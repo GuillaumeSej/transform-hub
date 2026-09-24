@@ -357,16 +357,33 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     [persistAudit, currentUser, programConfig.workstreams]
   );
 
+  /** Création NON optimiste (contrairement aux autres mutations de ce hook) : l'écriture Firestore
+   *  est attendue AVANT de mettre à jour l'état local et le journal d'audit, et toute erreur est
+   *  propagée à l'appelant. Sinon un refus des règles (ex. levier sans `companyId`, id déjà pris
+   *  par une autre entreprise) affichait « Levier créé », redirigeait vers une fiche introuvable
+   *  et laissait une entrée d'audit fantôme. `companyId` est rattaché ici depuis le hook quand
+   *  l'appelant ne le fournit pas : un levier ne peut pas exister sans entreprise. */
   const createLever = useCallback(
-    (input: Omit<Lever, "id" | "createdAt" | "lastUpdate">) => {
-      const result = leversLogic.createLever(leversRef.current, input, DEMO_USER);
-      leversRef.current = result.levers;
-      setLevers(result.levers);
+    async (input: Omit<Lever, "id" | "createdAt" | "lastUpdate">): Promise<Lever> => {
+      const scopedCompanyId = input.companyId ?? companyId;
+      if (!scopedCompanyId)
+        throw new Error("Aucune entreprise active : impossible de créer un levier");
+      const result = leversLogic.createLever(
+        leversRef.current,
+        { ...input, companyId: scopedCompanyId },
+        DEMO_USER
+      );
+      await leversDb.saveLever(result.lever);
+      // La souscription Firestore a pu livrer le nouveau levier pendant l'attente : ne pas le
+      // dupliquer, et repartir de l'état le plus récent plutôt que de `result.levers`.
+      if (!leversRef.current.some((l) => l.id === result.lever.id)) {
+        leversRef.current = [...leversRef.current, result.lever];
+        setLevers(leversRef.current);
+      }
       persistAudit(result.auditEntries);
-      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
       return result.lever;
     },
-    [persistAudit]
+    [persistAudit, companyId]
   );
 
   const upsertLeverByCode = useCallback(

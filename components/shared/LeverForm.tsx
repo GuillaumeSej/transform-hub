@@ -140,7 +140,9 @@ export function LeverForm({
    *  comportement historique inchangé (champ texte libre). */
   companyId?: string | null;
   initialValues?: Partial<LeverFormValues>;
-  onSubmit: (values: LeverFormValues) => void;
+  /** Peut être asynchrone : le bouton de validation reste désactivé tant que la promesse n'est
+   *  pas résolue (évite les doubles soumissions pendant l'écriture Firestore). */
+  onSubmit: (values: LeverFormValues) => void | Promise<void>;
   onCancel: () => void;
   submitLabel?: string;
   /** Round <n> (fondations RBAC déclaratives) — `Lever.workstreamWeightPct` (poids du levier dans
@@ -155,6 +157,7 @@ export function LeverForm({
   canEditWorkstreamWeight?: boolean;
 }) {
   const { t } = useTranslation();
+  const [submitting, setSubmitting] = useState(false);
   const [values, setValues] = useState<LeverFormValues>({
     ...emptyValues(data),
     ...initialValues,
@@ -385,7 +388,11 @@ export function LeverForm({
           next.opexRec = tot.opexRec;
           next.fteImpact = tot.fteNet;
         }
-        onSubmit(next);
+        if (submitting) return;
+        setSubmitting(true);
+        Promise.resolve(onSubmit(next))
+          .catch(() => undefined)
+          .finally(() => setSubmitting(false));
       }}
     >
       <SectionTitle>{t("leverForm.sectionIdentification")}</SectionTitle>
@@ -827,7 +834,7 @@ export function LeverForm({
         <Button
           type="submit"
           variant="primary"
-          disabled={!values.programId || !actionWeights.valid}
+          disabled={!values.programId || !actionWeights.valid || submitting}
         >
           {submitLabel ?? t("common.save")}
         </Button>

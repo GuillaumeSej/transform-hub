@@ -431,6 +431,9 @@ const es: Record<string, string> = {
   "leverForm.popImpacted": "Población impactada",
   "leverForm.updated": "Palanca actualizada",
   "leverForm.created": "Palanca creada",
+  "leverForm.createFailedTitle": "No se pudo crear la palanca",
+  "leverForm.createFailedBody":
+    "La palanca no se ha guardado. Compruebe sus permisos sobre la empresa e inténtelo de nuevo.",
 
   // ─── leverDetail (página de detalle de palanca) ────────────────────────────
   "leverDetail.tab.plan": "Plan de acción",

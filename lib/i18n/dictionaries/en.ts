@@ -434,6 +434,9 @@ const en: Record<string, string> = {
   "leverForm.popImpacted": "Population impacted",
   "leverForm.updated": "Initiative updated",
   "leverForm.created": "Initiative created",
+  "leverForm.createFailedTitle": "Initiative could not be created",
+  "leverForm.createFailedBody":
+    "The initiative was not saved. Check your access to this company and try again.",
 
   // ─── leverDetail (initiative detail page) ──────────────────────────────────
   "leverDetail.tab.plan": "Action plan",

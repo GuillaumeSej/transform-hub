@@ -294,6 +294,23 @@ describe("leversLogic — createLever", () => {
     expect(result.lever.id).toBe("L004");
   });
 
+  it("prefixes the id with companyId so it never collides with another tenant's bare id", () => {
+    // Cas ACME réel : leviers historiques L001…L021 (ids nus), alors que L022 existe déjà chez
+    // une autre entreprise — un id nu "L022" faisait refuser l'écriture par firestore.rules.
+    const existing = Array.from({ length: 21 }, (_, i) => ({
+      ...baseLever,
+      id: `L${String(i + 1).padStart(3, "0")}`,
+      companyId: "c1",
+    }));
+    const result = createLever(
+      existing as Lever[],
+      { ...omitBaseLever(), companyId: "c1" },
+      "user"
+    );
+    expect(result.lever.id).toBe("c1-L022");
+    expect(result.lever.companyId).toBe("c1");
+  });
+
   it("creates audit entry", () => {
     const result = createLever([], omitBaseLever(), "alice");
     expect(result.auditEntries).toHaveLength(1);

@@ -431,6 +431,9 @@ const de: Record<string, string> = {
   "leverForm.popImpacted": "Betroffene Population",
   "leverForm.updated": "Hebel aktualisiert",
   "leverForm.created": "Hebel erstellt",
+  "leverForm.createFailedTitle": "Hebel konnte nicht erstellt werden",
+  "leverForm.createFailedBody":
+    "Der Hebel wurde nicht gespeichert. Prüfen Sie Ihre Berechtigungen für das Unternehmen und versuchen Sie es erneut.",
 
   // ─── leverDetail (Hebel-Detailseite) ────────────────────────────────────────
   "leverDetail.tab.plan": "Aktionsplan",

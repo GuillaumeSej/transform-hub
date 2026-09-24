@@ -467,6 +467,9 @@ const fr: Record<string, string> = {
   "leverForm.popImpacted": "Population impactée",
   "leverForm.updated": "Levier mis à jour",
   "leverForm.created": "Levier créé",
+  "leverForm.createFailedTitle": "Échec de la création du levier",
+  "leverForm.createFailedBody":
+    "Le levier n'a pas été enregistré. Vérifiez vos droits sur l'entreprise et réessayez.",
 
   // ─── leverDetail (page détail levier) ──────────────────────────────────────
   "leverDetail.tab.plan": "Plan d'action",

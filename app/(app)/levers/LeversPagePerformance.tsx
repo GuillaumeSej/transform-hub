@@ -804,11 +804,20 @@ export function LeversPagePerformance() {
           companyId={user?.companyId}
           submitLabel={t("levers.createLever")}
           onCancel={() => setNewLeverOpen(false)}
-          onSubmit={(values: LeverFormValues) => {
-            const created = data.createLever({ ...values, dependencies: [] });
-            setNewLeverOpen(false);
-            showToast(t("leverForm.created"), created.name, "success");
-            router.push(`/levers/detail?id=${created.id}`);
+          onSubmit={async (values: LeverFormValues) => {
+            try {
+              const created = await data.createLever({
+                ...values,
+                companyId: values.companyId ?? user?.companyId ?? undefined,
+                dependencies: [],
+              });
+              setNewLeverOpen(false);
+              showToast(t("leverForm.created"), created.name, "success");
+              router.push(`/levers/detail?id=${created.id}`);
+            } catch (err) {
+              console.error("[betrack] création de levier :", err);
+              showToast(t("leverForm.createFailedTitle"), t("leverForm.createFailedBody"), "error");
+            }
           }}
         />
       </Modal>
