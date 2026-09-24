@@ -15,6 +15,9 @@ export function formatCompactCurrency(
   const tag = INTL_LOCALE[locale] ?? INTL_LOCALE.fr;
   const options: Intl.NumberFormatOptions = {
     notation: "compact",
+    // `minimumFractionDigits: 0` explicite : sans lui, l'ICU de Node 20 (CI GitHub) applique le
+    // minimum de la devise (2, borné au max) et affiche "€500.0K" au lieu de "€500K".
+    minimumFractionDigits: 0,
     maximumFractionDigits: Math.abs(value) >= 1000 ? maximumFractionDigits : 0,
   };
   try {

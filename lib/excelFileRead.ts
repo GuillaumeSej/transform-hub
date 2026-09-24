@@ -12,13 +12,54 @@ import { XLSX_READ_OPTIONS } from "@/lib/excelParse";
  * l'UTF-8 valide, puis lecture texte avec `raw: true` (les "0,5" / "01/03/2026" restent du texte,
  * interprété ensuite au format français par `lib/excelParse.ts`).
  */
+/** Caractères Windows-1252 des octets 0x80–0x9F (Latin-1 y met des caractères de contrôle). */
+const CP1252_HIGH: Record<number, string> = {
+  0x80: "€",
+  0x82: "‚",
+  0x83: "ƒ",
+  0x84: "„",
+  0x85: "…",
+  0x86: "†",
+  0x87: "‡",
+  0x88: "ˆ",
+  0x89: "‰",
+  0x8a: "Š",
+  0x8b: "‹",
+  0x8c: "Œ",
+  0x8e: "Ž",
+  0x91: "‘",
+  0x92: "’",
+  0x93: "“",
+  0x94: "”",
+  0x95: "•",
+  0x96: "–",
+  0x97: "—",
+  0x98: "˜",
+  0x99: "™",
+  0x9a: "š",
+  0x9b: "›",
+  0x9c: "œ",
+  0x9e: "ž",
+  0x9f: "Ÿ",
+};
+
+/** Décodage Windows-1252 explicite : `TextDecoder("windows-1252")` se comporte en Latin-1 dans
+ *  certaines versions de Node (dont Node 20 de la CI) et perd le "€" (0x80). */
+function decodeWindows1252(view: Uint8Array): string {
+  let out = "";
+  for (const b of view)
+    out +=
+      b >= 0x80 && b <= 0x9f ? (CP1252_HIGH[b] ?? String.fromCharCode(b)) : String.fromCharCode(b);
+  return out;
+}
+
 export function decodeCsvBytes(bytes: ArrayBuffer | Uint8Array): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(view);
   } catch {
-    text = new TextDecoder("windows-1252").decode(view);
+    text = decodeWindows1252(view);
   }
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
