@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { subscribeCompanies, subscribePrograms } from "@/lib/firestore/admin";
 import {
   allActionsDone,
-  canUserViewLever,
+  leverAccessDenialReason,
   isLeverCtoOf,
   isLeverOwnedBy,
   isLeverSponsoredBy,
@@ -206,7 +206,7 @@ export function LeverDetailClientPerformance() {
     );
   }
 
-  const canView = canUserViewLever(
+  const denialReason = leverAccessDenialReason(
     user,
     lever,
     roleClearance,
@@ -214,13 +214,18 @@ export function LeverDetailClientPerformance() {
     company?.confidentialityLevels
   );
 
-  if (!canView) {
+  if (denialReason) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
-        {t(
-          "leverDetail.restrictedAccess",
-          "Accès restreint — ce levier est classé « {level} », un niveau de confidentialité auquel votre profil n'est pas habilité."
-        ).replace("{level}", lever.confidentialityLevel ?? "")}{" "}
+        {denialReason === "confidentiality"
+          ? t(
+              "leverDetail.restrictedAccess",
+              "Accès restreint — ce levier est classé « {level} », un niveau de confidentialité auquel votre profil n'est pas habilité."
+            ).replace("{level}", lever.confidentialityLevel ?? "")
+          : t(
+              "leverDetail.outOfPerimeter",
+              "Accès restreint — ce levier n'est pas dans votre périmètre : vous n'en êtes ni le responsable ni le commanditaire."
+            )}{" "}
         <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
           {t("leverDetail.backToPipeline", "Retour aux leviers par étape")}
         </button>
@@ -236,9 +241,7 @@ export function LeverDetailClientPerformance() {
   const canActOnPendingApproval =
     !!lever.approval &&
     !!user &&
-    (isAnyAdmin(user) ||
-      isLeverSponsoredBy(lever, ws?.sponsorUsername, user) ||
-      isLeverCtoOf(lever, user));
+    (isAnyAdmin(user) || isLeverSponsoredBy(lever, ws, user) || isLeverCtoOf(lever, user));
   // Idem pour le bouton "Soumettre pour validation" (voir requestLeverApproval) : seul le
   // porteur du levier ou un admin peut initier une demande.
   const canSubmitApproval = !!user && (isAnyAdmin(user) || isLeverOwnedBy(lever, user));

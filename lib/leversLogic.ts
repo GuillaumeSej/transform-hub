@@ -114,16 +114,25 @@ export function isLeverOwnedBy(
 }
 
 /** Même principe que `isLeverOwnedBy`, pour le scoping du rôle "sponsor" : un utilisateur sponsor
- *  voit un levier soit parce qu'il sponsorise le workstream parent (`workstreamSponsorUsername`,
+ *  voit un levier soit parce qu'il sponsorise le workstream parent (`workstream`,
  *  résolu par l'appelant depuis `Workstream.sponsorUsername`), soit parce qu'il est identifié
  *  individuellement comme sponsor du levier (`lever.sponsorUsername`, priorité au lien id-based si
  *  réconcilié, repli sur la comparaison de noms fragile sinon — mêmes règles que `owner`). */
 export function isLeverSponsoredBy(
   lever: Pick<Lever, "sponsor" | "sponsorUsername">,
-  workstreamSponsorUsername: string | undefined,
+  /** Workstream parent (ou directement son `sponsorUsername`, forme historique). Un workstream
+   *  sans `sponsorUsername` (sponsor saisi en texte, jamais rattaché à un compte — cas des données
+   *  ACME) est reconnu par son NOM, comme `lever.sponsor` ci-dessous : sinon ses vrais sponsors ne
+   *  voyaient aucun levier de leur chantier. */
+  workstream: string | (Pick<Workstream, "sponsorUsername"> & { sponsor?: string }) | undefined,
   user: Pick<AuthUser, "name" | "username">
 ): boolean {
-  if (workstreamSponsorUsername && workstreamSponsorUsername === user.username) return true;
+  const ws = typeof workstream === "string" ? { sponsorUsername: workstream } : workstream;
+  if (ws?.sponsorUsername) {
+    if (ws.sponsorUsername === user.username) return true;
+  } else if (ws && "sponsor" in ws && ws.sponsor) {
+    if (normalizeOwnerName(ws.sponsor) === normalizeOwnerName(user.name)) return true;
+  }
   if (lever.sponsorUsername) return lever.sponsorUsername === user.username;
   return normalizeOwnerName(lever.sponsor) === normalizeOwnerName(user.name);
 }
@@ -168,24 +177,67 @@ export function canUserViewLever(
     | "confidentialityLevel"
   >,
   roleClearance: Partial<Record<Role, string | string[]>> | undefined,
-  workstreams: Pick<Workstream, "id" | "sponsorUsername">[] = [],
+  workstreams: (Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string })[] = [],
   /** `Company.confidentialityLevels` — active la résolution hiérarchique (voir
    *  `resolveConfidentialityClearance`). */
   confidentialityLevels?: string[]
 ): boolean {
-  if (!user) return false;
-  if (user.isGlobalAdmin) return true;
-  if (lever.companyId != null && user.companyId !== lever.companyId) return false;
-  if (user.isCompanyAdmin) return true;
-  if (hasRole(user, "lever") && !isLeverOwnedBy(lever, user)) return false;
+  return (
+    leverAccessDenialReason(user, lever, roleClearance, workstreams, confidentialityLevels) === null
+  );
+}
+
+/** Motif pour lequel `user` ne peut pas voir `lever` (`null` = accès autorisé) — mêmes règles que
+ *  `canUserViewLever`, qui l'utilise. Distinguer le motif permet d'afficher un message juste :
+ *  un porteur qui n'est pas responsable du levier voyait « niveau de confidentialité « » »
+ *  (vide) alors que le levier n'était simplement pas dans son périmètre. */
+export type LeverAccessDenialReason = "no_user" | "other_company" | "perimeter" | "confidentiality";
+
+export function leverAccessDenialReason(
+  user:
+    | Pick<
+        AuthUser,
+        | "profiles"
+        | "isGlobalAdmin"
+        | "isCompanyAdmin"
+        | "name"
+        | "username"
+        | "companyId"
+        | "confidentialityClearance"
+      >
+    | null
+    | undefined,
+  lever: Pick<
+    Lever,
+    | "owner"
+    | "ownerUsername"
+    | "sponsor"
+    | "sponsorUsername"
+    | "ws"
+    | "companyId"
+    | "confidentialityLevel"
+  >,
+  roleClearance: Partial<Record<Role, string | string[]>> | undefined,
+  workstreams: (Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string })[] = [],
+  /** `Company.confidentialityLevels` — active la résolution hiérarchique (voir
+   *  `resolveConfidentialityClearance`). */
+  confidentialityLevels?: string[]
+): LeverAccessDenialReason | null {
+  if (!user) return "no_user";
+  if (user.isGlobalAdmin) return null;
+  if (lever.companyId != null && user.companyId !== lever.companyId) return "other_company";
+  if (user.isCompanyAdmin) return null;
+  if (hasRole(user, "lever") && !isLeverOwnedBy(lever, user)) return "perimeter";
   if (hasRole(user, "sponsor")) {
-    const workstreamSponsorUsername = workstreams.find((w) => w.id === lever.ws)?.sponsorUsername;
-    if (!isLeverSponsoredBy(lever, workstreamSponsorUsername, user)) return false;
+    const workstream = workstreams.find((w) => w.id === lever.ws);
+    if (!isLeverSponsoredBy(lever, workstream, user)) return "perimeter";
   }
   return isLeverVisibleForClearance(
     lever.confidentialityLevel,
     resolveConfidentialityClearance(user, roleClearance, "performance", confidentialityLevels)
-  );
+  )
+    ? null
+    : "confidentiality";
 }
 
 type PlanLockable = Pick<
@@ -626,7 +678,7 @@ export function approveLeverGate(
   levers: Lever[],
   id: string,
   user: Pick<AuthUser, "name" | "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
-  workstreams: Pick<Workstream, "id" | "sponsorUsername">[]
+  workstreams: (Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string })[]
 ): LeverMutationResult {
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
@@ -634,8 +686,8 @@ export function approveLeverGate(
   if (!before.approval) {
     throw new Error(`Le levier "${id}" n'a pas de demande de validation en cours`);
   }
-  const workstreamSponsorUsername = workstreams.find((w) => w.id === before.ws)?.sponsorUsername;
-  const isSponsor = isLeverSponsoredBy(before, workstreamSponsorUsername, user);
+  const parentWorkstream = workstreams.find((w) => w.id === before.ws);
+  const isSponsor = isLeverSponsoredBy(before, parentWorkstream, user);
   const isCto = isLeverCtoOf(before, user);
   if (!isAnyAdmin(user) && !isSponsor && !isCto) {
     throw new Error(`Vous n'êtes pas habilité à approuver la demande de validation de ce levier`);
@@ -683,7 +735,7 @@ export function rejectLeverApproval(
   id: string,
   user: Pick<AuthUser, "name" | "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
   reason?: string,
-  workstreams: Pick<Workstream, "id" | "sponsorUsername">[] = []
+  workstreams: (Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string })[] = []
 ): LeverMutationResult {
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
@@ -692,11 +744,11 @@ export function rejectLeverApproval(
     throw new Error(`Le levier "${id}" n'a pas de demande de validation en cours`);
   }
   const targetStatus = before.approval.targetStatus;
-  const workstreamSponsorUsername = workstreams.find((w) => w.id === before.ws)?.sponsorUsername;
+  const parentWorkstream = workstreams.find((w) => w.id === before.ws);
   const authorized =
     isAnyAdmin(user) ||
     isLeverOwnedBy(before, user) ||
-    isLeverSponsoredBy(before, workstreamSponsorUsername, user) ||
+    isLeverSponsoredBy(before, parentWorkstream, user) ||
     isLeverCtoOf(before, user);
   if (!authorized) {
     throw new Error(`Vous n'êtes pas habilité à rejeter la demande de validation de ce levier`);

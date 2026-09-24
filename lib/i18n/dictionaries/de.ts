@@ -431,6 +431,8 @@ const de: Record<string, string> = {
   "leverForm.popImpacted": "Betroffene Population",
   "leverForm.updated": "Hebel aktualisiert",
   "leverForm.created": "Hebel erstellt",
+  "leverForm.createdOutOfScope":
+    "„{name}“ wurde erstellt, erscheint aber nicht in Ihrer Liste: Sie sind weder verantwortlich noch Auftraggeber.",
   "leverForm.createFailedTitle": "Hebel konnte nicht erstellt werden",
   "leverForm.createFailedBody":
     "Der Hebel wurde nicht gespeichert. Prüfen Sie Ihre Berechtigungen für das Unternehmen und versuchen Sie es erneut.",
@@ -441,6 +443,8 @@ const de: Record<string, string> = {
   "leverDetail.loading": "Wird geladen…",
   "leverDetail.notFound": "Hebel nicht gefunden.",
   "leverDetail.backToPipeline": "Zurück zur Pipeline",
+  "leverDetail.outOfPerimeter":
+    "Eingeschränkter Zugriff — dieser Hebel liegt außerhalb Ihres Bereichs: Sie sind weder verantwortlich noch Auftraggeber.",
   "leverDetail.restrictedAccess":
     "Zugriff eingeschränkt — dieser Hebel ist als „{level}“ eingestuft, eine Vertraulichkeitsstufe, für die Ihr Profil nicht freigegeben ist.",
   "leverDetail.editLever": "Hebel bearbeiten",

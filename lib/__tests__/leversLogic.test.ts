@@ -8,6 +8,7 @@ import {
   resolveConfidentialityClearance,
   isLeverVisibleForClearance,
   canUserViewLever,
+  leverAccessDenialReason,
   isLeverOwnedBy,
   isLeverSponsoredBy,
   isLeverCtoOf,
@@ -903,5 +904,52 @@ describe("leversLogic — règle Réalisé / actions", () => {
     const done = makeLever("delivered", { actions: [act("a", 100), act("b", 100)] });
     const res = updateAction([done], { leverId: done.id }, "b", { declaredProgressPct: 40 }, "u");
     expect(res.changedLever?.status).toBe("in_progress");
+  });
+});
+
+describe("leversLogic — sponsor de chantier et motif de refus d'accès", () => {
+  const sponsor = {
+    profiles: [{ role: "sponsor" as const }],
+    name: "Jean Dupont",
+    username: "jean.dupont",
+    companyId: "c1",
+  };
+  const lever = { ...baseLever, companyId: "c1", sponsor: "Autre Personne", ws: "WS-OPS" };
+
+  it("reconnaît le sponsor d'un chantier saisi par son seul nom (sans compte rattaché)", () => {
+    expect(isLeverSponsoredBy(lever, { sponsor: "Jean Dupont" }, sponsor)).toBe(true);
+    expect(isLeverSponsoredBy(lever, { sponsor: "Marie Durand" }, sponsor)).toBe(false);
+  });
+
+  it("un compte rattaché au chantier prime sur le nom", () => {
+    expect(
+      isLeverSponsoredBy(
+        lever,
+        { sponsor: "Jean Dupont", sponsorUsername: "marie.durand" },
+        sponsor
+      )
+    ).toBe(false);
+  });
+
+  it("distingue « hors périmètre » et « confidentialité »", () => {
+    const workstreams = [{ id: "WS-OPS", sponsor: "Marie Durand" }];
+    expect(leverAccessDenialReason(sponsor, lever, {}, workstreams)).toBe("perimeter");
+    expect(
+      leverAccessDenialReason(sponsor, lever, {}, [{ id: "WS-OPS", sponsor: "Jean Dupont" }])
+    ).toBe(null);
+    const owner = { ...sponsor, profiles: [{ role: "lever" as const }] };
+    expect(
+      leverAccessDenialReason(owner, { ...lever, owner: "Jean Dupont" }, { lever: [] }, [], ["C1"])
+    ).toBe(null);
+    expect(
+      leverAccessDenialReason(
+        owner,
+        { ...lever, owner: "Jean Dupont", confidentialityLevel: "C2" },
+        { lever: "C1" },
+        [],
+        ["C1", "C2"]
+      )
+    ).toBe("confidentiality");
+    expect(canUserViewLever(sponsor, lever, {}, workstreams)).toBe(false);
   });
 });

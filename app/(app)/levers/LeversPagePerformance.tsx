@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutGrid, ListTree, Plus, Table2, TriangleAlert } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
@@ -37,7 +37,7 @@ import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { FilterToggleButton, useFilterBarExpanded } from "@/components/shared/CollapsibleFilterBar";
 import { ColumnVisibilityMenu } from "@/components/shared/ColumnVisibilityMenu";
 import { Modal } from "@/components/shared/Modal";
-import { LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
+import { initialsFromName, LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter } from "@/lib/filterUtils";
 import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
@@ -214,23 +214,37 @@ export function LeversPagePerformance() {
   // useRole.tsx) : un utilisateur peut cumuler plusieurs profils Performance sur des programmes
   // différents (round multi-profils), `role` seul manquerait un rôle "lever"/"sponsor" au-delà du
   // premier.
-  const scopedLevers = useMemo(() => {
-    let scoped = data.levers;
-    if (user && hasRole(user, "lever")) {
-      scoped = scoped.filter((l) => isLeverOwnedBy(l, user));
-    }
-    if (user && hasRole(user, "sponsor")) {
-      scoped = scoped.filter((l) => {
-        const workstreamSponsorUsername = data.workstreams.find(
-          (w) => w.id === l.ws
-        )?.sponsorUsername;
-        return isLeverSponsoredBy(l, workstreamSponsorUsername, user);
-      });
-    }
-    return scoped.filter(
-      (l) => isAnyAdmin(user) || isLeverVisibleForClearance(l.confidentialityLevel, clearance)
-    );
-  }, [data.levers, data.workstreams, user, clearance]);
+  const isInUserScope = useCallback(
+    (l: Lever) => {
+      if (user && hasRole(user, "lever") && !isLeverOwnedBy(l, user)) return false;
+      if (user && hasRole(user, "sponsor")) {
+        const parentWorkstream = data.workstreams.find((w) => w.id === l.ws);
+        if (!isLeverSponsoredBy(l, parentWorkstream, user)) return false;
+      }
+      return isAnyAdmin(user) || isLeverVisibleForClearance(l.confidentialityLevel, clearance);
+    },
+    [data.workstreams, user, clearance]
+  );
+  const scopedLevers = useMemo(
+    () => data.levers.filter(isInUserScope),
+    [data.levers, isInUserScope]
+  );
+
+  // Création par un porteur/sponsor : il est pré-rempli comme responsable/commanditaire, sinon le
+  // levier créé (responsable « Aucun » par défaut) sortait aussitôt de son propre périmètre et la
+  // redirection affichait un « Accès restreint » incompréhensible.
+  const newLeverDefaults = useMemo<Partial<LeverFormValues>>(() => {
+    if (!user || isAnyAdmin(user)) return {};
+    const self = { username: user.username, name: user.name, init: initialsFromName(user.name) };
+    return {
+      ...(hasRole(user, "lever")
+        ? { ownerUsername: self.username, owner: self.name, ownerInit: self.init }
+        : {}),
+      ...(hasRole(user, "sponsor")
+        ? { sponsorUsername: self.username, sponsor: self.name, sponsorInit: self.init }
+        : {}),
+    };
+  }, [user]);
 
   // Scope au programme Performance sélectionné (voir usePerformanceProgramSelector plus haut) —
   // appliqué AVANT les filtres de la barre (leurs options ne doivent refléter que les leviers du
@@ -788,6 +802,7 @@ export function LeversPagePerformance() {
           data={data}
           lifecycle={lifecycle}
           companyId={user?.companyId}
+          initialValues={newLeverDefaults}
           submitLabel={t("levers.createLever")}
           onCancel={() => setNewLeverOpen(false)}
           onSubmit={async (values: LeverFormValues) => {
@@ -798,6 +813,16 @@ export function LeversPagePerformance() {
                 dependencies: [],
               });
               setNewLeverOpen(false);
+              if (!isInUserScope(created)) {
+                // Responsable/commanditaire changés dans le formulaire : le levier existe mais
+                // n'est pas visible pour cet utilisateur — ne pas l'envoyer sur une fiche refusée.
+                showToast(
+                  t("leverForm.created"),
+                  t("leverForm.createdOutOfScope").replace("{name}", created.name),
+                  "success"
+                );
+                return;
+              }
               showToast(t("leverForm.created"), created.name, "success");
               router.push(`/levers/detail?id=${created.id}`);
             } catch (err) {

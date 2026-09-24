@@ -434,6 +434,8 @@ const en: Record<string, string> = {
   "leverForm.popImpacted": "Population impacted",
   "leverForm.updated": "Initiative updated",
   "leverForm.created": "Initiative created",
+  "leverForm.createdOutOfScope":
+    '"{name}" was created, but it won\'t appear in your list: you are neither its owner nor its sponsor.',
   "leverForm.createFailedTitle": "Initiative could not be created",
   "leverForm.createFailedBody":
     "The initiative was not saved. Check your access to this company and try again.",
@@ -444,6 +446,8 @@ const en: Record<string, string> = {
   "leverDetail.loading": "Loading…",
   "leverDetail.notFound": "Initiative not found.",
   "leverDetail.backToPipeline": "Back to pipeline",
+  "leverDetail.outOfPerimeter":
+    "Restricted access — this initiative is outside your scope: you are neither its owner nor its sponsor.",
   "leverDetail.restrictedAccess":
     'Restricted access — this initiative is classified as "{level}", a confidentiality level your profile is not cleared for.',
   "leverDetail.editLever": "Edit initiative",

@@ -33,7 +33,7 @@ import { matchLeverOwner } from "@/lib/leverOwnerReconciliation";
 /** Mêmes règles que `components/shared/Topbar.tsx`/`components/strategic/RaciChips.tsx` (2
  *  initiales max, majuscules) — pas de helper partagé exporté par ces composants d'affichage, on
  *  réplique ici pour dériver `ownerInit` depuis le nom du compte sélectionné. */
-function initialsFromName(name: string): string {
+export function initialsFromName(name: string): string {
   return name
     .split(" ")
     .map((x) => x[0])

@@ -431,6 +431,8 @@ const es: Record<string, string> = {
   "leverForm.popImpacted": "Población impactada",
   "leverForm.updated": "Palanca actualizada",
   "leverForm.created": "Palanca creada",
+  "leverForm.createdOutOfScope":
+    "«{name}» se ha creado, pero no aparecerá en su lista: no es ni su responsable ni su patrocinador.",
   "leverForm.createFailedTitle": "No se pudo crear la palanca",
   "leverForm.createFailedBody":
     "La palanca no se ha guardado. Compruebe sus permisos sobre la empresa e inténtelo de nuevo.",
@@ -441,6 +443,8 @@ const es: Record<string, string> = {
   "leverDetail.loading": "Cargando…",
   "leverDetail.notFound": "Palanca no encontrada.",
   "leverDetail.backToPipeline": "Volver a palancas por etapa",
+  "leverDetail.outOfPerimeter":
+    "Acceso restringido — esta palanca no está en su perímetro: no es ni su responsable ni su patrocinador.",
   "leverDetail.restrictedAccess":
     "Acceso restringido — esta palanca está clasificada como «{level}», un nivel de confidencialidad para el que su perfil no está habilitado.",
   "leverDetail.editLever": "Editar palanca",

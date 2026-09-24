@@ -467,6 +467,8 @@ const fr: Record<string, string> = {
   "leverForm.popImpacted": "Population impactée",
   "leverForm.updated": "Levier mis à jour",
   "leverForm.created": "Levier créé",
+  "leverForm.createdOutOfScope":
+    "« {name} » a été créé, mais il n'apparaîtra pas dans votre liste : vous n'en êtes ni le responsable ni le commanditaire.",
   "leverForm.createFailedTitle": "Échec de la création du levier",
   "leverForm.createFailedBody":
     "Le levier n'a pas été enregistré. Vérifiez vos droits sur l'entreprise et réessayez.",
@@ -477,6 +479,8 @@ const fr: Record<string, string> = {
   "leverDetail.loading": "Chargement…",
   "leverDetail.notFound": "Levier introuvable.",
   "leverDetail.backToPipeline": "Retour aux leviers par étape",
+  "leverDetail.outOfPerimeter":
+    "Accès restreint — ce levier n'est pas dans votre périmètre : vous n'en êtes ni le responsable ni le commanditaire.",
   "leverDetail.restrictedAccess":
     "Accès restreint — ce levier est classé « {level} », un niveau de confidentialité auquel votre profil n'est pas habilité.",
   "leverDetail.editLever": "Modifier le levier",

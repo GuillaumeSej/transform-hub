@@ -40,10 +40,8 @@ export function resolveApprovalQueue(
   if (isAnyAdmin(user)) return data.levers.filter((lever) => !!lever.approval);
   return data.levers.filter((lever) => {
     if (!lever.approval) return false;
-    const workstreamSponsorUsername = data.workstreams.find(
-      (w) => w.id === lever.ws
-    )?.sponsorUsername;
-    return isLeverSponsoredBy(lever, workstreamSponsorUsername, user) || isCtoForLever(user, lever);
+    const parentWorkstream = data.workstreams.find((w) => w.id === lever.ws);
+    return isLeverSponsoredBy(lever, parentWorkstream, user) || isCtoForLever(user, lever);
   });
 }
 

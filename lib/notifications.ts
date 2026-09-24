@@ -45,8 +45,8 @@ export function canUserAccessLever(
   // "sponsor" sur un autre (voir round multi-profils), les deux restrictions s'appliquent alors.
   if (hasRole(user, "lever") && !isLeverOwnedBy(lever, user)) return false;
   if (hasRole(user, "sponsor")) {
-    const workstreamSponsorUsername = workstreams.find((w) => w.id === lever.ws)?.sponsorUsername;
-    if (!isLeverSponsoredBy(lever, workstreamSponsorUsername, user)) return false;
+    const parentWorkstream = workstreams.find((w) => w.id === lever.ws);
+    if (!isLeverSponsoredBy(lever, parentWorkstream, user)) return false;
   }
   return true;
 }
