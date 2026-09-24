@@ -2,7 +2,7 @@
 
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import { matchesFilter } from "@/lib/filterUtils";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -46,6 +46,9 @@ export type EditableTableProps<T extends { id: string }> = {
    *  plusieurs pages Plan Performance (leviers, ETP, RH, workstreams...). `false` par défaut :
    *  aucun changement pour les appelants existants qui ne passent pas ce prop. */
   readOnly?: boolean;
+  /** Reçoit les ids des lignes réellement affichées (après recherche, filtres de colonnes et tri),
+   *  à chaque changement — ex. pour exporter exactement ce que voit l'utilisateur. */
+  onVisibleIdsChange?: (ids: string[]) => void;
 };
 
 /**
@@ -63,6 +66,7 @@ export function EditableTable<T extends { id: string }>({
   defaultSort,
   className,
   readOnly = false,
+  onVisibleIdsChange,
 }: EditableTableProps<T>) {
   const { t } = useTranslation();
   const resolvedSearchPlaceholder =
@@ -107,6 +111,14 @@ export function EditableTable<T extends { id: string }>({
     }
     return rows;
   }, [data, search, columnFilters, sort, columns]);
+
+  // Clé texte plutôt que tableau : `data` est souvent recalculé à chaque rendu par l'appelant, un
+  // tableau neuf à chaque fois déclencherait l'effet (et un setState parent) en boucle.
+  const visibleIdsKey = filtered.map((r) => r.id).join("\u0000");
+  useEffect(() => {
+    onVisibleIdsChange?.(visibleIdsKey ? visibleIdsKey.split("\u0000") : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rappel seulement si les lignes changent
+  }, [visibleIdsKey]);
 
   const toggleSort = (key: keyof T & string) => {
     setSort((prev) =>

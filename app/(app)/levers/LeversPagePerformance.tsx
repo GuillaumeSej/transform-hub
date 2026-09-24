@@ -737,6 +737,20 @@ export function LeversPagePerformance() {
   // l'arborescence, voir Kanban.tsx CancelledLeversStrip et LeverLibraryTree.tsx).
   const activeRows = rows.filter((r) => r.status !== "cancelled");
   const cancelledRows = rows.filter((r) => r.status === "cancelled");
+  // Export = exactement ce qui est affiché : en vue Tableau, les lignes des deux tableaux (actifs
+  // puis abandonnés) après leur recherche/filtres de colonnes et dans leur ordre de tri ; en vue
+  // Kanban/Arborescence (sans recherche), les leviers filtrés par la barre de filtres.
+  const [visibleActiveIds, setVisibleActiveIds] = useState<string[] | null>(null);
+  const [visibleCancelledIds, setVisibleCancelledIds] = useState<string[] | null>(null);
+  const leversToExport = useMemo(() => {
+    if (view !== "table" || visibleActiveIds === null) return filteredLevers;
+    const byId = new Map(filteredLevers.map((l) => [l.id, l]));
+    const cancelledIds =
+      cancelledRows.length === 0 ? [] : (visibleCancelledIds ?? cancelledRows.map((r) => r.id));
+    return [...visibleActiveIds, ...cancelledIds]
+      .map((id) => byId.get(id))
+      .filter((l): l is Lever => !!l);
+  }, [view, filteredLevers, visibleActiveIds, visibleCancelledIds, cancelledRows]);
 
   // Entreprise sans aucun Plan Performance : pas de programme sur lequel scoper la table, donc
   // rien à afficher (même repli que le dashboard exécutif, voir DashboardPagePerformance).
@@ -775,19 +789,21 @@ export function LeversPagePerformance() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Export/import Excel : outils de bureau, sans objet sur téléphone. */}
           <span className="hidden items-center gap-2 sm:inline-flex">
-            <ExportButton data={data} programs={programs} />
-            <LeverImportButton
-              data={data}
-              companyId={user?.companyId}
-              // Seuls les programmes Performance peuvent porter des leviers (un Plan Stratégique
-              // n'en a pas) : les passer tous faisait rejeter chaque ligne sans colonne
-              // "Programme" dès que l'entreprise avait aussi un programme stratégique.
-              programs={performancePrograms}
-              defaultProgramId={selectedProgramId}
-              lifecycleStages={lifecycle.stages}
-              onImport={(rows) => data.importLevers(rows)}
-              onCreateWorkstreams={(workstreams) => data.addWorkstreams(workstreams)}
-            />
+            <ExportButton data={data} programs={programs} levers={leversToExport} />
+            {!readOnly && (
+              <LeverImportButton
+                data={data}
+                companyId={user?.companyId}
+                // Seuls les programmes Performance peuvent porter des leviers (un Plan Stratégique
+                // n'en a pas) : les passer tous faisait rejeter chaque ligne sans colonne
+                // "Programme" dès que l'entreprise avait aussi un programme stratégique.
+                programs={performancePrograms}
+                defaultProgramId={selectedProgramId}
+                lifecycleStages={lifecycle.stages}
+                onImport={(rows) => data.importLevers(rows)}
+                onCreateWorkstreams={(workstreams) => data.addWorkstreams(workstreams)}
+              />
+            )}
           </span>
           {!readOnly && (
             <Button variant="primary" onClick={() => setNewLeverOpen(true)}>
@@ -912,6 +928,7 @@ export function LeversPagePerformance() {
             searchPlaceholder={t("levers.searchPlaceholder")}
             defaultSort={{ key: "risk", direction: "desc" }}
             readOnly={readOnly}
+            onVisibleIdsChange={setVisibleActiveIds}
           />
           {cancelledRows.length > 0 && (
             <div>
@@ -927,6 +944,7 @@ export function LeversPagePerformance() {
                 defaultSort={{ key: "risk", direction: "desc" }}
                 readOnly
                 className="opacity-60 grayscale"
+                onVisibleIdsChange={setVisibleCancelledIds}
               />
             </div>
           )}
