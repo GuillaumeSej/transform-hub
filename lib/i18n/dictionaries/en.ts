@@ -63,6 +63,8 @@ const en: Record<string, string> = {
   "validation.sa.status.pending": "Pending",
   "validation.sa.status.approved": "Approved",
   "validation.sa.status.rejected": "Rejected",
+  "validation.sa.status.direct": "Applied (for information)",
+  "validation.sa.adjustValue": "Value to apply (editable before accepting)",
   "validation.sa.tab.todo": "To validate",
   "validation.sa.tab.mine": "My requests",
   "validation.sa.tab.history": "Decision history",
@@ -1557,16 +1559,11 @@ const en: Record<string, string> = {
   "strategicAxes.actionDescription": "Description",
   "strategicAxes.deliverables": "Expected deliverables",
   "strategicAxes.deliverablesHint":
-    "One field per deliverable; each deliverable can be split into dated sub-steps.",
+    'One field per deliverable, with its due date (the day it must be done) and a "Done" checkbox.',
   "strategicAxes.noDeliverables": "No deliverable specified.",
   "strategicAxes.deliverableLabel": "Deliverable title",
   "strategicAxes.addDeliverable": "Add a deliverable",
   "strategicAxes.removeDeliverable": "Remove deliverable",
-  "strategicAxes.noPhases": "No sub-step.",
-  "strategicAxes.phaseStart": "Start",
-  "strategicAxes.phaseEnd": "End",
-  "strategicAxes.addPhase": "Add a sub-step",
-  "strategicAxes.removePhase": "Remove sub-step",
   // Indicators — READ ONLY here, data entry lives on the KPI page
   "strategicAxes.indicatorsSection": "Indicators of this axis",
   "strategicAxes.indicatorsReadOnly":
@@ -1638,10 +1635,6 @@ const en: Record<string, string> = {
   // ─── Plan Stratégique — round 8 (optional levier KPI + kanban without KPI) ─────────────
   "strategicChantierDetail.indicatorSelect.label": "Linked KPI",
   "strategicChantierDetail.indicatorSelect.none": "No KPI",
-  "strategicChantierDetail.kanban.title": "Status",
-  "strategicChantierDetail.kanban.todo": "To do",
-  "strategicChantierDetail.kanban.inProgress": "In progress",
-  "strategicChantierDetail.kanban.done": "Done",
 
   "strategicChantierDetail.prerequisites.title": "Dependencies / Prerequisites",
   "strategicChantierDetail.prerequisites.kindAction": "Plan project",
@@ -1668,6 +1661,16 @@ const en: Record<string, string> = {
   "strategicChantierDetail.deliverableModal.commentPlaceholder": "Add a comment…",
   "strategicChantierDetail.deliverableModal.noComments": "No comments.",
   "strategicChantierDetail.deliverableForm.leverSelect": "Linked project",
+  // Livrable = ÉCHÉANCE + statut binaire Fait / À faire (+ « en retard » dérivé) — voir
+  // lib/deliverableState.ts et components/strategic/deliverableMarker.tsx.
+  "strategicChantierDetail.deliverableState.done": "Done",
+  "strategicChantierDetail.deliverableState.todo": "To do",
+  "strategicChantierDetail.deliverableState.late": "Late",
+  "strategicChantierDetail.deliverableState.lateDays": "{n} d late",
+  "strategicChantierDetail.deliverableState.legendTitle": "Deliverables",
+  "strategicChantierDetail.deliverableState.doneCount": "{done}/{total} done",
+  "strategicChantierDetail.deliverableState.lateCount": "{n} late",
+  "strategicChantierDetail.deliverableState.dueDateMissing": "Each deliverable needs a due date.",
 
   // ─── Workstream detail tabs (round 10, point 2) ────────────────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Overview",
@@ -1972,11 +1975,30 @@ const en: Record<string, string> = {
   "kpi.measurement.deleted": "Measurement deleted",
   "kpi.measurement.deleteError": "Deletion failed",
   "kpi.measurement.periodCollision": "A measurement already exists for period {period}.",
-  "kpi.measurement.correctionSubmitted": "Correction submitted for approval by the plan owner",
-  "kpi.measurement.deletionSubmitted": "Deletion submitted for approval by the plan owner",
+  "kpi.measurement.correctionSubmitted": "Correction request sent for approval",
+  "kpi.measurement.deletionSubmitted": "Deletion request sent for approval",
   "kpi.measurement.correctLatest": "Correct the latest value",
   "kpi.measurement.pendingCorrection": "Correction",
   "kpi.measurement.pendingDeletion": "Deletion",
+  "kpi.measurement.route.edit.chantier":
+    "Your correction will be submitted to the owner of work package {name}.",
+  "kpi.measurement.route.edit.axis":
+    "Your correction will be submitted to the owner of axis {name}.",
+  "kpi.measurement.route.edit.plan": "Your correction will be submitted to the plan owner.",
+  "kpi.measurement.route.delete.chantier":
+    "Your deletion will be submitted to the owner of work package {name}.",
+  "kpi.measurement.route.delete.axis":
+    "Your deletion will be submitted to the owner of axis {name}.",
+  "kpi.measurement.route.delete.plan": "Your deletion will be submitted to the plan owner.",
+  "kpi.measurement.inform.axisPlan": "The axis owner and the plan owner will be notified.",
+  "kpi.measurement.inform.axis": "The axis owner will be notified.",
+  "kpi.measurement.inform.plan": "The plan owner will be notified.",
+  "kpi.measurement.informAfter.axisPlan":
+    "Once the request is accepted, the axis owner and the plan owner will be notified.",
+  "kpi.measurement.informAfter.axis":
+    "Once the request is accepted, the axis owner will be notified.",
+  "kpi.measurement.informAfter.plan":
+    "Once the request is accepted, the plan owner will be notified.",
   "kpi.history.actions": "Actions",
   "kpi.history.correctedBy": "corrected by",
   "strategicDelete.pendingBy": "Deletion pending approval by {approver}",
@@ -2039,6 +2061,8 @@ const en: Record<string, string> = {
   "staffing.ftePlaceholder": "e.g. 0.5",
   "staffing.datesMissing": "Dates to complete",
   "staffing.edit": "Edit this line",
+  "staffing.manageInStaffingTab": "Manage FTEs in the work package's Staffing tab",
+  "staffing.emptyProjet": "No FTE declared on this project.",
   "staffing.editing": "Editing line",
   "staffing.editingMissingDates": "Editing line — please fill in the start and end dates.",
   "staffing.saveEdit": "Save",

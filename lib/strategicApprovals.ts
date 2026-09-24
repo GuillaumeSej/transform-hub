@@ -5,6 +5,7 @@ import {
   isStrategicLeadOf,
   latestMeasurement,
 } from "@/lib/axisLogic";
+import { kpiCorrectionApprover } from "@/lib/kpiCorrectionRouting";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
 import type {
@@ -28,6 +29,9 @@ import type {
  * Qui valide quoi :
  *  - "milestone"       passage de jalon d'un projet      → responsable (pilote) du CHANTIER
  *  - "kpi_value"       valeur KPI renseignée             → responsable du plan (strategic_lead)
+ *                      CORRECTION/SUPPRESSION d'une mesure (`payload.measurementId`) → responsable
+ *                      du CHANTIER du KPI (repli axe → plan), voir lib/kpiCorrectionRouting.ts ;
+ *                      les responsables supérieurs sont INFORMÉS (`informUsernames`)
  *  - "projet_create"   projet ajouté à un chantier       → DOUBLE validation séquentielle : pilote
  *                                                          du CHANTIER PUIS responsable de l'AXE
  *                                                          (voir "Double validation" ci-dessous)
@@ -94,6 +98,12 @@ export type KpiValueApprovalPayload = {
   note?: string;
   measurementId?: string;
   remove?: boolean;
+  /** Correction/suppression : valeur, période et commentaire AVANT (texte des notifications). */
+  previousValue?: number;
+  previousPeriod?: string;
+  previousNote?: string;
+  /** Valeur initialement demandée quand l'approbateur l'a AJUSTÉE avant d'accepter. */
+  requestedValue?: number;
 };
 /** Palier de la double validation d'un `"projet_create"` (voir l'en-tête du fichier) :
  *  `"chantier"` = 1er palier (pilote du chantier), `"axis"` = palier terminal (responsable de
@@ -141,6 +151,12 @@ export type StrategicApproval = {
   decisionComment?: string;
   /** Motif saisi par le demandeur. */
   reason?: string;
+  /** Enregistrement d'INFORMATION (pas une demande) : action appliquée directement par un
+   *  responsable habilité (ex. correction KPI par le pilote du chantier), créé déjà `"approved"`
+   *  (`decidedBy` = acteur) pour notifier `informUsernames`. Exclu de « Mes demandes ». */
+  direct?: boolean;
+  /** Responsables à INFORMER de l'action appliquée (alerte « Valeur KPI corrigée … »). */
+  informUsernames?: string[];
 };
 
 /** Ce que la résolution d'approbateur a besoin de connaître du plan (déjà scopé programme). */
@@ -225,7 +241,8 @@ export function resolveApprover(
   kind: StrategicApprovalKind,
   target: StrategicApprovalTarget,
   data: StrategicApprovalData,
-  stage?: ProjetCreateStage
+  stage?: ProjetCreateStage,
+  ctx?: { payload?: StrategicApprovalPayload; requestedBy?: string }
 ): ResolvedApprover {
   const programId = resolveTargetProgramId(target, data);
   const lead = (): ResolvedApprover => {
@@ -247,8 +264,24 @@ export function resolveApprover(
       : axisLevel();
 
   switch (kind) {
-    case "kpi_value":
+    case "kpi_value": {
+      // Correction/suppression d'une mesure publiée : responsable du chantier du KPI (repli axe →
+      // plan), voir lib/kpiCorrectionRouting.ts. Saisie d'une nouvelle valeur : plan (inchangé).
+      const p = ctx?.payload as KpiValueApprovalPayload | undefined;
+      const indicator = data.indicators.find((i) => i.id === target.id);
+      if (p?.measurementId && indicator) {
+        const a = kpiCorrectionApprover(indicator, data, ctx?.requestedBy);
+        if (!a.usernames.length) return lead();
+        const role: Role =
+          a.level === "chantier"
+            ? "chantier_owner"
+            : a.level === "axis"
+              ? "axis_sponsor"
+              : "strategic_lead";
+        return { role, usernames: a.usernames, username: a.usernames[0] };
+      }
       return lead();
+    }
     case "milestone":
     case "projet_delete":
       return chantierLevel();
@@ -318,7 +351,8 @@ export function canDecide(
     approval.kind,
     { type: approval.targetType, id: approval.targetId, name: approval.targetName },
     data,
-    stage
+    stage,
+    { payload: approval.payload, requestedBy: approval.requestedBy }
   );
   const usernames = Array.from(new Set([...resolved.usernames, ...approval.approverUsernames]));
   return isApproverFor(user, { ...resolved, usernames }, approval.programId);
@@ -359,7 +393,10 @@ export function buildApproval(input: {
     input.kind === "projet_create"
       ? (input.payload as ProjetCreateApprovalPayload).stage
       : undefined;
-  const approver = resolveApprover(input.kind, input.target, input.data, stage);
+  const approver = resolveApprover(input.kind, input.target, input.data, stage, {
+    payload: input.payload,
+    requestedBy: input.requester.username,
+  });
   return stripUndefined({
     id: input.id ?? newApprovalId(),
     companyId: input.companyId,
@@ -378,6 +415,82 @@ export function buildApproval(input: {
     status: "pending" as const,
     reason: input.reason?.trim() || undefined,
   });
+}
+
+/**
+ * Enregistrement d'INFORMATION d'une correction/suppression KPI appliquée DIRECTEMENT par un
+ * responsable habilité (voir lib/kpiCorrectionRouting.ts) : déjà `"approved"` par l'acteur,
+ * `direct: true`, destinataires dans `informUsernames`. Aucun effet à appliquer (la mesure est déjà
+ * écrite par l'appelant) — sert uniquement aux alertes et à l'historique.
+ */
+export function buildDirectKpiCorrectionRecord(input: {
+  target: StrategicApprovalTarget;
+  payload: KpiValueApprovalPayload;
+  informUsernames: string[];
+  companyId: string;
+  programId: string;
+  actor: Pick<AuthUser, "username" | "name">;
+  data: StrategicApprovalData;
+  id?: string;
+  now?: string;
+}): StrategicApproval {
+  const now = input.now ?? new Date().toISOString();
+  const base = buildApproval({
+    kind: "kpi_value",
+    target: input.target,
+    payload: input.payload,
+    companyId: input.companyId,
+    programId: input.programId,
+    requester: input.actor,
+    data: input.data,
+    id: input.id,
+    now,
+  });
+  return stripUndefined({
+    ...base,
+    status: "approved" as const,
+    decidedBy: input.actor.username,
+    decidedByName: input.actor.name,
+    decidedAt: now,
+    direct: true,
+    informUsernames: input.informUsernames.filter((u) => u !== input.actor.username),
+  });
+}
+
+/** Texte de notification d'une correction/suppression KPI appliquée :
+ *  « Valeur KPI corrigée : <KPI> <période> <ancienne> → <nouvelle> par <nom> ». */
+export function kpiCorrectionNoticeText(
+  approval: StrategicApproval,
+  data: StrategicApprovalData
+): { title: string; desc: string } {
+  const p = approval.payload as KpiValueApprovalPayload;
+  const indicator = data.indicators.find((i) => i.id === approval.targetId);
+  const kpi = indicator?.name ?? approval.targetName ?? approval.targetId;
+  const unit = indicator?.unit ? ` ${indicator.unit}` : "";
+  const fmt = (v: number | undefined, note?: string) =>
+    v !== undefined ? `${v}${unit}` : (note ?? "—");
+  const actorName = approval.direct
+    ? displayName(approval.requestedBy, data.users, approval.requestedByName)
+    : displayName(approval.decidedBy, data.users, approval.decidedByName);
+  const period = p.previousPeriod ?? p.period;
+  const old = fmt(p.previousValue, p.previousNote);
+  if (p.remove) {
+    return {
+      title: `Mesure KPI supprimée · ${kpi}`,
+      desc: `Mesure KPI supprimée : ${kpi} ${period} ${old} par ${actorName}.`,
+    };
+  }
+  const periodText =
+    p.previousPeriod && p.previousPeriod !== p.period
+      ? `${p.previousPeriod} → ${p.period}`
+      : p.period;
+  const requested = !approval.direct
+    ? ` (demandé par ${displayName(approval.requestedBy, data.users, approval.requestedByName)})`
+    : "";
+  return {
+    title: `Valeur KPI corrigée · ${kpi}`,
+    desc: `Valeur KPI corrigée : ${kpi} ${periodText} ${old} → ${fmt(p.value, p.note)} par ${actorName}${requested}.`,
+  };
 }
 
 // ─── Effets ─────────────────────────────────────────────────────────────────────────────────
@@ -677,9 +790,15 @@ export function describeApproval(
       const unit = indicator?.unit ? ` ${indicator.unit}` : "";
       if (p.measurementId) {
         const existing = (data.measurements ?? []).find((m) => m.id === p.measurementId);
+        const before =
+          p.previousPeriod !== undefined
+            ? `${p.previousValue ?? p.previousNote ?? "—"}${p.previousValue !== undefined ? unit : ""} (${p.previousPeriod})`
+            : existing
+              ? `${existing.value ?? "—"}${unit} (${existing.period})`
+              : undefined;
         return {
           subject,
-          before: existing ? `${existing.value ?? "—"}${unit} (${existing.period})` : undefined,
+          before,
           after: p.remove ? undefined : `${p.value ?? "—"}${unit} (${p.period})`,
         };
       }
@@ -865,6 +984,30 @@ export function buildApprovalAlerts(
       companyId: a.companyId,
       resolved: false,
     };
+    // Information des responsables supérieurs (correction/suppression KPI appliquée), voir
+    // lib/kpiCorrectionRouting.ts. Jamais l'acteur (demandeur/décideur) lui-même.
+    if (
+      a.status === "approved" &&
+      (a.informUsernames ?? []).includes(user.username) &&
+      a.requestedBy !== user.username &&
+      a.decidedBy !== user.username
+    ) {
+      const decidedAt = a.decidedAt ?? a.requestedAt;
+      if (new Date(decidedAt).getTime() >= cutoff) {
+        const notice = kpiCorrectionNoticeText(a, data);
+        alerts.push({
+          ...common,
+          id: `strategic-approval-${a.id}-info`,
+          type: "blue",
+          ts: decidedAt.slice(0, 10),
+          createdAt: decidedAt,
+          title: notice.title,
+          desc: notice.desc,
+        });
+      }
+    }
+    // Enregistrement d'information (action directe) : ni « à valider » ni accusé de décision.
+    if (a.direct) continue;
     if (a.status === "pending") {
       if (canDecide(user, a, data)) {
         alerts.push({
@@ -945,13 +1088,16 @@ export function bucketApprovals(
   const pending = approvals
     .filter((a) => canDecide(user, a, data))
     .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
-  const mine = approvals.filter((a) => a.requestedBy === user.username).sort(byRecent);
+  const mine = approvals.filter((a) => !a.direct && a.requestedBy === user.username).sort(byRecent);
   const seesAll = isAnyAdmin(user) || hasRole(user, "strategic_lead");
   const history = approvals
     .filter(
       (a) =>
         a.status !== "pending" &&
-        (seesAll || a.requestedBy === user.username || a.decidedBy === user.username)
+        (seesAll ||
+          a.requestedBy === user.username ||
+          a.decidedBy === user.username ||
+          (a.informUsernames ?? []).includes(user.username))
     )
     .sort(byRecent);
   return { pending, mine, history };

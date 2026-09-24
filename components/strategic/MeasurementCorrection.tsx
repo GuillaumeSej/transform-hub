@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import { IndicatorValueModal } from "@/components/strategic/IndicatorValueModal";
+import { KpiCorrectionNotice } from "@/components/strategic/KpiCorrectionNotice";
 import { useToast } from "@/lib/hooks/useToast";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -26,10 +27,11 @@ export type MeasurementCorrection = {
 };
 
 /**
- * Correction / suppression d'une mesure KPI déjà publiée (« si on s'est trompé »). Droit : le même
- * que la saisie (`canFillIndicatorValue` — responsables de l'indicateur, comptes additionnels,
- * strategic_lead du programme, admins). Le passage par la validation stratégique suit la même
- * porte `"kpi_value"` que la saisie (voir `editKpiValueFlow` / `deleteKpiValueFlow`).
+ * Correction / suppression d'une mesure KPI déjà publiée (« si on s'est trompé »). En contexte
+ * stratégique, droit ET circuit suivent `routeKpiCorrection` (lib/kpiCorrectionRouting.ts) :
+ * responsables plan/axe/chantier ⇒ correction directe + information des niveaux supérieurs ;
+ * responsable de projet (ou autre saisisseur autorisé) ⇒ demande au responsable du chantier. Hors
+ * contexte stratégique : droit de saisie (`canFillIndicatorValue`), écriture directe.
  */
 export function useMeasurementCorrection({
   indicator,
@@ -52,20 +54,24 @@ export function useMeasurementCorrection({
   const [deleting, setDeleting] = useState<IndicatorMeasurement | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const canCorrect =
-    !!user && !!updateMeasurement && !!deleteMeasurement && canFillIndicatorValue(indicator, user);
+  const route = sa && user ? sa.kpiCorrectionRoute(indicator) : null;
+  const allowed = route ? route.mode !== "forbidden" : canFillIndicatorValue(indicator, user);
+  const canCorrect = !!user && !!updateMeasurement && !!deleteMeasurement && allowed;
 
   const confirmDelete = async () => {
     if (!deleting || !deleteMeasurement) return;
     setBusy(true);
     try {
-      const outcome = await deleteKpiValueFlow(sa, indicator, deleting, deleteMeasurement);
+      const outcome = await deleteKpiValueFlow(
+        sa,
+        indicator,
+        deleting,
+        deleteMeasurement,
+        route ?? undefined
+      );
       showToast(
         outcome === "pending"
-          ? t(
-              "kpi.measurement.deletionSubmitted",
-              "Suppression soumise à validation du responsable du plan"
-            )
+          ? t("kpi.measurement.deletionSubmitted", "Demande de suppression envoyée pour validation")
           : t("kpi.measurement.deleted", "Mesure supprimée"),
         indicator.name,
         "success"
@@ -98,6 +104,7 @@ export function useMeasurementCorrection({
           editing={editing}
           measurements={measurements}
           updateMeasurement={updateMeasurement}
+          correctionRoute={route}
         />
       )}
       <Modal
@@ -132,6 +139,7 @@ export function useMeasurementCorrection({
                 )}
               </p>
             )}
+            <KpiCorrectionNotice route={route} action="delete" />
           </div>
         )}
       </Modal>

@@ -47,7 +47,8 @@ export async function saveStrategicApproval(approval: StrategicApproval): Promis
 export type ApprovalDecisionPatch = Pick<
   StrategicApproval,
   "status" | "decidedBy" | "decidedByName" | "decidedAt" | "decisionComment"
->;
+> &
+  Partial<Pick<StrategicApproval, "payload" | "informUsernames">>;
 
 /** Enregistre la décision en transaction : refuse si la demande n'est plus "pending" (double
  *  décision concurrente). Renvoie la demande mise à jour. */

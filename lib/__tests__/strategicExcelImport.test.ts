@@ -174,7 +174,10 @@ describe("validateStrategicImportRows", () => {
     expect(action.chantierWeightPct).toBe(50);
     expect(action.deliverables).toHaveLength(1);
     expect(action.deliverables![0].label).toBe("Cartographie validée en comité");
-    expect(action.deliverables![0].phases).toHaveLength(1);
+    // Livrable = ÉCHÉANCE : ancien format "Début"/"Fin" → "Fin" devient l'échéance, "Début" ignoré.
+    expect(action.deliverables![0].phases).toHaveLength(0);
+    expect(action.deliverables![0].dueDate).toBe("2026-03-31");
+    expect(action.deliverables![0].status).toBe("todo");
 
     const axisIndicator = result.toCreate.indicators.find((ind) =>
       ind.name.includes("automatisation")
@@ -293,6 +296,41 @@ describe("validateStrategicImportRows", () => {
     expect(result.toCreate.actions[0].deliverables ?? []).toHaveLength(0);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].sheet).toBe("Livrables");
+  });
+
+  it("Livrables : colonne 'Échéance' = seule date (prioritaire sur 'Fin'), 'Début' ignoré, date invalide rejetée", () => {
+    const sheets: StrategicImportRawSheets = {
+      axes: [baseAxisRow()],
+      chantiers: [baseChantierRow()],
+      actions: [baseActionRow()],
+      livrables: [
+        { "Code Projet": "ACT1", Label: "Nouveau format", Échéance: "15/04/2026" },
+        baseLivrableRow({ Label: "Échéance prioritaire", Échéance: "2026-06-30" }),
+        { "Code Projet": "ACT1", Label: "Début seul", Début: "2026-01-01" },
+        { "Code Projet": "ACT1", Label: "Invalide", Échéance: "pas une date" },
+      ],
+      indicateurs: [],
+      etp: [],
+    };
+
+    const result = validateStrategicImportRows(
+      sheets,
+      emptyExisting(),
+      companyId,
+      programId,
+      stages
+    );
+
+    const deliverables = result.toCreate.actions[0].deliverables ?? [];
+    expect(deliverables.map((d) => [d.label, d.dueDate])).toEqual([
+      ["Nouveau format", "2026-04-15"],
+      ["Échéance prioritaire", "2026-06-30"],
+      ["Début seul", undefined],
+    ]);
+    expect(deliverables.every((d) => d.phases.length === 0)).toBe(true);
+    expect(deliverables.some((d) => "dueDate" in d && d.dueDate === undefined)).toBe(false);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({ sheet: "Livrables", rowNumber: 5 });
   });
 
   it("rattache un chantier à PLUSIEURS axes via 'Codes Axes (séparés par ;)'", () => {

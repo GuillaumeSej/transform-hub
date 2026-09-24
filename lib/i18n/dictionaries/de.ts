@@ -60,6 +60,8 @@ const de: Record<string, string> = {
   "validation.sa.status.pending": "Ausstehend",
   "validation.sa.status.approved": "Genehmigt",
   "validation.sa.status.rejected": "Abgelehnt",
+  "validation.sa.status.direct": "Angewendet (zur Information)",
+  "validation.sa.adjustValue": "Anzuwendender Wert (vor dem Annehmen änderbar)",
   "validation.sa.tab.todo": "Zu prüfen",
   "validation.sa.tab.mine": "Meine Anträge",
   "validation.sa.tab.history": "Entscheidungshistorie",
@@ -1566,16 +1568,11 @@ const de: Record<string, string> = {
   "strategicAxes.actionDescription": "Beschreibung",
   "strategicAxes.deliverables": "Erwartete Liefergegenstände",
   "strategicAxes.deliverablesHint":
-    "Ein Feld pro Liefergegenstand; jeder Liefergegenstand kann in datierte Teilschritte gegliedert werden.",
+    "Ein Feld pro Liefergegenstand, mit Fälligkeitsdatum (bis wann er erledigt sein muss) und einem Kästchen „Erledigt“.",
   "strategicAxes.noDeliverables": "Kein Liefergegenstand erfasst.",
   "strategicAxes.deliverableLabel": "Bezeichnung des Liefergegenstands",
   "strategicAxes.addDeliverable": "Liefergegenstand hinzufügen",
   "strategicAxes.removeDeliverable": "Liefergegenstand entfernen",
-  "strategicAxes.noPhases": "Kein Teilschritt.",
-  "strategicAxes.phaseStart": "Beginn",
-  "strategicAxes.phaseEnd": "Ende",
-  "strategicAxes.addPhase": "Teilschritt hinzufügen",
-  "strategicAxes.removePhase": "Teilschritt entfernen",
   // Indikatoren — hier NUR LESEND, die Erfassung erfolgt auf der KPI-Seite
   "strategicAxes.indicatorsSection": "Indikatoren dieser Achse",
   "strategicAxes.indicatorsReadOnly":
@@ -1647,10 +1644,6 @@ const de: Record<string, string> = {
   // ─── Plan Stratégique — round 8 (optionale KPI-Verknüpfung des Hebels + Kanban ohne KPI) ─
   "strategicChantierDetail.indicatorSelect.label": "Verknüpfter KPI",
   "strategicChantierDetail.indicatorSelect.none": "Kein KPI",
-  "strategicChantierDetail.kanban.title": "Status",
-  "strategicChantierDetail.kanban.todo": "Zu erledigen",
-  "strategicChantierDetail.kanban.inProgress": "In Bearbeitung",
-  "strategicChantierDetail.kanban.done": "Erledigt",
 
   "strategicChantierDetail.prerequisites.title": "Abhängigkeiten / Voraussetzungen",
   "strategicChantierDetail.prerequisites.kindAction": "Projekt des Plans",
@@ -1679,6 +1672,17 @@ const de: Record<string, string> = {
   "strategicChantierDetail.deliverableModal.commentPlaceholder": "Kommentar hinzufügen…",
   "strategicChantierDetail.deliverableModal.noComments": "Keine Kommentare.",
   "strategicChantierDetail.deliverableForm.leverSelect": "Zugehöriges Projekt",
+  // Livrable = ÉCHÉANCE + statut binaire Fait / À faire (+ « en retard » dérivé) — voir
+  // lib/deliverableState.ts et components/strategic/deliverableMarker.tsx.
+  "strategicChantierDetail.deliverableState.done": "Erledigt",
+  "strategicChantierDetail.deliverableState.todo": "Offen",
+  "strategicChantierDetail.deliverableState.late": "Überfällig",
+  "strategicChantierDetail.deliverableState.lateDays": "{n} T überfällig",
+  "strategicChantierDetail.deliverableState.legendTitle": "Liefergegenstände",
+  "strategicChantierDetail.deliverableState.doneCount": "{done}/{total} erledigt",
+  "strategicChantierDetail.deliverableState.lateCount": "{n} überfällig",
+  "strategicChantierDetail.deliverableState.dueDateMissing":
+    "Jeder Liefergegenstand braucht ein Fälligkeitsdatum.",
 
   // ─── Reiter der Detailansicht des Arbeitspakets (Runde 10, Punkt 2) ───────────────────────
   "strategicChantierDetail.tabs.overview": "Übersicht",
@@ -1989,13 +1993,31 @@ const de: Record<string, string> = {
   "kpi.measurement.deleted": "Messung gelöscht",
   "kpi.measurement.deleteError": "Löschen fehlgeschlagen",
   "kpi.measurement.periodCollision": "Für den Zeitraum {period} existiert bereits eine Messung.",
-  "kpi.measurement.correctionSubmitted":
-    "Korrektur zur Freigabe durch den Planverantwortlichen eingereicht",
-  "kpi.measurement.deletionSubmitted":
-    "Löschung zur Freigabe durch den Planverantwortlichen eingereicht",
+  "kpi.measurement.correctionSubmitted": "Korrekturanfrage zur Genehmigung gesendet",
+  "kpi.measurement.deletionSubmitted": "Löschanfrage zur Genehmigung gesendet",
   "kpi.measurement.correctLatest": "Letzten Wert korrigieren",
   "kpi.measurement.pendingCorrection": "Korrektur",
   "kpi.measurement.pendingDeletion": "Löschung",
+  "kpi.measurement.route.edit.chantier":
+    "Ihre Korrektur wird dem Verantwortlichen des Arbeitspakets {name} vorgelegt.",
+  "kpi.measurement.route.edit.axis":
+    "Ihre Korrektur wird dem Verantwortlichen der Achse {name} vorgelegt.",
+  "kpi.measurement.route.edit.plan": "Ihre Korrektur wird dem Planverantwortlichen vorgelegt.",
+  "kpi.measurement.route.delete.chantier":
+    "Ihre Löschung wird dem Verantwortlichen des Arbeitspakets {name} vorgelegt.",
+  "kpi.measurement.route.delete.axis":
+    "Ihre Löschung wird dem Verantwortlichen der Achse {name} vorgelegt.",
+  "kpi.measurement.route.delete.plan": "Ihre Löschung wird dem Planverantwortlichen vorgelegt.",
+  "kpi.measurement.inform.axisPlan":
+    "Der Achsenverantwortliche und der Planverantwortliche werden informiert.",
+  "kpi.measurement.inform.axis": "Der Achsenverantwortliche wird informiert.",
+  "kpi.measurement.inform.plan": "Der Planverantwortliche wird informiert.",
+  "kpi.measurement.informAfter.axisPlan":
+    "Nach Annahme der Anfrage werden der Achsenverantwortliche und der Planverantwortliche informiert.",
+  "kpi.measurement.informAfter.axis":
+    "Nach Annahme der Anfrage wird der Achsenverantwortliche informiert.",
+  "kpi.measurement.informAfter.plan":
+    "Nach Annahme der Anfrage wird der Planverantwortliche informiert.",
   "kpi.history.actions": "Aktionen",
   "kpi.history.correctedBy": "korrigiert von",
   "strategicDelete.pendingBy": "Löschung wartet auf Genehmigung durch {approver}",
@@ -2061,6 +2083,8 @@ const de: Record<string, string> = {
   "staffing.ftePlaceholder": "z. B. 0,5",
   "staffing.datesMissing": "Daten ergänzen",
   "staffing.edit": "Diese Zeile bearbeiten",
+  "staffing.manageInStaffingTab": "VZÄ im Reiter Personaleinsatz des Arbeitspakets verwalten",
+  "staffing.emptyProjet": "Für dieses Projekt sind keine VZÄ erfasst.",
   "staffing.editing": "Zeile wird bearbeitet",
   "staffing.editingMissingDates": "Zeile wird bearbeitet — bitte Beginn- und Enddatum ergänzen.",
   "staffing.saveEdit": "Speichern",

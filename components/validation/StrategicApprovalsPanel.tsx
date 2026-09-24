@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
+import { parseNumber } from "@/lib/kpiHistory";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   describeApproval,
   STRATEGIC_APPROVAL_KINDS,
+  type KpiValueApprovalPayload,
   type StrategicApproval,
   type StrategicApprovalData,
   type StrategicApprovalKind,
@@ -42,7 +44,7 @@ type Api = {
   pending: StrategicApproval[];
   mine: StrategicApproval[];
   history: StrategicApproval[];
-  approve: (id: string, comment?: string) => Promise<void>;
+  approve: (id: string, comment?: string, adjust?: { value?: number }) => Promise<void>;
   reject: (id: string, comment: string) => Promise<void>;
 };
 
@@ -65,15 +67,25 @@ export function StrategicApprovalsPanel({
   const [tab, setTab] = useState<Tab>("todo");
   const [kindFilter, setKindFilter] = useState<StrategicApprovalKind | "all">("all");
   const [comments, setComments] = useState<Record<string, string>>({});
+  /** Valeur AJUSTÉE par l'approbateur d'une correction KPI (saisie brute, par demande). */
+  const [adjusted, setAdjusted] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const kindLabel = (k: StrategicApprovalKind) => t(`validation.sa.kind.${k}`, KIND_FALLBACK[k]);
-  const statusLabel = (s: StrategicApproval["status"]) =>
-    s === "approved"
-      ? t("validation.sa.status.approved", "Validée")
-      : s === "rejected"
-        ? t("validation.sa.status.rejected", "Refusée")
-        : t("validation.sa.status.pending", "En attente");
+  /** Correction KPI (valeur modifiable par l'approbateur avant d'accepter). */
+  const kpiCorrection = (a: StrategicApproval): KpiValueApprovalPayload | undefined => {
+    if (a.kind !== "kpi_value") return undefined;
+    const p = a.payload as KpiValueApprovalPayload;
+    return p.measurementId && !p.remove ? p : undefined;
+  };
+  const statusLabel = (s: StrategicApproval["status"], direct?: boolean) =>
+    direct
+      ? t("validation.sa.status.direct", "Appliquée (information)")
+      : s === "approved"
+        ? t("validation.sa.status.approved", "Validée")
+        : s === "rejected"
+          ? t("validation.sa.status.rejected", "Refusée")
+          : t("validation.sa.status.pending", "En attente");
 
   const list = useMemo(() => {
     const base = tab === "todo" ? api.pending : tab === "mine" ? api.mine : api.history;
@@ -90,9 +102,19 @@ export function StrategicApprovalsPanel({
       );
       return;
     }
+    let adjust: { value?: number } | undefined;
+    const rawAdjusted = adjusted[a.id];
+    if (decision === "approve" && kpiCorrection(a) && rawAdjusted !== undefined) {
+      const parsed = parseNumber(rawAdjusted);
+      if (parsed === null) {
+        showToast(t("kpi.valueInvalid"), a.targetName ?? a.targetId, "error");
+        return;
+      }
+      if (parsed !== undefined) adjust = { value: parsed };
+    }
     setBusyId(a.id);
     try {
-      if (decision === "approve") await api.approve(a.id, comment);
+      if (decision === "approve") await api.approve(a.id, comment, adjust);
       else await api.reject(a.id, comment);
       showToast(
         decision === "approve"
@@ -189,7 +211,7 @@ export function StrategicApprovalsPanel({
                             : "bg-rag-amber-light text-rag-amber"
                       }`}
                     >
-                      {statusLabel(a.status)}
+                      {statusLabel(a.status, a.direct)}
                     </span>
                   </div>
 
@@ -258,6 +280,22 @@ export function StrategicApprovalsPanel({
                           : "—")}
                     </span>
                   </div>
+
+                  {tab === "todo" && a.status === "pending" && kpiCorrection(a) && (
+                    <label className="mt-3 flex flex-wrap items-center gap-2 text-xs text-tertiary">
+                      {t(
+                        "validation.sa.adjustValue",
+                        "Valeur à appliquer (modifiable avant d'accepter)"
+                      )}
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={adjusted[a.id] ?? String(kpiCorrection(a)?.value ?? "")}
+                        onChange={(e) => setAdjusted((v) => ({ ...v, [a.id]: e.target.value }))}
+                        className="w-28 rounded-md border border-border px-2.5 py-1.5 text-xs text-primary"
+                      />
+                    </label>
+                  )}
 
                   {tab === "todo" && a.status === "pending" && (
                     <div className="mt-3 flex flex-wrap items-center gap-2">

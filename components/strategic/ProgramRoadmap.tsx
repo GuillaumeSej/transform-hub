@@ -29,7 +29,13 @@ import {
   withAlpha,
   type TimelineScale,
 } from "@/components/strategic/TimelineBars";
-import type { Chantier, ChantierAction, ProjetKanbanStatus, StrategicAxis } from "@/types";
+import {
+  DELIVERABLE_MARKER_STYLE,
+  DeliverableMarkerLegend,
+  useDeliverableStateText,
+} from "@/components/strategic/deliverableMarker";
+import { deliverableLateDays, deliverableState } from "@/lib/deliverableState";
+import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
 
 /**
  * Feuille de route PROGRAMME (round 15) — vue Gantt du plan stratégique COMPLET : une ligne par
@@ -101,23 +107,8 @@ const ROW_LABEL_WIDTH = "w-80";
  *  périmètre modifiable de ce lot). */
 const FALLBACK_COLOR = "#a99e9a";
 
-/** Mêmes 3 couleurs que `PROGRESSION_COLOR_*`/`deliverableStatusColor` de `ChantierDetailPanel.tsx`
- *  (fonction privée, hors périmètre de ce lot — dupliqué ici pour garder EXACTEMENT le même code
- *  couleur todo/rouge, in_progress/ambre, done/vert sur les losanges de livrable). */
-const DELIVERABLE_COLOR_RED = "#ff3c47";
-const DELIVERABLE_COLOR_AMBER = "#806659";
-const DELIVERABLE_COLOR_GREEN = "#1a1a1a";
-
-function deliverableMarkerColor(status: ProjetKanbanStatus | undefined): string {
-  switch (status) {
-    case "done":
-      return DELIVERABLE_COLOR_GREEN;
-    case "in_progress":
-      return DELIVERABLE_COLOR_AMBER;
-    default:
-      return DELIVERABLE_COLOR_RED;
-  }
-}
+// Code couleur des losanges de livrable : module partagé `deliverableMarker.tsx` (Fait plein encre,
+// À faire creux, En retard plein rouge corail) — plus de copie locale.
 
 // Hauteurs de ligne (round 17) : agrandies par rapport au round 15 (le PO trouvait la vue trop
 // plate/compacte) tout en restant plus resserrées que `ChantierGantt.tsx`/`ChantierDetailPanel.tsx`
@@ -225,6 +216,9 @@ export function ProgramRoadmap({
 }) {
   const { t, locale } = useTranslation();
   const formatTimelineDay = (iso: string) => formatTimelineDayBase(iso, locale);
+  const { tooltip: deliverableTooltip } = useDeliverableStateText();
+  /** Référence du retard des livrables (état « en retard » dérivé, voir `deliverableState`). */
+  const today = new Date();
   const l = {
     empty: labels?.empty ?? t("strategicAxes.roadmap.empty", "Aucun projet daté sur le programme."),
     scale: labels?.scale ?? t("strategicAxes.roadmap.scale", "Échelle"),
@@ -687,21 +681,31 @@ export function ProgramRoadmap({
                                     est désormais décalé de `LEVIER_LABEL_HEIGHT` (la bande du "N%"
                                     ci-dessus) — `top` en tient compte pour rester centré SUR la barre,
                                     qui reste la bande dédiée aux losanges (jamais celle du "N%"). */}
-                                {row.deliverables.map((deliverable) => (
-                                  <TimelineMarker
-                                    key={deliverable.id}
-                                    leftPct={pctOf(deliverable.dueDate!)}
-                                    top={LEVIER_LABEL_HEIGHT + LEVIER_BAR_HEIGHT / 2}
-                                    color={deliverableMarkerColor(deliverable.status)}
-                                    onClick={
-                                      rowClickable
-                                        ? () => onProjetClick!(row.chantier.id, row.action.id)
-                                        : undefined
-                                    }
-                                    ariaLabel={deliverable.label}
-                                    tooltipText={`${deliverable.label} · ${formatTimelineDay(deliverable.dueDate!)}`}
-                                  />
-                                ))}
+                                {row.deliverables.map((deliverable) => {
+                                  const state = deliverableState(deliverable, today);
+                                  const markerStyle = DELIVERABLE_MARKER_STYLE[state];
+                                  return (
+                                    <TimelineMarker
+                                      key={deliverable.id}
+                                      leftPct={pctOf(deliverable.dueDate!)}
+                                      top={LEVIER_LABEL_HEIGHT + LEVIER_BAR_HEIGHT / 2}
+                                      color={markerStyle.fill}
+                                      borderColor={markerStyle.border}
+                                      onClick={
+                                        rowClickable
+                                          ? () => onProjetClick!(row.chantier.id, row.action.id)
+                                          : undefined
+                                      }
+                                      ariaLabel={deliverable.label}
+                                      tooltipText={deliverableTooltip(
+                                        deliverable.label,
+                                        deliverable.dueDate,
+                                        state,
+                                        deliverableLateDays(deliverable, today)
+                                      )}
+                                    />
+                                  );
+                                })}
                               </div>
                             </div>
                           );
@@ -715,6 +719,7 @@ export function ProgramRoadmap({
           </div>
         </div>
       </div>
+      <DeliverableMarkerLegend className="mt-2" />
     </div>
   );
 }

@@ -33,6 +33,12 @@
  *        projet directement si ce 2e palier s'avère inutile/indécidable (voir cette fonction).
  *        Seule l'approbation du palier "axis" (ou d'une demande sans `stage`, format d'avant cette
  *        fonctionnalité) crée réellement le projet.
+ *        `adjust` (optionnel, correction KPI uniquement) : valeur AJUSTÉE par l'approbateur avant
+ *        d'accepter ; à l'acceptation d'une correction KPI, les responsables supérieurs au
+ *        décideur sont informés (`informUsernames`, voir lib/kpiCorrectionRouting.ts).
+ *   sa.kpiCorrectionRoute(indicator) => KpiCorrectionRoute   directe / demande / interdite
+ *   sa.notifyKpiCorrection(target, payload, informUsernames) => enregistrement d'information
+ *        d'une correction KPI appliquée directement (alerte aux responsables supérieurs)
  *   sa.reject(id, comment)   => Promise<void>   commentaire OBLIGATOIRE
  * Toutes les méthodes lèvent une Error (message FR) si non habilité / périmé / déjà traité.
  */
@@ -53,6 +59,11 @@ import {
 } from "@/lib/firestore/indicatorMeasurements";
 import { appendAuditEntries } from "@/lib/firestore/levers";
 import {
+  kpiCorrectionDecisionInformees,
+  routeKpiCorrection,
+  type KpiCorrectionIndicator,
+} from "@/lib/kpiCorrectionRouting";
+import {
   applyApprovedPayload,
   applyRejectedPayload,
   applyRequestSideEffects,
@@ -60,10 +71,12 @@ import {
   buildApproval,
   buildApprovalAlerts,
   buildApprovalAuditEntry,
+  buildDirectKpiCorrectionRecord,
   canDecide,
   needsApproval as needsApprovalLogic,
   nextProjetCreateApproval,
   type ApprovalEffects,
+  type KpiValueApprovalPayload,
   type ProjetCreateApprovalPayload,
   type ProjetCreateStage,
   type StrategicApproval,
@@ -182,8 +195,42 @@ export function useStrategicApprovals({
     [user, companyId, programId, logAudit]
   );
 
+  const kpiCorrectionRoute = useCallback(
+    (indicator: KpiCorrectionIndicator) => routeKpiCorrection(user, indicator, fullData),
+    [user, fullData]
+  );
+
+  const notifyKpiCorrection = useCallback(
+    async (
+      target: StrategicApprovalTarget,
+      payload: KpiValueApprovalPayload,
+      informUsernames: string[]
+    ): Promise<void> => {
+      if (!user || !companyId || !programId) return;
+      const informees = informUsernames.filter((u) => u !== user.username);
+      if (!informees.length) return;
+      await saveStrategicApproval(
+        buildDirectKpiCorrectionRecord({
+          target,
+          payload,
+          informUsernames: informees,
+          companyId,
+          programId,
+          actor: user,
+          data: dataRef.current,
+        })
+      );
+    },
+    [user, companyId, programId]
+  );
+
   const decide = useCallback(
-    async (id: string, status: "approved" | "rejected", comment?: string) => {
+    async (
+      id: string,
+      status: "approved" | "rejected",
+      comment?: string,
+      adjust?: { value?: number }
+    ) => {
       if (!user) throw new Error("Session indisponible");
       const approval = approvalsRef.current.find((a) => a.id === id);
       if (!approval) throw new Error("Demande introuvable");
@@ -191,8 +238,38 @@ export function useStrategicApprovals({
         throw new Error("Vous n'êtes pas habilité à traiter cette demande");
       }
       const decidedAt = new Date().toISOString();
+      // Correction/suppression KPI : valeur éventuellement AJUSTÉE par l'approbateur, et
+      // responsables supérieurs au décideur informés (lib/kpiCorrectionRouting.ts).
+      let payloadPatch: KpiValueApprovalPayload | undefined;
+      let informUsernames: string[] | undefined;
+      const kpiPayload =
+        approval.kind === "kpi_value" ? (approval.payload as KpiValueApprovalPayload) : undefined;
+      if (status === "approved" && kpiPayload?.measurementId) {
+        if (
+          !kpiPayload.remove &&
+          adjust?.value !== undefined &&
+          adjust.value !== kpiPayload.value
+        ) {
+          payloadPatch = {
+            ...kpiPayload,
+            value: adjust.value,
+            requestedValue: kpiPayload.requestedValue ?? kpiPayload.value,
+          };
+        }
+        const indicator = dataRef.current.indicators.find((i) => i.id === approval.targetId);
+        if (indicator) {
+          informUsernames = kpiCorrectionDecisionInformees(
+            user,
+            approval.requestedBy,
+            indicator,
+            dataRef.current
+          );
+        }
+      }
       const decided: StrategicApproval = {
         ...approval,
+        ...(payloadPatch ? { payload: payloadPatch } : {}),
+        ...(informUsernames?.length ? { informUsernames } : {}),
         status,
         decidedBy: user.username,
         decidedByName: user.name,
@@ -214,6 +291,8 @@ export function useStrategicApprovals({
         decidedByName: decided.decidedByName,
         decidedAt,
         decisionComment: decided.decisionComment,
+        ...(payloadPatch ? { payload: payloadPatch } : {}),
+        ...(informUsernames?.length ? { informUsernames } : {}),
       });
       logAudit(saved, status);
       if (status === "approved" && saved.kind === "projet_create") {
@@ -242,7 +321,8 @@ export function useStrategicApprovals({
   );
 
   const approve = useCallback(
-    (id: string, comment?: string) => decide(id, "approved", comment),
+    (id: string, comment?: string, adjust?: { value?: number }) =>
+      decide(id, "approved", comment, adjust),
     [decide]
   );
   const reject = useCallback(
@@ -263,6 +343,8 @@ export function useStrategicApprovals({
     alerts,
     needsApproval,
     request,
+    kpiCorrectionRoute,
+    notifyKpiCorrection,
     approve,
     reject,
   };

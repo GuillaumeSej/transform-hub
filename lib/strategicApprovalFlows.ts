@@ -12,7 +12,9 @@ import {
   type IndicatorValueInput,
   type MeasurementEditPatch,
 } from "@/lib/kpiHistory";
+import type { KpiCorrectionRoute } from "@/lib/kpiCorrectionRouting";
 import type {
+  KpiValueApprovalPayload,
   ProjetCreateApprovalPayload,
   ProjetCreateStage,
   StrategicApproval,
@@ -44,7 +46,40 @@ export type ApprovalGate = {
     payload: StrategicApprovalPayload,
     reason?: string
   ) => Promise<StrategicApproval>;
+  /** Information des responsables supérieurs après une correction KPI appliquée directement
+   *  (voir `lib/kpiCorrectionRouting.ts`). Optionnel : absent ⇒ personne n'est informé. */
+  notifyKpiCorrection?: (
+    target: StrategicApprovalTarget,
+    payload: KpiValueApprovalPayload,
+    informUsernames: string[]
+  ) => Promise<unknown>;
 };
+
+/** Informe sans faire échouer la correction déjà appliquée (la notification est secondaire). */
+async function informSafely(
+  gate: ApprovalGate | null | undefined,
+  target: StrategicApprovalTarget,
+  payload: KpiValueApprovalPayload,
+  inform: string[]
+): Promise<void> {
+  if (!gate?.notifyKpiCorrection || inform.length === 0) return;
+  try {
+    await gate.notifyKpiCorrection(target, payload, inform);
+  } catch (err) {
+    console.error("[betrack] notification de correction KPI :", err);
+  }
+}
+
+function previousOf(
+  measurement: Pick<IndicatorMeasurement, "period" | "value" | "note">
+): Pick<KpiValueApprovalPayload, "previousPeriod" | "previousValue" | "previousNote"> {
+  const note = measurement.note?.trim();
+  return {
+    previousPeriod: measurement.period,
+    ...(measurement.value !== undefined ? { previousValue: measurement.value } : {}),
+    ...(note ? { previousNote: note } : {}),
+  };
+}
 
 export type FlowOutcome = "applied" | "pending";
 
@@ -95,52 +130,88 @@ export async function submitKpiValueFlow<M>(
 }
 
 /**
- * Correction d'une mesure KPI déjà publiée — MÊME porte que la saisie (`"kpi_value"`) : une
- * correction change une valeur publiée exactement comme une saisie, elle ne doit donc pas
- * permettre de contourner la validation. Approbateur (lead/admin) ou hors contexte ⇒ correction
- * directe ; sinon demande `"kpi_value"` portant `measurementId` (le doc est réécrit à
- * l'approbation, voir `applyApprovedPayload`).
+ * Correction d'une mesure KPI déjà publiée. Avec `route` (règles PO, `routeKpiCorrection` de
+ * `lib/kpiCorrectionRouting.ts`) : `"direct"` ⇒ correction appliquée puis responsables supérieurs
+ * informés (`gate.notifyKpiCorrection`) ; `"request"` ⇒ demande `"kpi_value"` portant
+ * `measurementId`, adressée au responsable du chantier (le doc est réécrit à l'approbation, voir
+ * `applyApprovedPayload`) ; `"forbidden"` ⇒ lève. Sans `route` (compatibilité) : même porte
+ * `"kpi_value"` que la saisie.
  */
 export async function editKpiValueFlow(
   gate: ApprovalGate | null | undefined,
   indicator: Pick<Indicator, "id" | "name">,
   measurement: Pick<IndicatorMeasurement, "id" | "period" | "value" | "note">,
   patch: MeasurementEditPatch,
-  updateMeasurement: (id: string, patch: MeasurementEditPatch) => Promise<unknown>
+  updateMeasurement: (id: string, patch: MeasurementEditPatch) => Promise<unknown>,
+  route?: KpiCorrectionRoute
 ): Promise<FlowOutcome> {
   const target: StrategicApprovalTarget = {
     type: "indicateur",
     id: indicator.id,
     name: indicator.name,
   };
+  const period = patch.period !== undefined ? patch.period.trim() : measurement.period;
+  const value = patch.value === undefined ? measurement.value : (patch.value ?? undefined);
+  const note = (patch.note === undefined ? measurement.note : (patch.note ?? undefined))?.trim();
+  const payload: KpiValueApprovalPayload = {
+    period,
+    measurementId: measurement.id,
+    ...(value !== undefined ? { value } : {}),
+    ...(note ? { note } : {}),
+  };
+  if (gate && route) {
+    if (route.mode === "forbidden") {
+      throw new Error("Vous n'êtes pas habilité à corriger cette mesure");
+    }
+    if (route.mode === "request") {
+      await gate.request("kpi_value", target, { ...payload, ...previousOf(measurement) });
+      return "pending";
+    }
+    await updateMeasurement(measurement.id, patch);
+    await informSafely(gate, target, { ...payload, ...previousOf(measurement) }, route.inform);
+    return "applied";
+  }
   if (gate && gate.needsApproval("kpi_value", target)) {
-    const period = patch.period !== undefined ? patch.period.trim() : measurement.period;
-    const value = patch.value === undefined ? measurement.value : (patch.value ?? undefined);
-    const note = (patch.note === undefined ? measurement.note : (patch.note ?? undefined))?.trim();
-    await gate.request("kpi_value", target, {
-      period,
-      measurementId: measurement.id,
-      ...(value !== undefined ? { value } : {}),
-      ...(note ? { note } : {}),
-    });
+    await gate.request("kpi_value", target, payload);
     return "pending";
   }
   await updateMeasurement(measurement.id, patch);
   return "applied";
 }
 
-/** Suppression d'une mesure KPI publiée — même porte `"kpi_value"` que la saisie/correction. */
+/** Suppression d'une mesure KPI publiée — même routage que la correction (`route`, voir
+ *  `editKpiValueFlow`) ; sans `route`, même porte `"kpi_value"` que la saisie. */
 export async function deleteKpiValueFlow(
   gate: ApprovalGate | null | undefined,
   indicator: Pick<Indicator, "id" | "name">,
-  measurement: Pick<IndicatorMeasurement, "id" | "period" | "value">,
-  deleteMeasurement: (id: string) => Promise<unknown>
+  measurement: Pick<IndicatorMeasurement, "id" | "period" | "value" | "note">,
+  deleteMeasurement: (id: string) => Promise<unknown>,
+  route?: KpiCorrectionRoute
 ): Promise<FlowOutcome> {
   const target: StrategicApprovalTarget = {
     type: "indicateur",
     id: indicator.id,
     name: indicator.name,
   };
+  if (gate && route) {
+    if (route.mode === "forbidden") {
+      throw new Error("Vous n'êtes pas habilité à supprimer cette mesure");
+    }
+    const payload: KpiValueApprovalPayload = {
+      period: measurement.period,
+      measurementId: measurement.id,
+      remove: true,
+      ...(measurement.value !== undefined ? { value: measurement.value } : {}),
+      ...previousOf(measurement),
+    };
+    if (route.mode === "request") {
+      await gate.request("kpi_value", target, payload);
+      return "pending";
+    }
+    await deleteMeasurement(measurement.id);
+    await informSafely(gate, target, payload, route.inform);
+    return "applied";
+  }
   if (gate && gate.needsApproval("kpi_value", target)) {
     await gate.request("kpi_value", target, {
       period: measurement.period,

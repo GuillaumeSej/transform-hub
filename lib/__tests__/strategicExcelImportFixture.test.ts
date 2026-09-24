@@ -113,9 +113,10 @@ describe("import Excel du plan stratégique — fichier pré-rempli réel", () =
     expect(errors).toEqual([]);
     expect(toCreate.chantiers[0].allocatedBudget).toBe(1500.5);
     expect(toCreate.actions[0].start).toBe("2026-01-01");
-    expect(toCreate.actions[0].deliverables?.[0].phases[0]).toMatchObject({
-      start: "2026-01-01",
-      end: "2026-12-31",
+    // Livrable = ÉCHÉANCE : ancien format "Début"/"Fin" → "Fin" devient l'échéance, "Début" ignoré.
+    expect(toCreate.actions[0].deliverables?.[0]).toMatchObject({
+      phases: [],
+      dueDate: "2026-12-31",
     });
     expect(toCreate.indicators[0].objectiveValue).toBe(99.5);
     expect(toCreate.staffing[0]).toMatchObject({ fte: 1.5, startDate: "2026-01-01" });

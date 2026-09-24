@@ -87,6 +87,8 @@ const fr: Record<string, string> = {
   "validation.sa.status.pending": "En attente",
   "validation.sa.status.approved": "Validée",
   "validation.sa.status.rejected": "Refusée",
+  "validation.sa.status.direct": "Appliquée (information)",
+  "validation.sa.adjustValue": "Valeur à appliquer (modifiable avant d'accepter)",
   "validation.sa.tab.todo": "À valider",
   "validation.sa.tab.mine": "Mes demandes",
   "validation.sa.tab.history": "Historique des décisions",
@@ -1625,16 +1627,11 @@ const fr: Record<string, string> = {
   "strategicAxes.actionDescription": "Description",
   "strategicAxes.deliverables": "Livrables attendus",
   "strategicAxes.deliverablesHint":
-    "Un champ par livrable ; chaque livrable peut être découpé en sous-étapes datées.",
+    "Un champ par livrable, avec son échéance (date à laquelle il doit être fait) et une case « Fait ».",
   "strategicAxes.noDeliverables": "Aucun livrable renseigné.",
   "strategicAxes.deliverableLabel": "Intitulé du livrable",
   "strategicAxes.addDeliverable": "Ajouter un livrable",
   "strategicAxes.removeDeliverable": "Supprimer le livrable",
-  "strategicAxes.noPhases": "Aucune sous-étape.",
-  "strategicAxes.phaseStart": "Début",
-  "strategicAxes.phaseEnd": "Fin",
-  "strategicAxes.addPhase": "Ajouter une sous-étape",
-  "strategicAxes.removePhase": "Supprimer la sous-étape",
   // Indicateurs — LECTURE SEULE ici, la saisie vit sur la page KPI
   "strategicAxes.indicatorsSection": "Indicateurs de l'axe",
   "strategicAxes.indicatorsReadOnly":
@@ -1719,14 +1716,6 @@ const fr: Record<string, string> = {
   // ─── Plan Stratégique — round 8 (KPI optionnel du levier, purement informatif depuis round 18) ──
   "strategicChantierDetail.indicatorSelect.label": "KPI rattaché",
   "strategicChantierDetail.indicatorSelect.none": "Aucun KPI",
-  // Round 18 : ces 4 clés "kanban.*" ne pilotent plus le suivi du LEVIER (kanban classique supprimé,
-  // voir `ChantierAction.kanbanStatus`) — elles restent utilisées pour le statut à 3 états d'UN
-  // LIVRABLE (`Deliverable.status`, `DeliverableDetailModal`/`AddDeliverableForm` dans
-  // `ChantierDetailPanel.tsx`), un concept distinct et toujours actif. Ne pas supprimer.
-  "strategicChantierDetail.kanban.title": "Statut",
-  "strategicChantierDetail.kanban.todo": "À faire",
-  "strategicChantierDetail.kanban.inProgress": "En cours",
-  "strategicChantierDetail.kanban.done": "Terminé",
 
   "strategicChantierDetail.prerequisites.title": "Dépendances / Prérequis",
   "strategicChantierDetail.prerequisites.kindAction": "Projet du plan",
@@ -1753,6 +1742,17 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.deliverableModal.commentPlaceholder": "Ajouter un commentaire…",
   "strategicChantierDetail.deliverableModal.noComments": "Aucun commentaire.",
   "strategicChantierDetail.deliverableForm.leverSelect": "Projet rattaché",
+  // Livrable = ÉCHÉANCE + statut binaire Fait / À faire (+ « en retard » dérivé) — voir
+  // lib/deliverableState.ts et components/strategic/deliverableMarker.tsx.
+  "strategicChantierDetail.deliverableState.done": "Fait",
+  "strategicChantierDetail.deliverableState.todo": "À faire",
+  "strategicChantierDetail.deliverableState.late": "En retard",
+  "strategicChantierDetail.deliverableState.lateDays": "En retard de {n} j",
+  "strategicChantierDetail.deliverableState.legendTitle": "Livrables",
+  "strategicChantierDetail.deliverableState.doneCount": "{done}/{total} faits",
+  "strategicChantierDetail.deliverableState.lateCount": "{n} en retard",
+  "strategicChantierDetail.deliverableState.dueDateMissing":
+    "Chaque livrable doit avoir une échéance.",
 
   // ─── Onglets de la fiche chantier (round 10, point 2) ─────────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Vue d'ensemble",
@@ -2077,11 +2077,31 @@ const fr: Record<string, string> = {
   "kpi.measurement.deleted": "Mesure supprimée",
   "kpi.measurement.deleteError": "Échec de la suppression",
   "kpi.measurement.periodCollision": "Une mesure existe déjà pour la période {period}.",
-  "kpi.measurement.correctionSubmitted": "Correction soumise à validation du responsable du plan",
-  "kpi.measurement.deletionSubmitted": "Suppression soumise à validation du responsable du plan",
+  "kpi.measurement.correctionSubmitted": "Demande de correction envoyée pour validation",
+  "kpi.measurement.deletionSubmitted": "Demande de suppression envoyée pour validation",
   "kpi.measurement.correctLatest": "Corriger la dernière valeur",
   "kpi.measurement.pendingCorrection": "Correction",
   "kpi.measurement.pendingDeletion": "Suppression",
+  "kpi.measurement.route.edit.chantier":
+    "Votre correction sera soumise au responsable du chantier {name}.",
+  "kpi.measurement.route.edit.axis":
+    "Votre correction sera soumise au responsable de l'axe {name}.",
+  "kpi.measurement.route.edit.plan": "Votre correction sera soumise au responsable du plan.",
+  "kpi.measurement.route.delete.chantier":
+    "Votre suppression sera soumise au responsable du chantier {name}.",
+  "kpi.measurement.route.delete.axis":
+    "Votre suppression sera soumise au responsable de l'axe {name}.",
+  "kpi.measurement.route.delete.plan": "Votre suppression sera soumise au responsable du plan.",
+  "kpi.measurement.inform.axisPlan":
+    "Le responsable de l'axe et le responsable du plan seront informés.",
+  "kpi.measurement.inform.axis": "Le responsable de l'axe sera informé.",
+  "kpi.measurement.inform.plan": "Le responsable du plan sera informé.",
+  "kpi.measurement.informAfter.axisPlan":
+    "Une fois la demande acceptée, le responsable de l'axe et le responsable du plan seront informés.",
+  "kpi.measurement.informAfter.axis":
+    "Une fois la demande acceptée, le responsable de l'axe sera informé.",
+  "kpi.measurement.informAfter.plan":
+    "Une fois la demande acceptée, le responsable du plan sera informé.",
   "kpi.history.actions": "Actions",
   "kpi.history.correctedBy": "corrigé par",
   "strategicDelete.pendingBy": "Suppression en attente d'approbation de {approver}",
@@ -2148,6 +2168,8 @@ const fr: Record<string, string> = {
   "staffing.ftePlaceholder": "ex. 0,5",
   "staffing.datesMissing": "Dates à compléter",
   "staffing.edit": "Modifier cette ligne",
+  "staffing.manageInStaffingTab": "Gérer les ETP dans l'onglet Effectifs du chantier",
+  "staffing.emptyProjet": "Aucun ETP déclaré sur ce projet.",
   "staffing.editing": "Modification de la ligne",
   "staffing.editingMissingDates":
     "Modification de la ligne — complétez les dates de début et de fin.",

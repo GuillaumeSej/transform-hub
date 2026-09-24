@@ -12,7 +12,12 @@ import {
   projetMilestoneCounts,
 } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { Chantier, ChantierAction, ProjetKanbanStatus, StrategicAxis } from "@/types";
+import {
+  DeliverableDiamond,
+  useDeliverableStateText,
+} from "@/components/strategic/deliverableMarker";
+import { deliverableLateDays, deliverableState, effectiveDueDate } from "@/lib/deliverableState";
+import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
 
 /**
  * Accordéon Axe → Chantier → Projet (round 24, Phase 4, Partie 3) — nouvel onglet "Vue par axe" de
@@ -40,26 +45,8 @@ import type { Chantier, ChantierAction, ProjetKanbanStatus, StrategicAxis } from
  * ci-dessous) reste affiché tel quel mais devient inerte au clic.
  */
 
-/** Mêmes 3 couleurs que `deliverableMarkerColor`/`deliverableStatusColor` (`ProgramRoadmap.tsx`/
- *  `ChantierDetailPanel.tsx`) — dupliquées ici plutôt qu'importées : aucun des deux fichiers
- *  n'exporte cette fonction (chacun la garde privée), même parti pris de duplication assumé que ces
- *  deux-là (voir leurs propres doc-comments). Colore les pastilles compactes de statut de livrable
- *  sous chaque projet, plus légères qu'un `TimelineMarker` (conçu pour un positionnement en
- *  pourcentage sur une piste temporelle, hors sujet ici — une simple liste plate). */
-const DELIVERABLE_COLOR_RED = "#ff3c47";
-const DELIVERABLE_COLOR_AMBER = "#806659";
-const DELIVERABLE_COLOR_GREEN = "#1a1a1a";
-
-function deliverableStatusColor(status: ProjetKanbanStatus | undefined): string {
-  switch (status) {
-    case "done":
-      return DELIVERABLE_COLOR_GREEN;
-    case "in_progress":
-      return DELIVERABLE_COLOR_AMBER;
-    default:
-      return DELIVERABLE_COLOR_RED;
-  }
-}
+// Étiquettes de livrable sous chaque projet : petit losange au code visuel partagé
+// (`deliverableMarker.tsx` — Fait plein encre, À faire creux, En retard plein rouge corail).
 
 /** Ligne d'arborescence commune aux 3 niveaux : nom (cliquable → fiche), responsable, décompte
  *  d'éléments en dessous et barre d'avancement + % (même composition que le plan Performance,
@@ -188,6 +175,7 @@ export function AxisChantierProjetAccordion({
   clickableActionIds?: Set<string> | "all";
 }) {
   const { t } = useTranslation();
+  const { tooltip: deliverableTooltip } = useDeliverableStateText();
   const [expandedAxisIds, setExpandedAxisIds] = useState<Set<string>>(new Set());
   /** Clé composite `${axisId}:${chantierId}` — voir le doc-comment de tête de ce fichier. */
   const [expandedChantierKeys, setExpandedChantierKeys] = useState<Set<string>>(new Set());
@@ -358,21 +346,21 @@ export function AxisChantierProjetAccordion({
                                                     )
                                                 : undefined
                                             }
-                                            title={deliverable.label}
-                                            className={`inline-flex max-w-[10rem] items-center gap-1 rounded-full border border-border bg-neutral-50 px-1.5 py-0.5 text-[10px] font-medium text-secondary transition focus:outline-none ${
+                                            title={deliverableTooltip(
+                                              deliverable.label,
+                                              effectiveDueDate(deliverable),
+                                              deliverableState(deliverable),
+                                              deliverableLateDays(deliverable)
+                                            )}
+                                            className={`inline-flex max-w-[10rem] items-center gap-1.5 rounded-full border border-border bg-neutral-50 px-1.5 py-0.5 text-[10px] font-medium text-secondary transition focus:outline-none ${
                                               projetClickable
                                                 ? "hover:border-black hover:bg-white focus:ring-2 focus:ring-black"
                                                 : ""
                                             }`}
                                           >
-                                            <span
-                                              aria-hidden
-                                              className="h-1.5 w-1.5 shrink-0 rounded-full"
-                                              style={{
-                                                backgroundColor: deliverableStatusColor(
-                                                  deliverable.status
-                                                ),
-                                              }}
+                                            <DeliverableDiamond
+                                              state={deliverableState(deliverable)}
+                                              size={6}
                                             />
                                             <span className="truncate">{deliverable.label}</span>
                                           </button>

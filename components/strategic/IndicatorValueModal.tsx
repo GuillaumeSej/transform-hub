@@ -16,6 +16,8 @@ import {
 } from "@/lib/kpiHistory";
 import { editKpiValueFlow, submitKpiValueFlow } from "@/lib/strategicApprovalFlows";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
+import { KpiCorrectionNotice } from "@/components/strategic/KpiCorrectionNotice";
+import type { KpiCorrectionRoute } from "@/lib/kpiCorrectionRouting";
 import type { AuthUser, Indicator, IndicatorMeasurement } from "@/types";
 
 const FIELD =
@@ -36,6 +38,7 @@ export function IndicatorValueModal({
   editing,
   measurements = [],
   updateMeasurement,
+  correctionRoute,
 }: {
   indicator: Indicator;
   user: AuthUser;
@@ -47,6 +50,8 @@ export function IndicatorValueModal({
   /** Mesures de l'indicateur (contrôle de doublon de période, détection de la baseline). */
   measurements?: IndicatorMeasurement[];
   updateMeasurement?: (id: string, patch: MeasurementEditPatch) => Promise<unknown>;
+  /** Circuit de la correction (`routeKpiCorrection`) — texte explicatif + demande/directe. */
+  correctionRoute?: KpiCorrectionRoute | null;
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -79,13 +84,14 @@ export function IndicatorValueModal({
         indicator,
         editing,
         { period: p, value: parsed ?? null, note: note.trim() === "" ? null : note },
-        updateMeasurement
+        updateMeasurement,
+        correctionRoute ?? undefined
       );
       showToast(
         outcome === "pending"
           ? t(
               "kpi.measurement.correctionSubmitted",
-              "Correction soumise à validation du responsable du plan"
+              "Demande de correction envoyée pour validation"
             )
           : t("kpi.measurement.updated", "Mesure corrigée"),
         indicator.name,
@@ -202,6 +208,7 @@ export function IndicatorValueModal({
             )}
           </p>
         )}
+        {editing && <KpiCorrectionNotice route={correctionRoute} action="edit" />}
       </div>
     </Modal>
   );

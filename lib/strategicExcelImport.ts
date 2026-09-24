@@ -7,7 +7,6 @@ import type {
   ChantierDependencyType,
   ChantierStaffing,
   Deliverable,
-  DeliverablePhase,
   Indicator,
   IndicatorDirection,
   IndicatorFrequency,
@@ -45,9 +44,9 @@ import type {
  *  - "Projets" : une ligne par projet (type interne `ChantierAction`), rattachée à un chantier via
  *    `Code Chantier`. `Code` sert de clé de liaison pour "Livrables".
  *  - "Livrables" (optionnelle) : une ligne par livrable, rattachée à un projet via `Code Projet`.
- *    Simplifiée à UNE phase par ligne (`Début`/`Fin`) plutôt que d'exposer la liste `phases[]` —
- *    largement suffisant pour un import initial, une phase supplémentaire se rajoute ensuite à la
- *    main sur la fiche chantier. Un livrable n'est jamais un `toCreate` séparé : il est embarqué
+ *    Livrable = ÉCHÉANCE (décision PO) : une seule date, colonne `Échéance`, statut « à faire ».
+ *    Compatibilité : un ancien fichier aux colonnes `Début`/`Fin` s'importe toujours — `Fin` sert
+ *    d'échéance, `Début` est ignoré. Un livrable n'est jamais un `toCreate` séparé : il est embarqué
  *    dans `ChantierAction.deliverables` de l'action résolue.
  *  - "Indicateurs" : une ligne par indicateur, rattachée à un axe (`Code Axe`) OU un chantier
  *    (`Code Chantier`) — exactement l'un des deux, jamais les deux, jamais ni l'un ni l'autre
@@ -125,12 +124,9 @@ export const STRATEGIC_ACTION_IMPORT_HEADERS = [
   "Poids dans le chantier (%)",
 ] as const;
 
-export const STRATEGIC_DELIVERABLE_IMPORT_HEADERS = [
-  "Code Projet",
-  "Label",
-  "Début",
-  "Fin",
-] as const;
+/** Livrable = ÉCHÉANCE (une seule date). Compatibilité : un ancien fichier aux colonnes
+ *  "Début"/"Fin" s'importe toujours — "Fin" sert d'échéance, "Début" est ignoré. */
+export const STRATEGIC_DELIVERABLE_IMPORT_HEADERS = ["Code Projet", "Label", "Échéance"] as const;
 
 export const STRATEGIC_INDICATOR_IMPORT_HEADERS = [
   "Code Axe",
@@ -879,27 +875,34 @@ export function validateStrategicImportRows(
       return;
     }
 
+    // Livrable = ÉCHÉANCE (décision PO) : une seule date. Colonne "Échéance" (modèle actuel) ; à
+    // défaut, "Fin" d'un ancien fichier au format "Début"/"Fin" — la date de DÉBUT est ignorée
+    // (compatibilité des fichiers existants, jamais bloquante).
     // Valeurs BRUTES passées à `parseFlexibleDate` (pas `str(...)`) : une vraie date Excel arrive
     // en numéro de série (nombre) via `sheet_to_json`, que la conversion en chaîne rendrait
     // ininterprétable ("46023" lu comme l'an 46023).
-    const startCell = row["Début"];
-    const endCell = row["Fin"];
-    const phases: DeliverablePhase[] = [];
-    if (str(startCell) || str(endCell)) {
-      const start = parseFlexibleDate(startCell);
-      const end = parseFlexibleDate(endCell);
-      if (!start || !end) {
+    const dueColumn = str(row["Échéance"]) ? "Échéance" : "Fin";
+    const dueCell = row[dueColumn];
+    let dueDate: string | undefined;
+    if (str(dueCell)) {
+      dueDate = parseFlexibleDate(dueCell) || undefined;
+      if (!dueDate) {
         errors.push({
           sheet: "Livrables",
           rowNumber,
-          reason: `"Début"/"Fin" doivent être toutes les deux renseignées et valides (JJ/MM/AAAA ou AAAA-MM-JJ), ou toutes les deux vides`,
+          reason: `"${dueColumn}" doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ), ou vide`,
         });
         return;
       }
-      phases.push({ id: makeId("DLP"), start, end });
     }
 
-    const deliverable: Deliverable = { id: makeId("DL"), label, phases };
+    const deliverable: Deliverable = {
+      id: makeId("DL"),
+      label,
+      phases: [],
+      status: "todo",
+      ...(dueDate ? { dueDate } : {}),
+    };
     const list = deliverablesByActionCode.get(lowerActionCode) ?? [];
     list.push(deliverable);
     deliverablesByActionCode.set(lowerActionCode, list);
@@ -1293,6 +1296,9 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
   ['  - "Code" (Chantiers) est repris par "Code Chantier" (Projets, Indicateurs, ETP).'],
   ['  - "Code" (Projets) est repris par "Code Projet" (Livrables, ETP).'],
   [
+    '  - Livrables : une seule date, "Échéance" (date à laquelle le livrable doit être fait). Un ancien fichier avec "Début"/"Fin" reste accepté : "Fin" = échéance, "Début" ignoré.',
+  ],
+  [
     '  - "Indicateurs" se rattache à UN axe OU UN chantier : renseignez "Code Axe" OU "Code Chantier", jamais les deux.',
   ],
   [""],
@@ -1429,8 +1435,8 @@ export const STRATEGIC_ACTION_EXAMPLE_ROWS = [
 ];
 
 export const STRATEGIC_DELIVERABLE_EXAMPLE_ROWS = [
-  ["ACT1", "Cartographie validée en comité de pilotage", "2026-02-01", "2026-03-31"],
-  ["ACT2", "Portail RH ouvert en pilote sur un périmètre restreint", "2026-05-01", "2026-05-31"],
+  ["ACT1", "Cartographie validée en comité de pilotage", "2026-03-31"],
+  ["ACT2", "Portail RH ouvert en pilote sur un périmètre restreint", "2026-05-31"],
 ];
 
 export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [

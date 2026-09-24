@@ -1,5 +1,6 @@
 import { rollupBudgets } from "@/lib/budgetRollup";
 import { daysBetween } from "@/lib/dateUtils";
+import { effectiveDueDate } from "@/lib/deliverableState";
 import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import {
   getStrategicProfile,
@@ -2043,10 +2044,9 @@ export type ProgramRoadmapDeliverable = Pick<Deliverable, "id" | "label" | "dueD
  *  les livrables attendus des leviers, on le voit »). `undefined` seulement si le livrable n'a NI
  *  `dueDate` NI aucune `phase` — reste alors bien absent des deux timelines, comme avant. Partagée
  *  par `normalizeRoadmapDeliverables` ci-dessous et par `ChantierDetailPanel.tsx` (import direct,
- *  pour ne pas dupliquer la règle entre les deux call sites). */
-export function effectiveDueDate(d: Pick<Deliverable, "dueDate" | "phases">): string | undefined {
-  return d.dueDate ?? d.phases?.[d.phases.length - 1]?.end;
-}
+ *  pour ne pas dupliquer la règle entre les deux call sites). Désormais définie dans
+ *  `lib/deliverableState.ts` (livrable = échéance unique, statut binaire) et ré-exportée ici. */
+export { effectiveDueDate };
 
 /**
  * UNE ligne de la feuille de route programme = UN LEVIER (`ChantierAction`), avec son axe et son

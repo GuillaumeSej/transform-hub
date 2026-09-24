@@ -60,6 +60,8 @@ const es: Record<string, string> = {
   "validation.sa.status.pending": "Pendiente",
   "validation.sa.status.approved": "Validada",
   "validation.sa.status.rejected": "Rechazada",
+  "validation.sa.status.direct": "Aplicada (información)",
+  "validation.sa.adjustValue": "Valor a aplicar (modificable antes de aceptar)",
   "validation.sa.tab.todo": "Por validar",
   "validation.sa.tab.mine": "Mis solicitudes",
   "validation.sa.tab.history": "Historial de decisiones",
@@ -1564,16 +1566,11 @@ const es: Record<string, string> = {
   "strategicAxes.actionDescription": "Descripción",
   "strategicAxes.deliverables": "Entregables esperados",
   "strategicAxes.deliverablesHint":
-    "Un campo por entregable; cada entregable puede dividirse en subetapas con fechas.",
+    "Un campo por entregable, con su fecha de vencimiento (el día en que debe estar hecho) y una casilla «Hecho».",
   "strategicAxes.noDeliverables": "Ningún entregable indicado.",
   "strategicAxes.deliverableLabel": "Título del entregable",
   "strategicAxes.addDeliverable": "Añadir un entregable",
   "strategicAxes.removeDeliverable": "Eliminar el entregable",
-  "strategicAxes.noPhases": "Sin subetapa.",
-  "strategicAxes.phaseStart": "Inicio",
-  "strategicAxes.phaseEnd": "Fin",
-  "strategicAxes.addPhase": "Añadir una subetapa",
-  "strategicAxes.removePhase": "Eliminar la subetapa",
   // Indicadores — SOLO LECTURA aquí, el registro vive en la página KPI
   "strategicAxes.indicatorsSection": "Indicadores del eje",
   "strategicAxes.indicatorsReadOnly":
@@ -1645,10 +1642,6 @@ const es: Record<string, string> = {
   // ─── Plan Stratégique — round 8 (KPI opcional del levier + kanban clásico sin KPI) ─────
   "strategicChantierDetail.indicatorSelect.label": "KPI vinculado",
   "strategicChantierDetail.indicatorSelect.none": "Sin KPI",
-  "strategicChantierDetail.kanban.title": "Estado",
-  "strategicChantierDetail.kanban.todo": "Por hacer",
-  "strategicChantierDetail.kanban.inProgress": "En curso",
-  "strategicChantierDetail.kanban.done": "Terminado",
 
   "strategicChantierDetail.prerequisites.title": "Dependencias / Prerrequisitos",
   "strategicChantierDetail.prerequisites.kindAction": "Iniciativa del plan",
@@ -1677,6 +1670,17 @@ const es: Record<string, string> = {
   "strategicChantierDetail.deliverableModal.commentPlaceholder": "Añadir un comentario…",
   "strategicChantierDetail.deliverableModal.noComments": "Sin comentarios.",
   "strategicChantierDetail.deliverableForm.leverSelect": "Iniciativa vinculada",
+  // Livrable = ÉCHÉANCE + statut binaire Fait / À faire (+ « en retard » dérivé) — voir
+  // lib/deliverableState.ts et components/strategic/deliverableMarker.tsx.
+  "strategicChantierDetail.deliverableState.done": "Hecho",
+  "strategicChantierDetail.deliverableState.todo": "Por hacer",
+  "strategicChantierDetail.deliverableState.late": "Con retraso",
+  "strategicChantierDetail.deliverableState.lateDays": "Con {n} d de retraso",
+  "strategicChantierDetail.deliverableState.legendTitle": "Entregables",
+  "strategicChantierDetail.deliverableState.doneCount": "{done}/{total} hechos",
+  "strategicChantierDetail.deliverableState.lateCount": "{n} con retraso",
+  "strategicChantierDetail.deliverableState.dueDateMissing":
+    "Cada entregable debe tener una fecha de vencimiento.",
 
   // ─── Pestañas de la ficha de proyecto (ronda 10, punto 2) ─────────────────────────────────
   "strategicChantierDetail.tabs.overview": "Resumen",
@@ -1989,11 +1993,29 @@ const es: Record<string, string> = {
   "kpi.measurement.deleted": "Medida eliminada",
   "kpi.measurement.deleteError": "Error al eliminar",
   "kpi.measurement.periodCollision": "Ya existe una medida para el periodo {period}.",
-  "kpi.measurement.correctionSubmitted": "Corrección enviada a validación del responsable del plan",
-  "kpi.measurement.deletionSubmitted": "Eliminación enviada a validación del responsable del plan",
+  "kpi.measurement.correctionSubmitted": "Solicitud de corrección enviada para validación",
+  "kpi.measurement.deletionSubmitted": "Solicitud de eliminación enviada para validación",
   "kpi.measurement.correctLatest": "Corregir el último valor",
   "kpi.measurement.pendingCorrection": "Corrección",
   "kpi.measurement.pendingDeletion": "Eliminación",
+  "kpi.measurement.route.edit.chantier":
+    "Su corrección se enviará al responsable del frente de trabajo {name}.",
+  "kpi.measurement.route.edit.axis": "Su corrección se enviará al responsable del eje {name}.",
+  "kpi.measurement.route.edit.plan": "Su corrección se enviará al responsable del plan.",
+  "kpi.measurement.route.delete.chantier":
+    "Su eliminación se enviará al responsable del frente de trabajo {name}.",
+  "kpi.measurement.route.delete.axis": "Su eliminación se enviará al responsable del eje {name}.",
+  "kpi.measurement.route.delete.plan": "Su eliminación se enviará al responsable del plan.",
+  "kpi.measurement.inform.axisPlan":
+    "El responsable del eje y el responsable del plan serán informados.",
+  "kpi.measurement.inform.axis": "El responsable del eje será informado.",
+  "kpi.measurement.inform.plan": "El responsable del plan será informado.",
+  "kpi.measurement.informAfter.axisPlan":
+    "Una vez aceptada la solicitud, el responsable del eje y el responsable del plan serán informados.",
+  "kpi.measurement.informAfter.axis":
+    "Una vez aceptada la solicitud, el responsable del eje será informado.",
+  "kpi.measurement.informAfter.plan":
+    "Una vez aceptada la solicitud, el responsable del plan será informado.",
   "kpi.history.actions": "Acciones",
   "kpi.history.correctedBy": "corregido por",
   "strategicDelete.pendingBy": "Eliminación pendiente de aprobación de {approver}",
@@ -2057,6 +2079,8 @@ const es: Record<string, string> = {
   "staffing.ftePlaceholder": "p. ej. 0,5",
   "staffing.datesMissing": "Fechas por completar",
   "staffing.edit": "Editar esta línea",
+  "staffing.manageInStaffingTab": "Gestionar los ETC en la pestaña Personal del frente de trabajo",
+  "staffing.emptyProjet": "No hay ETC declarados en esta iniciativa.",
   "staffing.editing": "Edición de la línea",
   "staffing.editingMissingDates": "Edición de la línea — complete las fechas de inicio y fin.",
   "staffing.saveEdit": "Guardar",

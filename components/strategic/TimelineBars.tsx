@@ -634,6 +634,7 @@ export function TimelineMarker({
   top,
   size = 12,
   color,
+  borderColor = "#ffffff",
   onClick,
   ariaLabel,
   tooltipText,
@@ -642,6 +643,9 @@ export function TimelineMarker({
   top: number;
   size?: number;
   color: string;
+  /** Couleur du contour (défaut blanc, historique) — un losange CREUX (livrable « à faire », voir
+   *  `components/strategic/deliverableMarker.tsx`) passe un fond blanc + un contour encre. */
+  borderColor?: string;
   onClick?: () => void;
   ariaLabel: string;
   tooltipText: string;
@@ -663,7 +667,7 @@ export function TimelineMarker({
               }
             : undefined
         }
-        className={`rounded-[1.5px] border border-white shadow-sm ${
+        className={`rounded-[1.5px] shadow-sm ${
           onClick
             ? "cursor-pointer transition hover:brightness-110 hover:ring-2 hover:ring-bp-coral/40"
             : ""
@@ -672,6 +676,7 @@ export function TimelineMarker({
           width: size,
           height: size,
           backgroundColor: color,
+          border: `1.5px solid ${borderColor}`,
           // `-50%, -50%` centre le losange sur `(leftPct, top)` avant la rotation ; `rotate(45deg)`
           // transforme le carré en losange APRÈS ce centrage, dans le même repère (donc toujours
           // centré sur le point visé, pas décalé par la rotation).

@@ -46,6 +46,18 @@ import {
 } from "@/components/strategic/TimelineBars";
 import { UserPicker } from "@/components/strategic/UserPicker";
 import {
+  DELIVERABLE_MARKER_STYLE,
+  DeliverableDiamond,
+  DeliverableMarkerLegend,
+  useDeliverableStateText,
+} from "@/components/strategic/deliverableMarker";
+import {
+  countDeliverableStates,
+  deliverableLateDays,
+  deliverableState,
+  isDeliverableDone,
+} from "@/lib/deliverableState";
+import {
   canStartAction,
   chantierBounds,
   chantierDeclaredProgress,
@@ -96,11 +108,9 @@ import type {
   ChantierMilestoneState,
   ChantierStaffing,
   Deliverable,
-  DeliverablePhase,
   Indicator,
   MilestoneCustomAction,
   MilestoneId,
-  ProjetKanbanStatus,
   MaturityStageConfig,
 } from "@/types";
 
@@ -188,29 +198,8 @@ const BUCKET_BORDER_CLASS: Record<ProgressBucket, string> = {
   green: "border-l-rag-green",
 };
 
-/** Hex des tokens `--red`/`--amber`/`--green` (voir `app/globals.css`) — repris ici EN DUR, comme
- *  `IndicatorDonut.tsx` (`FAVORABLE`/`UNFAVORABLE`) le fait déjà pour la même raison : `TimelineBar`
- *  attend une couleur hexadécimale brute (`hexToRgb`/`withAlpha`), pas une classe Tailwind
- *  `bg-rag-*`. Alimente l'onglet "Progression" (round 12) — 3 paliers, mêmes seuils que partout
- *  ailleurs ce round : `<= 0` rouge, `>= 100` vert, sinon ambre. */
-const PROGRESSION_COLOR_RED = "#ff3c47";
-const PROGRESSION_COLOR_AMBER = "#806659";
-const PROGRESSION_COLOR_GREEN = "#1a1a1a";
-
-/** Couleur du losange d'un livrable sur l'onglet "Timeline" fusionné, à partir de son
- *  `Deliverable.status` — mêmes 3 couleurs que `ProgramRoadmap.tsx` (todo/rouge,
- *  in_progress/ambre, done/vert), `undefined` traité comme "todo" (même convention que
- *  `LevierKanbanStatusControl`). */
-function deliverableStatusColor(status: ProjetKanbanStatus | undefined): string {
-  switch (status) {
-    case "done":
-      return PROGRESSION_COLOR_GREEN;
-    case "in_progress":
-      return PROGRESSION_COLOR_AMBER;
-    default:
-      return PROGRESSION_COLOR_RED;
-  }
-}
+// Losanges de livrable : code visuel partagé `deliverableMarker.tsx` (Fait plein encre, À faire
+// creux, En retard plein rouge corail) — livrable = échéance unique + statut binaire.
 
 /** Pourcentage d'avancement AFFICHÉ d'un levier sur l'onglet "Progression" (round 12) — jalons
  *  E0→E4 (`milestoneProgressPct`), UNIVERSELLEMENT pour tout levier qu'il soit rattaché à un KPI ou
@@ -303,10 +292,6 @@ function makeDeliverableId(): string {
   idSeq += 1;
   return `deliverable-${Date.now()}-${idSeq}`;
 }
-function makePhaseId(): string {
-  idSeq += 1;
-  return `phase-${Date.now()}-${idSeq}`;
-}
 function makePrerequisiteId(): string {
   idSeq += 1;
   return `prereq-${Date.now()}-${idSeq}`;
@@ -364,11 +349,9 @@ type ChantierActionFormLabels = {
   deliverableLabel: string;
   addDeliverable: string;
   removeDeliverable: string;
-  noPhases: string;
-  phaseStart: string;
-  phaseEnd: string;
-  addPhase: string;
-  removePhase: string;
+  deliverableDueDate: string;
+  deliverableDone: string;
+  deliverableDueDateMissing: string;
   prerequisitesTitle: string;
   prerequisiteKind: string;
   prerequisiteKindAction: string;
@@ -552,70 +535,81 @@ function PrerequisitesEditor({
 }
 
 /**
- * Contrôle kanban classique 3 états (round 8 : introduit pour le suivi d'UN LEVIER SANS KPI
- * rattaché ; round 18 : ce mode de suivi levier a été supprimé — le PO a unifié tous les leviers
- * sur les jalons E0→E4 — mais ce composant SURVIT car il pilote désormais uniquement
- * `Deliverable.status` (voir `DeliverableDetailModal`/`AddDeliverableForm` ci-dessous), un concept
- * totalement différent et hors scope de ce round. Même esprit visuel que
- * `components/shared/ActionKanban.tsx` du Plan Performance (bouton actif rempli en noir, inactifs
- * en contour) mais écrit ici en JSX Strategic-only, purement contrôlé (`status`/`onChange`,
- * auto-sauvegarde immédiate à chaque clic). N'importe jamais `ActionKanban.tsx` ni son type
- * `ActionStatus`, domaines strictement séparés.
+ * Case « Fait » d'un livrable — décision PO : un livrable est une ÉCHÉANCE avec un statut BINAIRE
+ * Fait / À faire (l'ancien contrôle kanban 3 états « À faire / En cours / Terminé » est supprimé).
+ * Purement contrôlé ; écrit `"done"` ou `"todo"` (un `"in_progress"` historique est lu comme « à
+ * faire », voir `isDeliverableDone`, lib/deliverableState.ts).
  */
-function LevierKanbanStatusControl({
-  status,
+function DeliverableDoneToggle({
+  done,
   onChange,
+  label,
+  disabled = false,
+  id,
+}: {
+  done: boolean;
+  onChange: (done: boolean) => void;
+  label: string;
+  disabled?: boolean;
+  id?: string;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className={cn(
+        "inline-flex select-none items-center gap-1.5 text-[12px] font-semibold text-primary",
+        disabled ? "cursor-default opacity-60" : "cursor-pointer"
+      )}
+    >
+      <input
+        id={id}
+        type="checkbox"
+        className="h-3.5 w-3.5 accent-black"
+        checked={done}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      {label}
+    </label>
+  );
+}
+
+/** « {done}/{total} faits · {late} en retard » — décompte binaire + retard dérivé. */
+function DeliverableCountsSummary({
+  deliverables,
   labels,
 }: {
-  /** `undefined` traité comme "todo" pour la mise en avant du bouton actif — voir
-   *  `Deliverable.status`, jamais forcé en base tant que l'utilisateur n'a pas cliqué. */
-  status: ProjetKanbanStatus | undefined;
-  onChange: (next: ProjetKanbanStatus) => void;
-  labels: { title: string; todo: string; inProgress: string; done: string };
+  deliverables: Deliverable[];
+  labels: { doneCount: string; lateCount: string };
 }) {
-  const effectiveStatus: ProjetKanbanStatus = status ?? "todo";
-  const COLUMNS: { value: ProjetKanbanStatus; label: string }[] = [
-    { value: "todo", label: labels.todo },
-    { value: "in_progress", label: labels.inProgress },
-    { value: "done", label: labels.done },
-  ];
+  if (deliverables.length === 0) return null;
+  const counts = countDeliverableStates(deliverables);
   return (
-    <div>
-      <span className="text-[11.5px] font-bold uppercase tracking-wide text-secondary">
-        {labels.title}
-      </span>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {COLUMNS.map((c) => (
-          <button
-            key={c.value}
-            type="button"
-            onClick={() => onChange(c.value)}
-            className={cn(
-              "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
-              effectiveStatus === c.value
-                ? "border-bp-coral bg-black text-white"
-                : "border-border bg-white text-secondary hover:border-black"
-            )}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-    </div>
+    <span className="text-[11px] font-medium normal-case tracking-normal text-tertiary">
+      {labels.doneCount
+        .replace("{done}", String(counts.done))
+        .replace("{total}", String(counts.total))}
+      {counts.late > 0 && (
+        <span className="text-bp-coral">
+          {" · "}
+          {labels.lateCount.replace("{n}", String(counts.late))}
+        </span>
+      )}
+    </span>
   );
 }
 
 /**
  * Modale de détail d'UN livrable (round <n>, onglet "Timeline" fusionné) — ouverte au clic sur son
- * losange. Statut réutilise `LevierKanbanStatusControl` tel quel (aucune nouvelle logique), date
- * d'échéance et fil de commentaires en écriture directe (`onPatch`, auto-sauvegarde immédiate comme
+ * losange. Échéance (seule date d'un livrable, obligatoire : une saisie vidée n'est pas écrite),
+ * case « Fait » (`DeliverableDoneToggle`, statut binaire) et fil de commentaires en écriture
+ * directe (`onPatch`, auto-sauvegarde immédiate comme
  * `updateActionPrerequisites`/`updateActionKanbanStatus`). Rendu via `Modal` (portal Radix) plutôt
  * qu'un `Popover` : le contenu est trop riche pour un panneau ancré, et un losange proche du bord
  * droit du Gantt scrollable couperait un popover non-porté.
  */
 function DeliverableDetailModal({
   deliverable,
-  kanbanLabels,
   labels,
   users,
   currentUsername,
@@ -623,9 +617,9 @@ function DeliverableDetailModal({
   onPatch,
 }: {
   deliverable: Deliverable;
-  kanbanLabels: { title: string; todo: string; inProgress: string; done: string };
   labels: {
     dueDate: string;
+    done: string;
     comments: string;
     commentPlaceholder: string;
     noComments: string;
@@ -638,9 +632,11 @@ function DeliverableDetailModal({
   onPatch: (patch: Partial<Deliverable>) => void;
 }) {
   const [commentText, setCommentText] = useState("");
+  const { stateLabel } = useDeliverableStateText();
   const comments = [...(deliverable.comments ?? [])].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt)
   );
+  const state = deliverableState(deliverable);
   return (
     <Modal
       open
@@ -655,21 +651,31 @@ function DeliverableDetailModal({
       }
     >
       <label className="block text-xs font-bold uppercase tracking-wide text-secondary">
-        {labels.dueDate}
+        {labels.dueDate} <span className="text-bp-coral">*</span>
         <input
           type="date"
+          required
           className={INPUT_CLASS}
-          value={deliverable.dueDate ?? ""}
-          onChange={(e) => onPatch({ dueDate: e.target.value || undefined })}
+          value={effectiveDueDate(deliverable) ?? ""}
+          // Échéance obligatoire : une saisie vidée n'est jamais écrite (pas de `undefined` envoyé
+          // à Firestore, et un livrable reste toujours daté).
+          onChange={(e) => {
+            if (e.target.value) onPatch({ dueDate: e.target.value });
+          }}
         />
       </label>
 
-      <div className="mt-4">
-        <LevierKanbanStatusControl
-          status={deliverable.status}
-          labels={kanbanLabels}
-          onChange={(status) => onPatch({ status })}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <DeliverableDoneToggle
+          id={`deliverable-done-${deliverable.id}`}
+          done={isDeliverableDone(deliverable)}
+          label={labels.done}
+          onChange={(done) => onPatch({ status: done ? "done" : "todo" })}
         />
+        <span className="inline-flex items-center gap-1.5 text-[11.5px] text-secondary">
+          <DeliverableDiamond state={state} size={8} />
+          {stateLabel(state, deliverableLateDays(deliverable))}
+        </span>
       </div>
 
       <div className="mt-4">
@@ -732,31 +738,31 @@ function DeliverableDetailModal({
  */
 function AddDeliverableForm({
   actions,
-  kanbanLabels,
   labels,
   onCancel,
   onSubmit,
 }: {
   actions: ChantierAction[];
-  kanbanLabels: { title: string; todo: string; inProgress: string; done: string };
   labels: {
     title: string;
     leverSelect: string;
     deliverableLabel: string;
     dueDate: string;
+    done: string;
     save: string;
     cancel: string;
   };
   onCancel: () => void;
   onSubmit: (
     actionId: string,
-    values: { label: string; dueDate: string; status: ProjetKanbanStatus }
+    values: { label: string; dueDate: string; status: "done" | "todo" }
   ) => void;
 }) {
   const [actionId, setActionId] = useState(actions.length === 1 ? actions[0].id : "");
   const [label, setLabel] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [status, setStatus] = useState<ProjetKanbanStatus>("todo");
+  const [done, setDone] = useState(false);
+  const status = done ? "done" : "todo";
   const canSubmit = actionId.trim() !== "" && label.trim() !== "" && dueDate.trim() !== "";
   return (
     <Modal
@@ -802,9 +808,10 @@ function AddDeliverableForm({
       </label>
 
       <label className="mt-3 block text-[11.5px] font-bold uppercase tracking-wide text-secondary">
-        {labels.dueDate}
+        {labels.dueDate} <span className="text-bp-coral">*</span>
         <input
           type="date"
+          required
           className={INPUT_CLASS}
           value={dueDate}
           onChange={(e) => setDueDate(e.target.value)}
@@ -812,7 +819,12 @@ function AddDeliverableForm({
       </label>
 
       <div className="mt-3">
-        <LevierKanbanStatusControl status={status} labels={kanbanLabels} onChange={setStatus} />
+        <DeliverableDoneToggle
+          id="add-deliverable-done"
+          done={done}
+          label={labels.done}
+          onChange={setDone}
+        />
       </div>
     </Modal>
   );
@@ -915,7 +927,8 @@ function ChantierActionForm({
    *  en vraies `ChantierStaffing` une fois le projet réellement créé/approuvé (voir
    *  `ChantierDetailPanel.tsx`, l'`onSubmit` du "Nouveau projet"). Volontairement PAS ajouté à
    *  `ChantierActionFormValues` : ce type est aussi celui de l'édition, où ce brouillon n'a pas de
-   *  sens (le staffing s'y modifie via le vrai `ChantierStaffingEditor`, pas via ce formulaire). */
+   *  sens (après création, le staffing se modifie UNIQUEMENT dans l'onglet "Effectifs" du chantier —
+   *  règle PO — la fiche projet n'en montre qu'une vue en lecture seule). */
   /** `draftCustomMilestoneActions` : actions personnalisées ajoutées jalon par jalon dans l'aperçu
    *  J0→J4 ci-dessous (round "aperçu jalons création", `MilestonePreviewEditor`) — vide si
    *  `showStaffingDraft` est `false`, ou si l'utilisateur n'a rien ajouté. Même discipline que
@@ -988,10 +1001,14 @@ function ChantierActionForm({
     Partial<Record<MilestoneId, string[]>>
   >({});
   const [description, setDescription] = useState(initial?.description ?? "");
-  // Un champ de saisie PAR livrable (plus de convention « une ligne = un livrable »), chacun
-  // portant ses propres sous-étapes temporelles.
+  // Un champ de saisie PAR livrable (plus de convention « une ligne = un livrable »). Livrable =
+  // ÉCHÉANCE (décision PO) : une seule date, pré-remplie depuis l'échéance effective d'un livrable
+  // historique (fin de sa dernière phase si pas de `dueDate`), et une case « Fait ».
   const [deliverables, setDeliverables] = useState<Deliverable[]>(() =>
-    normalizeDeliverables(initial?.deliverables)
+    normalizeDeliverables(initial?.deliverables).map((d) => {
+      const due = effectiveDueDate(d);
+      return due ? { ...d, dueDate: due } : d;
+    })
   );
   const [prerequisites, setPrerequisites] = useState<ActionPrerequisite[]>(
     initial?.prerequisites ?? []
@@ -1024,50 +1041,46 @@ function ChantierActionForm({
   const parsedConsumedBudget =
     trimmedConsumedBudget === "" ? undefined : Number(trimmedConsumedBudget);
 
-  const canSubmit = !requiredFieldsMissing && !submitting;
+  // Échéance OBLIGATOIRE pour tout livrable ayant un intitulé (un livrable sans intitulé est
+  // simplement ignoré au submit, voir plus bas).
+  const deliverableDueDateMissing = deliverables.some(
+    (d) => d.label.trim().length > 0 && !d.dueDate
+  );
+
+  const canSubmit = !requiredFieldsMissing && !deliverableDueDateMissing && !submitting;
 
   const patchDeliverable = (id: string, patch: Partial<Deliverable>) =>
     setDeliverables((list) => list.map((d) => (d.id === id ? { ...d, ...patch } : d)));
 
-  const patchPhase = (deliverableId: string, phaseId: string, patch: Partial<DeliverablePhase>) =>
+  /** Échéance saisie : une valeur vidée RETIRE la clé (jamais `dueDate: undefined`, que `setDoc`
+   *  rejetterait) — le submit reste de toute façon bloqué tant qu'elle manque. */
+  const setDeliverableDueDate = (id: string, value: string) =>
     setDeliverables((list) =>
-      list.map((d) =>
-        d.id === deliverableId
-          ? { ...d, phases: d.phases.map((p) => (p.id === phaseId ? { ...p, ...patch } : p)) }
-          : d
-      )
+      list.map((d) => {
+        if (d.id !== id) return d;
+        if (value) return { ...d, dueDate: value };
+        const { dueDate: _removed, ...rest } = d;
+        void _removed;
+        return rest;
+      })
     );
 
   const addDeliverable = () =>
-    setDeliverables((list) => [...list, { id: makeDeliverableId(), label: "", phases: [] }]);
+    setDeliverables((list) => [
+      ...list,
+      { id: makeDeliverableId(), label: "", phases: [], status: "todo" },
+    ]);
 
   const removeDeliverable = (id: string) =>
     setDeliverables((list) => list.filter((d) => d.id !== id));
-
-  /** Une nouvelle sous-étape reprend par défaut les bornes de l'action : c'est la plage la plus
-   *  probable, et cela évite deux champs date vides que l'on filtrerait au submit. */
-  const addPhase = (deliverableId: string) =>
-    setDeliverables((list) =>
-      list.map((d) =>
-        d.id === deliverableId
-          ? { ...d, phases: [...d.phases, { id: makePhaseId(), start, end }] }
-          : d
-      )
-    );
-
-  const removePhase = (deliverableId: string, phaseId: string) =>
-    setDeliverables((list) =>
-      list.map((d) =>
-        d.id === deliverableId ? { ...d, phases: d.phases.filter((p) => p.id !== phaseId) } : d
-      )
-    );
 
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
       // Même esprit que l'ancien `.filter(Boolean)` sur les lignes : un livrable sans intitulé
-      // n'est pas écrit, et une sous-étape dont une borne a été vidée est ignorée.
+      // n'est pas écrit. Les `phases` historiques (legacy, plus éditables) sont conservées telles
+      // quelles — seule une sous-étape à borne vide est écartée, comme avant.
       const parsedDeliverables = deliverables
         .map((d) => ({
           ...d,
@@ -1334,56 +1347,38 @@ function ChantierActionForm({
                   </Button>
                 </div>
 
-                <div className="mt-2 space-y-1.5 border-l border-border pl-2.5">
-                  {d.phases.length === 0 && (
-                    <p className="text-[11px] text-tertiary">{labels.noPhases}</p>
-                  )}
-                  {d.phases.map((p) => (
-                    <div key={p.id} className="flex flex-wrap items-end gap-2">
-                      <div>
-                        <label
-                          className="text-[10.5px] font-medium text-tertiary"
-                          htmlFor={`ca-phase-${p.id}-start`}
-                        >
-                          {labels.phaseStart}
-                        </label>
-                        <input
-                          id={`ca-phase-${p.id}-start`}
-                          type="date"
-                          value={p.start}
-                          onChange={(e) => patchPhase(d.id, p.id, { start: e.target.value })}
-                          className={`block ${SMALL_INPUT_CLASS}`}
-                        />
-                      </div>
-                      <div>
-                        <label
-                          className="text-[10.5px] font-medium text-tertiary"
-                          htmlFor={`ca-phase-${p.id}-end`}
-                        >
-                          {labels.phaseEnd}
-                        </label>
-                        <input
-                          id={`ca-phase-${p.id}-end`}
-                          type="date"
-                          value={p.end}
-                          onChange={(e) => patchPhase(d.id, p.id, { end: e.target.value })}
-                          className={`block ${SMALL_INPUT_CLASS}`}
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={labels.removePhase}
-                        title={labels.removePhase}
-                        onClick={() => removePhase(d.id, p.id)}
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button variant="ghost" size="sm" onClick={() => addPhase(d.id)}>
-                    <Plus size={12} /> {labels.addPhase}
-                  </Button>
+                {/* Livrable = ÉCHÉANCE (décision PO) : une seule date obligatoire + case « Fait »
+                    (plus de sous-étapes début/fin). */}
+                <div className="mt-2 flex flex-wrap items-end gap-3 border-l border-border pl-2.5">
+                  <div>
+                    <label
+                      className="text-[10.5px] font-medium text-tertiary"
+                      htmlFor={`ca-deliverable-${d.id}-due`}
+                    >
+                      {labels.deliverableDueDate} <span className="text-bp-coral">*</span>
+                    </label>
+                    <input
+                      id={`ca-deliverable-${d.id}-due`}
+                      type="date"
+                      required
+                      value={d.dueDate ?? ""}
+                      onChange={(e) => setDeliverableDueDate(d.id, e.target.value)}
+                      className={cn(
+                        `block ${SMALL_INPUT_CLASS}`,
+                        d.label.trim() && !d.dueDate && "border-bp-coral"
+                      )}
+                    />
+                  </div>
+                  <div className="pb-1">
+                    <DeliverableDoneToggle
+                      id={`ca-deliverable-${d.id}-done`}
+                      done={isDeliverableDone(d)}
+                      label={labels.deliverableDone}
+                      onChange={(done) =>
+                        patchDeliverable(d.id, { status: done ? "done" : "todo" })
+                      }
+                    />
+                  </div>
                 </div>
               </li>
             ))}
@@ -1408,6 +1403,9 @@ function ChantierActionForm({
         </div>
         {!canSubmit && !submitting && requiredFieldsMissing && (
           <p className="mt-1.5 text-[11px] text-tertiary">{labels.missingHint}</p>
+        )}
+        {!canSubmit && !submitting && deliverableDueDateMissing && (
+          <p className="mt-1.5 text-[11px] text-tertiary">{labels.deliverableDueDateMissing}</p>
         )}
       </div>
     </div>
@@ -1442,6 +1440,8 @@ export function ChantierDetailPanel({
   const readOnly = isReadOnlyUser(user);
   const { activeProgram, activeProgramId } = useActiveProgram();
   const { t, locale } = useTranslation();
+  const { tooltip: deliverableTooltip, stateLabel: deliverableStateLabel } =
+    useDeliverableStateText();
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -1856,7 +1856,7 @@ export function ChantierDetailPanel({
   // ── Onglet "Timeline" (ex-"Progression", fusionné avec l'ex-onglet "Timeline" dédié aux phases
   // de livrables — round <n>, deux vues calendaires disjointes jugées peu lisibles) — une barre par
   // levier, sur son propre axe temporel `action.start` → `action.end`, complétée par un losange par
-  // livrable ayant une `dueDate` déclarée (voir `deliverableStatusColor`, le rendu plus bas).
+  // livrable ayant une `dueDate` déclarée (voir `deliverableMarker.tsx`, le rendu plus bas).
   const [progressionScale, setProgressionScale] = useState<TimelineScale>("quarter");
   // Bornes = plages des projets PLUS l'échéance effective de chaque livrable : un livrable daté
   // après la fin de son projet ne doit pas tomber hors de la grille (losange rogné au bord droit).
@@ -1914,6 +1914,23 @@ export function ChantierDetailPanel({
   const [activeTab, setActiveTab] = useState<"overview" | "progression" | "leviers" | "staffing">(
     focusActionId ? "leviers" : "overview"
   );
+
+  // Règle PO « ETP gérés au niveau chantier » : la fiche d'un projet n'affiche plus ses lignes ETP
+  // qu'en lecture seule, avec un lien qui bascule ici sur l'onglet "Effectifs" en y mettant ce
+  // projet en avant (pré-sélection du formulaire d'ajout + surlignage de ses lignes). `key`
+  // incrémentée à chaque clic pour re-déclencher la pré-sélection même sur le même projet.
+  const [staffingFocus, setStaffingFocus] = useState<{ actionId: string; key: number } | undefined>(
+    undefined
+  );
+  const staffingTabRef = useRef<HTMLDivElement>(null);
+  const manageStaffingInTab = (actionId: string) => {
+    setStaffingFocus((prev) => ({ actionId, key: (prev?.key ?? 0) + 1 }));
+    setActiveTab("staffing");
+    // Le lien est cliqué au fond d'une carte projet : on ramène la vue sur l'onglet affiché.
+    requestAnimationFrame(() =>
+      staffingTabRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    );
+  };
 
   // Ciblage interne d'un levier depuis l'onglet "Timeline" (round 12) — pendant de
   // `focusActionId` (prop externe, pilotée par l'appelant via l'URL) mais déclenché DEPUIS ce
@@ -2136,7 +2153,7 @@ export function ChantierDetailPanel({
    *  de l'onglet "Timeline" (round <n>) — même discipline que `updateDeliverable` ci-dessus. */
   const addDeliverable = async (
     actionId: string,
-    values: { label: string; dueDate: string; status: ProjetKanbanStatus }
+    values: { label: string; dueDate: string; status: "done" | "todo" }
   ) => {
     const action = chantierActions.find((a) => a.id === actionId);
     if (!action) return;
@@ -2177,11 +2194,12 @@ export function ChantierDetailPanel({
     deliverableLabel: t("strategicAxes.deliverableLabel"),
     addDeliverable: t("strategicAxes.addDeliverable"),
     removeDeliverable: t("strategicAxes.removeDeliverable"),
-    noPhases: t("strategicAxes.noPhases"),
-    phaseStart: t("strategicAxes.phaseStart"),
-    phaseEnd: t("strategicAxes.phaseEnd"),
-    addPhase: t("strategicAxes.addPhase"),
-    removePhase: t("strategicAxes.removePhase"),
+    deliverableDueDate: t("strategicChantierDetail.deliverableModal.dueDate", "Échéance"),
+    deliverableDone: t("strategicChantierDetail.deliverableState.done", "Fait"),
+    deliverableDueDateMissing: t(
+      "strategicChantierDetail.deliverableState.dueDateMissing",
+      "Chaque livrable doit avoir une échéance."
+    ),
     prerequisitesTitle: t("strategicChantierDetail.prerequisites.title"),
     prerequisiteKind: t("strategicChantierDetail.prerequisites.kind"),
     prerequisiteKindAction: t("strategicChantierDetail.prerequisites.kindAction"),
@@ -2210,12 +2228,11 @@ export function ChantierDetailPanel({
       ? chantierActions.find((a) => a.id === actionForm.actionId)
       : undefined;
 
-  // ── Livrables (round <n>) — labels partagés par les 2 modales (détail + création) ────────────
-  const deliverableKanbanLabels = {
-    title: t("strategicChantierDetail.kanban.title"),
-    todo: t("strategicChantierDetail.kanban.todo"),
-    inProgress: t("strategicChantierDetail.kanban.inProgress"),
-    done: t("strategicChantierDetail.kanban.done"),
+  // ── Livrables — échéance unique + statut binaire (Fait / À faire, retard dérivé) ───────────
+  const deliverableDoneLabel = t("strategicChantierDetail.deliverableState.done", "Fait");
+  const deliverableCountLabels = {
+    doneCount: t("strategicChantierDetail.deliverableState.doneCount", "{done}/{total} faits"),
+    lateCount: t("strategicChantierDetail.deliverableState.lateCount", "{n} en retard"),
   };
   const openDeliverableAction = openDeliverable
     ? chantierActions.find((a) => a.id === openDeliverable.actionId)
@@ -2597,7 +2614,7 @@ export function ChantierDetailPanel({
           (round 18, voir `progressionPctFor` en tête de fichier) — complétée d'un losange par
           livrable ayant une échéance EFFECTIVE (`effectiveDueDate`, `lib/axisLogic.ts` : `dueDate`
           déclarée, ou repli sur la fin de sa dernière phase si aucune `dueDate` autonome n'est
-          renseignée) (`TimelineMarker`, couleur via `deliverableStatusColor`), sur le MÊME axe
+          renseignée) (`TimelineMarker`, code visuel via `deliverableMarker.tsx`), sur le MÊME axe
           temporel que la barre de son levier parent (pas un axe séparé — c'est justement ce qui
           manquait à l'ancien onglet dédié). ─────────────────────────────────────────────────────── */}
       <div className={activeTab === "progression" ? undefined : "hidden"}>
@@ -2639,87 +2656,95 @@ export function ChantierDetailPanel({
               // `pr-3` : réserve la demi-largeur d'un losange (12px pivoté ≈ 17px) au-delà du bord
               // droit de la piste — un livrable échu pile en fin de grille reste entier au lieu
               // d'être rogné par `overflow-x-auto`. Côté gauche, la colonne d'identité joue ce rôle.
-              <div className="overflow-x-auto">
-                <div className="min-w-[560px] pr-3">
-                  <TimelineHeaderRow
-                    columns={progressionColumns}
-                    yearBands={progressionYearBands}
-                    labelWidthClassName={TIMELINE_LABEL_WIDTH}
-                  />
-                  {chantierActions.map((action) => {
-                    const pct = progressionPctFor(action, data.chantiers, data.chantierActions);
-                    const left = progressionPctOfComputed(action.start);
-                    const width = Math.max(1.5, progressionPctOfComputed(action.end) - left);
-                    const dueDeliverables = normalizeDeliverables(action.deliverables).filter(
-                      (d) => effectiveDueDate(d) !== undefined
-                    );
-                    const barTop = (DELIVERABLE_LANE_HEIGHT - DELIVERABLE_BAR_HEIGHT) / 2;
-                    return (
-                      <div
-                        key={action.id}
-                        className="flex items-stretch gap-2 border-b border-border/60 py-1 last:border-b-0"
-                      >
+              <>
+                <div className="overflow-x-auto">
+                  <div className="min-w-[560px] pr-3">
+                    <TimelineHeaderRow
+                      columns={progressionColumns}
+                      yearBands={progressionYearBands}
+                      labelWidthClassName={TIMELINE_LABEL_WIDTH}
+                    />
+                    {chantierActions.map((action) => {
+                      const pct = progressionPctFor(action, data.chantiers, data.chantierActions);
+                      const left = progressionPctOfComputed(action.start);
+                      const width = Math.max(1.5, progressionPctOfComputed(action.end) - left);
+                      const dueDeliverables = normalizeDeliverables(action.deliverables).filter(
+                        (d) => effectiveDueDate(d) !== undefined
+                      );
+                      const barTop = (DELIVERABLE_LANE_HEIGHT - DELIVERABLE_BAR_HEIGHT) / 2;
+                      return (
                         <div
-                          className={`${TIMELINE_LABEL_WIDTH} flex shrink-0 items-center truncate text-[12.5px] font-medium text-primary`}
-                          title={action.name}
+                          key={action.id}
+                          className="flex items-stretch gap-2 border-b border-border/60 py-1 last:border-b-0"
                         >
-                          <span className="min-w-0 truncate">{action.name}</span>
-                        </div>
-                        <div
-                          className="relative flex-1"
-                          style={{ height: DELIVERABLE_LANE_HEIGHT }}
-                        >
-                          <TimelineGridColumns columns={progressionColumns} />
-                          {/* Même barre que la feuille de route programme (`ProgramRoadmap.tsx`) :
+                          <div
+                            className={`${TIMELINE_LABEL_WIDTH} flex shrink-0 items-center truncate text-[12.5px] font-medium text-primary`}
+                            title={action.name}
+                          >
+                            <span className="min-w-0 truncate">{action.name}</span>
+                          </div>
+                          <div
+                            className="relative flex-1"
+                            style={{ height: DELIVERABLE_LANE_HEIGHT }}
+                          >
+                            <TimelineGridColumns columns={progressionColumns} />
+                            {/* Même barre que la feuille de route programme (`ProgramRoadmap.tsx`) :
                               variante `"soft"` teintée de la nuance du chantier — l'avancement reste
                               affiché en clair dans la barre et dans l'infobulle. */}
-                          <TimelineBar
-                            left={left}
-                            width={width}
-                            top={barTop}
-                            height={DELIVERABLE_BAR_HEIGHT}
-                            color={progressionBarColor}
-                            variant="soft"
-                            progressPct={pct}
-                            onClick={() => focusLevierFromProgression(action.id)}
-                            ariaLabel={action.name}
-                            tooltipText={`${action.name} · ${formatTimelineDay(action.start, locale)} → ${formatTimelineDay(
-                              action.end,
-                              locale
-                            )} · ${pct}%`}
-                            label={`${pct}%`}
-                            labelClassName="min-w-0 flex-1 truncate text-[11px] font-semibold"
-                          />
-                          {/* Losanges de livrable posés DIRECTEMENT sur la barre (même centre
+                            <TimelineBar
+                              left={left}
+                              width={width}
+                              top={barTop}
+                              height={DELIVERABLE_BAR_HEIGHT}
+                              color={progressionBarColor}
+                              variant="soft"
+                              progressPct={pct}
+                              onClick={() => focusLevierFromProgression(action.id)}
+                              ariaLabel={action.name}
+                              tooltipText={`${action.name} · ${formatTimelineDay(action.start, locale)} → ${formatTimelineDay(
+                                action.end,
+                                locale
+                              )} · ${pct}%`}
+                              label={`${pct}%`}
+                              labelClassName="min-w-0 flex-1 truncate text-[11px] font-semibold"
+                            />
+                            {/* Losanges de livrable posés DIRECTEMENT sur la barre (même centre
                               vertical), comme sur la feuille de route programme. */}
-                          {dueDeliverables.map((d) => {
-                            const due = effectiveDueDate(d)!;
-                            const statusLabel =
-                              d.status === "done"
-                                ? deliverableKanbanLabels.done
-                                : d.status === "in_progress"
-                                  ? deliverableKanbanLabels.inProgress
-                                  : deliverableKanbanLabels.todo;
-                            return (
-                              <TimelineMarker
-                                key={d.id}
-                                leftPct={Math.min(100, Math.max(0, progressionPctOfComputed(due)))}
-                                top={DELIVERABLE_LANE_HEIGHT / 2}
-                                color={deliverableStatusColor(d.status)}
-                                onClick={() =>
-                                  setOpenDeliverable({ actionId: action.id, deliverableId: d.id })
-                                }
-                                ariaLabel={d.label}
-                                tooltipText={`${d.label} · ${formatTimelineDay(due, locale)} · ${statusLabel}`}
-                              />
-                            );
-                          })}
+                            {dueDeliverables.map((d) => {
+                              const due = effectiveDueDate(d)!;
+                              const state = deliverableState(d);
+                              const markerStyle = DELIVERABLE_MARKER_STYLE[state];
+                              return (
+                                <TimelineMarker
+                                  key={d.id}
+                                  leftPct={Math.min(
+                                    100,
+                                    Math.max(0, progressionPctOfComputed(due))
+                                  )}
+                                  top={DELIVERABLE_LANE_HEIGHT / 2}
+                                  color={markerStyle.fill}
+                                  borderColor={markerStyle.border}
+                                  onClick={() =>
+                                    setOpenDeliverable({ actionId: action.id, deliverableId: d.id })
+                                  }
+                                  ariaLabel={d.label}
+                                  tooltipText={deliverableTooltip(
+                                    d.label,
+                                    due,
+                                    state,
+                                    deliverableLateDays(d)
+                                  )}
+                                />
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+                <DeliverableMarkerLegend className="mt-2" />
+              </>
             )}
           </CardBody>
         </Card>
@@ -3199,38 +3224,79 @@ export function ChantierDetailPanel({
                           )}
 
                           <div className="mt-3 rounded-lg border border-border bg-neutral-50/50 p-3">
-                            <div className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
-                              {t("strategicAxes.deliverables")}
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+                              <span>{t("strategicAxes.deliverables")}</span>
+                              <DeliverableCountsSummary
+                                deliverables={actionDeliverables}
+                                labels={deliverableCountLabels}
+                              />
                             </div>
                             {actionDeliverables.length === 0 ? (
                               <p className="text-[12px] text-tertiary">
                                 {t("strategicAxes.noDeliverables")}
                               </p>
                             ) : (
+                              // Livrable = ÉCHÉANCE + statut binaire : losange d'état, échéance,
+                              // état (Fait / À faire / En retard de N j) et case « Fait » directe.
                               <ul className="mt-1 space-y-2">
-                                {actionDeliverables.map((d) => (
-                                  <li
-                                    key={d.id}
-                                    className="rounded-md border border-border bg-neutral-50 p-2"
-                                  >
-                                    <div className="text-sm font-medium text-primary">
-                                      {d.label}
-                                    </div>
-                                    {d.phases.length > 0 && (
-                                      <div className="mt-1 flex flex-wrap gap-1">
-                                        {d.phases.map((p) => (
-                                          <span
-                                            key={p.id}
-                                            className="rounded-full border border-border bg-white px-2 py-0.5 text-[14px] font-semibold text-secondary"
-                                          >
-                                            {formatRange(p.start, p.end)}
-                                            {p.note ? ` · ${p.note}` : ""}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </li>
-                                ))}
+                                {actionDeliverables.map((d) => {
+                                  const due = effectiveDueDate(d);
+                                  const state = deliverableState(d);
+                                  return (
+                                    <li
+                                      key={d.id}
+                                      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-neutral-50 p-2"
+                                    >
+                                      <DeliverableDiamond state={state} size={9} />
+                                      <button
+                                        type="button"
+                                        className="min-w-0 flex-1 truncate text-left text-sm font-medium text-primary hover:underline"
+                                        title={deliverableTooltip(
+                                          d.label,
+                                          due,
+                                          state,
+                                          deliverableLateDays(d)
+                                        )}
+                                        onClick={() =>
+                                          setOpenDeliverable({
+                                            actionId: action.id,
+                                            deliverableId: d.id,
+                                          })
+                                        }
+                                      >
+                                        {d.label}
+                                      </button>
+                                      {due && (
+                                        <span className="rounded-full border border-border bg-white px-2 py-0.5 text-[12px] font-semibold text-secondary">
+                                          {t(
+                                            "strategicChantierDetail.deliverableModal.dueDate",
+                                            "Échéance"
+                                          )}{" "}
+                                          {formatDateNumeric(due)}
+                                        </span>
+                                      )}
+                                      <span
+                                        className={cn(
+                                          "text-[11.5px] font-semibold",
+                                          state === "late" ? "text-bp-coral" : "text-secondary"
+                                        )}
+                                      >
+                                        {deliverableStateLabel(state, deliverableLateDays(d))}
+                                      </span>
+                                      <DeliverableDoneToggle
+                                        id={`levier-${action.id}-deliverable-${d.id}-done`}
+                                        done={isDeliverableDone(d)}
+                                        label={deliverableDoneLabel}
+                                        disabled={readOnly}
+                                        onChange={(done) =>
+                                          updateDeliverable(action.id, d.id, {
+                                            status: done ? "done" : "todo",
+                                          })
+                                        }
+                                      />
+                                    </li>
+                                  );
+                                })}
                               </ul>
                             )}
                           </div>
@@ -3302,8 +3368,11 @@ export function ChantierDetailPanel({
                           )}
 
                           {/* ── ETP mobilisés sur CE projet (round 28) — instance SCOPÉE
-                        (`scopedToActionId`) du même composant que l'onglet "Effectifs" (qui reste
-                        inchangé, vue transverse au chantier entier, voir plus bas dans ce fichier).
+                        (`scopedToActionId`) du même composant que l'onglet "Effectifs" (vue
+                        transverse au chantier entier, voir plus bas dans ce fichier). Règle PO :
+                        LECTURE SEULE ici (plus d'ajout/édition/suppression après création du
+                        projet), lien « Gérer les ETP… » vers l'onglet "Effectifs", seul point de
+                        saisie, qui met ce projet en avant (`manageStaffingInTab`).
                         Pas de `border` ici, même motif que le bloc "Suivi du LEVIER" juste en
                         dessous : `ChantierStaffingEditor` dessine déjà son propre cadre, un second
                         cadre autour ferait un double-cadre. ─────────────────────────────────── */}
@@ -3318,6 +3387,7 @@ export function ChantierDetailPanel({
                                 chantierId={chantier.id}
                                 chantierActions={chantierActions}
                                 scopedToActionId={action.id}
+                                onManageInStaffingTab={() => manageStaffingInTab(action.id)}
                               />
                             </div>
                           </div>
@@ -3478,7 +3548,7 @@ export function ChantierDetailPanel({
       </div>
 
       {/* ── Onglet "Effectifs" ───────────────────────────────────────────────────────────────── */}
-      <div className={activeTab === "staffing" ? undefined : "hidden"}>
+      <div ref={staffingTabRef} className={activeTab === "staffing" ? undefined : "hidden"}>
         {/* ── Effectifs mobilisés sur le chantier (composant autonome du lot « Effectifs ») ──── */}
         <div className="mt-4">
           <ChantierStaffingEditor
@@ -3486,6 +3556,7 @@ export function ChantierDetailPanel({
             programId={activeProgramId ?? ""}
             chantierId={chantier.id}
             chantierActions={chantierActions}
+            focusRequest={staffingFocus}
           />
         </div>
       </div>
@@ -3549,9 +3620,9 @@ export function ChantierDetailPanel({
       {openDeliverableItem && openDeliverable && (
         <DeliverableDetailModal
           deliverable={openDeliverableItem}
-          kanbanLabels={deliverableKanbanLabels}
           labels={{
             dueDate: t("strategicChantierDetail.deliverableModal.dueDate"),
+            done: deliverableDoneLabel,
             comments: t("strategicChantierDetail.deliverableModal.comments"),
             commentPlaceholder: t("strategicChantierDetail.deliverableModal.commentPlaceholder"),
             noComments: t("strategicChantierDetail.deliverableModal.noComments"),
@@ -3569,12 +3640,12 @@ export function ChantierDetailPanel({
       {addDeliverableOpen && (
         <AddDeliverableForm
           actions={chantierActions}
-          kanbanLabels={deliverableKanbanLabels}
           labels={{
             title: t("strategicAxes.addDeliverable"),
             leverSelect: t("strategicChantierDetail.deliverableForm.leverSelect"),
             deliverableLabel: t("strategicAxes.deliverableLabel"),
             dueDate: t("strategicChantierDetail.deliverableModal.dueDate"),
+            done: deliverableDoneLabel,
             save: t("common.save"),
             cancel: t("common.cancel"),
           }}

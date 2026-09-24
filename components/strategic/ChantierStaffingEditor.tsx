@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Save, Trash2, Users } from "lucide-react";
+import { ExternalLink, Pencil, Plus, Save, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import {
   EMPTY_STAFFING_LINE,
@@ -46,7 +46,10 @@ import type { ChantierAction, ChantierStaffing } from "@/types";
  *
  * Round 28 : vrai `<table>` — une personne = une ligne, colonnes Personne/Précision, Équipe, Début,
  * Fin, Taux ETP, et Projet quand pertinent. Gagne aussi `scopedToActionId` : rendu une SECONDE fois
- * directement sur la carte d'un projet/levier précis — voir `ChantierDetailPanel.tsx`.
+ * directement sur la carte d'un projet/levier précis — voir `ChantierDetailPanel.tsx`. Depuis la
+ * règle PO « ETP gérés au niveau chantier », cette instance scopée est en LECTURE SEULE avec un lien
+ * vers l'onglet "Effectifs" (seul point d'ajout/édition/suppression après création du projet ; la
+ * création initiale passe par `StaffingDraftTable.tsx`, l'import en lot par l'Excel).
  *
  * Règles de saisie (retour PO) : équipe JAMAIS pré-remplie (« À définir », choix obligatoire),
  * ETP vide par défaut et obligatoire (> 0, virgule acceptée), dates de début ET de fin obligatoires
@@ -80,6 +83,8 @@ export function ChantierStaffingEditor({
   chantierId,
   chantierActions,
   scopedToActionId,
+  onManageInStaffingTab,
+  focusRequest,
 }: {
   companyId: string;
   programId: string;
@@ -89,28 +94,50 @@ export function ChantierStaffingEditor({
    *  retrouver les dates du projet sélectionné (avertissement « hors période »). */
   chantierActions: ChantierAction[];
   /** Scope optionnel à UN projet précis (`ChantierAction.id`) — filtre les lignes affichées à
-   *  celles dont `actionId` correspond, cache la colonne "Projet" (redondante dans ce contexte), et
-   *  pré-remplit le sélecteur "Projet concerné" du formulaire d'ajout sur cette valeur (toujours
-   *  modifiable manuellement). */
+   *  celles dont `actionId` correspond et cache la colonne "Projet" (redondante dans ce contexte).
+   *  Règle PO : une fois le projet créé, sa fiche n'ajoute/modifie/supprime PLUS de ligne ETP —
+   *  en mode scopé ce composant est donc TOUJOURS en lecture seule (pas de formulaire, pas de
+   *  crayon/corbeille, badge « Dates à compléter » non cliquable). L'onglet "Effectifs" du chantier
+   *  (instance non scopée) est l'unique point de saisie après création. */
   scopedToActionId?: string;
+  /** Mode scopé uniquement : bascule vers l'onglet "Effectifs" du chantier (lien « Gérer les ETP
+   *  dans l'onglet Effectifs du chantier »). Absent = pas de lien. */
+  onManageInStaffingTab?: () => void;
+  /** Mode non scopé (onglet "Effectifs") : demande de mise en avant d'un projet, émise depuis la
+   *  fiche projet. Chaque nouvelle `key` pré-sélectionne ce projet dans le formulaire d'ajout
+   *  (toujours modifiable) et surligne ses lignes. */
+  focusRequest?: { actionId: string; key: number };
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { user } = useRole();
-  const readOnly = isReadOnlyUser(user);
+  const scoped = !!scopedToActionId;
+  const readOnly = isReadOnlyUser(user) || scoped;
+  const focusActionId = !scoped ? focusRequest?.actionId : undefined;
 
   const { departmentNames } = useCompanyDepartments(companyId);
 
   const [all, setAll] = useState<ChantierStaffing[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<StaffingLineFormValue>(EMPTY_STAFFING_LINE);
-  // Pré-rempli (pas verrouillé) sur le projet scopé — simple valeur initiale, jamais re-synchronisée.
-  const [actionDraft, setActionDraft] = useState(scopedToActionId ?? "");
+  // Pré-rempli (pas verrouillé) sur le projet mis en avant depuis sa fiche — voir l'effet
+  // `focusRequest` ci-dessous.
+  const [actionDraft, setActionDraft] = useState(focusActionId ?? "");
   /** Ligne en cours de modification (`null` = mode ajout). */
   const [editing, setEditing] = useState<ChantierStaffing | null>(null);
   /** Change à chaque réinitialisation du formulaire → remonte `StaffingLineFields` (état « touché »). */
   const [formKey, setFormKey] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  // Nouvelle demande de mise en avant (clic « Gérer les ETP… » sur une fiche projet) : pré-sélection
+  // du projet dans le formulaire d'ajout, sauf si une ligne est en cours de modification (on
+  // n'écrase pas une saisie en cours).
+  const focusKey = focusRequest?.key;
+  useEffect(() => {
+    if (!focusActionId || editing) return;
+    setActionDraft(focusActionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- déclenché par la seule `key`
+  }, [focusKey]);
 
   const actionById = useMemo(
     () => new Map(chantierActions.map((a) => [a.id, a])),
@@ -161,9 +188,9 @@ export function ChantierStaffingEditor({
   const resetForm = () => {
     setForm(EMPTY_STAFFING_LINE);
     setEditing(null);
-    // Retombe sur le projet scopé (pas sur vide) quand ce composant est rendu depuis la carte
-    // d'un projet précis.
-    setActionDraft(scopedToActionId ?? "");
+    // Retombe sur le projet mis en avant (pas sur vide) quand l'onglet a été ouvert depuis la
+    // fiche d'un projet précis.
+    setActionDraft(focusActionId ?? "");
     setFormKey((k) => k + 1);
   };
 
@@ -247,7 +274,11 @@ export function ChantierStaffingEditor({
       {loading ? (
         <p className="text-[12px] text-tertiary">{t("staffing.loading")}</p>
       ) : entries.length === 0 ? (
-        <p className="text-[12px] text-tertiary">{t("staffing.empty")}</p>
+        <p className="text-[12px] text-tertiary">
+          {scoped
+            ? t("staffing.emptyProjet", "Aucun ETP déclaré sur ce projet.")
+            : t("staffing.empty")}
+        </p>
       ) : (
         <div className="mb-3 overflow-x-auto rounded-md border border-border">
           <table className="w-full min-w-[560px] text-left text-[12px]">
@@ -268,7 +299,13 @@ export function ChantierStaffingEditor({
               {entries.map((entry) => (
                 <tr
                   key={entry.id}
-                  className={`text-primary ${editing?.id === entry.id ? "bg-bp-coral/5" : "bg-white"}`}
+                  className={`text-primary ${
+                    editing?.id === entry.id
+                      ? "bg-bp-coral/5"
+                      : focusActionId && entry.actionId === focusActionId
+                        ? "bg-amber-50/70"
+                        : "bg-white"
+                  }`}
                 >
                   <td className="px-2.5 py-1.5 font-medium">{entry.note || "—"}</td>
                   <td className="px-2.5 py-1.5">
@@ -389,6 +426,16 @@ export function ChantierStaffingEditor({
         </>
       )}
       {!readOnly && <p className="mt-1.5 text-[11px] text-tertiary">{t("staffing.hint")}</p>}
+      {scoped && onManageInStaffingTab && (
+        <button
+          type="button"
+          onClick={onManageInStaffingTab}
+          className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-bp-coral hover:underline"
+        >
+          <ExternalLink size={12} />
+          {t("staffing.manageInStaffingTab", "Gérer les ETP dans l'onglet Effectifs du chantier")}
+        </button>
+      )}
     </div>
   );
 }

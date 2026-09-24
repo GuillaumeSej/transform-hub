@@ -1111,21 +1111,28 @@ export type DeliverablePhase = {
   note?: string;
 };
 
-/** Livrable attendu d'une action de chantier — texte libre (aucune convention « un par ligne »),
- *  éventuellement phasé dans le temps. */
+/** Livrable attendu d'une action de chantier — texte libre (aucune convention « un par ligne »).
+ *  Décision PO : un livrable est une ÉCHÉANCE, pas une plage — une seule date (`dueDate`,
+ *  "Échéance") et un statut binaire Fait / À faire. Voir `lib/deliverableState.ts`. */
 export type Deliverable = {
   id: string;
   label: string;
+  /** LEGACY — plus jamais saisi ni affiché (les dates de début sont ignorées) : conservé pour la
+   *  forme des documents existants (règles Firestore) ; les nouveaux livrables écrivent `[]`. La
+   *  fin de la dernière phase sert seulement de repli d'échéance (`effectiveDueDate`) pour un
+   *  livrable historique sans `dueDate`. */
   phases: DeliverablePhase[];
-  /** Date d'échéance ISO du livrable, INDÉPENDANTE des `phases` ci-dessus — positionne le losange
+  /** Échéance ISO du livrable — LA seule date d'un livrable (obligatoire dans les formulaires).
+   *  Historique : INDÉPENDANTE des `phases` ci-dessus — positionne le losange
    *  du livrable sur l'onglet "Timeline" fusionné de la fiche chantier (round <n>, remplace
    *  l'ancien onglet dédié aux phases). Les `phases` restent éditables comme sous-étapes internes
    *  mais ne sont plus dessinées en Gantt dans cette timeline. Absent = livrable sans échéance
    *  déclarée, invisible sur la timeline (mais toujours listé dans l'onglet "Leviers"). */
   dueDate?: string;
-  /** Statut à 3 états du livrable — RÉUTILISE `ProjetKanbanStatus` (pas de nouvel enum, voir son
-   *  commentaire) : `undefined` traité comme "todo". Colore le losange sur la timeline (todo →
-   *  rouge, in_progress → ambre, done → vert). */
+  /** Statut BINAIRE du livrable : seul `"done"` (Fait) ou `"todo"` (À faire) est désormais écrit.
+   *  Type `ProjetKanbanStatus` conservé pour la compatibilité : un `"in_progress"` historique (ou
+   *  `undefined`) est lu comme « à faire ». L'état « en retard » est DÉRIVÉ (à faire + échéance
+   *  dépassée), jamais stocké — voir `deliverableState` (`lib/deliverableState.ts`). */
   status?: ProjetKanbanStatus;
   /** Mini fil de commentaires embarqué directement dans le document (round <n>) — distinct du
    *  système de commentaires leviers/sub-levers du module Plan Performance (collection Firestore
