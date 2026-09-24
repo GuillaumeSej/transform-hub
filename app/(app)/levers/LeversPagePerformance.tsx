@@ -779,7 +779,11 @@ export function LeversPagePerformance() {
             <LeverImportButton
               data={data}
               companyId={user?.companyId}
-              programs={programs}
+              // Seuls les programmes Performance peuvent porter des leviers (un Plan Stratégique
+              // n'en a pas) : les passer tous faisait rejeter chaque ligne sans colonne
+              // "Programme" dès que l'entreprise avait aussi un programme stratégique.
+              programs={performancePrograms}
+              defaultProgramId={selectedProgramId}
               onImport={(rows) => data.importLevers(rows)}
               onCreateWorkstreams={(workstreams) => data.addWorkstreams(workstreams)}
             />

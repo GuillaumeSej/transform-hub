@@ -140,6 +140,83 @@ export const IMPACT_IMPORT_HEADERS = [
   "Statut impact", // Planifié | Réalisé (ponctuel) | En cours (récurrent) — vide = dérivé de la date
 ] as const;
 
+/** Lignes d'exemple du « Modèle Excel » (3 feuilles), construites PAR NOM DE COLONNE puis remises
+ *  dans l'ordre des en-têtes : une colonne ajoutée ou retirée des `*_IMPORT_HEADERS` ne décale
+ *  plus les valeurs d'exemple (le commentaire de la feuille Impacts tombait dans "Mode" et faisait
+ *  rejeter la ligne). `programName` pré-remplit la colonne "Programme" avec le programme courant.
+ *  Le modèle doit rester importable tel quel sans erreur (voir le test associé), et son code
+ *  d'exemple ne doit correspondre à aucun vrai levier : importé tel quel, il écraserait sinon ce
+ *  levier (l'import met à jour les leviers par Code). */
+export function leverImportTemplateRows(
+  programName = "",
+  /** Chantier existant à utiliser dans l'exemple (sinon un nom fictif, auto-créé à l'import). */
+  workstreamName = "Achats & Supply Chain"
+): {
+  leviers: (string | number)[][];
+  actions: (string | number)[][];
+  impacts: (string | number)[][];
+} {
+  const toRow = <H extends readonly string[]>(
+    headers: H,
+    values: Partial<Record<H[number], string | number>>
+  ) => headers.map((h) => values[h as H[number]] ?? "");
+  const example = "Exemple — à remplacer ou supprimer avant import";
+  const code = "EXEMPLE-001";
+  return {
+    leviers: [
+      toRow(LEVER_IMPORT_HEADERS, {
+        Code: code,
+        "Type de levier": "Sourcing & Achats",
+        "Nom du levier": "Optimisation achats indirects",
+        Chantier: workstreamName,
+        Programme: programName,
+        Owner: "Marc Dubois",
+        "Owner (initiales)": "MD",
+        Sponsor: "Isabelle Roy",
+        "Sponsor (initiales)": "IR",
+        Géographie: "Europe",
+        Pays: "France",
+        Entité: "Acme France SAS",
+        Fonction: "Procurement",
+        "Centre de coût": "CC-PROC-001",
+        "Compte P&L impacté": "GA",
+        "Date de départ": "2026-01-15",
+        "Date de fin estimée": "2026-12-31",
+        Statut: "En cours d'exécution",
+        "Progression (%)": 40,
+        "Impact estimé brut (€M)": 2.5,
+        "Impact estimé net (€M)": 2.1,
+        "Impact estimé (ETP)": -1,
+        "CAPEX (€M)": 0.3,
+        "OPEX one-off (€M)": 0.4,
+        "OPEX récurrent (€M/an)": 0.1,
+        Description: example,
+      }),
+    ],
+    actions: [
+      toRow(ACTION_IMPORT_HEADERS, {
+        "Code Levier": code,
+        "Nom de l'action": "Renégocier contrats fournisseurs classe A",
+        Owner: "Marc Dubois",
+        "Date début": "2026-01-15",
+        "Date fin": "2026-04-30",
+        Statut: "En cours",
+      }),
+    ],
+    impacts: [
+      toRow(IMPACT_IMPORT_HEADERS, {
+        "Code Levier": code,
+        "Nom de l'action": "Renégocier contrats fournisseurs classe A",
+        Type: "Gain",
+        "Montant (€M)": 1.2,
+        "Type de gain": "Réduction de coût",
+        "Date gain": "01/07/2026",
+        Commentaire: example,
+      }),
+    ],
+  };
+}
+
 // ---------- Libellés humains <-> valeurs internes ----------
 
 const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
@@ -395,7 +472,12 @@ export function validateLeverImportRows(
    *  acceptés en plus des libellés par défaut. Absent = référentiel par défaut uniquement (déjà
    *  celui réellement affiché pour toute entreprise sans personnalisation, voir
    *  `buildStatusByLabel` ci-dessus). */
-  lifecycleStages?: LifecycleStage[]
+  lifecycleStages?: LifecycleStage[],
+  /** Programme Performance actuellement sélectionné dans l'app : cible par défaut des lignes dont
+   *  la colonne "Programme" est vide, quel que soit le nombre de programmes de l'entreprise (sinon
+   *  l'ajout d'un 2e programme — ex. un Plan Stratégique — faisait rejeter tout fichier construit
+   *  depuis le modèle, qui laisse cette colonne vide). Ignoré s'il n'est pas dans `programs`. */
+  defaultProgramId?: string | null
 ): LeverImportPreview {
   const errors: LeverImportError[] = [];
   const resolvedCompanyId = companyId ?? null;
@@ -515,6 +597,8 @@ export function validateLeverImportRows(
         return;
       }
       programId = program.id;
+    } else if (defaultProgramId && programs.some((p) => p.id === defaultProgramId)) {
+      programId = defaultProgramId;
     } else if (programs.length === 1) {
       // Colonne vide, mais un SEUL programme existe pour cette entreprise : rattachement sans
       // ambiguïté, pas la peine d'obliger à le retaper sur chaque ligne (cas très majoritaire —

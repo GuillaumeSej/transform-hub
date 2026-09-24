@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { validateLeverImportRows, type LeverImportRawSheets } from "@/lib/leverExcelImport";
+import * as XLSX from "xlsx";
+import {
+  ACTION_IMPORT_HEADERS,
+  IMPACT_IMPORT_HEADERS,
+  LEVER_IMPORT_HEADERS,
+  leverImportTemplateRows,
+  validateLeverImportRows,
+  type LeverImportRawSheets,
+} from "@/lib/leverExcelImport";
 import type { BeTrackData, Lever } from "@/types";
 
 type Ctx = Pick<BeTrackData, "levers" | "workstreams" | "pnlAccounts">;
@@ -535,5 +543,91 @@ describe("leverExcelImport — validateLeverImportRows", () => {
       expect(preview.errors[0].reason).toContain("Identifié");
       expect(preview.errors[0].reason).toContain("Exécuté");
     });
+  });
+});
+
+describe("leverExcelImport — programme par défaut et modèle", () => {
+  // Cas ACME : un programme Performance + un Plan Stratégique. La page ne passe plus que les
+  // programmes Performance, et le programme sélectionné sert de cible par défaut.
+  const perfAndOther = [
+    { id: "p1", name: "Transformation Excellence 2026" },
+    { id: "p2", name: "Autre programme Performance" },
+  ];
+
+  it("rattache une ligne sans colonne Programme au programme sélectionné", () => {
+    const preview = validateLeverImportRows(
+      { ...emptySheets, leviers: [baseLeverRow()] },
+      ctx(),
+      "c1",
+      perfAndOther,
+      undefined,
+      "p2"
+    );
+    expect(preview.errors).toEqual([]);
+    expect(preview.toUpsert).toHaveLength(1);
+    expect(preview.toUpsert[0].programId).toBe("p2");
+  });
+
+  it("ignore un programme par défaut qui n'est pas dans la liste autorisée", () => {
+    const preview = validateLeverImportRows(
+      { ...emptySheets, leviers: [baseLeverRow()] },
+      ctx(),
+      "c1",
+      perfAndOther,
+      undefined,
+      "strategic-1"
+    );
+    expect(preview.errors).toHaveLength(1);
+    expect(preview.errors[0].reason).toMatch(/Programme/);
+  });
+
+  it("aligne chaque valeur d'exemple du modèle sur sa colonne", () => {
+    const rows = leverImportTemplateRows("Transformation Excellence 2026");
+    expect(rows.leviers[0]).toHaveLength(LEVER_IMPORT_HEADERS.length);
+    expect(rows.actions[0]).toHaveLength(ACTION_IMPORT_HEADERS.length);
+    expect(rows.impacts[0]).toHaveLength(IMPACT_IMPORT_HEADERS.length);
+    const commentIdx = IMPACT_IMPORT_HEADERS.indexOf("Commentaire");
+    expect(String(rows.impacts[0][commentIdx])).toMatch(/Exemple/);
+    expect(rows.impacts[0][IMPACT_IMPORT_HEADERS.indexOf("Mode")]).toBe("");
+    expect(rows.leviers[0][LEVER_IMPORT_HEADERS.indexOf("Programme")]).toBe(
+      "Transformation Excellence 2026"
+    );
+  });
+
+  it.each([
+    ["colonne Programme pré-remplie", "Transformation Excellence 2026", null],
+    ["colonne Programme vide + programme sélectionné", "", "p1"],
+  ])("importe le modèle téléchargé tel quel sans erreur (%s)", (_label, programName, def) => {
+    // Aller-retour réel par un classeur XLSX, comme le bouton (aoa_to_sheet -> sheet_to_json).
+    const rows = leverImportTemplateRows(programName);
+    const toJson = (headers: readonly string[], data: (string | number)[][]) =>
+      XLSX.utils.sheet_to_json<Record<string, unknown>>(
+        XLSX.utils.aoa_to_sheet([[...headers], ...data]),
+        { defval: "" }
+      );
+    const preview = validateLeverImportRows(
+      {
+        leviers: toJson(LEVER_IMPORT_HEADERS, rows.leviers),
+        actions: toJson(ACTION_IMPORT_HEADERS, rows.actions),
+        impacts: toJson(IMPACT_IMPORT_HEADERS, rows.impacts),
+      },
+      ctx(),
+      "c1",
+      perfAndOther,
+      undefined,
+      def
+    );
+    expect(preview.errors).toEqual([]);
+    expect(preview.toUpsert).toHaveLength(1);
+    expect(preview.toUpsert[0].programId).toBe("p1");
+    expect(preview.toCreateWorkstreams ?? []).toEqual([]);
+  });
+
+  it("n'utilise pas un code d'exemple qui écraserait un vrai levier", () => {
+    const rows = leverImportTemplateRows();
+    const code = rows.leviers[0][LEVER_IMPORT_HEADERS.indexOf("Code")];
+    expect(code).toBe("EXEMPLE-001");
+    expect(rows.actions[0][0]).toBe(code);
+    expect(rows.impacts[0][0]).toBe(code);
   });
 });

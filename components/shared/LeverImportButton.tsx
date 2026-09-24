@@ -7,6 +7,7 @@ import {
   ACTION_IMPORT_HEADERS,
   IMPACT_IMPORT_HEADERS,
   LEVER_IMPORT_HEADERS,
+  leverImportTemplateRows,
   validateLeverImportRows,
   type LeverImportPreview,
 } from "@/lib/leverExcelImport";
@@ -45,6 +46,7 @@ export function LeverImportButton({
   data,
   companyId,
   programs = [],
+  defaultProgramId,
   onImport,
   onCreateWorkstreams,
 }: {
@@ -54,6 +56,9 @@ export function LeverImportButton({
    *  lib/leverExcelImport.ts (contrairement au Workstream, un Programme inconnu est une erreur de
    *  ligne, pas une auto-création : il doit déjà exister, créé dans Admin > Programmes). */
   programs?: { id: string; name: string }[];
+  /** Programme sélectionné dans l'app : cible des lignes sans colonne "Programme" renseignée, et
+   *  valeur pré-remplie de cette colonne dans le modèle téléchargé. */
+  defaultProgramId?: string | null;
   onImport: (rows: LeverImportPreview["toUpsert"]) => {
     createdCount: number;
     updatedCount: number;
@@ -79,73 +84,13 @@ export function LeverImportButton({
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
 
-    const leversExample = [
-      [
-        "PROC-001",
-        "Sourcing & Achats",
-        "Optimisation achats indirects",
-        "Achats & Supply Chain",
-        "",
-        "Marc Dubois",
-        "MD",
-        "Isabelle Roy",
-        "IR",
-        "Europe",
-        "France",
-        "Acme France SAS",
-        "Procurement",
-        "CC-PROC-001",
-        "GA",
-        "2026-01-15",
-        "2026-12-31",
-        "En cours d'exécution",
-        40,
-        2.5,
-        2.1,
-        -1,
-        120,
-        0.3,
-        0.4,
-        0.1,
-        "",
-        "Exemple — à remplacer ou supprimer avant import",
-      ],
-    ];
-    const leversSheet = XLSX.utils.aoa_to_sheet([[...LEVER_IMPORT_HEADERS], ...leversExample]);
+    const defaultProgram = programs.find((p) => p.id === defaultProgramId);
+    const example = leverImportTemplateRows(defaultProgram?.name ?? "", data.workstreams[0]?.name);
+    const leversSheet = XLSX.utils.aoa_to_sheet([[...LEVER_IMPORT_HEADERS], ...example.leviers]);
     XLSX.utils.book_append_sheet(wb, leversSheet, SHEET_NAMES.leviers);
-
-    const actionsExample = [
-      [
-        "PROC-001",
-        "Renégocier contrats fournisseurs classe A",
-        "Marc Dubois",
-        "2026-01-15",
-        "2026-04-30",
-        "En cours",
-      ],
-    ];
-    const actionsSheet = XLSX.utils.aoa_to_sheet([[...ACTION_IMPORT_HEADERS], ...actionsExample]);
+    const actionsSheet = XLSX.utils.aoa_to_sheet([[...ACTION_IMPORT_HEADERS], ...example.actions]);
     XLSX.utils.book_append_sheet(wb, actionsSheet, SHEET_NAMES.actions);
-
-    const impactsExample = [
-      [
-        "PROC-001",
-        "Renégocier contrats fournisseurs classe A",
-        "Gain",
-        "",
-        1.2,
-        "",
-        "Réduction de coût",
-        "",
-        "01/07/2026",
-        "",
-        "",
-        "",
-        "",
-        "Exemple — à remplacer ou supprimer avant import",
-      ],
-    ];
-    const impactsSheet = XLSX.utils.aoa_to_sheet([[...IMPACT_IMPORT_HEADERS], ...impactsExample]);
+    const impactsSheet = XLSX.utils.aoa_to_sheet([[...IMPACT_IMPORT_HEADERS], ...example.impacts]);
     XLSX.utils.book_append_sheet(wb, impactsSheet, SHEET_NAMES.impacts);
 
     XLSX.writeFile(wb, "template_leviers.xlsx");
@@ -170,7 +115,14 @@ export function LeverImportButton({
       impacts: findSheet(workbook, SHEET_NAMES.impacts),
     };
 
-    const result = validateLeverImportRows(sheets, data, companyId, programs);
+    const result = validateLeverImportRows(
+      sheets,
+      data,
+      companyId,
+      programs,
+      undefined,
+      defaultProgramId
+    );
     setFileName(file.name);
     setPreview(result);
   };
