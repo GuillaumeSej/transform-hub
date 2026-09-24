@@ -2847,6 +2847,7 @@ const de: Record<string, string> = {
   "chart.gapDrill.adjustment": "Leistungsabweichung",
   "chart.gapDrill.adjustment.tooltip":
     "Aktualisiert − Ursprungsplan (Effekt der Plananpassung selbst: positiv, wenn das Ziel angehoben wurde, negativ, wenn es gesenkt wurde).",
+  "chart.gapDrill.cancelledLever": "Storniert",
   "chart.clickForDetails": "Für mehr Details klicken",
   "dashboard.workstreamTable.targetNote":
     "Realisiert im Verhältnis zum neu prognostizierten Ziel (letzte Version des Ziels).",

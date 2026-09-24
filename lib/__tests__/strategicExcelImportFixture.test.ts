@@ -34,7 +34,7 @@ function loadFixture() {
 
 describe("import Excel du plan stratégique — fichier pré-rempli réel", () => {
   it("parse toutes les feuilles sans erreur et cible l'entreprise/programme fournis", () => {
-    const sheets = parseStrategicImportWorkbook(loadFixture());
+    const sheets = parseStrategicImportWorkbook(loadFixture(), XLSX);
     expect(sheets.axes.length).toBeGreaterThan(0);
 
     const { toCreate, errors } = validateStrategicImportRows(
@@ -104,7 +104,7 @@ describe("import Excel du plan stratégique — fichier pré-rempli réel", () =
     ]);
 
     const { toCreate, errors } = validateStrategicImportRows(
-      parseStrategicImportWorkbook(wb),
+      parseStrategicImportWorkbook(wb, XLSX),
       { axes: [], chantiers: [], actions: [], indicators: [] },
       companyId,
       programId,

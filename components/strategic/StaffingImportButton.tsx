@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import * as XLSX from "xlsx";
+import type { WorkBook } from "xlsx";
 import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import {
   STAFFING_IMPORT_HEADERS,
@@ -26,7 +26,10 @@ import type { Chantier, ChantierAction, ChantierStaffing } from "@/types";
  *  ne matche renvoie simplement une liste vide), cet import n'a qu'UNE feuille attendue : un CSV
  *  importé porte presque toujours un nom de feuille arbitraire ("Sheet1"), le repli évite de
  *  bloquer un fichier valide pour un simple renommage d'onglet. */
-function findStaffingSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] {
+function findStaffingSheet(
+  XLSX: Pick<typeof import("xlsx"), "utils">,
+  workbook: WorkBook
+): Record<string, unknown>[] {
   const wanted = workbook.SheetNames.find(
     (n) => n.toLowerCase() === STAFFING_IMPORT_SHEET_NAME.toLowerCase()
   );
@@ -80,7 +83,9 @@ export function StaffingImportButton({
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
 
-  const downloadTemplate = () => {
+  // SheetJS chargé au clic seulement (`await import("xlsx")`) : hors du JS initial de /effectifs.
+  const downloadTemplate = async () => {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     // Exemples construits avec un chantier/une équipe RÉELS mais commentés ("#") : ignorés à
     // l'import tant que l'utilisateur ne les active pas (voir buildStaffingTemplateRows).
@@ -98,7 +103,8 @@ export function StaffingImportButton({
   };
 
   /** Export au format d'import (aller-retour : ré-importer le fichier inchangé ne crée rien). */
-  const exportStaffing = () => {
+  const exportStaffing = async () => {
+    const XLSX = await import("xlsx");
     const rows = staffingToExcelRows(staffing, chantiers, chantierActions);
     const wb = XLSX.utils.book_new();
     const sheet =
@@ -123,8 +129,8 @@ export function StaffingImportButton({
     try {
       // CSV décodé UTF-8 / Windows-1252 + raw : accents corrects, "0,5" et "01/03/2026" gardés
       // en texte puis lus au format français (lib/excelFileRead.ts, lib/excelParse.ts).
-      const workbook = await readSpreadsheetFile(file);
-      const rawRows = findStaffingSheet(workbook);
+      const [workbook, XLSX] = await Promise.all([readSpreadsheetFile(file), import("xlsx")]);
+      const rawRows = findStaffingSheet(XLSX, workbook);
       const result = validateStaffingImportRows(
         rawRows,
         companyId,
@@ -179,10 +185,10 @@ export function StaffingImportButton({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={downloadTemplate}>
+      <Button variant="outline" size="sm" onClick={() => void downloadTemplate()}>
         <Download size={13} /> {t("staffingImport.templateButton")}
       </Button>
-      <Button variant="outline" size="sm" onClick={exportStaffing}>
+      <Button variant="outline" size="sm" onClick={() => void exportStaffing()}>
         <FileSpreadsheet size={13} /> {t("staffingImport.exportButton", "Exporter")}
       </Button>
       <input

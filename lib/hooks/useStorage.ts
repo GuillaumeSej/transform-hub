@@ -12,7 +12,9 @@ import {
   ensureAdminSeeded,
   subscribeCompanies,
   subscribeHierarchyNodes,
+  subscribeLifecycleConfig,
 } from "@/lib/firestore/admin";
+import { DEFAULT_LIFECYCLE_STAGES } from "@/lib/status-config";
 import { derivePnlAccounts } from "@/lib/hierarchyLogic";
 import { migrateLeversImpacts } from "@/lib/leverImpactMigration";
 import type { CascadeShift } from "@/lib/engine";
@@ -29,6 +31,7 @@ import type {
   Lever,
   LeverAction,
   HierarchyNode,
+  LifecycleStage,
   ManualAlertInput,
   WorkforceMovement,
   Workstream,
@@ -137,6 +140,42 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   movementsRef.current = movements;
   const workforceMetaRef = useRef(workforceMeta);
   workforceMetaRef.current = workforceMeta;
+
+  // Référentiel de cycle de vie de CHAQUE programme porteur de leviers (`lifecycleConfigs/
+  // {programId}`, même source et même repli sur `DEFAULT_LIFECYCLE_STAGES` que
+  // `useLifecycleLabels`) : les portes de validation effectives d'un levier sont les étapes
+  // « validation requise » de SON programme (voir `gatedStatusesFor`, lib/status-config.ts).
+  // Tant que la config d'un programme n'a pas répondu, aucune option n'est passée à
+  // `leversLogic` → repli sur les 3 portes historiques (le plus strict).
+  const [lifecycleByProgram, setLifecycleByProgram] = useState<Record<string, LifecycleStage[]>>(
+    {}
+  );
+  const lifecycleByProgramRef = useRef(lifecycleByProgram);
+  lifecycleByProgramRef.current = lifecycleByProgram;
+  const leverProgramIdsKey = useMemo(
+    () =>
+      Array.from(new Set(levers.map((l) => l.programId).filter(Boolean)))
+        .sort()
+        .join("|"),
+    [levers]
+  );
+  useEffect(() => {
+    if (!leverProgramIdsKey) return;
+    const unsubs = leverProgramIdsKey.split("|").map((programId) =>
+      subscribeLifecycleConfig(programId, (fetched) =>
+        setLifecycleByProgram((prev) => ({
+          ...prev,
+          [programId]: fetched.length > 0 ? fetched : DEFAULT_LIFECYCLE_STAGES,
+        }))
+      )
+    );
+    return () => unsubs.forEach((unsub) => unsub());
+  }, [leverProgramIdsKey]);
+  const workflowOptionsFor = useCallback((leverId: string): leversLogic.LeverWorkflowOptions => {
+    const programId = leversRef.current.find((l) => l.id === leverId)?.programId;
+    const lifecycleStages = programId ? lifecycleByProgramRef.current[programId] : undefined;
+    return lifecycleStages ? { lifecycleStages } : {};
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,14 +331,20 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
 
   const updateLever = useCallback(
     (id: string, patch: Partial<Lever>) => {
-      const result = leversLogic.updateLever(leversRef.current, id, patch, DEMO_USER);
+      const result = leversLogic.updateLever(
+        leversRef.current,
+        id,
+        patch,
+        DEMO_USER,
+        workflowOptionsFor(id)
+      );
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
       leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
       return result.lever;
     },
-    [persistAudit]
+    [persistAudit, workflowOptionsFor]
   );
 
   /** Point d'entrée UI de la demande de validation (voir lib/leversLogic.ts pour la logique
@@ -313,14 +358,19 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         throw new Error(
           "Utilisateur non identifié : impossible de soumettre la demande de validation"
         );
-      const result = leversLogic.requestLeverApproval(leversRef.current, id, currentUser);
+      const result = leversLogic.requestLeverApproval(
+        leversRef.current,
+        id,
+        currentUser,
+        workflowOptionsFor(id)
+      );
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
       leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
       return result.lever;
     },
-    [persistAudit, currentUser]
+    [persistAudit, currentUser, workflowOptionsFor]
   );
 
   const approveLeverGate = useCallback(

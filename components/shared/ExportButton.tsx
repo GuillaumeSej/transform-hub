@@ -2,7 +2,6 @@
 
 import { FileSpreadsheet } from "lucide-react";
 import { useMemo } from "react";
-import * as XLSX from "xlsx";
 import { generateAlerts } from "@/lib/alertEngine";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
@@ -59,7 +58,9 @@ export function ExportButton({
   const { t } = useTranslation();
   const alerts = useMemo(() => generateAlerts(data), [data]);
 
-  const exportExcel = (d: BeTrackData) => {
+  const exportExcel = async (d: BeTrackData) => {
+    // SheetJS chargé au clic seulement (~400 kB hors du JS initial de la page Leviers).
+    const XLSX = await import("xlsx");
     const leversToExport = levers ?? d.levers;
     const rows = leversToExport.map((l) =>
       leverToExcelRow(l, d, alerts, riskThresholds, lifecycleStages, programs)
@@ -114,7 +115,7 @@ export function ExportButton({
   };
 
   return (
-    <Button variant="outline" onClick={() => exportExcel(data)}>
+    <Button variant="outline" onClick={() => void exportExcel(data)}>
       <FileSpreadsheet size={13} /> Export Excel
     </Button>
   );

@@ -2,7 +2,6 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Download } from "lucide-react";
-import * as XLSX from "xlsx";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Popover } from "@/components/shared/Popover";
 import * as engine from "@/lib/engine";
@@ -130,7 +129,9 @@ export function FinanceHierarchyTable({
   const arrow = (key: FinanceSortKey) =>
     sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "";
 
-  const exportXlsx = () => {
+  // SheetJS chargé au clic seulement (`await import("xlsx")`) : hors du JS initial de /finance.
+  const exportXlsx = async () => {
+    const XLSX = await import("xlsx");
     const rows: Record<string, string | number>[] = [];
     const toRow = (label: string, values: Record<Exclude<FinanceSortKey, "label">, number>) => {
       const row: Record<string, string | number> = { [level.label]: label };
@@ -173,7 +174,7 @@ export function FinanceHierarchyTable({
             </select>
             <button
               type="button"
-              onClick={exportXlsx}
+              onClick={() => void exportXlsx()}
               className="inline-flex items-center gap-1 rounded-sm border border-border-strong px-2 py-1 text-xs font-semibold text-secondary hover:text-primary"
             >
               <Download size={12} /> {t("finance.hierarchyTable.export", "Exporter")}

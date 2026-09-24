@@ -42,6 +42,8 @@ export type DrilldownEntry = {
   /** Réactualisé — uniquement renseigné par le détail de la trajectoire des économies
    *  (`gapEntriesAt`, lib/scurveDetail.ts) ; absent (undefined) pour les autres drilldowns. */
   reforecast?: number;
+  /** Levier abandonné (détail de la trajectoire, `gapEntriesAt`) : l'UI l'étiquette « Annulé ». */
+  cancelled?: boolean;
   segments: OpexSegment[];
 };
 

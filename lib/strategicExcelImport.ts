@@ -1,5 +1,11 @@
-import * as XLSX from "xlsx";
+import type { WorkBook } from "xlsx";
 import { baselineMeasurement, computeIndicatorStatus } from "@/lib/axisLogic";
+
+/** Module SheetJS fourni PAR L'APPELANT aux fonctions qui lisent/composent un classeur : cette
+ *  librairie n'importe jamais `xlsx` statiquement (elle est chargée par toutes les pages du plan
+ *  stratégique), les composants font `await import("xlsx")` au clic et les tests passent le
+ *  module réel — la logique reste pure et synchrone. */
+export type XlsxModule = Pick<typeof import("xlsx"), "utils">;
 import {
   canonicalizeRowKeys,
   excelRowNumber,
@@ -1905,7 +1911,10 @@ const SHEET_ALIASES: Partial<Record<SheetKey, string[]>> = {
 
 /** Lit un classeur (feuille "Lisez-moi" ignorée) : lignes par feuille + en-têtes réels + feuilles
  *  absentes/renommées — point d'entrée partagé par `StrategicImportButton` et les tests. */
-export function parseStrategicImportWorkbook(workbook: XLSX.WorkBook): StrategicImportRawSheets {
+export function parseStrategicImportWorkbook(
+  workbook: WorkBook,
+  XLSX: XlsxModule
+): StrategicImportRawSheets {
   const find = (name: string) => workbook.SheetNames.find((n) => norm(n) === norm(name));
   const result: StrategicImportRawSheets = {
     axes: [],
@@ -2174,7 +2183,7 @@ export const STRATEGIC_STAFFING_EXAMPLE_ROWS = [
 type SheetRows = Record<SheetKey, unknown[][]>;
 
 /** Compose un classeur au format d'import (feuille "Lisez-moi" + 6 feuilles). */
-function buildWorkbook(rows: SheetRows): XLSX.WorkBook {
+function buildWorkbook(rows: SheetRows, XLSX: XlsxModule): WorkBook {
   const wb = XLSX.utils.book_new();
   const guideSheet = XLSX.utils.aoa_to_sheet(STRATEGIC_IMPORT_GUIDE_ROWS);
   guideSheet["!cols"] = [{ wch: 110 }];
@@ -2189,15 +2198,18 @@ function buildWorkbook(rows: SheetRows): XLSX.WorkBook {
 }
 
 /** Modèle vierge avec lignes d'exemple. */
-export function buildStrategicImportTemplateWorkbook(): XLSX.WorkBook {
-  return buildWorkbook({
-    axes: STRATEGIC_AXIS_EXAMPLE_ROWS,
-    chantiers: STRATEGIC_CHANTIER_EXAMPLE_ROWS,
-    actions: STRATEGIC_ACTION_EXAMPLE_ROWS,
-    livrables: STRATEGIC_DELIVERABLE_EXAMPLE_ROWS,
-    indicateurs: STRATEGIC_INDICATOR_EXAMPLE_ROWS,
-    etp: STRATEGIC_STAFFING_EXAMPLE_ROWS,
-  });
+export function buildStrategicImportTemplateWorkbook(XLSX: XlsxModule): WorkBook {
+  return buildWorkbook(
+    {
+      axes: STRATEGIC_AXIS_EXAMPLE_ROWS,
+      chantiers: STRATEGIC_CHANTIER_EXAMPLE_ROWS,
+      actions: STRATEGIC_ACTION_EXAMPLE_ROWS,
+      livrables: STRATEGIC_DELIVERABLE_EXAMPLE_ROWS,
+      indicateurs: STRATEGIC_INDICATOR_EXAMPLE_ROWS,
+      etp: STRATEGIC_STAFFING_EXAMPLE_ROWS,
+    },
+    XLSX
+  );
 }
 
 /**
@@ -2207,8 +2219,9 @@ export function buildStrategicImportTemplateWorkbook(): XLSX.WorkBook {
  */
 export function buildStrategicPlanExportWorkbook(
   data: StrategicImportExistingData,
-  stages: MaturityStageConfig[]
-): XLSX.WorkBook {
+  stages: MaturityStageConfig[],
+  XLSX: XlsxModule
+): WorkBook {
   const codeOf = (e: { id: string }) => importCodeOf(e) ?? e.id;
   const axisCode = new Map(data.axes.map((a) => [a.id, codeOf(a)]));
   const chantierCode = new Map(data.chantiers.map((c) => [c.id, codeOf(c)]));
@@ -2219,68 +2232,71 @@ export function buildStrategicPlanExportWorkbook(
   const num = (v: number | undefined) => (v === undefined ? "" : v);
   const measurements = data.measurements ?? [];
 
-  return buildWorkbook({
-    axes: data.axes.map((a) => [
-      codeOf(a),
-      a.name,
-      a.description ?? "",
-      a.owner ?? "",
-      a.color ?? "",
-      stageLabel(a.stage),
-    ]),
-    chantiers: data.chantiers.map((c) => [
-      codeOf(c),
-      (c.axisIds ?? []).map((id) => axisCode.get(id) ?? id).join(";"),
-      c.name,
-      c.description ?? "",
-      c.pilote ?? "",
-      stageLabel(c.stage),
-      num(c.allocatedBudget),
-      num(c.consumedBudget),
-      num(c.consumedFte),
-      (c.dependencies ?? [])
-        .map((d) => `${chantierCode.get(d.targetId) ?? d.targetId}:${d.type}`)
-        .join(";"),
-    ]),
-    actions: data.actions.map((a) => [
-      codeOf(a),
-      chantierCode.get(a.chantierId) ?? a.chantierId,
-      a.name,
-      a.description ?? "",
-      a.owner ?? "",
-      a.sponsor ?? "",
-      a.start ?? "",
-      a.end ?? "",
-      stageLabel(a.status),
-      num(a.budget),
-      num(a.consumedBudget),
-      num(a.chantierWeightPct),
-    ]),
-    livrables: data.actions.flatMap((a) =>
-      (a.deliverables ?? []).map((d) => [codeOf(a), d.label, d.dueDate ?? ""])
-    ),
-    indicateurs: data.indicators.map((i) => [
-      codeOf(i),
-      i.chantierId ? "" : (axisCode.get(i.axisId) ?? i.axisId),
-      i.chantierId ? (chantierCode.get(i.chantierId) ?? i.chantierId) : "",
-      i.name,
-      KIND_LABEL[i.kind] ?? i.kind,
-      FREQUENCY_LABEL[i.frequency] ?? i.frequency,
-      i.objective,
-      num(i.objectiveValue),
-      num(baselineMeasurement(i.id, measurements)?.value),
-      i.direction ? DIRECTION_LABEL[i.direction] : "",
-      i.unit ?? "",
-      (i.responsibleRoles ?? []).join(";"),
-    ]),
-    etp: (data.staffing ?? []).map((s) => [
-      chantierCode.get(s.chantierId) ?? s.chantierId,
-      s.actionId ? (actionCode.get(s.actionId) ?? s.actionId) : "",
-      s.function,
-      s.fte,
-      s.note ?? "",
-      s.startDate ?? "",
-      s.endDate ?? "",
-    ]),
-  });
+  return buildWorkbook(
+    {
+      axes: data.axes.map((a) => [
+        codeOf(a),
+        a.name,
+        a.description ?? "",
+        a.owner ?? "",
+        a.color ?? "",
+        stageLabel(a.stage),
+      ]),
+      chantiers: data.chantiers.map((c) => [
+        codeOf(c),
+        (c.axisIds ?? []).map((id) => axisCode.get(id) ?? id).join(";"),
+        c.name,
+        c.description ?? "",
+        c.pilote ?? "",
+        stageLabel(c.stage),
+        num(c.allocatedBudget),
+        num(c.consumedBudget),
+        num(c.consumedFte),
+        (c.dependencies ?? [])
+          .map((d) => `${chantierCode.get(d.targetId) ?? d.targetId}:${d.type}`)
+          .join(";"),
+      ]),
+      actions: data.actions.map((a) => [
+        codeOf(a),
+        chantierCode.get(a.chantierId) ?? a.chantierId,
+        a.name,
+        a.description ?? "",
+        a.owner ?? "",
+        a.sponsor ?? "",
+        a.start ?? "",
+        a.end ?? "",
+        stageLabel(a.status),
+        num(a.budget),
+        num(a.consumedBudget),
+        num(a.chantierWeightPct),
+      ]),
+      livrables: data.actions.flatMap((a) =>
+        (a.deliverables ?? []).map((d) => [codeOf(a), d.label, d.dueDate ?? ""])
+      ),
+      indicateurs: data.indicators.map((i) => [
+        codeOf(i),
+        i.chantierId ? "" : (axisCode.get(i.axisId) ?? i.axisId),
+        i.chantierId ? (chantierCode.get(i.chantierId) ?? i.chantierId) : "",
+        i.name,
+        KIND_LABEL[i.kind] ?? i.kind,
+        FREQUENCY_LABEL[i.frequency] ?? i.frequency,
+        i.objective,
+        num(i.objectiveValue),
+        num(baselineMeasurement(i.id, measurements)?.value),
+        i.direction ? DIRECTION_LABEL[i.direction] : "",
+        i.unit ?? "",
+        (i.responsibleRoles ?? []).join(";"),
+      ]),
+      etp: (data.staffing ?? []).map((s) => [
+        chantierCode.get(s.chantierId) ?? s.chantierId,
+        s.actionId ? (actionCode.get(s.actionId) ?? s.actionId) : "",
+        s.function,
+        s.fte,
+        s.note ?? "",
+        s.startDate ?? "",
+        s.endDate ?? "",
+      ]),
+    },
+    XLSX
+  );
 }

@@ -2627,6 +2627,7 @@ const fr: Record<string, string> = {
   "chart.gapDrill.adjustment": "Écart de performance",
   "chart.gapDrill.adjustment.tooltip":
     "Réactualisé − planifié initial (effet du réajustement du plan lui-même : positif si la cible a été relevée, négatif si elle a été abaissée).",
+  "chart.gapDrill.cancelledLever": "Annulé",
   "chart.clickForDetails": "Cliquer pour plus de détails",
   "dashboard.workstreamTable.targetNote":
     "Réalisé par rapport à la cible réactualisée (dernière version de la cible).",

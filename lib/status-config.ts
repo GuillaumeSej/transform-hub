@@ -97,6 +97,23 @@ export function gatedStatusesFor(lifecycleStages?: LifecycleStage[]): LeverAppro
   );
 }
 
+/** Première porte de validation (au sens de `gatedStatusesFor`) franchie par la transition
+ *  `from` → `to` : une porte est franchie si elle se situe entre le statut de départ (exclu) et la
+ *  cible (incluse) — viser une étape au-delà d'une porte ne la contourne pas. `undefined` si la
+ *  transition ne franchit aucune porte (statut inchangé, abandon, régression, étapes libres).
+ *  Règle unique partagée par `updateLever` (lib/leversLogic.ts), le stepper de la fiche levier et
+ *  la garde de statut de l'import Excel (lib/leverExcelImport.ts). */
+export function gateCrossedBy(
+  from: LeverStatus,
+  to: LeverStatus,
+  lifecycleStages?: LifecycleStage[]
+): LeverApprovalGate | undefined {
+  if (from === to || to === "cancelled") return undefined;
+  return gatedStatusesFor(lifecycleStages).find(
+    (gate) => STATUS_ORDER[gate] > STATUS_ORDER[from] && STATUS_ORDER[gate] <= STATUS_ORDER[to]
+  );
+}
+
 /** Porte de validation à franchir DEPUIS `status` (l'étape suivante du cycle, si elle est une
  *  porte effective — voir `gatedStatusesFor`). Sans référentiel : `GATE_BY_STATUS` historique. */
 export function nextGateFor(

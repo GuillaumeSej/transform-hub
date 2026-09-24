@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import * as XLSX from "xlsx";
 import { Copy, Download, FileDown, Upload } from "lucide-react";
 import {
   STRATEGIC_IMPORT_MESSAGES,
@@ -18,7 +17,7 @@ import {
   type StrategicImportPreview,
   type StrategicImportWrites,
 } from "@/lib/strategicExcelImport";
-import { XLSX_READ_OPTIONS } from "@/lib/excelParse";
+import { readSpreadsheetFile } from "@/lib/excelFileRead";
 import type { AuthUser, MaturityStageConfig, Role } from "@/types";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
@@ -32,9 +31,11 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /** Génère et télécharge le modèle Excel vierge (feuille "Lisez-moi" + 6 feuilles d'exemple) —
- *  réutilisé par `components/admin/StrategicPlanOnboarding.tsx`. */
-export function downloadStrategicImportTemplate(): void {
-  XLSX.writeFile(buildStrategicImportTemplateWorkbook(), "modele_plan_strategique.xlsx");
+ *  réutilisé par `components/admin/StrategicPlanOnboarding.tsx`. SheetJS chargé au clic
+ *  (`await import("xlsx")`), jamais importé statiquement par ce composant ni par la librairie. */
+export async function downloadStrategicImportTemplate(): Promise<void> {
+  const XLSX = await import("xlsx");
+  XLSX.writeFile(buildStrategicImportTemplateWorkbook(XLSX), "modele_plan_strategique.xlsx");
 }
 
 /** Personne référencée dans le fichier, sans compte, proposée à la création (voir
@@ -229,8 +230,8 @@ export function StrategicImportButton({
     }
   }
 
-  const downloadTemplate = () => {
-    downloadStrategicImportTemplate();
+  const downloadTemplate = async () => {
+    await downloadStrategicImportTemplate();
     showToast(
       t("strategicImport.templateDownloadedTitle", "Modèle téléchargé"),
       t(
@@ -241,8 +242,9 @@ export function StrategicImportButton({
     );
   };
 
-  const exportPlan = () => {
-    const wb = buildStrategicPlanExportWorkbook(data, maturityStages);
+  const exportPlan = async () => {
+    const XLSX = await import("xlsx");
+    const wb = buildStrategicPlanExportWorkbook(data, maturityStages, XLSX);
     const d = new Date();
     const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     XLSX.writeFile(wb, `plan_strategique_${stamp}.xlsx`);
@@ -270,9 +272,10 @@ export function StrategicImportButton({
     }
     let result: StrategicImportPreview;
     try {
-      const workbook = XLSX.read(await file.arrayBuffer(), XLSX_READ_OPTIONS);
+      // Point d'entrée unique de lecture (lib/excelFileRead.ts) ; SheetJS chargé au clic.
+      const [workbook, XLSX] = await Promise.all([readSpreadsheetFile(file), import("xlsx")]);
       result = validateStrategicImportRows(
-        parseStrategicImportWorkbook(workbook),
+        parseStrategicImportWorkbook(workbook, XLSX),
         data,
         companyId,
         programId,
@@ -445,12 +448,12 @@ export function StrategicImportButton({
   return (
     <>
       {showTemplateButton && (
-        <Button variant="outline" onClick={downloadTemplate}>
+        <Button variant="outline" onClick={() => void downloadTemplate()}>
           <Download size={13} /> {t("strategicImport.templateButton", "Télécharger le modèle")}
         </Button>
       )}
       {exportVisible && (
-        <Button variant="outline" onClick={exportPlan}>
+        <Button variant="outline" onClick={() => void exportPlan()}>
           <FileDown size={13} /> {t("strategicImport.exportButton", "Exporter le plan")}
         </Button>
       )}

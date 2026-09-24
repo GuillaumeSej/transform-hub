@@ -1,10 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
-import { isStrategicLeadOf } from "@/lib/axisLogic";
+import { canDecideMilestone } from "@/lib/axisLogic";
 import { isLeverSponsoredBy } from "@/lib/leversLogic";
 import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
-import type { AuthUser, BeTrackData, Chantier, ChantierAction, Lever } from "@/types";
+import type {
+  AuthUser,
+  BeTrackData,
+  Chantier,
+  ChantierAction,
+  Lever,
+  StrategicAxis,
+} from "@/types";
 
 /** L'utilisateur a-t-il le rôle "cto" sur le programme de ce levier ? Fonction LOCALE à ce
  *  fichier (ne pas la déplacer dans `lib/leversLogic.ts`, réservé à l'autre agent qui implémente
@@ -65,8 +72,9 @@ export function useApprovalQueue(data: BeTrackData, user: AuthUser | null | unde
 // Même page dédiée `/validation` et même dropdown Topbar que la file ci-dessus, mais pour la
 // DEMANDE DE VALIDATION DE JALON d'un projet (`ChantierAction.milestoneApproval`, voir
 // `lib/axisLogic.ts::requestMilestoneApproval`/`approveMilestoneGate`) plutôt qu'une porte de
-// cycle de vie de levier — modèle à approbateur UNIQUE (`strategic_lead`, voir
-// `isStrategicLeadOf`), pas de sponsor/cto : structurellement absent du Plan Stratégique.
+// cycle de vie de levier. Approbateurs = même cascade que `resolveApprover("milestone", …)`
+// (lib/strategicApprovals.ts) via `canDecideMilestone` : pilote du chantier, à défaut le(s)
+// responsable(s) de l'axe, toujours le `strategic_lead` du programme et les admins.
 
 /** UNE ligne de la file d'attente de validation de jalon — le projet en attente ET son chantier
  *  parent déjà résolu (mêmes deux informations que la page/le dropdown ont besoin d'afficher :
@@ -79,13 +87,16 @@ export type MilestoneApprovalQueueEntry = {
 /**
  * Résolution PURE de la file d'attente de validation de jalon — voir `resolveApprovalQueue`
  * ci-dessus (même mécanique, adaptée). Un projet dont le chantier parent est introuvable
- * (référence orpheline) n'apparaît jamais dans la file : `isStrategicLeadOf` a besoin du chantier
- * pour résoudre son `programId`, et aucun projet fantôme ne doit être présenté à l'approbation.
+ * (référence orpheline) n'apparaît jamais dans la file : la cascade d'approbation a besoin du
+ * chantier (programme, pilote, axes), et aucun projet fantôme ne doit être présenté à
+ * l'approbation. `axes` : nécessaire pour qu'un responsable d'axe voie les demandes des chantiers
+ * SANS pilote (repli de la cascade, voir `canDecideMilestone`).
  */
 export function resolveMilestoneApprovalQueue(
   chantierActions: ChantierAction[],
   chantiers: Chantier[],
-  user: AuthUser | null | undefined
+  user: AuthUser | null | undefined,
+  axes: Pick<StrategicAxis, "id" | "owner">[] = []
 ): MilestoneApprovalQueueEntry[] {
   if (!user) return [];
   const chantierById = new Map(chantiers.map((c) => [c.id, c]));
@@ -94,7 +105,7 @@ export function resolveMilestoneApprovalQueue(
     if (!action.milestoneApproval) continue;
     const chantier = chantierById.get(action.chantierId);
     if (!chantier) continue;
-    if (isAnyAdmin(user) || isStrategicLeadOf(chantier, user)) {
+    if (canDecideMilestone(chantier, user, axes)) {
       entries.push({ action, chantier });
     }
   }
@@ -102,16 +113,20 @@ export function resolveMilestoneApprovalQueue(
 }
 
 /** Sur le modèle exact de `useApprovalQueue` ci-dessus — résout la file des projets dont la
- *  demande de validation de jalon (`strategic_lead` scopé au programme, voir `isStrategicLeadOf`)
- *  attend actuellement CET utilisateur, pour alimenter le badge/dropdown de notifications ET la
- *  page dédiée `/validation` en mode Plan Stratégique. */
+ *  demande de validation de jalon attend actuellement CET utilisateur (cascade
+ *  `canDecideMilestone` : pilote, responsable d'axe, `strategic_lead`, admin), pour alimenter le
+ *  badge/dropdown de notifications ET la page dédiée `/validation` en mode Plan Stratégique. */
 export function useMilestoneApprovalQueue(
-  data: { chantierActions: ChantierAction[]; chantiers: Chantier[] },
+  data: {
+    chantierActions: ChantierAction[];
+    chantiers: Chantier[];
+    axes?: Pick<StrategicAxis, "id" | "owner">[];
+  },
   user: AuthUser | null | undefined
 ) {
   const queue = useMemo(
-    () => resolveMilestoneApprovalQueue(data.chantierActions, data.chantiers, user),
-    [data.chantierActions, data.chantiers, user]
+    () => resolveMilestoneApprovalQueue(data.chantierActions, data.chantiers, user, data.axes),
+    [data.chantierActions, data.chantiers, data.axes, user]
   );
 
   return {

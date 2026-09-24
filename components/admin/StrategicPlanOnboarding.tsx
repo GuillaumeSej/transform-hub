@@ -210,7 +210,7 @@ export function StrategicPlanOnboarding({
         {!imported && (
           <button
             type="button"
-            onClick={downloadStrategicImportTemplate}
+            onClick={() => void downloadStrategicImportTemplate()}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary underline-offset-2 hover:text-bp-coral hover:underline"
           >
             <FileSpreadsheet size={13} />

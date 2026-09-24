@@ -2,7 +2,7 @@ import * as engine from "@/lib/engine";
 import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
 import { migrateLeverImpacts } from "@/lib/leverImpactMigration";
 import type { CascadeShift } from "@/lib/engine";
-import { STATUS_ORDER, gatedStatusesFor, nextGateFor } from "@/lib/status-config";
+import { STATUS_ORDER, gateCrossedBy, nextGateFor } from "@/lib/status-config";
 import type {
   AuditEntry,
   AuthUser,
@@ -13,7 +13,6 @@ import type {
   LeverStatus,
   LeverAction,
   LeverApproval,
-  LeverApprovalGate,
   LifecycleStage,
   Role,
   Workstream,
@@ -530,7 +529,7 @@ export function createLever(
 
 export type LeverWorkflowOptions = {
   /** Référentiel de cycle de vie du programme du levier : seules les étapes dont l'admin a coché
-   *  « validation requise » sont des portes (voir `gatedStatusesFor`). Omis = les 3 portes
+   *  « validation requise » sont des portes (voir `gatedStatusesFor`/`gateCrossedBy`, lib/status-config.ts). Omis = les 3 portes
    *  historiques (qualified/validated/in_progress). */
   lifecycleStages?: LifecycleStage[];
 };
@@ -559,21 +558,14 @@ export function updateLever(
   // restent librement modifiables par cette voie, comme avant.
   // Portes effectives : case « validation requise » du référentiel de cycle de vie (admin), sinon
   // les 3 portes historiques quand l'appelant ne fournit pas de référentiel.
-  const GATED_STATUSES: readonly LeverApprovalGate[] = gatedStatusesFor(options.lifecycleStages);
   const bypassesApprovalCascade = "approval" in patch;
   let guardedPatch: Partial<Lever> = patch;
   // Une porte est franchie si elle se situe entre le statut de départ (exclu) et la cible
   // (incluse) : viser une étape au-delà d'une porte (ex. « Identifié » → « Planifié » quand seule
-  // « Validé » exige une validation, ou « Planifié » → « Réalisé ») ne la contourne pas.
+  // « Validé » exige une validation, ou « Planifié » → « Réalisé ») ne la contourne pas — voir
+  // `gateCrossedBy` (lib/status-config.ts), règle partagée avec le stepper et l'import Excel.
   const crossesGate =
-    !!patch.status &&
-    patch.status !== before.status &&
-    patch.status !== "cancelled" &&
-    GATED_STATUSES.some(
-      (gate) =>
-        STATUS_ORDER[gate] > STATUS_ORDER[before.status] &&
-        STATUS_ORDER[gate] <= STATUS_ORDER[patch.status as LeverStatus]
-    );
+    !!patch.status && !!gateCrossedBy(before.status, patch.status, options.lifecycleStages);
   if (crossesGate && !bypassesApprovalCascade) {
     guardedPatch = { ...patch };
     delete guardedPatch.status;

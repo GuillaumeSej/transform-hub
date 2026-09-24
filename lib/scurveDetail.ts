@@ -45,7 +45,12 @@ export function savingsSeriesByWorkstream(
  *  `DrilldownEntry` réutilisés pour partager le regroupement chantier / géographie : before =
  *  planifié initial cumulé, after = réalisé cumulé, reforecast = réactualisé cumulé, value = écart
  *  total, realized = écart de retard (réalisé − réactualisé, en entier), remaining = écart de
- *  performance (réactualisé − planifié initial). */
+ *  performance (réactualisé − planifié initial).
+ *
+ *  Leviers ABANDONNÉS COMPRIS (`cancelled: true`) : leur plan figé reste dans la courbe « Plan
+ *  initial » (voir `savingsSeries`), donc dans l'écart affiché par le badge (`gap.total`) — les
+ *  exclure ici faisait diverger le total du détail de celui du badge. Leur contribution est un
+ *  écart de performance pur (réactualisé 0, réalisé 0). */
 export function gapEntriesAt(
   data: BeTrackData,
   granularity: engine.TimeGranularity,
@@ -54,7 +59,6 @@ export function gapEntriesAt(
 ): DrilldownEntry[] {
   const out: DrilldownEntry[] = [];
   for (const l of data.levers) {
-    if (l.status === "cancelled") continue;
     const p = engine
       .savingsSeries({ ...data, levers: [l] }, granularity, today)
       .find((x) => x.month === month);
@@ -78,6 +82,7 @@ export function gapEntriesAt(
       realized: p.gap.delayRaw,
       remaining: p.gap.adjustmentRaw,
       segments: [],
+      ...(l.status === "cancelled" ? { cancelled: true } : {}),
     });
   }
   return out;

@@ -9,7 +9,7 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import {
   chantierDependencyAlerts,
-  latestMeasurement,
+  latestNumericMeasurement,
   programBudgetOverrun,
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
@@ -143,7 +143,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     for (const indicator of strategic.indicators) {
       if (resolveIndicatorStatus(indicator) !== "at_risk") continue;
       const id = `strategic-indicator-${indicator.id}`;
-      const latest = latestMeasurement(indicator.id, strategic.measurements);
+      // Dernière mesure NUMÉRIQUE (même ordre période puis `reportedAt` que le statut,
+      // `compareMeasurements`) : un commentaire seul saisi après la valeur ne date pas l'alerte.
+      const latest = latestNumericMeasurement(indicator.id, strategic.measurements);
       alerts.push({
         id,
         type: "red",
@@ -174,7 +176,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     //    "absent = pas d'alerte fabriquée" que les deux blocs précédents. Cette alerte est pour le
     //    PILOTE du plan (`actorRole: "strategic_lead"`), même esprit que `indicator.responsibleRoles[0]`
     //    ci-dessus qui cible le responsable métier de l'indicateur.
-    if (activeProgram) {
+    //    Uniquement pour un lecteur à périmètre COMPLET (`fullScope`, même règle que la puce
+    //    « Budget alloué » de StrategicDashboardView) : le prévisionnel porte sur le programme
+    //    entier, un utilisateur scopé (confidentialité, ownership) n'a qu'un total partiel.
+    if (activeProgram && strategic.fullScope) {
       const overrun = programBudgetOverrun(
         activeProgram,
         strategic.chantiers,
@@ -221,6 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     strategic.chantierActions,
     strategic.indicators,
     strategic.measurements,
+    strategic.fullScope,
     user?.companyId,
     t,
   ]);

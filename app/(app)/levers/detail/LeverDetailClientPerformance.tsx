@@ -31,7 +31,7 @@ import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
 import type { CascadeResult } from "@/lib/engine";
-import { STATUS_ORDER } from "@/lib/status-config";
+import { STATUS_ORDER, gateCrossedBy, nextGateFor } from "@/lib/status-config";
 import { dependencyAlertMessage, dependencyTypeDescription } from "@/lib/dependencyLabels";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -245,7 +245,7 @@ export function LeverDetailClientPerformance() {
   // Réalisé à date (net) = gains bruts réalisés − OPEX récurrent réalisé (`engine.realizedSavings`),
   // exactement la même formule et la même somme d'impacts que celle utilisée pour le % de
   // progression (`engine.displayedProgressPct`) — jamais une projection proratée sur une courbe
-  // plan (ancien calcul via `leverJCurve`/`jCurveActualToDate`, qui pouvait afficher un "net" plus
+  // plan (l'ancien calcul via une courbe en J par levier, retiré, pouvait afficher un "net" plus
   // élevé que les gains bruts réalisés eux-mêmes, cf. bug ACME SC-002 22/09).
   const real = engine.realizedSavings(lever);
   // Gains BRUTS réalisés à date (avant déduction des coûts) — même périmètre que `real` (net) :
@@ -377,11 +377,12 @@ export function LeverDetailClientPerformance() {
               const isCurrent = lever.status === s;
               const isPast = STATUS_ORDER[lever.status] > STATUS_ORDER[s];
               const isAuto = s === "delivered";
-              // Round "portes de validation" : le passage à "qualified" (M2), "validated" (M3)
-              // ou "in_progress" (M4) ne se déclenche plus par un clic direct sur l'étape du
-              // stepper — il passe désormais par une demande de validation (porteur → sponsor OU
-              // CTO, voir le bandeau juste en dessous du stepper).
-              const isCascadeGated = s === "qualified" || s === "validated" || s === "in_progress";
+              // Portes de validation : une étape n'est pas cliquable si l'atteindre depuis le
+              // statut courant franchit une étape « validation requise » du référentiel de CE
+              // programme (`gateCrossedBy`, même règle que `updateLever` et l'import Excel) — elle
+              // passe alors par une demande de validation (porteur → sponsor OU CTO, voir le
+              // bandeau juste en dessous du stepper).
+              const isCascadeGated = !!gateCrossedBy(lever.status, s, lifecycle.stages);
               // Impératif métier : une étape déjà franchie (isPast) n'est plus cliquable — on ne
               // peut jamais revenir en arrière dans le cycle M1→M5 (garde-fou dupliqué côté données
               // dans `leversLogic.ts::updateLever`, qui ignore silencieusement un `status` en
@@ -457,10 +458,10 @@ export function LeverDetailClientPerformance() {
                   .replace("{current}", lifecycle.shortLabel("in_progress"))}
               </p>
             )}
+          {/* Bouton « Soumettre » : seulement si l'étape SUIVANTE est une porte effective du
+              programme (`nextGateFor`, même règle que `requestLeverApproval`). */}
           {!readOnly &&
-            (lever.status === "idea" ||
-              lever.status === "qualified" ||
-              lever.status === "validated") &&
+            !!nextGateFor(lever.status, lifecycle.stages) &&
             !lever.approval &&
             canSubmitApproval && (
               <div className="mt-2.5 flex items-center justify-between gap-3 rounded-md bg-info-blue-light px-3 py-2">

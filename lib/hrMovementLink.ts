@@ -1,4 +1,5 @@
 import { serializeFilterValues } from "@/lib/filterUtils";
+import type { MovementAlertKind } from "@/lib/hrEngine";
 
 /**
  * Mécanisme UNIQUE "voir ce(s) mouvement(s) précis dans la Base ETP" — réutilisé par tous les
@@ -44,12 +45,14 @@ export function etpMovementFilterLink(filters: Record<string, string[]>): string
  * Lien vers l'onglet "Suivi des mouvements" de la Base ETP filtré sur une ou plusieurs catégories
  * d'alerte (filtre `f_alert` de la barre de filtres "mouvements"). Le paramètre est préfixé par le
  * namespace `mov_` et sérialisé comme le fait `useMultiFilterBarState` (valeurs encodées, séparées
- * par des virgules) — `labels` sont les libellés affichés du filtre (`hr.alert.*`), car c'est la
- * valeur que `FilterDef.getValue` compare. Contrairement à `etpMovementDeepLink`, le filtre reste
- * visible et modifiable dans la barre de filtres.
+ * par des virgules). `kinds` sont les CODES STABLES d'alerte (`MovementAlertKind`, ou `"none"`) :
+ * la Base ETP stocke ces codes dans l'URL, indépendants de la langue (voir `ALERT_LABEL_KEYS` dans
+ * `app/(app)/hr/etp/page.tsx`) — un lien construit avec les libellés traduits cessait de filtrer
+ * dès qu'on changeait de langue. Contrairement à `etpMovementDeepLink`, le filtre reste visible et
+ * modifiable dans la barre de filtres.
  */
-export function etpAlertFilterLink(labels: string[]): string {
-  const values = Array.from(new Set(labels.filter(Boolean)));
+export function etpAlertFilterLink(kinds: (MovementAlertKind | "none")[]): string {
+  const values = Array.from(new Set(kinds.filter(Boolean)));
   const params = new URLSearchParams({ tab: "mouvements" });
   if (values.length > 0) params.set("mov_f_alert", serializeFilterValues(values));
   return `/hr/etp?${params.toString()}`;

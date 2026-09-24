@@ -2570,7 +2570,6 @@ export default function HrDashboardPage() {
         onOpenChange={(open) => !open && setAlertsModal(null)}
         alerts={alerts}
         initialKind={alertsModal?.kind ?? null}
-        kindLabels={ALERT_LABELS}
         levers={data.levers}
         programLabels={Object.fromEntries(programs.map((program) => [program.id, program.name]))}
       />

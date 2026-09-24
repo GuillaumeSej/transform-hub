@@ -1,8 +1,10 @@
 import {
   DEFAULT_LIFECYCLE_STAGES,
+  gateCrossedBy,
   resolveStatusLabel,
   STATUS_LABEL,
   STATUS_LEVEL,
+  STATUS_ORDER,
   STATUS_SHORT_LABEL,
 } from "@/lib/status-config";
 import { getImpactNatures } from "@/lib/impactConfig";
@@ -135,6 +137,8 @@ const LEVER_EXTRA_KNOWN_HEADERS = [
   "Réalisé à date (€M)",
   "Réalisé à date (ETP)",
   "Gains one-off (€M)",
+  // Ancienne colonne d'export (doublon de « Impact estimé net (€M) », retirée) : encore acceptée
+  // sans avertissement pour les fichiers exportés avant ce changement.
   "Réactualisé (net)",
   "Planifié initial",
   "Créé le",
@@ -327,16 +331,15 @@ export function formatLeverImportMessage(template: string, vars: LeverImportMess
 
 // ---------- Portes de validation ----------
 
-/** Statuts protégés par une porte de validation (porteur → sponsor OU CTO) — même liste que la
- *  garde de `lib/leversLogic.ts::updateLever`, seul `approveLeverGate` peut y faire entrer un
- *  levier. */
-const GATED_IMPORT_STATUSES: readonly LeverStatus[] = ["qualified", "validated", "in_progress"];
-
-/** Variante codée de `importStatusTransitionError` (message traduisible). */
+/** Variante codée de `importStatusTransitionError` (message traduisible). Portes effectives =
+ *  étapes « validation requise » du référentiel du programme (`gateCrossedBy` /
+ *  `gatedStatusesFor`, lib/status-config.ts — même règle que `updateLever` et le stepper de la
+ *  fiche levier) ; sans référentiel fourni, les 3 portes historiques. */
 export function importStatusTransitionIssue(
   current: LeverStatus | undefined,
   target: LeverStatus,
-  labelOf: (status: LeverStatus) => string
+  labelOf: (status: LeverStatus) => string,
+  lifecycleStages?: LifecycleStage[]
 ): { code: LeverImportMessageCode; vars: LeverImportMessageVars } | null {
   if (current === target) return null;
   if (target === "cancelled") return null;
@@ -345,23 +348,32 @@ export function importStatusTransitionIssue(
     return { code: "statusNewLever", vars: { idea: labelOf("idea"), target: labelOf(target) } };
   }
   if (current === "cancelled" && target === "idea") return null;
-  if (current === "in_progress" && target === "delivered") return null;
-  return {
-    code: GATED_IMPORT_STATUSES.includes(target) ? "statusGated" : "statusBackward",
-    vars: { current: labelOf(current), target: labelOf(target) },
-  };
+  const vars = { current: labelOf(current), target: labelOf(target) };
+  if (gateCrossedBy(current, target, lifecycleStages)) return { code: "statusGated", vars };
+  // Régression dans le cycle (`STATUS_ORDER` place l'abandon hors cycle), ou passage direct d'un
+  // levier abandonné à « Réalisé » (interdit aussi par `updateLever`).
+  if (
+    (current !== "cancelled" && STATUS_ORDER[target] < STATUS_ORDER[current]) ||
+    (current === "cancelled" && target === "delivered")
+  ) {
+    return { code: "statusBackward", vars };
+  }
+  return null;
 }
 
 /** Un import ne doit pas contourner les portes de validation : renvoie le motif de rejet de la
  *  ligne, ou `null` si la transition est permise. Permis : statut inchangé ; nouveau levier
  *  « Identifié » ou abandonné ; abandon d'un levier existant ; réactivation d'un abandonné en
- *  « Identifié » ; Exécuté → Réalisé (seule transition libre du cycle, voir `updateLever`). */
+ *  « Identifié » ; toute progression qui ne franchit aucune porte effective du programme (ex.
+ *  Exécuté → Réalisé ; ou Identifié → Validé quand l'admin n'exige pas de validation à cette
+ *  étape). Jamais de retour en arrière. */
 export function importStatusTransitionError(
   current: LeverStatus | undefined,
   target: LeverStatus,
-  labelOf: (status: LeverStatus) => string
+  labelOf: (status: LeverStatus) => string,
+  lifecycleStages?: LifecycleStage[]
 ): string | null {
-  const issue = importStatusTransitionIssue(current, target, labelOf);
+  const issue = importStatusTransitionIssue(current, target, labelOf, lifecycleStages);
   return issue ? formatLeverImportMessage(LEVER_IMPORT_MESSAGES[issue.code], issue.vars) : null;
 }
 
@@ -903,7 +915,12 @@ export function validateLeverImportRows(
         });
         return reject();
       }
-      const transition = importStatusTransitionIssue(existing?.status, status, labelOf);
+      const transition = importStatusTransitionIssue(
+        existing?.status,
+        status,
+        labelOf,
+        lifecycleStages
+      );
       if (transition) {
         err("Leviers", rowNumber, transition.code, transition.vars);
         return reject();

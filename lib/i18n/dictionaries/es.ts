@@ -2835,6 +2835,7 @@ const es: Record<string, string> = {
   "chart.gapDrill.adjustment": "Desviación de rendimiento",
   "chart.gapDrill.adjustment.tooltip":
     "Reactualizado − plan inicial (efecto del reajuste del propio plan: positivo si el objetivo se elevó, negativo si se redujo).",
+  "chart.gapDrill.cancelledLever": "Cancelada",
   "chart.clickForDetails": "Haga clic para más detalles",
   "dashboard.workstreamTable.targetNote":
     "Realizado respecto al objetivo reactualizado (última versión del objetivo).",

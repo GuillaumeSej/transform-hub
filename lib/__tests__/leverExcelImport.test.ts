@@ -858,4 +858,40 @@ describe("leverExcelImport — portes de validation (XLS-05)", () => {
     expect(importStatusTransitionError("validated", "delivered", label)).not.toBeNull();
     expect(importStatusTransitionError("cancelled", "in_progress", label)).not.toBeNull();
   });
+
+  it("portes effectives = étapes « validation requise » du programme (même règle que updateLever)", () => {
+    const onlyValidatedGated = [
+      { key: "idea" as const, label: "Identifié", validationRequired: false },
+      { key: "qualified" as const, label: "Validé", validationRequired: false },
+      { key: "validated" as const, label: "Planifié", validationRequired: true },
+      { key: "in_progress" as const, label: "Exécuté", validationRequired: false },
+      { key: "delivered" as const, label: "Réalisé", validationRequired: false },
+    ];
+    // Étape sans validation requise : progression libre à l'import.
+    expect(importStatusTransitionError("idea", "qualified", label, onlyValidatedGated)).toBeNull();
+    expect(
+      importStatusTransitionError("validated", "delivered", label, onlyValidatedGated)
+    ).toBeNull();
+    // Viser au-delà d'une porte ne la contourne pas.
+    expect(importStatusTransitionError("idea", "in_progress", label, onlyValidatedGated)).toMatch(
+      /nécessite une validation/
+    );
+    expect(
+      importStatusTransitionError("qualified", "validated", label, onlyValidatedGated)
+    ).toMatch(/nécessite une validation/);
+    // Jamais de retour en arrière, ni d'abandonné → Réalisé.
+    expect(importStatusTransitionError("in_progress", "idea", label, onlyValidatedGated)).toMatch(
+      /revenir en arrière/
+    );
+    // Abandonné → Réalisé : la porte « Planifié » est franchie d'abord ; sans aucune porte, le
+    // passage direct reste refusé (même règle que `updateLever`).
+    expect(
+      importStatusTransitionError("cancelled", "delivered", label, onlyValidatedGated)
+    ).toMatch(/nécessite une validation/);
+    const noGates = onlyValidatedGated.map((s) => ({ ...s, validationRequired: false }));
+    expect(importStatusTransitionError("idea", "delivered", label, noGates)).toBeNull();
+    expect(importStatusTransitionError("cancelled", "delivered", label, noGates)).toMatch(
+      /revenir en arrière/
+    );
+  });
 });

@@ -160,9 +160,9 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
 /**
  * Vue Plan Stratégique (round "jalon validation gate") — pendant de `PerformanceValidationTable`
  * ci-dessus, pour les demandes de validation de JALON de projet (`ChantierAction.milestoneApproval`)
- * plutôt qu'une porte de cycle de vie de levier. Approbateur unique `strategic_lead` (scopé
- * programme, voir `lib/axisLogic.ts::isStrategicLeadOf`) ou admin — pas de sponsor/cto, notion
- * absente du Plan Stratégique. Même source de données que le dropdown du Topbar
+ * plutôt qu'une porte de cycle de vie de levier. Approbateurs = cascade `canDecideMilestone`
+ * (pilote du chantier, à défaut responsable d'axe, `strategic_lead` du programme, admin) — pas de
+ * sponsor/cto, notion absente du Plan Stratégique. Même source de données que le dropdown du Topbar
  * (`useMilestoneApprovalQueue`, voir lib/hooks/useApprovalQueue.ts).
  */
 function StrategicValidationTable({

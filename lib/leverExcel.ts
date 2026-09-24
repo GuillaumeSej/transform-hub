@@ -68,10 +68,15 @@ export function leverToExcelRow(
     "Progression (%)": engine.leverProgressPct(lever),
     Risque: engine.computeLeverRisk(lever.id, alerts, riskThresholds).level,
     "Impact estimé brut (€M)": lever.grossSavings,
-    "Impact estimé net (€M)": lever.netSavings,
-    // Mêmes valeurs que l'écran (fiche, tableau Finance) — colonnes informatives, ignorées à l'import.
+    // Même valeur que la colonne « Réactualisé (net) » du tableau des leviers
+    // (`displayedReforecastNet` : net des impacts si le levier en porte, sinon réactualisation,
+    // plan figé ou net courant) — l'ancienne colonne « Réactualisé (net) » séparée en était un
+    // doublon et est retirée. Ré-import : lue comme `netSavings`, mais un levier porteur
+    // d'impacts ou au plan figé conserve ses valeurs calculées (lib/leverExcelImport.ts), et un
+    // levier sans impact ni plan figé a par construction net courant = réactualisé affiché.
+    "Impact estimé net (€M)": engine.displayedReforecastNet(lever).value,
+    // Même valeur que l'écran (fiche, tableau Finance) — colonne informative, ignorée à l'import.
     "Planifié initial": engine.displayedLockedPlanNet(lever).value,
-    "Réactualisé (net)": engine.displayedReforecastNet(lever).value,
     "Réalisé à date (€M)": engine.realizedSavings(lever),
     "Impact estimé (ETP)": lever.fteImpact,
     "Réalisé à date (ETP)": engine.realizedFte(lever),

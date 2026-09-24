@@ -76,8 +76,7 @@ function mergeLeverRows(rows: InvestVsSavingsLeverRow[]): InvestVsSavingsLeverRo
     .sort((a, b) => a.net - b.net);
 }
 
-/** Breakeven : 1re période où le cumul net ≥ 0 après avoir été négatif (même règle que
- *  `leverPayback` côté levier). */
+/** Breakeven : 1re période où le cumul net ≥ 0 après avoir été négatif. */
 export function investVsSavingsPayback(
   points: InvestVsSavingsPoint[]
 ): { label: string; periods: number } | null {

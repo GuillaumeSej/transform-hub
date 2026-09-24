@@ -1900,13 +1900,12 @@ export type ImpactTrajectoryPoint = {
   cumulativeNet: number;
   /** Net cumulé au sens SAVINGS (gains récurrents − OPEX récurrent, JAMAIS CAPEX/OPEX one-off —
    *  même convention que `netAnnual`/`realizedSavings`, voir leur commentaire), PAS une vue
-   *  trésorerie comme `cumulativeNet` ci-dessus. C'est cette cohérence qui permet à
-   *  `leverConsolidate.ts::leverJCurve` de comparer directement son point final à
-   *  `realizedSavings(lever)`/`netSavings` (même dénominateur) pour dériver `ratio` — inclure
-   *  CAPEX/OPEX one-off ici (comme un temps, bug corrigé) désynchronisait le "Réalisé (net)" affiché
-   *  (dérivé de ce champ via le J-curve) de la Progression (dérivée, elle, de `realizedSavings`),
-   *  un même levier pouvant alors afficher 100% de progression pour un "Réalisé (net)" très inférieur
-   *  au "Réactualisé (net)". */
+   *  trésorerie comme `cumulativeNet` ci-dessus. Cette cohérence garantit que le point final de
+   *  la trajectoire se compare directement à `realizedSavings(lever)`/`netSavings` (même
+   *  dénominateur) — inclure CAPEX/OPEX one-off ici (comme un temps, bug corrigé)
+   *  désynchronisait le "Réalisé (net)" affiché de la Progression (dérivée, elle, de
+   *  `realizedSavings`), un même levier pouvant alors afficher 100% de progression pour un
+   *  "Réalisé (net)" très inférieur au "Réactualisé (net)". */
   cumulativeNetRecurring: number;
   /** Part PLANIFIÉE (statut « planned ») des montants ci-dessus — sous-ensemble de chaque colonne,
    *  à rendre en prévisionnel ; le reste (réalisé / en cours) est effectif depuis sa date de début. */

@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import * as XLSX from "xlsx";
 import { FileSpreadsheet, Download, Upload } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
@@ -61,7 +60,9 @@ export function HrExcelButtons({
   const [preview, setPreview] = useState<Preview | null>(null);
   const [importing, setImporting] = useState(false);
 
-  const exportExcel = () => {
+  // SheetJS chargé au clic seulement (`await import("xlsx")`) : hors du JS initial des pages RH.
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
     const empList = employees ?? data.workforce.employees;
     const movList = movements ?? data.workforce.movements;
     const wb = XLSX.utils.book_new();
@@ -95,7 +96,8 @@ export function HrExcelButtons({
     );
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(
       wb,
@@ -123,6 +125,7 @@ export function HrExcelButtons({
       // CSV décodé UTF-8 / Windows-1252 + raw : accents et "€" corrects, "0,5"/"01/03/2026"
       // gardés en texte puis lus au format français (lib/excelFileRead.ts, lib/excelParse.ts).
       const workbook = await readSpreadsheetFile(file);
+      const XLSX = await import("xlsx");
       const names = workbook.SheetNames;
       const movSheetName = names.find((n) => /mouvement|movement/.test(normalizeHeaderKey(n)));
       const empSheetName =
@@ -206,10 +209,10 @@ export function HrExcelButtons({
 
   return (
     <>
-      <Button variant="outline" onClick={downloadTemplate}>
+      <Button variant="outline" onClick={() => void downloadTemplate()}>
         <Download size={13} /> {t("shared.excelIO.templateButton", "Modèle Excel")}
       </Button>
-      <Button variant="outline" onClick={exportExcel}>
+      <Button variant="outline" onClick={() => void exportExcel()}>
         <FileSpreadsheet size={13} /> {t("shared.hrExcelButtons.exportButton", "Exporter Excel")}
       </Button>
       <input

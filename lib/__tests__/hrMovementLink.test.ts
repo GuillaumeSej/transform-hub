@@ -29,15 +29,12 @@ describe("hrMovementLink — etpMovementDeepLink", () => {
 });
 
 describe("hrMovementLink — etpAlertFilterLink", () => {
-  it("targets the movements tab with the namespaced alert filter, readable by the filter bar", () => {
-    const link = etpAlertFilterLink(["En retard", "Désynchronisé levier"]);
+  it("targets the movements tab with the namespaced alert filter, carrying STABLE alert codes", () => {
+    const link = etpAlertFilterLink(["overdue", "leverMismatch"]);
     const params = new URLSearchParams(link.split("?")[1]);
     expect(link.startsWith("/hr/etp?")).toBe(true);
     expect(params.get("tab")).toBe("mouvements");
-    expect(parseFilterValues(params.get("mov_f_alert"))).toEqual([
-      "En retard",
-      "Désynchronisé levier",
-    ]);
+    expect(parseFilterValues(params.get("mov_f_alert"))).toEqual(["overdue", "leverMismatch"]);
   });
 
   it("omits the filter when no category is given", () => {

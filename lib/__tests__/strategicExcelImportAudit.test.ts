@@ -195,11 +195,11 @@ describe("#1 personnes : Owner/Pilote/Sponsor stockés en username", () => {
 
 describe("#3 ré-import idempotent (upsert) + export aller-retour", () => {
   it("réimporter le même fichier = 0 création, 0 mise à jour", () => {
-    const first = run(parseStrategicImportWorkbook(loadFixture()));
+    const first = run(parseStrategicImportWorkbook(loadFixture(), XLSX));
     expect(first.errors).toEqual([]);
     const existing = applyToExisting(empty(), first);
 
-    const second = run(parseStrategicImportWorkbook(loadFixture()), existing);
+    const second = run(parseStrategicImportWorkbook(loadFixture(), XLSX), existing);
     expect(second.errors).toEqual([]);
     expect(countStrategicImportWrites(second.toCreate)).toBe(0);
     expect(countStrategicImportWrites(second.toUpdate)).toBe(0);
@@ -207,14 +207,14 @@ describe("#3 ré-import idempotent (upsert) + export aller-retour", () => {
   });
 
   it("export puis réimport sans modification = 0 changement ; une modification = 1 mise à jour", () => {
-    const first = run(parseStrategicImportWorkbook(loadFixture()));
+    const first = run(parseStrategicImportWorkbook(loadFixture(), XLSX));
     const existing = applyToExisting(empty(), first);
 
-    const exported = buildStrategicPlanExportWorkbook(existing, stages);
+    const exported = buildStrategicPlanExportWorkbook(existing, stages, XLSX);
     const reread = () =>
       XLSX.read(XLSX.write(exported, { type: "array", bookType: "xlsx" }), XLSX_READ_OPTIONS);
 
-    const roundTrip = run(parseStrategicImportWorkbook(reread()), existing);
+    const roundTrip = run(parseStrategicImportWorkbook(reread(), XLSX), existing);
     expect(roundTrip.errors).toEqual([]);
     expect(countStrategicImportWrites(roundTrip.toCreate)).toBe(0);
     expect(countStrategicImportWrites(roundTrip.toUpdate)).toBe(0);
@@ -225,7 +225,7 @@ describe("#3 ré-import idempotent (upsert) + export aller-retour", () => {
     });
     axesRows[0]["Nom"] = "Axe renommé";
     wb.Sheets["Axes"] = XLSX.utils.json_to_sheet(axesRows);
-    const modified = run(parseStrategicImportWorkbook(wb), existing);
+    const modified = run(parseStrategicImportWorkbook(wb, XLSX), existing);
     expect(countStrategicImportWrites(modified.toCreate)).toBe(0);
     expect(modified.toUpdate.axes).toHaveLength(1);
     expect(modified.toUpdate.axes[0].name).toBe("Axe renommé");
@@ -433,7 +433,10 @@ describe("points mineurs", () => {
       "Actions"
     );
     const result = run(
-      parseStrategicImportWorkbook(XLSX.read(XLSX.write(wb, { type: "array" }), XLSX_READ_OPTIONS))
+      parseStrategicImportWorkbook(
+        XLSX.read(XLSX.write(wb, { type: "array" }), XLSX_READ_OPTIONS),
+        XLSX
+      )
     );
     expect(result.toCreate.actions).toHaveLength(1);
     expect(result.warnings.map((w) => w.code)).toContain("sheetAlias");

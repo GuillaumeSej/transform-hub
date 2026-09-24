@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as XLSX from "xlsx";
 import {
   Plus,
   Save,
@@ -449,7 +448,9 @@ export function HierarchyEditor({
 
   // --- Import / export Excel de l'arborescence (construction en masse) ---
 
-  const downloadTemplate = () => {
+  // SheetJS chargé au clic seulement (`await import("xlsx")`) : hors du JS initial de la page.
+  const downloadTemplate = async () => {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const withFinancial = sortedLevels.some((l) => l.semantic === "pnl");
     const sheet = XLSX.utils.aoa_to_sheet([
@@ -472,7 +473,8 @@ export function HierarchyEditor({
     );
   };
 
-  const exportTree = () => {
+  const exportTree = async () => {
+    const XLSX = await import("xlsx");
     // Uniquement les nœuds de niveaux configurés (ré-importables), colonnes financières incluses.
     const { rows, headers, orphans } = hierarchyToExcelRows(nodes, sortedLevels);
     const wb = XLSX.utils.book_new();
@@ -511,7 +513,7 @@ export function HierarchyEditor({
     try {
       // CSV décodé UTF-8 / Windows-1252 + raw : accents corrects, "1 234,5" gardé en texte puis
       // lu au format français (lib/excelFileRead.ts, lib/excelParse.ts).
-      const workbook = await readSpreadsheetFile(file);
+      const [workbook, XLSX] = await Promise.all([readSpreadsheetFile(file), import("xlsx")]);
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
@@ -844,10 +846,14 @@ export function HierarchyEditor({
               {t("adminHierarchy.section2Title", "2. Valeurs de l'arborescence")}
             </h2>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={downloadTemplate}>
+              <Button variant="outline" onClick={() => void downloadTemplate()}>
                 <Download size={13} /> {t("adminHierarchy.templateExcel", "Modèle Excel")}
               </Button>
-              <Button variant="outline" onClick={exportTree} disabled={nodes.length === 0}>
+              <Button
+                variant="outline"
+                onClick={() => void exportTree()}
+                disabled={nodes.length === 0}
+              >
                 <FileSpreadsheet size={13} />{" "}
                 {t("adminHierarchy.exportTree", "Exporter l'arborescence")}
               </Button>

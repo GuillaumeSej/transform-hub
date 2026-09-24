@@ -271,6 +271,27 @@ describe("resolveMilestoneApprovalQueue", () => {
     expect(resolveMilestoneApprovalQueue([action], [makeChantier()], user)).toEqual([]);
   });
 
+  it("inclut la demande pour le pilote du chantier (cascade strategicApprovals)", () => {
+    const action = makeAction();
+    const chantier = makeChantier({ pilote: "pilote1" });
+    const user = makeUser({ username: "pilote1", profiles: [{ role: "chantier_owner" }] });
+    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([
+      { action, chantier },
+    ]);
+  });
+
+  it("sans pilote, le responsable de l'axe est l'approbateur ; avec pilote, il ne l'est plus", () => {
+    const action = makeAction();
+    const axes = [{ id: "AX1", owner: "sponsor1" }];
+    const user = makeUser({ username: "sponsor1", profiles: [{ role: "axis_sponsor" }] });
+    const noPilote = makeChantier({ pilote: undefined });
+    expect(resolveMilestoneApprovalQueue([action], [noPilote], user, axes)).toEqual([
+      { action, chantier: noPilote },
+    ]);
+    const withPilote = makeChantier({ pilote: "pilote1" });
+    expect(resolveMilestoneApprovalQueue([action], [withPilote], user, axes)).toEqual([]);
+  });
+
   it("un admin voit tous les projets en attente, tous rôles confondus", () => {
     const action = makeAction();
     const chantier = makeChantier();

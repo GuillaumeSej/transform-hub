@@ -1,8 +1,11 @@
-import * as XLSX from "xlsx";
+import type { WorkBook } from "xlsx";
 import { XLSX_READ_OPTIONS } from "@/lib/excelParse";
 
 /**
  * Lecture d'un fichier importé (xlsx/xls/csv) en classeur SheetJS, avec un décodage CSV fiable.
+ * Point d'entrée UNIQUE de tous les boutons d'import (leviers, plan stratégique, base ETP,
+ * staffing, arborescences). SheetJS est chargé à la demande (`await import("xlsx")`) : la
+ * bibliothèque (~400 kB) ne fait plus partie du JS initial des pages, seulement du clic.
  *
  * Pourquoi pas simplement `XLSX.read(buffer, XLSX_READ_OPTIONS)` pour un CSV : SheetJS lit alors
  * les octets en Latin-1 — un CSV UTF-8 SANS BOM (export Google Sheets, LibreOffice, scripts)
@@ -47,9 +50,13 @@ const CP1252_HIGH: Record<number, string> = {
  *  certaines versions de Node (dont Node 20 de la CI) et perd le "€" (0x80). */
 function decodeWindows1252(view: Uint8Array): string {
   let out = "";
-  for (const b of view)
+  // Boucle indexée (pas de `for…of`) : `tsconfig.json` n'a pas de `target` explicite, et le
+  // type-check de `next build` refuse alors d'itérer un `Uint8Array` (sans `downlevelIteration`).
+  for (let i = 0; i < view.length; i++) {
+    const b = view[i];
     out +=
       b >= 0x80 && b <= 0x9f ? (CP1252_HIGH[b] ?? String.fromCharCode(b)) : String.fromCharCode(b);
+  }
   return out;
 }
 
@@ -64,7 +71,8 @@ export function decodeCsvBytes(bytes: ArrayBuffer | Uint8Array): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
-export function readSpreadsheet(bytes: ArrayBuffer, fileName: string): XLSX.WorkBook {
+export async function readSpreadsheet(bytes: ArrayBuffer, fileName: string): Promise<WorkBook> {
+  const XLSX = await import("xlsx");
   const lower = fileName.toLowerCase();
   if (lower.endsWith(".csv") || lower.endsWith(".txt")) {
     return XLSX.read(decodeCsvBytes(bytes), {
@@ -77,6 +85,6 @@ export function readSpreadsheet(bytes: ArrayBuffer, fileName: string): XLSX.Work
 }
 
 /** Raccourci navigateur : `File` -> classeur. */
-export async function readSpreadsheetFile(file: File): Promise<XLSX.WorkBook> {
+export async function readSpreadsheetFile(file: File): Promise<WorkBook> {
   return readSpreadsheet(await file.arrayBuffer(), file.name);
 }

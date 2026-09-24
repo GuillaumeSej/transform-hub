@@ -2474,6 +2474,7 @@ const en: Record<string, string> = {
   "chart.gapDrill.adjustment": "Performance gap",
   "chart.gapDrill.adjustment.tooltip":
     "Reforecast − initial plan (effect of the plan adjustment itself: positive if the target was raised, negative if it was lowered).",
+  "chart.gapDrill.cancelledLever": "Cancelled",
   "chart.clickForDetails": "Click for more details",
   "dashboard.workstreamTable.targetNote":
     "Realized versus the reforecast target (latest version of the target).",

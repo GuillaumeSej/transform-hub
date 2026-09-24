@@ -1338,15 +1338,17 @@ export type Indicator = {
    *  intermédiaires — voir `targetSchedule` ci-dessous et
    *  `lib/axisLogic.ts::resolveIndicatorTargetForPeriod`. */
   objectiveValue?: number;
-  /** Trajectoire de cibles intermédiaires (round <n>, demande PO : "en 2026 Q2 on visait 70%, la
-   *  cible finale est 75%") — chaque entrée `period` suit le MÊME format que
-   *  `IndicatorMeasurement.period` (aligné sur `frequency`, ex. "2026-Q2"), triée chronologiquement
-   *  par convention lexicographique (pas garanti à l'écriture, voir `resolveIndicatorTargetForPeriod`
-   *  qui trie lui-même avant lecture). Absent ou vide = indicateur à CIBLE FIXE (comportement
-   *  historique, seul `objectiveValue` compte, à toute période). Non vide = CIBLE ÉVOLUTIVE : la
-   *  cible applicable à une période donnée est celle du dernier palier dont `period` est
-   *  lexicographiquement <= la période demandée, ou `objectiveValue` (la cible finale) au-delà du
-   *  dernier palier déclaré — jamais une valeur inventée par interpolation. */
+  /** Trajectoire de cibles intermédiaires (demande PO : "en 2026 Q2 on visait 70%, la cible
+   *  finale est 75%") — chaque entrée `period` suit le MÊME format que
+   *  `IndicatorMeasurement.period`, normalisé par `lib/indicatorPeriod.ts::normalizePeriod`
+   *  ("2026", "2026-Q2" ou "2026-05"). L'ordre n'est PAS garanti à l'écriture ni lexicographique
+   *  (les formats peuvent être mélangés, ex. paliers trimestriels sur un KPI mensuel) :
+   *  `resolveIndicatorTargetForPeriod` (lib/axisLogic.ts) trie et compare CHRONOLOGIQUEMENT
+   *  (`comparePeriods`/`periodStartsOnOrBefore`) avant lecture. Absent ou vide = indicateur à
+   *  CIBLE FIXE (seul `objectiveValue` compte, à toute période). Non vide = CIBLE ÉVOLUTIVE : la
+   *  cible applicable à une période est celle du dernier palier déjà en vigueur à cette période,
+   *  ou `objectiveValue` (la cible finale) au-delà du dernier palier déclaré — jamais une valeur
+   *  inventée par interpolation. */
   targetSchedule?: { period: string; value: number }[];
   direction?: IndicatorDirection;
   unit?: string;
@@ -1359,7 +1361,10 @@ export type Indicator = {
   /** Statut calculé automatiquement (dernière mesure vs objectif) — voir
    *  `lib/axisLogic.ts::computeIndicatorStatus`. */
   status: IndicatorRiskStatus;
-  /** Surcharge manuelle du responsable, prioritaire sur `status` (voir `resolveIndicatorStatus`). */
+  /** LEGACY — plus lu par aucun écran ni calcul (`resolveIndicatorStatus`, lib/axisLogic.ts, ne
+   *  renvoie que `status`) : aucune UI ne permet de poser cette surcharge, la lire figerait un
+   *  statut invisible. Conservé uniquement pour la compatibilité des documents Firestore
+   *  existants ; ne pas l'écrire. */
   statusOverride?: IndicatorRiskStatus;
   confidentialityLevel?: string;
   createdAt: string;

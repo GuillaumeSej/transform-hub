@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { leverToExcelRow } from "@/lib/leverExcel";
+import * as engine from "@/lib/engine";
+import { leverImpactsToExcelRows, leverToExcelRow } from "@/lib/leverExcel";
 import { validateLeverImportRows, type LeverImportRawSheets } from "@/lib/leverExcelImport";
 import { DEFAULT_LIFECYCLE_STAGES, STATUS_LABEL } from "@/lib/status-config";
 import type { Alert, BeTrackData, Lever, LeverStatus } from "@/types";
@@ -241,6 +242,66 @@ describe("leverExcel — leverToExcelRow (Statut)", () => {
     );
 
     expect(preview.errors).toEqual([]);
+    expect(preview.unchangedCodes).toEqual([lever.code]);
+  });
+});
+
+describe("leverExcel — « Impact estimé net » = réactualisé net affiché", () => {
+  it("writes displayedReforecastNet (impacts-driven) and no duplicate « Réactualisé (net) » column", () => {
+    const lever: Lever = {
+      ...baseLever,
+      netSavings: 8,
+      impacts: [
+        {
+          id: "i1",
+          label: "Gain",
+          type: "saving",
+          nature: "opex_rec",
+          amount: 5,
+          gainRecurrence: "annual",
+        },
+        { id: "i2", label: "Coût", type: "cost", nature: "opex_rec", amount: 1 },
+      ],
+    };
+    const row = leverToExcelRow(lever, makeData(), noAlerts);
+    expect(row["Impact estimé net (€M)"]).toBe(engine.displayedReforecastNet(lever).value);
+    expect(row["Impact estimé net (€M)"]).toBe(4);
+    expect("Réactualisé (net)" in row).toBe(false);
+    expect(row["Planifié initial"]).toBe(engine.displayedLockedPlanNet(lever).value);
+  });
+
+  it("re-imports its own export unchanged for an impacts-driven lever (net kept from impacts)", () => {
+    const lever: Lever = {
+      ...baseLever,
+      // Sans action, l'export écrit « Progression (%) » = 0 (progression calculée).
+      progress: 0,
+      netSavings: 4,
+      grossSavings: 5,
+      opexRec: 1,
+      opexOneOff: 0,
+      capex: 0,
+      fteImpact: 0,
+      impacts: [
+        {
+          id: "i1",
+          label: "Gain",
+          type: "saving",
+          nature: "opex_rec",
+          amount: 5,
+          gainRecurrence: "annual",
+        },
+        { id: "i2", label: "Coût", type: "cost", nature: "opex_rec", amount: 1 },
+      ],
+    };
+    const exportedRow = leverToExcelRow(lever, makeData(), noAlerts);
+    const preview = validateLeverImportRows(
+      { leviers: [exportedRow], actions: [], impacts: leverImpactsToExcelRows(lever) },
+      { levers: [lever], workstreams, pnlAccounts },
+      "c1",
+      singleProgram
+    );
+    expect(preview.errors).toEqual([]);
+    expect(preview.warnings).toEqual([]);
     expect(preview.unchangedCodes).toEqual([lever.code]);
   });
 });

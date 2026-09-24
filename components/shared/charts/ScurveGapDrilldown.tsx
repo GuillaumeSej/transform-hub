@@ -122,7 +122,14 @@ export function ScurveGapDrilldown({
               key={`${g.id}-${e.leverId}`}
               className="bg-neutral-50/60 text-[12px] text-secondary"
             >
-              <td className="py-1 pl-6 pr-2">{e.name}</td>
+              <td className="py-1 pl-6 pr-2">
+                {e.name}
+                {e.cancelled && (
+                  <span className="ml-1.5 rounded border border-border bg-neutral-100 px-1 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                    {t("chart.gapDrill.cancelledLever", "Annulé")}
+                  </span>
+                )}
+              </td>
               {cells(e)}
             </tr>
           ))}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import * as XLSX from "xlsx";
+import type { CellObject, WorkBook } from "xlsx";
 import { Download, Upload } from "lucide-react";
 import {
   ACTION_IMPORT_HEADERS,
@@ -15,7 +15,8 @@ import {
   type LeverImportPreview,
   type LeverImportSheet,
 } from "@/lib/leverExcelImport";
-import { normalizeHeaderKey, XLSX_READ_OPTIONS } from "@/lib/excelParse";
+import { normalizeHeaderKey } from "@/lib/excelParse";
+import { readSpreadsheetFile } from "@/lib/excelFileRead";
 import { useRole } from "@/lib/hooks/useRole";
 import type { BeTrackData, LifecycleStage, Workstream } from "@/types";
 import { Button } from "@/components/shared/Button";
@@ -32,14 +33,22 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const SHEET_NAMES = { leviers: "Leviers", actions: "Actions", impacts: "Impacts" } as const;
 
+/** Module SheetJS, chargé à la demande au clic (`await import("xlsx")`) — jamais importé
+ *  statiquement ici pour le tenir hors du JS initial de la page Leviers. */
+type XlsxModule = Pick<typeof import("xlsx"), "utils">;
+
 /** Nom réel d'un onglet, trouvé sans tenir compte de la casse, des accents ni des espaces. */
-function findSheetName(workbook: XLSX.WorkBook, name: string): string | undefined {
+function findSheetName(workbook: WorkBook, name: string): string | undefined {
   return workbook.SheetNames.find((n) => normalizeHeaderKey(n) === normalizeHeaderKey(name));
 }
 
 /** `null` quand la feuille est absente du fichier (≠ feuille présente mais vide) — voir
  *  `LeverImportRawSheets` : une feuille Actions absente ne doit pas vider les plans d'action. */
-function findSheet(workbook: XLSX.WorkBook, name: string): Record<string, unknown>[] | null {
+function findSheet(
+  XLSX: XlsxModule,
+  workbook: WorkBook,
+  name: string
+): Record<string, unknown>[] | null {
   const sheetName = findSheetName(workbook, name);
   if (!sheetName) return null;
   return XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
@@ -50,7 +59,8 @@ function findSheet(workbook: XLSX.WorkBook, name: string): Record<string, unknow
 /** Cellules contenant une formule sans valeur calculée (classeur généré par un outil qui ne
  *  recalcule pas) : lues vides, elles passeraient pour des cellules non renseignées. */
 function formulaCellsWithoutValue(
-  workbook: XLSX.WorkBook
+  XLSX: XlsxModule,
+  workbook: WorkBook
 ): { sheet: LeverImportSheet; cell: string; rowNumber: number }[] {
   const out: { sheet: LeverImportSheet; cell: string; rowNumber: number }[] = [];
   for (const sheet of Object.values(SHEET_NAMES)) {
@@ -59,7 +69,7 @@ function formulaCellsWithoutValue(
     if (!ws) continue;
     for (const [addr, cell] of Object.entries(ws)) {
       if (addr.startsWith("!")) continue;
-      const c = cell as XLSX.CellObject;
+      const c = cell as CellObject;
       if (c.f && (c.v === undefined || c.v === null || c.v === "")) {
         out.push({ sheet, cell: addr, rowNumber: XLSX.utils.decode_cell(addr).r + 1 });
       }
@@ -145,7 +155,8 @@ export function LeverImportButton({
   >(null);
   const companyUsers = useCompanyUsers(companyId);
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
 
     const defaultProgram = programs.find((p) => p.id === defaultProgramId);
@@ -179,15 +190,17 @@ export function LeverImportButton({
       setPreview(blockingPreview("csvNotSupported"));
       return;
     }
-    let workbook: XLSX.WorkBook;
+    let workbook: WorkBook;
+    let XLSX: XlsxModule;
     try {
-      workbook = XLSX.read(await file.arrayBuffer(), XLSX_READ_OPTIONS);
+      // Point d'entrée unique de lecture (lib/excelFileRead.ts) ; SheetJS chargé au clic.
+      [workbook, XLSX] = await Promise.all([readSpreadsheetFile(file), import("xlsx")]);
     } catch (err) {
       console.error("[betrack] lecture du fichier d'import :", err);
       setPreview(blockingPreview("noLeversSheet"));
       return;
     }
-    const leviers = findSheet(workbook, SHEET_NAMES.leviers);
+    const leviers = findSheet(XLSX, workbook, SHEET_NAMES.leviers);
     if (leviers === null) {
       setPreview(blockingPreview("noLeversSheet"));
       return;
@@ -195,8 +208,8 @@ export function LeverImportButton({
 
     const sheets = {
       leviers,
-      actions: findSheet(workbook, SHEET_NAMES.actions),
-      impacts: findSheet(workbook, SHEET_NAMES.impacts),
+      actions: findSheet(XLSX, workbook, SHEET_NAMES.actions),
+      impacts: findSheet(XLSX, workbook, SHEET_NAMES.impacts),
     };
 
     const result = validateLeverImportRows(
@@ -208,7 +221,7 @@ export function LeverImportButton({
       defaultProgramId,
       { importer: user }
     );
-    for (const f of formulaCellsWithoutValue(workbook)) {
+    for (const f of formulaCellsWithoutValue(XLSX, workbook)) {
       const vars = { cell: `${f.sheet}!${f.cell}` };
       result.warnings.push({
         sheet: f.sheet,
@@ -302,7 +315,7 @@ export function LeverImportButton({
 
   return (
     <>
-      <Button variant="outline" onClick={downloadTemplate}>
+      <Button variant="outline" onClick={() => void downloadTemplate()}>
         <Download size={13} /> {t("shared.excelIO.templateButton", "Modèle Excel")}
       </Button>
       <input

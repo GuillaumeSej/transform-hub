@@ -182,8 +182,8 @@ describe("buildHrImportPlan — CSV français (Windows-1252)", () => {
   it.each([
     ["Windows-1252", cp1252],
     ["UTF-8 sans BOM", utf8],
-  ])("décode les accents (%s) et lit nombres/dates au format FR", (_label, bytes) => {
-    const wb = readSpreadsheet(bytes.slice().buffer, "base.csv");
+  ])("décode les accents (%s) et lit nombres/dates au format FR", async (_label, bytes) => {
+    const wb = await readSpreadsheet(bytes.slice().buffer, "base.csv");
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], {
       defval: "",
     });

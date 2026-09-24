@@ -114,7 +114,9 @@ function fmtFte(n: number, unit: string): string {
  * - Clic sur une ligne → détail du mouvement dans la Base ETP (`etpMovementDeepLink`, ouvre sa
  *   modale d'édition).
  * - Pied de modale → Base ETP, onglet mouvements, restreinte aux mouvements affichés (ids, via
- *   `etpMovementDeepLink`) : même périmètre que le dashboard (programme, filtres, plage).
+ *   `etpMovementDeepLink`) : même périmètre que le dashboard (programme, filtres, plage). Un lien
+ *   par catégorie d'alerte passerait par `etpAlertFilterLink` avec les CODES stables
+ *   (`MovementAlertKind`), jamais les libellés traduits.
  * - Compteurs exprimés en mouvements distincts (un mouvement peut porter plusieurs alertes).
  */
 export function MovementAlertsSummaryModal({
@@ -130,10 +132,6 @@ export function MovementAlertsSummaryModal({
   alerts: MovementAlert[];
   /** Catégorie ouverte à l'ouverture (clic sur une puce) — `null` = toutes. */
   initialKind?: MovementAlertKind | null;
-  /** Libellés du filtre `f_alert` de la Base ETP (`hr.alert.*`) — valeurs passées dans l'URL. */
-  /** @deprecated Plus utilisé : le lien "Voir dans la page détaillée" porte désormais les ids
-   *  des mouvements affichés (M4), plus les libellés du filtre `f_alert`. */
-  kindLabels?: Record<MovementAlertKind, string>;
   levers: Lever[];
   programLabels?: Record<string, string>;
 }) {

@@ -153,7 +153,10 @@ export function excelRowNumber(row: Record<string, unknown>, fallbackIndex: numb
   return typeof n === "number" ? n + 1 : fallbackIndex + 2;
 }
 
-/** Options `XLSX.read` recommandées pour tous les imports : lire depuis un ArrayBuffer (encodage
- *  CSV détecté correctement, y compris Windows-1252) et garder le texte brut des CSV
- *  (`raw: true`) pour que "0,5" et "01/03/2026" ne soient pas réinterprétés à l'américaine. */
+/** Options `XLSX.read` pour un classeur BINAIRE (.xlsx/.xls) lu depuis un ArrayBuffer : dates en
+ *  objets Date (`cellDates`) et texte brut (`raw: true`). Un CSV ne doit JAMAIS être lu avec ces
+ *  options directement — SheetJS décoderait les octets en Latin-1 (accents et "€" perdus) : tout
+ *  fichier importé passe par `lib/excelFileRead.ts::readSpreadsheetFile`, seul point d'entrée,
+ *  qui décode le CSV (UTF-8 / Windows-1252) avant de le lire en mode texte avec ces mêmes
+ *  `raw`/`cellDates` pour que "0,5" et "01/03/2026" ne soient pas réinterprétés à l'américaine. */
 export const XLSX_READ_OPTIONS = { type: "array" as const, raw: true, cellDates: true };

@@ -64,4 +64,30 @@ describe("gapEntriesAt — pas de dérive d'arrondi vs la courbe globale (bug li
     expect(summedRealized).toBeCloseTo(-0.1, 5);
     expect(summedRealized).toBe(global?.gap.delay);
   });
+
+  it("inclut les leviers annulés (étiquetés) : total du détail = écart du badge (gap.total)", () => {
+    const cancelled = {
+      id: "X",
+      ws: "W1",
+      status: "cancelled",
+      start: "2026-01-01",
+      end: "2026-02-01",
+      netSavings: 2,
+      lockedPlan: { grossSavings: 2, netSavings: 2, opexOneOff: 0, opexRec: 0, capex: 0 },
+      impacts: [],
+    } as unknown as Lever;
+    const levers = [makeLateLever("A", 0.33, 0.3), cancelled];
+    const data = { program: { fyStart: "2026-01-01" }, levers } as unknown as BeTrackData;
+    const today = new Date("2026-06-01");
+
+    const global = engine.savingsSeries(data, "month", today).find((p) => p.month === "Mar 2026");
+    const entries = gapEntriesAt(data, "month", "Mar 2026", today);
+    const summedTotal = Math.round(entries.reduce((s, e) => s + e.value, 0) * 10) / 10;
+
+    const x = entries.find((e) => e.leverId === "X");
+    expect(x?.cancelled).toBe(true);
+    expect(x?.value).toBeCloseTo(-2, 5);
+    expect(entries.find((e) => e.leverId === "A")?.cancelled).toBeUndefined();
+    expect(summedTotal).toBe(global?.gap.total);
+  });
 });
