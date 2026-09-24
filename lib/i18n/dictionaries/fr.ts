@@ -532,7 +532,11 @@ const fr: Record<string, string> = {
   "leverDetail.impactedLevers": "Leviers impactés — alerte seule",
   "leverDetail.impactedLeversHint":
     "Ces leviers dépendent de l'élément retardé. Leurs dates ne sont jamais modifiées automatiquement : rapprochez-vous de leur responsable.",
-  "leverDetail.progressLabel": "Progression",
+  "leverDetail.progressLabel": "Avancement",
+  "leverDetail.financialRealization": "Réalisation financière",
+  "leverDetail.financialRealizationSub": "réalisé net / réactualisé net",
+  "leverDetail.financialRealizationFormula":
+    "Réalisation financière = réalisé à date (net) ÷ réactualisé (net)",
   "leverDetail.realizedToDate": "Réalisé à date (net)",
   "leverDetail.ofWhichGross": "dont {amount} de gains bruts",
   "leverDetail.lockedPlan": "Plan initial (figé à « {stage} »)",

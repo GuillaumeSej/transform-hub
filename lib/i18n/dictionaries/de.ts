@@ -497,6 +497,10 @@ const de: Record<string, string> = {
   "leverDetail.impactedLeversHint":
     "Diese Hebel hängen vom verzögerten Element ab. Ihre Termine werden nie automatisch geändert: wenden Sie sich an deren Verantwortlichen.",
   "leverDetail.progressLabel": "Fortschritt",
+  "leverDetail.financialRealization": "Finanzielle Realisierung",
+  "leverDetail.financialRealizationSub": "netto realisiert / netto aktualisiert",
+  "leverDetail.financialRealizationFormula":
+    "Finanzielle Realisierung = netto realisiert bis heute ÷ netto aktualisiert",
   "leverDetail.realizedToDate": "Realisiert bis heute (netto)",
   "leverDetail.ofWhichGross": "davon {amount} Bruttoeinsparungen",
   "leverDetail.lockedPlan": "Ursprungsplan (fixiert bei „{stage}“)",

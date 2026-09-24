@@ -27,7 +27,12 @@ import type {
   Program,
   Workstream,
 } from "@/types";
-import { realizedSavings, type Marimekko2DColumn, type Marimekko2DSegment } from "@/lib/engine";
+import {
+  leverProgressPct,
+  realizedSavings,
+  type Marimekko2DColumn,
+  type Marimekko2DSegment,
+} from "@/lib/engine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import { STATUS_SHORT_LABEL } from "@/lib/status-config";
 
@@ -77,7 +82,7 @@ export const METRIC_REGISTRY: MetricDef[] = [
     key: "progress",
     label: "Avancement moyen (%)",
     aggregation: "avg",
-    getValue: (l) => l.progress,
+    getValue: (l) => leverProgressPct(l),
   },
   {
     key: "capex",

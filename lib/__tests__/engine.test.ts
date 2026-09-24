@@ -4,6 +4,8 @@ import {
   displayedLockedPlanNet,
   displayedReforecastNet,
   displayedProgressPct,
+  leverProgressPct,
+  workstreamProgressPct,
   realizedFte,
   worstRisk,
   stageCounts,
@@ -244,7 +246,7 @@ describe("engine — displayedReforecastNet (cohérence avec la courbe en S 'Ré
   });
 });
 
-describe("engine — displayedProgressPct (réalisé net / réactualisé net — SEULE formule de progression affichée)", () => {
+describe("engine — displayedProgressPct (réalisation financière : réalisé net / réactualisé net)", () => {
   it("returns 0 when there is no reforecast/plan to divide by", () => {
     const lever = {
       ...baseLever,
@@ -1244,5 +1246,57 @@ describe("engine — pnlImpactDetailed driven by the financial hierarchy", () =>
 
     expect(withoutHierarchy).toEqual(expected);
     expect(withEmptyHierarchy).toEqual(expected);
+  });
+});
+
+describe("engine — avancement unique levier / chantier (audit C1)", () => {
+  const act = (id: string, status: "todo" | "in_progress" | "done", weightPct?: number) => ({
+    id,
+    name: id,
+    start: "2026-01-01",
+    end: "2026-06-30",
+    status,
+    ...(weightPct !== undefined ? { weightPct } : {}),
+  });
+
+  it("levier avec actions : avancement du plan d'action, quel que soit le champ stocké progress", () => {
+    const lever = {
+      ...baseLever,
+      progress: 12,
+      actions: [act("a", "done", 60), act("b", "todo", 40)],
+    };
+    expect(leverProgressPct(lever)).toBe(60);
+  });
+
+  it("levier sans action : 100 % si Réalisé, 0 % sinon (jamais le champ stocké)", () => {
+    expect(leverProgressPct({ ...baseLever, status: "delivered", actions: [] })).toBe(100);
+    expect(leverProgressPct({ ...baseLever, status: "idea", actions: [] })).toBe(0);
+  });
+
+  it("chantier : moyenne pondérée par la valeur réactualisée, abandonnés exclus", () => {
+    const big = {
+      ...baseLever,
+      id: "L1",
+      ws: "WS-A",
+      netSavings: 3,
+      actions: [act("a", "done")],
+    };
+    const small = {
+      ...baseLever,
+      id: "L2",
+      ws: "WS-A",
+      netSavings: 1,
+      actions: [act("b", "todo")],
+    };
+    const cancelled = { ...baseLever, id: "L3", ws: "WS-A", status: "cancelled" as const };
+    // (100 × 3 + 0 × 1) / 4 = 75
+    expect(workstreamProgressPct([big, small, cancelled], "WS-A")).toBe(75);
+    expect(workstreamProgressPct([big], "WS-B")).toBeNull();
+  });
+
+  it("chantier sans valeur positive : moyenne simple", () => {
+    const a = { ...baseLever, id: "L1", ws: "WS-A", netSavings: 0, actions: [act("a", "done")] };
+    const b = { ...baseLever, id: "L2", ws: "WS-A", netSavings: 0, actions: [act("b", "todo")] };
+    expect(workstreamProgressPct([a, b], "WS-A")).toBe(50);
   });
 });

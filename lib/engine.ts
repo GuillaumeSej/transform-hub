@@ -266,11 +266,36 @@ export function displayedReforecastNet(lever: Lever): { value: number; isReforec
   return { value: lever.lockedPlan?.netSavings ?? lever.netSavings, isReforecast: false };
 }
 
-/** Progression % affichée d'un levier — SEULE et UNIQUE formule utilisée partout où une
- *  "progression" de levier est montrée à l'utilisateur (bandeau Overview de la fiche détail,
- *  liste des leviers, page Workstreams) : `réalisé net à date / réactualisé net`, jamais le champ
- *  brut `lever.progress` (moyenne pondérée du statut des actions — sert encore à l'automatisme de
- *  cycle de vie `recomputeLeverProgress`, mais plus à l'affichage ni au calcul du risque).
+/** « Avancement » d'un levier — SEULE formule derrière ce libellé, partout (liste, Kanban,
+ *  arborescence, fiche, page Workstreams, pivot du dashboard, export Excel) : avancement de son
+ *  PLAN D'ACTION (`leverActionProgress` : actions pondérées, avancement déclaré si saisi, sinon
+ *  statut). Sans action, il suit le stade : 100 % une fois « Réalisé », 0 % sinon. Décision audit
+ *  2026-09-24 (C1) : 5 formules coexistaient sous ce libellé (dont le champ stocké, périmé,
+ *  `lever.progress`) — la réalisation financière est une AUTRE notion, voir
+ *  `displayedProgressPct`, affichée sous son propre libellé. */
+export function leverProgressPct(lever: Pick<Lever, "actions" | "status">): number {
+  if ((lever.actions ?? []).length === 0) return lever.status === "delivered" ? 100 : 0;
+  return leverActionProgress(lever);
+}
+
+/** « Avancement » d'un chantier (workstream) : moyenne des `leverProgressPct` de ses leviers non
+ *  abandonnés, PONDÉRÉE PAR LEUR VALEUR (économie nette réactualisée, `displayedReforecastNet`,
+ *  bornée à 0) — un gros levier pèse plus (décision audit 2026-09-24, C1). Si aucun levier n'a de
+ *  valeur positive, moyenne simple. `null` si le chantier n'a aucun levier actif. */
+export function workstreamProgressPct(levers: Lever[], workstreamId: string): number | null {
+  const active = levers.filter((l) => l.ws === workstreamId && l.status !== "cancelled");
+  if (active.length === 0) return null;
+  const weights = active.map((l) => Math.max(0, displayedReforecastNet(l).value));
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  const pct =
+    totalWeight > 0
+      ? active.reduce((sum, l, i) => sum + leverProgressPct(l) * weights[i], 0) / totalWeight
+      : active.reduce((sum, l) => sum + leverProgressPct(l), 0) / active.length;
+  return Math.round(pct);
+}
+
+/** « Réalisation financière » d'un levier (%) : `réalisé net à date / réactualisé net` — affichée
+ *  sous CE libellé (fiche levier), jamais sous « Avancement » (voir `leverProgressPct`).
  *  Si le ratio est négatif (réalisé négatif, ou réactualisé négatif), on affiche 0 % plutôt qu'un
  *  pourcentage négatif dénué de sens — dès qu'il redevient positif, le vrai pourcentage s'affiche
  *  (pas de plafond à 100 : un levier qui dépasse sa cible réactualisée peut légitimement afficher
@@ -429,9 +454,7 @@ export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSu
     capex: Math.round(capex * 10) / 10,
     opex: Math.round(opex * 10) / 10,
     leverCount: levers.length,
-    avgProgress: Math.round(
-      levers.reduce((s, l) => s + l.progress, 0) / Math.max(1, levers.length)
-    ),
+    avgProgress: workstreamProgressPct(levers, wsId) ?? 0,
     worstRisk: levers.length ? worstRisk(levers) : "low",
   };
 }

@@ -2,15 +2,11 @@ import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
- * Badge d'avancement DÉCLARATIF (`lib/workstreamLogic.ts::leverDeclaredProgress`/
- * `workstreamDeclaredProgress`) — même palette RAG (rouge/amber/vert) que `ProgressBar`
- * (`components/shared/ProgressBar.tsx`, mêmes seuils 70/50) et `StatusBadge`, mais sous forme de
- * pastille compacte (pas de barre) : utilisé partout où l'espace horizontal est contraint (en-tête
- * de swimlane workstream du Kanban, niveaux de l'arborescence Workstream→Type→Levier→Action).
- *
- * `pct === null` (aucune donnée déclarée par le pilote — voir doc-comment de
- * `workstreamDeclaredProgress`/`leverDeclaredProgress`) affiche un état "Non renseigné" neutre
- * plutôt qu'un 0% trompeur qui laisserait croire à un avancement nul mesuré.
+ * Pastille d'avancement (%) — même palette RAG (rouge/amber/vert) que `ProgressBar`
+ * (`components/shared/ProgressBar.tsx`, mêmes seuils 70/50) et `StatusBadge`, sous forme compacte :
+ * en-tête de swimlane workstream du Kanban (`engine.workstreamProgressPct`) et niveaux de
+ * l'arborescence. `pct === null` (rien à mesurer, ex. chantier sans levier actif) affiche un état
+ * "Non renseigné" neutre plutôt qu'un 0 % trompeur.
  */
 export function DeclaredProgressBadge({
   pct,

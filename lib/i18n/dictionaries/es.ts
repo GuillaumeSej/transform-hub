@@ -497,6 +497,10 @@ const es: Record<string, string> = {
   "leverDetail.impactedLeversHint":
     "Estas palancas dependen del elemento retrasado. Sus fechas nunca se modifican automáticamente: póngase en contacto con su responsable.",
   "leverDetail.progressLabel": "Progreso",
+  "leverDetail.financialRealization": "Realización financiera",
+  "leverDetail.financialRealizationSub": "realizado neto / reestimado neto",
+  "leverDetail.financialRealizationFormula":
+    "Realización financiera = realizado neto a la fecha ÷ reestimado neto",
   "leverDetail.realizedToDate": "Realizado a la fecha (neto)",
   "leverDetail.ofWhichGross": "de los cuales {amount} de ganancias brutas",
   "leverDetail.lockedPlan": "Plan inicial (fijado en «{stage}»)",

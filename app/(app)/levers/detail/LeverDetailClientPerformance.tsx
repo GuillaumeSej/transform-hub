@@ -835,11 +835,14 @@ export function LeverDetailClientPerformance() {
           <CardBody>
             {/* ── 1. Bandeau exécutif ─────────────────────────────────────── */}
             <div className="mb-6 flex flex-wrap items-center gap-6 rounded-lg border border-border bg-neutral-50 p-4">
+              {/* « Avancement » = plan d'action (même valeur que la liste, le Kanban et
+                  l'arborescence — engine.leverProgressPct) ; la réalisation financière est une
+                  autre notion, affichée sous son propre libellé à côté du réactualisé. */}
               <RadialProgress
-                pct={engine.displayedProgressPct(lever)}
+                pct={engine.leverProgressPct(lever)}
                 size={140}
                 strokeWidth={12}
-                label={t("leverDetail.progressLabel", "Progression")}
+                label={t("leverDetail.progressLabel", "Avancement")}
               />
               <div className="flex flex-1 flex-wrap gap-x-8 gap-y-4">
                 <BigStat
@@ -877,6 +880,15 @@ export function LeverDetailClientPerformance() {
                       provisionalHint={t("leverDetail.notYetReforecast", "non réactualisé")}
                     />
                   }
+                />
+                <BigStat
+                  label={t("leverDetail.financialRealization", "Réalisation financière")}
+                  value={`${engine.displayedProgressPct(lever)} %`}
+                  sub={t("leverDetail.financialRealizationSub", "réalisé net / réactualisé net")}
+                  title={t(
+                    "leverDetail.financialRealizationFormula",
+                    "Réalisation financière = réalisé à date (net) ÷ réactualisé (net)"
+                  )}
                 />
                 <BigStat
                   label={t("levers.columnMaturity", "Maturité")}
@@ -1217,7 +1229,7 @@ export function LeverDetailClientPerformance() {
               <span className="ml-auto font-bold text-primary">
                 {t("leverDetail.percentOfPlan", "{pct}% du plan").replace(
                   "{pct}",
-                  String(Math.round(engine.leverActionProgress(lever)))
+                  String(engine.leverProgressPct(lever))
                 )}
               </span>
             </div>

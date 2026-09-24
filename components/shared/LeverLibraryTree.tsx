@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ProgressBar } from "@/components/shared/ProgressBar";
-import { actionProgressPct, leverActionProgress } from "@/lib/engine";
+import { actionProgressPct, leverProgressPct, workstreamProgressPct } from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Lever, LeverAction, Workstream } from "@/types";
 
@@ -53,7 +53,7 @@ function OwnerTag({
   );
 }
 
-/** Progression compacte (barre + %) — basée sur les ACTIONS (voir engine.leverActionProgress). */
+/** Progression compacte (barre + %) — voir engine.leverProgressPct / workstreamProgressPct. */
 function Progress({ pct }: { pct: number }) {
   return (
     <span className="w-[120px] shrink-0" title={`Progression : ${pct}%`}>
@@ -73,7 +73,7 @@ export function LeverLibraryTree({
   /** Leviers à afficher (déjà filtrés/scopés par l'appelant, même ensemble que les vues Table et
    *  Kanban de cette page). */
   levers: Lever[];
-  /** Univers de leviers pour le calcul du badge % de chaque workstream (`workstreamDeclaredProgress`)
+  /** Univers de leviers pour le calcul du badge % de chaque workstream (`engine.workstreamProgressPct`)
    *  — voir le même paramètre sur `components/shared/Kanban.tsx` pour la raison de le distinguer
    *  de `levers`. */
   progressLevers: Lever[];
@@ -129,15 +129,9 @@ export function LeverLibraryTree({
       {groups.map((group) => {
         const wsOpen = expandedWsIds.has(group.id);
         const wsSponsor = workstreams.find((w) => w.id === group.id)?.sponsor;
-        // Progression du chantier = moyenne des progressions (actions) de ses leviers non abandonnés.
-        const progressBase = progressLevers.filter(
-          (l) => l.ws === group.id && l.status !== "cancelled"
-        );
-        const wsPct = progressBase.length
-          ? Math.round(
-              progressBase.reduce((sum, l) => sum + leverActionProgress(l), 0) / progressBase.length
-            )
-          : 0;
+        // Avancement du chantier : même formule que le Kanban et la page Workstreams
+        // (`workstreamProgressPct`, pondérée par la valeur des leviers non abandonnés).
+        const wsPct = workstreamProgressPct(progressLevers, group.id) ?? 0;
         // Un levier abandonné ne doit jamais être compté ni mélangé aux leviers actifs — écarté de
         // l'arborescence Chantier → Type → Levier, regroupé à part en fin de swimlane, grisé
         // (même principe que Kanban.tsx CancelledLeversStrip).
@@ -238,7 +232,7 @@ export function LeverLibraryTree({
                           <div className="space-y-1.5 bg-neutral-50/70 py-2 pl-14 pr-3.5">
                             {typeLevers.map((lever) => {
                               const leverOpen = expandedLeverIds.has(lever.id);
-                              const leverPct = leverActionProgress(lever);
+                              const leverPct = leverProgressPct(lever);
                               const actions = lever.actions ?? [];
                               return (
                                 <div

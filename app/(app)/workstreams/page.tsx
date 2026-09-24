@@ -22,8 +22,7 @@ type Row = Lever & {
   realized: number;
   /** Cible RÉACTUALISÉE du levier (`engine.displayedReforecastNet`) — référence de comparaison. */
   reforecastNet: number;
-  /** `engine.displayedProgressPct(l)` (réalisé net / réactualisé net) — PAS le champ brut
-   *  `progress` hérité de `Lever`, voir même doc-comment dans LeversPagePerformance.tsx. */
+  /** « Avancement » — `engine.leverProgressPct(l)`, même valeur que la bibliothèque des leviers. */
   progressPct: number;
   wsName: string;
   statusLabel: string;
@@ -94,7 +93,7 @@ export default function WorkstreamsPage() {
     ...l,
     realized: engine.realizedSavings(l),
     reforecastNet: engine.displayedReforecastNet(l).value,
-    progressPct: engine.displayedProgressPct(l),
+    progressPct: engine.leverProgressPct(l),
     wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
     statusLabel: lifecycle.label(l.status),
   }));

@@ -499,6 +499,10 @@ const en: Record<string, string> = {
   "leverDetail.impactedLeversHint":
     "These initiatives depend on the delayed item. Their dates are never changed automatically: reach out to their owner.",
   "leverDetail.progressLabel": "Progress",
+  "leverDetail.financialRealization": "Financial realization",
+  "leverDetail.financialRealizationSub": "net realized / net reforecast",
+  "leverDetail.financialRealizationFormula":
+    "Financial realization = net realized to date ÷ net reforecast",
   "leverDetail.realizedToDate": "Realized to date (net)",
   "leverDetail.ofWhichGross": "of which {amount} gross savings",
   "leverDetail.lockedPlan": 'Locked plan (set at "{stage}")',

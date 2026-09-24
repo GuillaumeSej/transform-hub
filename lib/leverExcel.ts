@@ -49,7 +49,7 @@ export function leverToExcelRow(
     "Date de départ": lever.start,
     "Date de fin estimée": lever.end,
     Statut: resolveStatusLabel(lever.status, lifecycleStages),
-    "Progression (%)": lever.progress,
+    "Progression (%)": engine.leverProgressPct(lever),
     Risque: engine.computeLeverRisk(lever.id, alerts, riskThresholds).level,
     "Impact estimé brut (€M)": lever.grossSavings,
     "Impact estimé net (€M)": lever.netSavings,

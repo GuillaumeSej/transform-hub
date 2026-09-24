@@ -5,9 +5,8 @@ import { Tooltip } from "@/components/shared/Tooltip";
 import { Avatar } from "@/components/shared/Avatar";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { DeclaredProgressBadge } from "@/components/shared/DeclaredProgressBadge";
-import { leverActionProgress, fmtCurr } from "@/lib/engine";
+import { leverProgressPct, workstreamProgressPct, fmtCurr } from "@/lib/engine";
 import { STATUS_CYCLE, STATUS_LABEL } from "@/lib/status-config";
-import { workstreamDeclaredProgress } from "@/lib/workstreamLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Lever, LeverStatus, Workstream } from "@/types";
 
@@ -79,9 +78,9 @@ function StatusColumns({
                     text={t(
                       "shared.kanban.tip.progress",
                       "Avancement du plan d'action : {pct} %"
-                    ).replace("{pct}", String(Math.round(leverActionProgress(l))))}
+                    ).replace("{pct}", String(leverProgressPct(l)))}
                   >
-                    <ProgressBar pct={leverActionProgress(l)} className="flex-1" />
+                    <ProgressBar pct={leverProgressPct(l)} className="flex-1" />
                   </Tooltip>
                   <Tooltip
                     text={t("shared.kanban.tip.owner", "Responsable du levier : {name}").replace(
@@ -155,10 +154,10 @@ export function Kanban({
   stageOrder = STATUS_CYCLE,
   stageLabel = (status: LeverStatus) => STATUS_LABEL[status],
   workstreams = [],
-  /** Univers de leviers sur lequel calculer le badge % d'avancement déclaratif de chaque
-   *  swimlane (`workstreamDeclaredProgress`) — volontairement DISTINCT de `levers` (les cartes
+  /** Univers de leviers sur lequel calculer le badge % d'avancement de chaque swimlane
+   *  (`engine.workstreamProgressPct`) — volontairement DISTINCT de `levers` (les cartes
    *  affichées, potentiellement déjà filtrées par la barre de filtres de la page) : l'avancement
-   *  déclaratif d'un workstream doit refléter TOUS ses leviers, pas seulement ceux qui matchent le
+   *  d'un workstream doit refléter TOUS ses leviers, pas seulement ceux qui matchent le
    *  filtre courant. Défaut = `levers`, pour les appelants qui n'ont qu'un seul ensemble sous la main. */
   progressLevers = levers,
 }: {
@@ -202,7 +201,7 @@ export function Kanban({
         const wsLevers = levers.filter((l) => l.ws === ws.id);
         const activeWsLevers = wsLevers.filter((l) => l.status !== "cancelled");
         const cancelledWsLevers = wsLevers.filter((l) => l.status === "cancelled");
-        const declaredPct = workstreamDeclaredProgress(progressLevers, ws.id);
+        const declaredPct = workstreamProgressPct(progressLevers, ws.id);
         return (
           <div key={ws.id} className="overflow-hidden rounded-lg border border-border bg-white">
             <div

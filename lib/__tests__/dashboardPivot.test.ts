@@ -187,12 +187,27 @@ describe("dashboardPivot — pivotByDimensions (1 dimension)", () => {
   });
 
   it("averages the progress metric rather than summing it", () => {
+    // « Avancement » = plan d'action (engine.leverProgressPct), plus le champ stocké `progress`.
+    const action = (status: "todo" | "done") => ({
+      id: `A-${status}`,
+      name: status,
+      start: "2026-01-01",
+      end: "2026-06-30",
+      status,
+    });
     const data = makeData([
-      { ...baseLever, id: "L001", function: "IT", progress: 20 },
-      { ...baseLever, id: "L002", function: "IT", progress: 60 },
+      { ...baseLever, id: "L001", function: "IT", progress: 90, actions: [action("todo")] },
+      {
+        ...baseLever,
+        id: "L002",
+        function: "IT",
+        progress: 10,
+        actions: [action("done"), action("todo")],
+      },
     ]);
     const rows = pivotByDimensions(data, "progress", ["function"]) as PivotRow[];
-    expect(rows.find((r) => r.key === "IT")?.value).toBe(40);
+    // (0 + 50) / 2
+    expect(rows.find((r) => r.key === "IT")?.value).toBe(25);
   });
 
   it("excludes cancelled levers, matching the legacy engine aggregation helpers", () => {
