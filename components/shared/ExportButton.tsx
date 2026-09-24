@@ -7,7 +7,8 @@ import { generateAlerts } from "@/lib/alertEngine";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { leverToExcelRow } from "@/lib/leverExcel";
+import { leverActionsToExcelRows, leverToExcelRow } from "@/lib/leverExcel";
+import { ACTION_IMPORT_HEADERS } from "@/lib/leverExcelImport";
 import type { BeTrackData, Company } from "@/types";
 
 /**
@@ -41,6 +42,12 @@ export function ExportButton({
     const sheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "Leviers");
+    // Feuille "Actions" au format de l'import : un export ré-importé tel quel ne doit pas vider
+    // les plans d'action (voir lib/leverExcelImport.ts, fusion des actions par nom).
+    const actionsSheet = XLSX.utils.json_to_sheet(d.levers.flatMap(leverActionsToExcelRows), {
+      header: [...ACTION_IMPORT_HEADERS],
+    });
+    XLSX.utils.book_append_sheet(workbook, actionsSheet, "Actions");
 
     XLSX.writeFile(
       workbook,

@@ -1161,6 +1161,11 @@ const es: Record<string, string> = {
   "shared.leverImportButton.createCountLabel": "palanca(s) a crear",
   "shared.leverImportButton.updateCountLabel": "palanca(s) a actualizar",
   "shared.leverImportButton.errorRowsLabel": "fila(s) con errores",
+  "shared.leverImportButton.actionsRemovedTitle": "Se eliminarán {n} acción(es) existente(s)",
+  "shared.leverImportButton.actionsRemovedBody":
+    "porque no figuran en la hoja Actions del archivo: {list}.",
+  "shared.leverImportButton.noActionsSheet":
+    "No hay hoja «Actions» en este archivo: se conservan los planes de acción existentes.",
   "shared.leverImportButton.workstreamsNoteIntro":
     "proyecto(s) referenciado(s) en el archivo aún no existe(n) para esta empresa, y",
   "shared.leverImportButton.willBeCreatedPlural": "se crearán",

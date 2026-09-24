@@ -1,4 +1,5 @@
 import * as engine from "@/lib/engine";
+import { ACTION_IMPORT_HEADERS, ACTION_STATUS_LABEL } from "@/lib/leverExcelImport";
 import { DEFAULT_LIFECYCLE_STAGES, resolveStatusLabel } from "@/lib/status-config";
 import type { Alert, BeTrackData, Lever, LifecycleStage, RiskLevel } from "@/types";
 
@@ -106,4 +107,21 @@ export function leverImpactsToExcelRows(lever: Lever): Record<string, string | n
       ? { planned: "Planifié", done: "Réalisé", ongoing: "En cours" }[imp.status]
       : "",
   }));
+}
+
+/** Lignes de la feuille "Actions" de l'export — mêmes colonnes et libellés que
+ *  `ACTION_IMPORT_HEADERS` : ré-importer un export conserve ainsi les plans d'action (sans cette
+ *  feuille, l'ancien import vidait les actions de chaque levier mis à jour). */
+export function leverActionsToExcelRows(lever: Lever): Record<string, string>[] {
+  return (lever.actions ?? []).map((a) => {
+    const row: Record<(typeof ACTION_IMPORT_HEADERS)[number], string> = {
+      "Code Levier": lever.code,
+      "Nom de l'action": a.name,
+      Owner: a.owner ?? "",
+      "Date début": a.start,
+      "Date fin": a.end,
+      Statut: ACTION_STATUS_LABEL[a.status],
+    };
+    return row;
+  });
 }

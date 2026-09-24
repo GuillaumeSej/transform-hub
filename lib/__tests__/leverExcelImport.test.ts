@@ -8,6 +8,7 @@ import {
   validateLeverImportRows,
   type LeverImportRawSheets,
 } from "@/lib/leverExcelImport";
+import { leverActionsToExcelRows } from "@/lib/leverExcel";
 import type { BeTrackData, Lever } from "@/types";
 
 type Ctx = Pick<BeTrackData, "levers" | "workstreams" | "pnlAccounts">;
@@ -629,5 +630,126 @@ describe("leverExcelImport — programme par défaut et modèle", () => {
     expect(code).toBe("EXEMPLE-001");
     expect(rows.actions[0][0]).toBe(code);
     expect(rows.impacts[0][0]).toBe(code);
+  });
+});
+
+describe("leverExcelImport — conservation des plans d'action (aller-retour export/import)", () => {
+  const existingWithActions = (): Lever => ({
+    id: "L001",
+    programId: "prog1",
+    code: "PROC-001",
+    type: "Sourcing & Achats",
+    name: "Optimisation achats indirects",
+    ws: "WS-PROC",
+    owner: "Marc Dubois",
+    ownerInit: "MD",
+    sponsor: "Isabelle Roy",
+    sponsorInit: "IR",
+    geography: "Europe",
+    country: "France",
+    entity: "Acme France SAS",
+    function: "Procurement",
+    costCenter: "CC-PROC-001",
+    pnlMap: "GA",
+    start: "2026-01-15",
+    end: "2026-12-31",
+    status: "idea",
+    progress: 0,
+    risk: "medium",
+    grossSavings: 2.5,
+    netSavings: 2.1,
+    opexOneOff: 0,
+    opexRec: 0,
+    capex: 0,
+    fteImpact: 0,
+    popImpacted: "",
+    companyId: "c1",
+    dependencies: [],
+    description: "",
+    createdAt: "2025-01-01",
+    lastUpdate: "2025-01-01",
+    actions: [
+      {
+        id: "A001",
+        name: "Renégocier contrats classe A",
+        owner: "Marc Dubois",
+        start: "2026-01-15",
+        end: "2026-04-30",
+        status: "in_progress",
+        weightPct: 60,
+        declaredProgressPct: 40,
+        description: "Détail non exporté",
+        impacts: [],
+      },
+      {
+        id: "A002",
+        name: "Centraliser les commandes",
+        start: "2026-05-01",
+        end: "2026-09-30",
+        status: "todo",
+        weightPct: 40,
+        impacts: [],
+      },
+    ],
+  });
+
+  it("conserve les actions quand le fichier n'a pas de feuille Actions", () => {
+    const preview = validateLeverImportRows(
+      { leviers: [baseLeverRow()], actions: null, impacts: null },
+      ctx([existingWithActions()]),
+      "c1",
+      singleProgram
+    );
+    expect(preview.errors).toEqual([]);
+    expect(preview.actionsSheetPresent).toBe(false);
+    expect(preview.actionsRemoved).toEqual([]);
+    expect(preview.toUpsert[0].actions).toEqual(existingWithActions().actions);
+  });
+
+  it("fusionne par nom (garde id, poids, avancement) et signale les actions supprimées", () => {
+    const preview = validateLeverImportRows(
+      {
+        leviers: [baseLeverRow()],
+        actions: [baseActionRow({ Statut: "Terminé", "Date fin": "2026-05-15" })],
+        impacts: [],
+      },
+      ctx([existingWithActions()]),
+      "c1",
+      singleProgram
+    );
+    expect(preview.errors).toEqual([]);
+    const actions = preview.toUpsert[0].actions ?? [];
+    expect(actions).toHaveLength(1);
+    expect(actions[0]).toMatchObject({
+      id: "A001",
+      status: "done",
+      end: "2026-05-15",
+      weightPct: 60,
+      declaredProgressPct: 40,
+      description: "Détail non exporté",
+    });
+    expect(preview.actionsRemoved).toEqual([{ code: "PROC-001", count: 1 }]);
+  });
+
+  it("ré-importer un export tel quel ne modifie aucun plan d'action", () => {
+    const lever = existingWithActions();
+    const toJson = (headers: readonly string[], rows: Record<string, unknown>[]) =>
+      XLSX.utils.sheet_to_json<Record<string, unknown>>(
+        XLSX.utils.json_to_sheet(rows, { header: [...headers] }),
+        { defval: "" }
+      );
+    const preview = validateLeverImportRows(
+      {
+        leviers: [baseLeverRow()],
+        actions: toJson(ACTION_IMPORT_HEADERS, leverActionsToExcelRows(lever)),
+        impacts: null,
+      },
+      ctx([lever]),
+      "c1",
+      singleProgram
+    );
+    expect(preview.errors).toEqual([]);
+    expect(preview.actionsRemoved).toEqual([]);
+    expect(preview.toUpsert[0].actions).toEqual(lever.actions);
   });
 });

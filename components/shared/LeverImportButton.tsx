@@ -28,9 +28,11 @@ const SHEET_NAMES = { leviers: "Leviers", actions: "Actions", impacts: "Impacts"
 
 /** Trouve une feuille par nom insensible à la casse — un utilisateur qui renomme légèrement
  *  l'onglet ("leviers" au lieu de "Leviers") ne doit pas être bloqué. */
-function findSheet(workbook: XLSX.WorkBook, name: string): Record<string, unknown>[] {
+/** `null` quand la feuille est absente du fichier (≠ feuille présente mais vide) — voir
+ *  `LeverImportRawSheets` : une feuille Actions absente ne doit pas vider les plans d'action. */
+function findSheet(workbook: XLSX.WorkBook, name: string): Record<string, unknown>[] | null {
   const sheetName = workbook.SheetNames.find((n) => n.toLowerCase() === name.toLowerCase());
-  if (!sheetName) return [];
+  if (!sheetName) return null;
   return XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
     defval: "",
   });
@@ -110,7 +112,7 @@ export function LeverImportButton({
       : XLSX.read(await file.arrayBuffer(), { type: "array" });
 
     const sheets = {
-      leviers: findSheet(workbook, SHEET_NAMES.leviers),
+      leviers: findSheet(workbook, SHEET_NAMES.leviers) ?? [],
       actions: findSheet(workbook, SHEET_NAMES.actions),
       impacts: findSheet(workbook, SHEET_NAMES.impacts),
     };
@@ -261,6 +263,31 @@ export function LeverImportButton({
               "shared.leverImportButton.workstreamsNoteOutro",
               "automatiquement : {names}."
             ).replace("{names}", preview.toCreateWorkstreams.map((w) => w.name).join(", "))}
+          </div>
+        )}
+        {preview && preview.actionsRemoved.length > 0 && (
+          <div className="mb-3 rounded-md border border-rag-red/40 bg-rag-red/5 p-2.5 text-xs text-secondary">
+            <strong className="text-rag-red">
+              {t(
+                "shared.leverImportButton.actionsRemovedTitle",
+                "{n} action(s) existante(s) seront supprimée(s)"
+              ).replace("{n}", String(preview.actionsRemoved.reduce((sum, r) => sum + r.count, 0)))}
+            </strong>{" "}
+            {t(
+              "shared.leverImportButton.actionsRemovedBody",
+              "car absentes de la feuille Actions du fichier : {list}."
+            ).replace(
+              "{list}",
+              preview.actionsRemoved.map((r) => `${r.code} (${r.count})`).join(", ")
+            )}
+          </div>
+        )}
+        {preview && !preview.actionsSheetPresent && preview.updateCount > 0 && (
+          <div className="mb-3 rounded-md border border-border bg-neutral-50 p-2.5 text-xs text-tertiary">
+            {t(
+              "shared.leverImportButton.noActionsSheet",
+              "Pas de feuille « Actions » dans ce fichier : les plans d'action existants sont conservés."
+            )}
           </div>
         )}
         <div className="max-h-[360px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">

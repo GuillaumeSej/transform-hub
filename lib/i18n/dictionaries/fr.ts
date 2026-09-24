@@ -1196,6 +1196,11 @@ const fr: Record<string, string> = {
   "shared.leverImportButton.createCountLabel": "levier(s) à créer",
   "shared.leverImportButton.updateCountLabel": "levier(s) à mettre à jour",
   "shared.leverImportButton.errorRowsLabel": "ligne(s) en erreur",
+  "shared.leverImportButton.actionsRemovedTitle": "{n} action(s) existante(s) seront supprimée(s)",
+  "shared.leverImportButton.actionsRemovedBody":
+    "car absentes de la feuille Actions du fichier : {list}.",
+  "shared.leverImportButton.noActionsSheet":
+    "Pas de feuille « Actions » dans ce fichier : les plans d'action existants sont conservés.",
   "shared.leverImportButton.workstreamsNoteIntro":
     "chantier(s) référencé(s) dans le fichier n'existe(nt) pas encore pour cette entreprise et",
   "shared.leverImportButton.willBeCreatedPlural": "seront créés",

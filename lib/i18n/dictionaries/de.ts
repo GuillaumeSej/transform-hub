@@ -1160,6 +1160,11 @@ const de: Record<string, string> = {
   "shared.leverImportButton.createCountLabel": "Hebel zu erstellen",
   "shared.leverImportButton.updateCountLabel": "Hebel zu aktualisieren",
   "shared.leverImportButton.errorRowsLabel": "Zeile(n) mit Fehlern",
+  "shared.leverImportButton.actionsRemovedTitle": "{n} bestehende Maßnahme(n) werden gelöscht",
+  "shared.leverImportButton.actionsRemovedBody":
+    "da sie im Blatt „Actions“ der Datei fehlen: {list}.",
+  "shared.leverImportButton.noActionsSheet":
+    "Kein Blatt „Actions“ in dieser Datei: bestehende Maßnahmenpläne bleiben erhalten.",
   "shared.leverImportButton.workstreamsNoteIntro":
     "in der Datei referenzierte(s) Arbeitspaket(e) existiert/existieren für dieses Unternehmen noch nicht, und",
   "shared.leverImportButton.willBeCreatedPlural": "werden erstellt",

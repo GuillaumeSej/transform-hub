@@ -1157,6 +1157,11 @@ const en: Record<string, string> = {
   "shared.leverImportButton.createCountLabel": "lever(s) to create",
   "shared.leverImportButton.updateCountLabel": "lever(s) to update",
   "shared.leverImportButton.errorRowsLabel": "row(s) with errors",
+  "shared.leverImportButton.actionsRemovedTitle": "{n} existing action(s) will be deleted",
+  "shared.leverImportButton.actionsRemovedBody":
+    "because they are missing from the file's Actions sheet: {list}.",
+  "shared.leverImportButton.noActionsSheet":
+    'No "Actions" sheet in this file: existing action plans are kept.',
   "shared.leverImportButton.workstreamsNoteIntro":
     "work package(s) referenced in the file do not yet exist for this company, and",
   "shared.leverImportButton.willBeCreatedPlural": "will be created",

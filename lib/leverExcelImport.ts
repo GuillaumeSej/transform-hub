@@ -219,7 +219,7 @@ export function leverImportTemplateRows(
 
 // ---------- Libellés humains <-> valeurs internes ----------
 
-const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
+export const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
   todo: "À faire",
   in_progress: "En cours",
   done: "Terminé",
@@ -434,6 +434,11 @@ export type LeverImportPreview = {
   errors: LeverImportError[];
   createCount: number;
   updateCount: number;
+  /** Leviers existants dont des actions vont être SUPPRIMÉES (présentes en base, absentes de la
+   *  feuille Actions du fichier) — affiché en avertissement dans l'aperçu avant confirmation. */
+  actionsRemoved: { code: string; count: number }[];
+  /** false = le fichier n'a pas de feuille "Actions" : aucun plan d'action n'est modifié. */
+  actionsSheetPresent: boolean;
   /** Workstreams référencés par la feuille "Leviers" mais absents de `data.workstreams` — aucune
    *  UI de gestion des workstreams n'existe aujourd'hui dans l'app (voir lib/firestore/
    *  programConfig.ts, doc-comment "aucune mutation dans l'UI aujourd'hui"), donc un import de
@@ -446,8 +451,11 @@ export type LeverImportPreview = {
 
 export type LeverImportRawSheets = {
   leviers: Record<string, unknown>[];
-  actions: Record<string, unknown>[];
-  impacts: Record<string, unknown>[];
+  /** `null` = feuille ABSENTE du fichier (ex. ancien export ne contenant que "Leviers") : les plans
+   *  d'action des leviers existants sont alors conservés tels quels. Tableau (même vide) = feuille
+   *  présente, le fichier fait foi pour les actions des leviers qu'il contient. */
+  actions: Record<string, unknown>[] | null;
+  impacts: Record<string, unknown>[] | null;
 };
 
 /**
@@ -675,7 +683,7 @@ export function validateLeverImportRows(
   const actionsByLeverCode = new Map<string, ParsedAction[]>();
   let actionSeq = 0;
 
-  sheets.actions.forEach((row, i) => {
+  (sheets.actions ?? []).forEach((row, i) => {
     const rowNumber = i + 2;
     if (isRowEmpty(row)) return;
 
@@ -750,7 +758,7 @@ export function validateLeverImportRows(
   let impactSeq = 0;
   const leverImpactsByCode = new Map<string, ActionImpact[]>();
 
-  sheets.impacts.forEach((row, i) => {
+  (sheets.impacts ?? []).forEach((row, i) => {
     const rowNumber = i + 2;
     if (isRowEmpty(row)) return;
 
@@ -941,6 +949,7 @@ export function validateLeverImportRows(
 
   // ---------- Assemblage final : chaque levier reçoit son plan d'action ----------
   const toUpsert: LeverImportRow[] = [];
+  const actionsRemoved: LeverImportPreview["actionsRemoved"] = [];
   let createCount = 0;
   let updateCount = 0;
 
@@ -948,7 +957,35 @@ export function validateLeverImportRows(
     const lowerCode = p.code.toLowerCase();
     const declaredActions = (actionsByLeverCode.get(lowerCode) ?? []).map((a) => a.action);
     const existing = existingByCode.get(lowerCode);
-    const actions = declaredActions; // toujours ce que le fichier déclare, y compris vide — l'import Excel fait foi
+    const existingActions = existing?.actions ?? [];
+    let actions: LeverAction[];
+    if (sheets.actions === null) {
+      // Pas de feuille Actions (ex. export ne contenant que les leviers) : on ne touche pas au
+      // plan d'action — avant, il était remplacé par une liste vide, sans avertissement.
+      actions = existingActions;
+    } else {
+      // Feuille présente : le fichier fait foi, mais une action déjà existante (même nom) est
+      // FUSIONNÉE plutôt que recréée, pour garder ce que le fichier ne décrit pas (id, poids,
+      // avancement déclaré, description, date de livraison).
+      const existingByName = new Map(existingActions.map((a) => [a.name.trim().toLowerCase(), a]));
+      actions = declaredActions.map((declared) => {
+        const prev = existingByName.get(declared.name.trim().toLowerCase());
+        if (!prev) return declared;
+        return {
+          ...prev,
+          name: declared.name,
+          owner: declared.owner,
+          start: declared.start,
+          end: declared.end,
+          status: declared.status,
+          deliveredDate: declared.status === "done" ? prev.deliveredDate : undefined,
+          impacts: declared.impacts?.length ? declared.impacts : prev.impacts,
+        };
+      });
+      const kept = new Set(declaredActions.map((a) => a.name.trim().toLowerCase()));
+      const removed = existingActions.filter((a) => !kept.has(a.name.trim().toLowerCase()));
+      if (removed.length > 0) actionsRemoved.push({ code: p.code, count: removed.length });
+    }
     const leverImpacts = leverImpactsByCode.get(lowerCode);
     toUpsert.push({
       ...p.values,
@@ -965,6 +1002,8 @@ export function validateLeverImportRows(
     errors,
     createCount,
     updateCount,
+    actionsRemoved,
+    actionsSheetPresent: sheets.actions !== null,
     toCreateWorkstreams: Array.from(newWorkstreamsByName.values()),
   };
 }
