@@ -4,6 +4,7 @@ import type {
   Alert,
   BeTrackData,
   DependencyType,
+  FinancialSnapshot,
   HierarchyLevelDef,
   HierarchyNode,
   Lever,
@@ -271,8 +272,29 @@ export function plannedInitialNet(levers: Lever[]): number {
  * sinon `netSavings` — même chaîne de repli que la courbe "Réactualisé" de `sCurve3` (voir aussi
  * `programSummary.reforecastTarget`). `isReforecast` distingue un vrai reforecast d'une valeur de
  * repli non réactualisée. */
+/** Réactualisé EFFECTIF d'un levier (snapshot complet : brut, net, CAPEX, OPEX) — règle métier
+ *  « réactualisé = impacts » (décision audit 2026-09-24, C3) : dès qu'un levier est réactualisé
+ *  (`lever.reforecast` posé, « Exécuté » et au-delà) ET porte des impacts, les montants sont
+ *  recalculés depuis ses impacts (`leverImpactTotals`) ; le snapshot enregistré n'est plus lu.
+ *  Avant, un réactualisé écrit directement en base (script de démo) divergeait des impacts sur
+ *  9 leviers ACME jusqu'à la modification suivante du levier. `undefined` = pas encore
+ *  réactualisé (l'appelant retombe alors sur le plan figé). */
+export function reforecastSnapshotOf(lever: Lever): FinancialSnapshot | undefined {
+  if (!lever.reforecast) return undefined;
+  if (!(lever.impacts && lever.impacts.length > 0)) return lever.reforecast;
+  const t = leverImpactTotals(lever);
+  return {
+    grossSavings: t.grossAnnual,
+    netSavings: t.netAnnual,
+    opexOneOff: t.opexOneOff,
+    opexRec: t.opexRec,
+    capex: t.capex,
+  };
+}
+
 export function displayedReforecastNet(lever: Lever): { value: number; isReforecast: boolean } {
-  if (lever.reforecast) return { value: lever.reforecast.netSavings, isReforecast: true };
+  const snap = reforecastSnapshotOf(lever);
+  if (snap) return { value: snap.netSavings, isReforecast: true };
   return { value: lever.lockedPlan?.netSavings ?? lever.netSavings, isReforecast: false };
 }
 
@@ -344,10 +366,7 @@ export function programSummary(data: BeTrackData): ProgramSummary {
   const fteImpact = active.reduce((s, l) => s + l.fteImpact, 0);
 
   // Cible réactualisée — même chaîne de repli que la courbe "Réactualisé" de sCurve3.
-  const reforecastTarget = active.reduce(
-    (s, l) => s + (l.reforecast?.netSavings ?? l.lockedPlan?.netSavings ?? l.netSavings),
-    0
-  );
+  const reforecastTarget = active.reduce((s, l) => s + displayedReforecastNet(l).value, 0);
 
   // Coûts d'implémentation (CAPEX + one-off, jamais l'OPEX récurrent) : plan / engagé / reforecast.
   const plannedCosts = active.reduce((s, l) => s + implementationCosts(l.lockedPlan ?? l), 0);
@@ -356,7 +375,7 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     0
   );
   const reforecastCosts = active.reduce(
-    (s, l) => s + implementationCosts(l.reforecast ?? l.lockedPlan ?? l),
+    (s, l) => s + implementationCosts(reforecastSnapshotOf(l) ?? l.lockedPlan ?? l),
     0
   );
 
@@ -375,16 +394,17 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     active
       .filter(
         (l) =>
-          l.reforecast &&
+          reforecastSnapshotOf(l) &&
           l.lockedPlan &&
-          implementationCosts(l.reforecast) > implementationCosts(l.lockedPlan)
+          implementationCosts(reforecastSnapshotOf(l)!) > implementationCosts(l.lockedPlan)
       )
       .map((l) => l.id)
   );
   const savingsCutLeverIds = new Set(
     active
       .filter(
-        (l) => l.reforecast && l.lockedPlan && l.reforecast.netSavings < l.lockedPlan.netSavings
+        (l) =>
+          l.lockedPlan && l.reforecast && displayedReforecastNet(l).value < l.lockedPlan.netSavings
       )
       .map((l) => l.id)
   );
@@ -450,10 +470,7 @@ export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSu
   // `target` (cible initiale, pas réactualisée) partout où un libellé "Cible réactualisée" était
   // affiché (tableau "Synthèse des chantiers"), ce qui divergeait du KPI "Économies réalisées" dès
   // qu'un levier du chantier avait un reforecast différent de sa valeur courante.
-  const reforecastTarget = levers.reduce(
-    (s, l) => s + (l.reforecast?.netSavings ?? l.lockedPlan?.netSavings ?? l.netSavings),
-    0
-  );
+  const reforecastTarget = levers.reduce((s, l) => s + displayedReforecastNet(l).value, 0);
   const realized = levers.reduce((s, l) => s + realizedSavings(l), 0);
   const capex = levers.reduce((s, l) => s + l.capex, 0);
   const opex = levers.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
@@ -2130,7 +2147,7 @@ export function savingsWaterfall(data: BeTrackData): SavingsWaterfall {
 
 /** OPEX récurrent annuel d'un levier (snapshot réactualisé ?? plan figé ?? courant). */
 export function leverOpexRecOf(l: Lever): number {
-  const snap = l.reforecast ?? l.lockedPlan ?? l;
+  const snap = reforecastSnapshotOf(l) ?? l.lockedPlan ?? l;
   return snap.opexRec ?? 0;
 }
 

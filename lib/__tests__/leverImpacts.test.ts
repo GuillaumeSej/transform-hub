@@ -114,11 +114,21 @@ describe("leverImpactMigration", () => {
     const arr = [m];
     expect(migrateLeversImpacts(arr)).toBe(arr);
   });
-  it("keeps existing lever impacts", () => {
+  it("levier qui a déjà ses impacts : les anciens impacts d'action (doublons) sont écartés (audit C3)", () => {
+    // Cas ACME COM-001 : détail « ENR » sur le levier (3,42 brut) + business case « SEED » resté
+    // sur les actions (1,15 + 2,15) pour les mêmes gains — la fusion doublait le net (3,3 → 6,6).
     const m = migrateLeverImpacts(
-      lever({ impacts: [imp("X", {})], actions: [act("A", { impacts: [imp("Y", {})] })] })
+      lever({
+        impacts: [imp("ENR-01", { amount: 2.23 }), imp("ENR-02", { amount: 1.19 })],
+        actions: [
+          act("A1", { impacts: [imp("SEED-DONE", { amount: 1.15 })] }),
+          act("A2", { impacts: [imp("SEED-PENDING", { amount: 2.15 })] }),
+        ],
+      })
     );
-    expect(m.impacts?.map((i) => i.id)).toEqual(["X", "Y"]);
+    expect(m.impacts?.map((i) => i.id)).toEqual(["ENR-01", "ENR-02"]);
+    expect(m.actions?.every((a) => !("impacts" in a))).toBe(true);
+    expect(engine.leverImpactTotals(m).grossAnnual).toBeCloseTo(3.42);
   });
 });
 
@@ -588,5 +598,37 @@ describe("excel impacts", () => {
     expect(rows[0].Technologie).toBe("SAP");
     const row = leverToExcelRow(l, data([l]), []);
     expect(row["Gains one-off (€M)"]).toBe(2);
+  });
+});
+
+describe("réactualisé = impacts (audit C3)", () => {
+  it("un levier réactualisé avec impacts affiche le net de ses impacts, pas le snapshot enregistré", () => {
+    const l = lever({
+      status: "in_progress",
+      netSavings: 3.3,
+      lockedPlan: { grossSavings: 3, netSavings: 2.87, opexOneOff: 0, opexRec: 0, capex: 0 },
+      // Valeur écrite directement en base par un ancien script, sans toucher aux impacts.
+      reforecast: { grossSavings: 1.5, netSavings: 1.45, opexOneOff: 0, opexRec: 0, capex: 0 },
+      impacts: [
+        imp("g1", { amount: 2.23 }),
+        imp("g2", { amount: 1.19 }),
+        imp("or", { type: "cost", nature: "opex_rec", amount: 0.12 }),
+      ],
+    });
+    expect(engine.reforecastSnapshotOf(l)?.netSavings).toBeCloseTo(3.3);
+    expect(engine.displayedReforecastNet(l)).toEqual({
+      value: engine.leverImpactTotals(l).netAnnual,
+      isReforecast: true,
+    });
+  });
+
+  it("sans impacts : snapshot enregistré ; pas encore réactualisé : undefined (repli plan figé)", () => {
+    const refo = { grossSavings: 2, netSavings: 1.8, opexOneOff: 0, opexRec: 0, capex: 0 };
+    expect(engine.reforecastSnapshotOf(lever({ reforecast: refo, impacts: [] }))?.netSavings).toBe(
+      1.8
+    );
+    expect(engine.reforecastSnapshotOf(lever({ impacts: [imp("g", { amount: 1 })] }))).toBe(
+      undefined
+    );
   });
 });

@@ -1,5 +1,10 @@
 import type { Alert, BeTrackData, ProgramType } from "@/types";
-import { underperformers, dependencyAlerts, leverImpactsOf } from "@/lib/engine";
+import {
+  underperformers,
+  dependencyAlerts,
+  displayedReforecastNet,
+  leverImpactsOf,
+} from "@/lib/engine";
 
 /**
  * Générateur d'alertes automatiques — fonction pure qui analyse les données du programme
@@ -182,21 +187,23 @@ export function generateAlerts(
   // ── 4. Savings réduits (dès le 1er €) — Plan Performance uniquement ─────────
   for (const l of financialAlertsEnabled ? active : []) {
     if (!l.reforecast || !l.lockedPlan) continue;
-    if (l.reforecast.netSavings < l.lockedPlan.netSavings) {
-      const delta = l.lockedPlan.netSavings - l.reforecast.netSavings;
+    // Réactualisé EFFECTIF (recalculé depuis les impacts — `reforecastSnapshotOf`), comme partout.
+    const refoNet = displayedReforecastNet(l).value;
+    if (refoNet < l.lockedPlan.netSavings) {
+      const delta = l.lockedPlan.netSavings - refoNet;
       auto.push({
         id: `AUTO-SAVINGS-${l.id}`,
         type: "amber",
         ts: l.lastUpdate,
         scope: l.id,
         title: `Savings réduits : ${l.name}`,
-        desc: `Reforecast ${fmtImpact(l.reforecast.netSavings)} vs plan ${fmtImpact(l.lockedPlan.netSavings)} (−${fmtImpact(delta)}).`,
+        desc: `Reforecast ${fmtImpact(refoNet)} vs plan ${fmtImpact(l.lockedPlan.netSavings)} (−${fmtImpact(delta)}).`,
         i18n: {
           titleKey: "alerts.auto.savingsReduced.title",
           descKey: "alerts.auto.savingsReduced.desc",
           vars: {
             name: l.name,
-            reforecast: fmtImpact(l.reforecast.netSavings),
+            reforecast: fmtImpact(refoNet),
             plan: fmtImpact(l.lockedPlan.netSavings),
             delta: fmtImpact(delta),
           },

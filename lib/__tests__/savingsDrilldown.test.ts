@@ -82,8 +82,11 @@ describe("buildDrilldownEntries", () => {
     const l = lever({
       id: "O",
       reforecast: snap(10, 3),
+      // Réactualisé = impacts (audit C3) : l'OPEX récurrent vient des impacts (2 + 1), plus du
+      // snapshot enregistré ; l'impact sans nature tombe dans « Autres ».
       impacts: [
         { id: "1", label: "x", type: "cost", nature: "opex_rec", amount: 2, natureId: "lic" },
+        { id: "3", label: "z", type: "cost", nature: "opex_rec", amount: 1 },
         { id: "2", label: "y", type: "saving", nature: "opex_rec", amount: 9 },
       ],
     } as Partial<Lever>);
@@ -125,7 +128,8 @@ describe("buildDrilldownEntries", () => {
     expect(segs.filter((x) => x.label === "Licences")).toHaveLength(1);
     expect(segs.filter((x) => x.label === "Non détaillé")).toHaveLength(1);
     expect(segs.find((x) => x.label === "SAP")?.value).toBe(1);
-    expect(segs.reduce((a, x) => a + x.value, 0)).toBeCloseTo(12, 5); // = OPEX total des 2 leviers
+    // = OPEX récurrent total des impacts des 2 leviers (4 + 2) — réactualisé = impacts (audit C3).
+    expect(segs.reduce((a, x) => a + x.value, 0)).toBeCloseTo(6, 5);
   });
 });
 

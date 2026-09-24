@@ -4,6 +4,7 @@ import {
   leverImpactsOf,
   leverOpexRecOf,
   realizedSavings,
+  reforecastSnapshotOf,
 } from "@/lib/engine";
 import { resolveHierarchyNodeChain } from "@/lib/hierarchyLogic";
 
@@ -53,7 +54,7 @@ export function leverOpexRecSegments(
   natureLabel: OpexNatureLabeler,
   labels: { fte: string; other: string }
 ): OpexSegment[] {
-  const snap = lever.reforecast ?? lever.lockedPlan ?? lever;
+  const snap = reforecastSnapshotOf(lever) ?? lever.lockedPlan ?? lever;
   const total = snap.opexRec;
   const acc = new Map<string, OpexSegment>();
   // Clé = libellé normalisé : deux natures de même nom fusionnent en un seul segment.
