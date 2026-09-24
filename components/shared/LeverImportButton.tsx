@@ -11,7 +11,7 @@ import {
   validateLeverImportRows,
   type LeverImportPreview,
 } from "@/lib/leverExcelImport";
-import type { BeTrackData, Workstream } from "@/types";
+import type { BeTrackData, LifecycleStage, Workstream } from "@/types";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import {
@@ -49,6 +49,7 @@ export function LeverImportButton({
   companyId,
   programs = [],
   defaultProgramId,
+  lifecycleStages,
   onImport,
   onCreateWorkstreams,
 }: {
@@ -61,6 +62,9 @@ export function LeverImportButton({
   /** Programme sélectionné dans l'app : cible des lignes sans colonne "Programme" renseignée, et
    *  valeur pré-remplie de cette colonne dans le modèle téléchargé. */
   defaultProgramId?: string | null;
+  /** Cycle de vie du programme sélectionné : ses libellés sont acceptés dans la colonne
+   *  « Statut » et utilisés dans les messages d'erreur (mêmes libellés qu'à l'écran). */
+  lifecycleStages?: LifecycleStage[];
   /** Asynchrone : doit être rejetée si l'écriture échoue (le toast de succès n'est affiché
    *  qu'une fois la promesse résolue). */
   onImport: (rows: LeverImportPreview["toUpsert"]) => Promise<{
@@ -124,7 +128,7 @@ export function LeverImportButton({
       data,
       companyId,
       programs,
-      undefined,
+      lifecycleStages,
       defaultProgramId
     );
     setFileName(file.name);

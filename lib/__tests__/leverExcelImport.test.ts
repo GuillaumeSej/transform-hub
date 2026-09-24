@@ -4,6 +4,7 @@ import {
   ACTION_IMPORT_HEADERS,
   IMPACT_IMPORT_HEADERS,
   LEVER_IMPORT_HEADERS,
+  importStatusTransitionError,
   leverImportTemplateRows,
   validateLeverImportRows,
   type LeverImportRawSheets,
@@ -32,6 +33,48 @@ function ctx(levers: Lever[] = []): Ctx {
   return { levers, workstreams, pnlAccounts };
 }
 
+/** Levier déjà en base, au statut donné, avec le même Code que `baseLeverRow` : un import qui
+ *  garde ce statut est permis (voir `importStatusTransitionError`), alors qu'un NOUVEAU levier ne
+ *  peut être importé qu'au stade « Identifié ». */
+function existingLeverAt(status: Lever["status"]): Lever {
+  return {
+    id: "L001",
+    programId: "prog1",
+    code: "PROC-001",
+    type: "Sourcing & Achats",
+    name: "Optimisation achats indirects",
+    ws: "WS-PROC",
+    owner: "Marc Dubois",
+    ownerInit: "MD",
+    sponsor: "Isabelle Roy",
+    sponsorInit: "IR",
+    geography: "Europe",
+    country: "France",
+    entity: "Acme France SAS",
+    function: "Procurement",
+    costCenter: "CC-PROC-001",
+    pnlMap: "GA",
+    start: "2026-01-15",
+    end: "2026-12-31",
+    status,
+    progress: 0,
+    risk: "medium",
+    grossSavings: 2.5,
+    netSavings: 2.1,
+    opexOneOff: 0,
+    opexRec: 0,
+    capex: 0,
+    fteImpact: 0,
+    popImpacted: "",
+    companyId: "c1",
+    dependencies: [],
+    description: "",
+    createdAt: "2025-01-01",
+    lastUpdate: "2025-01-01",
+    actions: [],
+  };
+}
+
 const emptySheets: LeverImportRawSheets = { leviers: [], actions: [], impacts: [] };
 
 /** Programme unique par défaut pour la plupart des tests : la colonne "Programme" du fichier peut
@@ -58,7 +101,7 @@ function baseLeverRow(overrides: Record<string, unknown> = {}) {
     "Compte P&L impacté": "GA",
     "Date de départ": "2026-01-15",
     "Date de fin estimée": "2026-12-31",
-    Statut: "En cours d'exécution",
+    Statut: "Identifié",
     "Progression (%)": 40,
     "Impact estimé brut (€M)": 2.5,
     "Impact estimé net (€M)": 2.1,
@@ -146,7 +189,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     expect(lever.code).toBe("PROC-001");
     expect(lever.ws).toBe("WS-PROC");
     expect(lever.pnlMap).toBe("GA");
-    expect(lever.status).toBe("in_progress");
+    expect(lever.status).toBe("idea");
     expect(lever.companyId).toBe("c1");
     expect(lever.actions).toHaveLength(2);
 
@@ -483,7 +526,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     it("accepts the short default label actually displayed on the platform (DEFAULT_LIFECYCLE_STAGES)", () => {
       const preview = validateLeverImportRows(
         { ...emptySheets, leviers: [baseLeverRow({ Statut: "Exécuté" })] },
-        ctx(),
+        ctx([existingLeverAt("in_progress")]),
         "c1",
         singleProgram
       );
@@ -494,7 +537,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     it("still accepts the legacy long-form label (STATUS_LABEL) for backward compatibility with old files/templates", () => {
       const preview = validateLeverImportRows(
         { ...emptySheets, leviers: [baseLeverRow({ Statut: "En cours d'exécution" })] },
-        ctx(),
+        ctx([existingLeverAt("in_progress")]),
         "c1",
         singleProgram
       );
@@ -513,7 +556,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
 
       const rejected = validateLeverImportRows(
         { ...emptySheets, leviers: [baseLeverRow({ Statut: "Déploiement" })] },
-        ctx(),
+        ctx([existingLeverAt("in_progress")]),
         "c1",
         singleProgram
         // pas de lifecycleStages custom passé -> le libellé personnalisé n'est pas (encore) connu
@@ -522,7 +565,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
 
       const accepted = validateLeverImportRows(
         { ...emptySheets, leviers: [baseLeverRow({ Statut: "Déploiement" })] },
-        ctx(),
+        ctx([existingLeverAt("in_progress")]),
         "c1",
         singleProgram,
         customStages
@@ -751,5 +794,64 @@ describe("leverExcelImport — conservation des plans d'action (aller-retour exp
     expect(preview.errors).toEqual([]);
     expect(preview.actionsRemoved).toEqual([]);
     expect(preview.toUpsert[0].actions).toEqual(lever.actions);
+  });
+});
+
+describe("leverExcelImport — portes de validation (XLS-05)", () => {
+  const label = (st: string) => st;
+
+  it("refuse un nouveau levier importé au-delà du stade Identifié", () => {
+    for (const statut of ["Validé", "Planifié", "Exécuté", "Réalisé"]) {
+      const preview = validateLeverImportRows(
+        { ...emptySheets, leviers: [baseLeverRow({ Statut: statut })] },
+        ctx(),
+        "c1",
+        singleProgram
+      );
+      expect(preview.toUpsert).toEqual([]);
+      expect(preview.errors[0].reason).toMatch(/nouveau levier ne peut être importé/);
+    }
+  });
+
+  it("accepte un nouveau levier Identifié ou abandonné", () => {
+    for (const statut of ["Identifié", "Levier abandonné"]) {
+      const preview = validateLeverImportRows(
+        { ...emptySheets, leviers: [baseLeverRow({ Statut: statut })] },
+        ctx(),
+        "c1",
+        singleProgram
+      );
+      expect(preview.errors).toEqual([]);
+    }
+  });
+
+  it("refuse un changement de statut vers une étape protégée au lieu de l'ignorer en silence", () => {
+    const preview = validateLeverImportRows(
+      { ...emptySheets, leviers: [baseLeverRow({ Statut: "Validé" })] },
+      ctx([existingLeverAt("idea")]),
+      "c1",
+      singleProgram
+    );
+    expect(preview.toUpsert).toEqual([]);
+    expect(preview.errors[0].reason).toMatch(/nécessite une validation/);
+  });
+
+  it("refuse un retour en arrière dans le cycle", () => {
+    const preview = validateLeverImportRows(
+      { ...emptySheets, leviers: [baseLeverRow({ Statut: "Identifié" })] },
+      ctx([existingLeverAt("validated")]),
+      "c1",
+      singleProgram
+    );
+    expect(preview.errors[0].reason).toMatch(/revenir en arrière/);
+  });
+
+  it("autorise statut inchangé, abandon, réactivation et Exécuté → Réalisé", () => {
+    expect(importStatusTransitionError("validated", "validated", label)).toBeNull();
+    expect(importStatusTransitionError("validated", "cancelled", label)).toBeNull();
+    expect(importStatusTransitionError("cancelled", "idea", label)).toBeNull();
+    expect(importStatusTransitionError("in_progress", "delivered", label)).toBeNull();
+    expect(importStatusTransitionError("validated", "delivered", label)).not.toBeNull();
+    expect(importStatusTransitionError("cancelled", "in_progress", label)).not.toBeNull();
   });
 });

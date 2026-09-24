@@ -175,7 +175,7 @@ describe("leverExcel — leverToExcelRow (Statut)", () => {
 
       const preview = validateLeverImportRows(
         sheets,
-        { levers: [], workstreams, pnlAccounts },
+        { levers: [lever], workstreams, pnlAccounts },
         "c1",
         singleProgram
       );
@@ -232,7 +232,7 @@ describe("leverExcel — leverToExcelRow (Statut)", () => {
 
     const preview = validateLeverImportRows(
       sheets,
-      { levers: [], workstreams, pnlAccounts },
+      { levers: [lever], workstreams, pnlAccounts },
       "c1",
       singleProgram,
       customStages
@@ -262,7 +262,7 @@ describe("leverExcel — full export -> re-import round trip", () => {
     const sheets: LeverImportRawSheets = { leviers: [exportedRow], actions: [], impacts: [] };
     const preview = validateLeverImportRows(
       sheets,
-      { levers: [], workstreams, pnlAccounts },
+      { levers: [lever], workstreams, pnlAccounts },
       "c1",
       [
         { id: "p1", name: "Programme Perf" },

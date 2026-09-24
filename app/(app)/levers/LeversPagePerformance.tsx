@@ -784,6 +784,7 @@ export function LeversPagePerformance() {
               // "Programme" dès que l'entreprise avait aussi un programme stratégique.
               programs={performancePrograms}
               defaultProgramId={selectedProgramId}
+              lifecycleStages={lifecycle.stages}
               onImport={(rows) => data.importLevers(rows)}
               onCreateWorkstreams={(workstreams) => data.addWorkstreams(workstreams)}
             />

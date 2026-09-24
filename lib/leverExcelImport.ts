@@ -182,7 +182,7 @@ export function leverImportTemplateRows(
         "Compte P&L impacté": "GA",
         "Date de départ": "2026-01-15",
         "Date de fin estimée": "2026-12-31",
-        Statut: "En cours d'exécution",
+        Statut: "Identifié",
         "Progression (%)": 40,
         "Impact estimé brut (€M)": 2.5,
         "Impact estimé net (€M)": 2.1,
@@ -215,6 +215,37 @@ export function leverImportTemplateRows(
       }),
     ],
   };
+}
+
+/** Statuts protégés par une porte de validation (porteur → sponsor OU CTO) — même liste que la
+ *  garde de `lib/leversLogic.ts::updateLever`, seul `approveLeverGate` peut y faire entrer un
+ *  levier. */
+const GATED_IMPORT_STATUSES: readonly LeverStatus[] = ["qualified", "validated", "in_progress"];
+
+/** Un import ne doit pas contourner les portes de validation : renvoie le motif de rejet de la
+ *  ligne, ou `null` si la transition est permise. Avant, un nouveau levier pouvait être créé
+ *  directement à n'importe quel stade, et un changement de statut vers une étape protégée était
+ *  ignoré en silence par `updateLever` (l'aperçu annonçait pourtant une mise à jour).
+ *  Permis : statut inchangé ; nouveau levier « Identifié » ou abandonné ; abandon d'un levier
+ *  existant ; réactivation d'un abandonné en « Identifié » ; Exécuté → Réalisé (seule transition
+ *  libre du cycle, voir `updateLever`). */
+export function importStatusTransitionError(
+  current: LeverStatus | undefined,
+  target: LeverStatus,
+  labelOf: (status: LeverStatus) => string
+): string | null {
+  if (current === target) return null;
+  if (target === "cancelled") return null;
+  if (current === undefined) {
+    if (target === "idea") return null;
+    return `Un nouveau levier ne peut être importé qu'au stade « ${labelOf("idea")} » (ou abandonné) : le stade « ${labelOf(target)} » nécessite une validation. Importez-le au stade « ${labelOf("idea")} », puis demandez la validation depuis sa fiche.`;
+  }
+  if (current === "cancelled" && target === "idea") return null;
+  if (current === "in_progress" && target === "delivered") return null;
+  const reason = GATED_IMPORT_STATUSES.includes(target)
+    ? `le stade « ${labelOf(target)} » nécessite une validation (demande depuis la fiche du levier)`
+    : "un import ne peut ni sauter d'étape ni revenir en arrière dans le cycle de vie";
+  return `Changement de statut « ${labelOf(current)} » → « ${labelOf(target)} » refusé : ${reason}. Remettez le statut actuel dans le fichier pour importer les autres modifications.`;
 }
 
 // ---------- Libellés humains <-> valeurs internes ----------
@@ -555,6 +586,15 @@ export function validateLeverImportRows(
         rowNumber,
         reason: `Statut "${statusRaw}" inconnu (attendu : ${activeStatusLabels(lifecycleStages).join(", ")})`,
       });
+      return;
+    }
+
+    const existingLever = data.levers.find((l) => l.code.toLowerCase() === lowerCode);
+    const transitionError = importStatusTransitionError(existingLever?.status, status, (st) =>
+      resolveStatusLabel(st, lifecycleStages)
+    );
+    if (transitionError) {
+      errors.push({ sheet: "Leviers", rowNumber, reason: transitionError });
       return;
     }
 
