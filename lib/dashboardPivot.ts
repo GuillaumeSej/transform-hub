@@ -28,6 +28,7 @@ import type {
   Workstream,
 } from "@/types";
 import {
+  displayedReforecastNet,
   leverProgressPct,
   realizedSavings,
   type Marimekko2DColumn,
@@ -55,10 +56,12 @@ export interface MetricDef {
  *  numérique associé. */
 export const METRIC_REGISTRY: MetricDef[] = [
   {
+    // Clé historique conservée (vues déjà enregistrées) ; valeur = net RÉACTUALISÉ, comme la
+    // colonne de la bibliothèque et le Marimekko (décision audit C2).
     key: "netSavings",
-    label: "Économies nettes",
+    label: "Économies nettes réactualisées",
     aggregation: "sum",
-    getValue: (l) => l.netSavings,
+    getValue: (l) => displayedReforecastNet(l).value,
   },
   {
     key: "grossSavings",

@@ -1482,7 +1482,13 @@ export type RoleDefinition = {
 };
 
 export type ProgramSummary = {
+  /** Σ économies nettes COURANTES (`netSavings`) des leviers actifs — ni figé ni réactualisé ;
+   *  ne pas l'afficher sous le libellé « Planifié initial » (voir `plannedInitial`). */
   target: number;
+  /** « Planifié initial » : Σ plan figé à « Validé » de TOUS les leviers, abandonnés compris
+   *  (`engine.plannedInitialNet`) — même chiffre que la courbe « Plan initial », la cascade et la
+   *  Finance (décision audit 2026-09-24, C2). */
+  plannedInitial: number;
   realized: number;
   progressPct: number;
   capex: number;

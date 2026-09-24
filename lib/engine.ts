@@ -257,6 +257,16 @@ export function displayedLockedPlanNet(lever: Lever): { value: number; isLocked:
     : { value: lever.netSavings, isLocked: false };
 }
 
+/** « Planifié initial » (€M) d'un ensemble de leviers — SEULE définition derrière ce libellé
+ *  (KPI, courbe « Plan initial », barres « Planifié initial », cascade, tableau Finance, fiche
+ *  levier) : Σ du plan figé au passage « Validé » (`displayedLockedPlanNet` : snapshot `lockedPlan`,
+ *  sinon net actuel tant que le levier n'est pas validé), leviers ABANDONNÉS COMPRIS (décision
+ *  audit 2026-09-24, C2 — 5 valeurs coexistaient : net courant, plan figé des actifs, plan figé
+ *  avec abandonnés, somme courante des impacts…). */
+export function plannedInitialNet(levers: Lever[]): number {
+  return levers.reduce((s, l) => s + displayedLockedPlanNet(l).value, 0);
+}
+
 /** Valeur "Réactualisé" affichée pour un levier : le reforecast s'il existe, sinon le plan figé,
  * sinon `netSavings` — même chaîne de repli que la courbe "Réactualisé" de `sCurve3` (voir aussi
  * `programSummary.reforecastTarget`). `isReforecast` distingue un vrai reforecast d'une valeur de
@@ -407,6 +417,7 @@ export function programSummary(data: BeTrackData): ProgramSummary {
 
   return {
     target: Math.round(target * 10) / 10,
+    plannedInitial: Math.round(plannedInitialNet(data.levers) * 10) / 10,
     realized: Math.round(realized * 10) / 10,
     // Réalisé / réactualisé (jamais / plan initial) — même convention que `displayedProgressPct`
     // (fiche levier) : un progrès ne peut afficher 100 % que si le réalisé égale la cible
@@ -1423,7 +1434,7 @@ export function savingsSeries(
 
   for (const l of active) {
     const endI = idxOf(l.end);
-    const plan = l.lockedPlan?.netSavings ?? l.netSavings;
+    const plan = displayedLockedPlanNet(l).value;
     const refo = displayedReforecastNet(l).value;
     add(planned, endI, plan);
     add(reforecast, endI, refo);
@@ -1445,8 +1456,13 @@ export function savingsSeries(
       else otherGap[i] += g;
     }
   }
+  // Leviers abandonnés : leur plan figé reste dans la courbe « Plan initial » (même définition que
+  // partout ailleurs, `plannedInitialNet`) ; leur perte apparaît donc dans l'écart d'ajustement
+  // (réactualisé − planifié), dont `cancelled` isole la part.
   for (const l of cancelled) {
-    add(cancelledMemo, idxOf(l.end), l.lockedPlan?.netSavings ?? l.netSavings);
+    const plan = displayedLockedPlanNet(l).value;
+    add(planned, idxOf(l.end), plan);
+    add(cancelledMemo, idxOf(l.end), plan);
   }
 
   const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -1546,7 +1562,9 @@ export function marimekko2D(
   programs: Program[] = []
 ): Marimekko2DColumn[] {
   const active = data.levers.filter((l) => l.status !== "cancelled");
-  const totalWeight = active.reduce((s, l) => s + Math.abs(l.netSavings), 0) || 1;
+  // « Économies prévues » = net RÉACTUALISÉ (décision audit C2), pas le net courant `netSavings`.
+  const net = (l: Lever) => displayedReforecastNet(l).value;
+  const totalWeight = active.reduce((s, l) => s + Math.abs(net(l)), 0) || 1;
 
   const primaryOf = (l: Lever): string =>
     pairKey === "function-country"
@@ -1568,8 +1586,8 @@ export function marimekko2D(
 
   return Array.from(byPrimary.entries())
     .map(([primaryKey, levers]) => {
-      const colWeight = levers.reduce((s, l) => s + Math.abs(l.netSavings), 0) || 1;
-      const totalSavings = levers.reduce((s, l) => s + l.netSavings, 0);
+      const colWeight = levers.reduce((s, l) => s + Math.abs(net(l)), 0) || 1;
+      const totalSavings = levers.reduce((s, l) => s + net(l), 0);
 
       const bySecondary = new Map<string, Lever[]>();
       levers.forEach((l) => {
@@ -1580,12 +1598,12 @@ export function marimekko2D(
 
       const segments: Marimekko2DSegment[] = Array.from(bySecondary.entries())
         .map(([secondaryKey, segLevers]) => {
-          const segWeight = segLevers.reduce((s, l) => s + Math.abs(l.netSavings), 0);
+          const segWeight = segLevers.reduce((s, l) => s + Math.abs(net(l)), 0);
           return {
             key: secondaryKey,
             label: secondaryKey,
             heightPct: Math.round((segWeight / colWeight) * 1000) / 10,
-            value: Math.round(segLevers.reduce((s, l) => s + l.netSavings, 0) * 10) / 10,
+            value: Math.round(segLevers.reduce((s, l) => s + net(l), 0) * 10) / 10,
             count: segLevers.length,
           };
         })
@@ -2062,12 +2080,12 @@ export function savingsWaterfall(data: BeTrackData): SavingsWaterfall {
   const r1 = (n: number) => Math.round(n * 10) / 10;
   const active = data.levers.filter((l) => l.status !== "cancelled");
   const cancelledLevers = data.levers.filter((l) => l.status === "cancelled");
-  const lockedOf = (l: Lever) => l.lockedPlan?.netSavings ?? l.netSavings;
+  const lockedOf = (l: Lever) => displayedLockedPlanNet(l).value;
   const realized = r1(active.reduce((s, l) => s + realizedSavings(l), 0));
   const target = r1(active.reduce((s, l) => s + displayedReforecastNet(l).value, 0));
   const opexRec = r1(active.reduce((s, l) => s + leverOpexRecOf(l), 0));
   const cancelled = r1(cancelledLevers.reduce((s, l) => s + lockedOf(l), 0));
-  const initial = r1(data.levers.reduce((s, l) => s + lockedOf(l), 0));
+  const initial = r1(plannedInitialNet(data.levers));
   const reforecastDelta = r1(target + cancelled - initial);
   const gross = r1(target + opexRec);
   const steps: WaterfallStep[] = [

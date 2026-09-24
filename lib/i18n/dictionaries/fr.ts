@@ -2764,6 +2764,7 @@ const fr: Record<string, string> = {
   "levers.column.code": "Code",
   "levers.column.type": "Type",
   "levers.column.netSavings": "Économies nettes (€M)",
+  "levers.column.reforecastNet": "Économies nettes réactualisées (€M)",
   "levers.column.progress": "Avancement",
   "levers.column.fteImpact": "ETP impacté",
   "levers.column.opexOneOff": "OPEX ponctuel",

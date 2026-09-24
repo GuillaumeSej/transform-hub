@@ -1,16 +1,23 @@
 import type { BeTrackData, HierarchyNode, Lever } from "@/types";
 import type { FinanceHierarchyRow, SavingsWaterfall } from "@/lib/engine";
-import { displayedReforecastNet, leverImpactsOf, realizedSavings } from "@/lib/engine";
+import {
+  displayedReforecastNet,
+  leverImpactsOf,
+  plannedInitialNet,
+  realizedSavings,
+} from "@/lib/engine";
 
 /**
  * Sélecteurs purs partagés par le dashboard exécutif (graphique "Réalisation des économies",
- * cascade) et la page Finance (tableau par niveau de hiérarchie). Leviers ANNULÉS toujours exclus
- * des totaux (seule la colonne/étape "Annulé" les mentionne).
+ * cascade) et la page Finance (tableau par niveau de hiérarchie). Leviers ANNULÉS exclus du
+ * réactualisé et du réalisé, mais inclus dans le « Planifié initial » (voir `plannedInitialNet`).
  */
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-/** Planifié initial (plan figé) / réactualisé / réalisé (€M) d'un groupe de leviers actifs. */
+/** Planifié initial / réactualisé / réalisé (€M) d'un groupe de leviers. Passer le groupe COMPLET
+ *  (abandonnés compris) : le planifié initial les inclut (`plannedInitialNet`, décision audit C2),
+ *  le réactualisé et le réalisé ne portent que sur les leviers actifs. */
 export function savingsTriple(levers: Lever[]): {
   planned: number;
   reforecast: number;
@@ -18,7 +25,7 @@ export function savingsTriple(levers: Lever[]): {
 } {
   const active = levers.filter((l) => l.status !== "cancelled");
   return {
-    planned: r1(active.reduce((s, l) => s + (l.lockedPlan?.netSavings ?? l.netSavings), 0)),
+    planned: r1(plannedInitialNet(levers)),
     reforecast: r1(active.reduce((s, l) => s + displayedReforecastNet(l).value, 0)),
     realized: r1(active.reduce((s, l) => s + realizedSavings(l), 0)),
   };

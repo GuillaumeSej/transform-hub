@@ -44,6 +44,9 @@ import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types
 
 type LeverRow = Lever & {
   realized: number;
+  /** Économie nette RÉACTUALISÉE (`engine.displayedReforecastNet`) — montant affiché dans la
+   *  colonne « Économies nettes réactualisées » (décision audit C2 : plus le net courant). */
+  reforecastNet: number;
   /** « Avancement » — `engine.leverProgressPct(l)` (plan d'action ; sans action, selon le
    *  stade), même valeur que Kanban, arborescence, fiche et export. */
   progressPct: number;
@@ -539,6 +542,7 @@ export function LeversPagePerformance() {
       risk: riskAssessment.level,
       riskReason: riskAssessment.reason,
       realized: engine.realizedSavings(l),
+      reforecastNet: engine.displayedReforecastNet(l).value,
       progressPct: engine.leverProgressPct(l),
       wsName: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       statusLabel: lifecycle.label(l.status),
@@ -634,13 +638,13 @@ export function LeversPagePerformance() {
     { key: "entity", label: t("leverForm.entity"), mobile: "hide", width: "150px" },
     // ── Financier ──
     {
-      key: "netSavings",
-      label: t("levers.column.netSavings", "Économies nettes (€M)"),
+      key: "reforecastNet",
+      label: t("levers.column.reforecastNet", "Économies nettes réactualisées (€M)"),
       align: "right",
       type: "number",
       mobile: "secondary",
       width: "110px",
-      render: (r) => r.netSavings.toFixed(1),
+      render: (r) => r.reforecastNet.toFixed(1),
     },
     {
       key: "realized",

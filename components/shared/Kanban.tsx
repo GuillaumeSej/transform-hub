@@ -5,7 +5,12 @@ import { Tooltip } from "@/components/shared/Tooltip";
 import { Avatar } from "@/components/shared/Avatar";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { DeclaredProgressBadge } from "@/components/shared/DeclaredProgressBadge";
-import { leverProgressPct, workstreamProgressPct, fmtCurr } from "@/lib/engine";
+import {
+  displayedReforecastNet,
+  leverProgressPct,
+  workstreamProgressPct,
+  fmtCurr,
+} from "@/lib/engine";
 import { STATUS_CYCLE, STATUS_LABEL } from "@/lib/status-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Lever, LeverStatus, Workstream } from "@/types";
@@ -68,7 +73,7 @@ function StatusColumns({
                   </Tooltip>
                   <Tooltip text={t("shared.kanban.tip.amount", "Gain net réactualisé")}>
                     <span className="text-[12.5px] font-bold text-primary">
-                      {fmtCurr(l.netSavings)}
+                      {fmtCurr(displayedReforecastNet(l).value)}
                     </span>
                   </Tooltip>
                 </div>
@@ -129,7 +134,9 @@ function CancelledLeversStrip({
               <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-semibold text-tertiary">
                 {l.code}
               </span>
-              <span className="text-[12.5px] font-bold text-tertiary">{fmtCurr(l.netSavings)}</span>
+              <span className="text-[12.5px] font-bold text-tertiary">
+                {fmtCurr(displayedReforecastNet(l).value)}
+              </span>
             </div>
           </button>
         ))}

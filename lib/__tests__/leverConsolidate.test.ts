@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  consolidateLeverFromActions,
-  leverJCurve,
-  resolveLockedPlanNet,
-} from "@/lib/leverConsolidate";
+import { consolidateLeverFromActions, leverJCurve } from "@/lib/leverConsolidate";
 import type { ActionImpact, Lever, LeverAction } from "@/types";
 
 const baseLever: Lever = {
@@ -268,43 +264,5 @@ describe("leverConsolidate — leverJCurve (Réalisé à date)", () => {
     const points = leverJCurve(lever, "2026-01-01", "2026-12-31");
     // 10 (saving) − 2 (OPEX rec) = 8 — CAPEX (3) et OPEX one-off (50) ignorés.
     expect(lastActual(points)).toBe(8);
-  });
-});
-
-// ─── resolveLockedPlanNet — "Plan initial (net)" (audit issue #5) ──────────
-
-describe("leverConsolidate — resolveLockedPlanNet", () => {
-  it("falls back to lever.netSavings when there is no lockedPlan and no action impacts", () => {
-    const lever: Lever = { ...baseLever, netSavings: 7, actions: [] };
-    expect(resolveLockedPlanNet(lever)).toEqual({ value: 7, isLocked: false });
-  });
-
-  it("uses the frozen lockedPlan.netSavings for a manual-entry lever (no action impacts)", () => {
-    const lever: Lever = {
-      ...baseLever,
-      netSavings: 7,
-      actions: [],
-      lockedPlan: { grossSavings: 9, netSavings: 5, opexOneOff: 0, opexRec: 0, capex: 0 },
-    };
-    expect(resolveLockedPlanNet(lever)).toEqual({ value: 5, isLocked: true });
-  });
-
-  it("prefers the consolidated action-impact total over a stale/incorrect lockedPlan snapshot", () => {
-    // Reproduit le bug audit : lockedPlan.netSavings figé à une valeur fausse (ex. le CAPEX
-    // capturé par erreur) alors que les lignes d'impact d'actions, elles, sont correctes.
-    const lever: Lever = {
-      ...baseLever,
-      actions: [
-        action({
-          impacts: [
-            impact({ id: "s1", type: "saving", amount: 20 }),
-            impact({ id: "c1", type: "cost", nature: "opex_rec", amount: 5 }),
-          ],
-        }),
-      ],
-      lockedPlan: { grossSavings: 3, netSavings: 3, opexOneOff: 0, opexRec: 0, capex: 3 },
-    };
-    // netSavings consolidé attendu = 20 - 5 (OPEX récurrent) = 15, pas les 3 figés par erreur.
-    expect(resolveLockedPlanNet(lever)).toEqual({ value: 15, isLocked: true });
   });
 });

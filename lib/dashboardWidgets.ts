@@ -205,13 +205,15 @@ export const DASHBOARD_WIDGET_REGISTRY: DashboardWidgetDef[] = [
     defaultCustomViews: [
       {
         id: "function-country",
-        metric: "realizedSavings",
+        // Métrique réellement calculée par ce widget (net réactualisé, `engine.marimekko2D`) — la
+        // déclaration « réalisées » ne correspondait pas au chiffre affiché (audit DASH-03).
+        metric: "netSavings",
         dimensions: ["function", "country"],
         label: "Département × Pays",
       },
       {
         id: "workstream-lever",
-        metric: "realizedSavings",
+        metric: "netSavings",
         dimensions: ["ws", "lever"],
         label: "Chantier × Levier",
       },

@@ -696,7 +696,8 @@ export function DashboardPagePerformance() {
     data.workstreams.length > 0 ? data.workstreams : stableWorkstreamsRef.current;
 
   const wsBars = stableWorkstreams.map((w) => {
-    const levers = filteredData.levers.filter((l) => l.ws === w.id && l.status !== "cancelled");
+    const wsAllLevers = filteredData.levers.filter((l) => l.ws === w.id);
+    const levers = wsAllLevers.filter((l) => l.status !== "cancelled");
     // Cible recalculée dynamiquement depuis les leviers (bottom-up), PAS `w.target` (champ de
     // configuration manuelle saisi dans l'admin/Configuration, qui peut devenir obsolète par
     // rapport aux leviers réels) — même source que le widget "Synthèse des Workstreams" juste en
@@ -706,8 +707,8 @@ export function DashboardPagePerformance() {
     // `netSavings` des leviers actifs (même classe de bug que celui déjà corrigé pour
     // `Program.target`, voir le commentaire plus bas sur l'ambition programme).
     // `target` = cible RÉACTUALISÉE (barre de fond) ; `planned` = planifié initial (contour
-    // pointillé) ; `realized` = réalisé. Leviers annulés exclus (voir `savingsTriple`).
-    const { planned, reforecast, realized } = savingsTriple(levers);
+    // pointillé, abandonnés compris — `plannedInitialNet`) ; `realized` = réalisé (actifs).
+    const { planned, reforecast, realized } = savingsTriple(wsAllLevers);
     return {
       label: w.name,
       target: reforecast,
@@ -725,16 +726,18 @@ export function DashboardPagePerformance() {
 
   /** Calcule les barres (target/realized/reforecast) groupées par une dimension du levier. */
   const dimensionBars = (getKey: (l: Lever) => string) => {
-    const active = filteredData.levers.filter((l) => l.status !== "cancelled");
+    // Groupes COMPLETS (abandonnés compris) pour le planifié initial ; réactualisé, réalisé et
+    // détail au survol restent sur les leviers actifs.
     const groups = new Map<string, Lever[]>();
-    active.forEach((l) => {
+    filteredData.levers.forEach((l) => {
       const key = getKey(l) || "—";
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(l);
     });
     return Array.from(groups.entries())
-      .map(([key, levers]) => {
-        const { planned, reforecast, realized } = savingsTriple(levers);
+      .map(([key, groupLevers]) => {
+        const { planned, reforecast, realized } = savingsTriple(groupLevers);
+        const levers = groupLevers.filter((l) => l.status !== "cancelled");
         return {
           label: key,
           target: reforecast,
@@ -761,19 +764,19 @@ export function DashboardPagePerformance() {
   // leviers actifs rattachés au programme.
   const programTargetById = new Map<string, number>();
   const programPlannedById = new Map<string, number>();
-  visibleData.levers
-    .filter((l) => l.status !== "cancelled")
-    .forEach((l) => {
-      if (!l.programId) return;
-      programTargetById.set(
-        l.programId,
-        (programTargetById.get(l.programId) ?? 0) + engine.displayedReforecastNet(l).value
-      );
-      programPlannedById.set(
-        l.programId,
-        (programPlannedById.get(l.programId) ?? 0) + (l.lockedPlan?.netSavings ?? l.netSavings)
-      );
-    });
+  visibleData.levers.forEach((l) => {
+    if (!l.programId) return;
+    // Planifié initial : abandonnés compris (`plannedInitialNet`) ; cible réactualisée : actifs.
+    programPlannedById.set(
+      l.programId,
+      (programPlannedById.get(l.programId) ?? 0) + engine.displayedLockedPlanNet(l).value
+    );
+    if (l.status === "cancelled") return;
+    programTargetById.set(
+      l.programId,
+      (programTargetById.get(l.programId) ?? 0) + engine.displayedReforecastNet(l).value
+    );
+  });
   const programBars = [
     ...programs.map((p) => ({
       label: p.name,
@@ -1928,11 +1931,11 @@ export function DashboardPagePerformance() {
           icon={Banknote}
           hero
           className="max-[1100px]:col-span-2"
-          sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.target)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)} · ${summary.progressPct}%`}
+          sub={`${t("dashboard.kpi.target")} ${engine.fmtCurr(summary.plannedInitial)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastTarget)} · ${summary.progressPct}%`}
           barPct={summary.progressPct}
           barMarkerPct={
             summary.reforecastTarget > 0
-              ? Math.round((summary.target / summary.reforecastTarget) * 100)
+              ? Math.round((summary.plannedInitial / summary.reforecastTarget) * 100)
               : undefined
           }
           onClick={() => goToLevers({})}

@@ -329,11 +329,17 @@ describe("cancelled levers are excluded from every aggregate", () => {
     expect(engine.realizedFte(bad)).toBe(0);
     expect(engine.pnlImpactDetailed(d).reduce((s2, p) => s2 + p.plan, 0)).toBe(5);
   });
-  it("series, bridge, marimekko", () => {
+  it("series, bridge, marimekko (seul le planifié initial inclut les abandonnés)", () => {
     const series = engine.savingsSeries(d, "month", new Date("2026-12-31"));
-    expect(series[11].planned).toBe(5);
+    // Planifié initial : abandonnés compris (audit C2) ; leur perte est dans l'ajustement.
+    expect(series[11].planned).toBe(55);
     expect(series[11].reforecast).toBe(5);
-    expect(series[11].gap.cancelled).toBe(50); // mémo uniquement
+    expect(series[11].gap.cancelled).toBe(50);
+    expect(series[11].gap.adjustment).toBe(-50);
+    expect(engine.programSummary(d).plannedInitial).toBe(55);
+    // Même chiffre partout : KPI = cascade = courbe = somme des plans figés (plannedInitialNet).
+    expect(engine.savingsWaterfall(d).steps[0].value).toBe(55);
+    expect(engine.plannedInitialNet(d.levers)).toBe(55);
     expect(
       engine.marimekko2D(d, "function-country").reduce((s2, c) => s2 + c.totalSavings, 0)
     ).toBe(5);

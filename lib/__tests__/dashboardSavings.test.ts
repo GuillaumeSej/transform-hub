@@ -23,9 +23,9 @@ const lever = (o: Partial<Lever>): Lever =>
   }) as unknown as Lever;
 
 describe("savingsTriple", () => {
-  it("excludes cancelled levers and uses locked plan / reforecast", () => {
+  it("planifié initial = plan figé abandonnés COMPRIS ; réactualisé sans les abandonnés (audit C2)", () => {
     const t = savingsTriple([lever({}), lever({ id: "C", status: "cancelled" })]);
-    expect(t.planned).toBe(8);
+    expect(t.planned).toBe(16);
     expect(t.reforecast).toBe(12);
   });
 });

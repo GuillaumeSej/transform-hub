@@ -194,31 +194,6 @@ export function leverGrossRealizedToDate(lever: Lever): number {
   return Math.round(realizedGrossSavings(lever) * 100) / 100;
 }
 
-/** Valeur "Plan initial (net)" affichée pour un levier (audit issue #5 : sur certains leviers,
- *  ce chiffre ne correspondait pas à la somme des lignes d'impact des actions — parfois même
- *  seulement au montant CAPEX). Root cause : `leversLogic.ts::applyPlanLock` fige `lockedPlan`
- *  en copiant les champs bruts du levier (`grossSavings`/`netSavings`/…) au moment du passage à
- *  "qualified" — or pour un levier créé DÉJÀ piloté par un plan d'actions chiffré (import Excel,
- *  seed démo, création directe à un statut avancé), ces champs bruts n'ont pas forcément été
- *  synchronisés avec les impacts d'actions avant ce gel, ce qui fige alors un "Plan initial" faux
- *  et définitif (`updateLever` interdit ensuite toute correction de ces champs une fois figés).
- *  `leversLogic.ts::snapshot` a été corrigé pour figer les montants consolidés dès le PROCHAIN
- *  verrouillage — mais un levier déjà figé avec un snapshot historique incorrect (démo ou
- *  production existante) garde ce mauvais chiffre en base. Cette fonction corrige donc aussi
- *  l'AFFICHAGE : pour un levier piloté par actions, on préfère toujours la somme actuelle des
- *  lignes d'impact au snapshot figé, pour qu'ils ne puissent plus diverger — sans réécrire les
- *  données. `isLocked` reste vrai/faux selon la présence d'un `lockedPlan`, pour ne pas changer la
- *  sémantique visuelle "figé"/"non figé" affichée par `ProvisionalValue`. */
-export function resolveLockedPlanNet(lever: Lever): { value: number; isLocked: boolean } {
-  const consolidated = consolidateLeverFromActions(lever);
-  if (consolidated) {
-    return { value: consolidated.netSavings ?? 0, isLocked: !!lever.lockedPlan };
-  }
-  return lever.lockedPlan
-    ? { value: lever.lockedPlan.netSavings, isLocked: true }
-    : { value: lever.netSavings, isLocked: false };
-}
-
 /** Calcule le mois de payback (1er mois où le cumul plan ≥ 0 après avoir été négatif). */
 export function leverPayback(jcurve: JCurvePoint[]): string | null {
   let wasNegative = false;

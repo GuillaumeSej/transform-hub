@@ -50,11 +50,7 @@ import { ActionGantt } from "@/components/shared/charts/ActionGantt";
 import { ImpactTrajectoryChart } from "@/components/shared/charts/ImpactTrajectoryChart";
 import { ImpactsEditor } from "@/components/shared/ImpactsEditor";
 import { ActionWeightsEditor } from "@/components/shared/ActionWeightsEditor";
-import {
-  consolidateLeverFromActions,
-  leverGrossRealizedToDate,
-  resolveLockedPlanNet,
-} from "@/lib/leverConsolidate";
+import { consolidateLeverFromActions, leverGrossRealizedToDate } from "@/lib/leverConsolidate";
 import { mentionsHiring, reconcileLeverMovements } from "@/lib/leverMovementReconciliation";
 import { fteEffect } from "@/lib/hrEngine";
 import type { ActionStatus, Company, LeverAction, Program } from "@/types";
@@ -257,11 +253,11 @@ export function LeverDetailClientPerformance() {
     ? leverGrossRealizedToDate(lever)
     : engine.realizedGrossSavings(lever);
   const realFte = engine.realizedFte(lever);
-  // "Plan initial (net)" — corrigé pour toujours correspondre à la somme des lignes d'impact des
-  // actions quand le levier en a (audit issue #5, voir lib/leverConsolidate.ts::resolveLockedPlanNet
-  // pour le détail du root cause) : engine.displayedLockedPlanNet(lever) reste utilisé ailleurs
-  // (dashboard, etc.) et n'est pas modifié ici.
-  const lockedPlanDisplay = resolveLockedPlanNet(lever);
+  // "Plan initial (net, figé)" — le snapshot réellement figé au passage « Validé »
+  // (`engine.displayedLockedPlanNet`), même valeur que le dashboard, la cascade et la Finance
+  // (décision audit 2026-09-24, C2). Avant, la fiche affichait la somme COURANTE des impacts sous
+  // ce libellé « figé » : le chiffre bougeait à chaque modification et différait des autres écrans.
+  const lockedPlanDisplay = engine.displayedLockedPlanNet(lever);
   const reforecastDisplay = engine.displayedReforecastNet(lever);
   // Réconciliation ETP levier ↔ mouvements RH (audit issues #1, #2, #6) — voir
   // lib/leverMovementReconciliation.ts. `realFte` sert de référence "Réalisé à date (ETP)" pour

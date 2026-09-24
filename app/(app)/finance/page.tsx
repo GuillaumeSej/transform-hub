@@ -132,8 +132,12 @@ export default function FinancePage() {
     { namespace: "finance" }
   );
 
-  const filteredLevers = useMemo(() => {
-    let levers = data.levers.filter((l) => l.status !== "cancelled");
+  // Leviers filtrés par la barre, ABANDONNÉS COMPRIS : le tableau par niveau financier en a besoin
+  // pour sa colonne « Annulé » et pour le « Planifié initial » (qui les inclut, voir
+  // `engine.plannedInitialNet`) — avant, ils étaient retirés ici et la colonne « Annulé » valait
+  // toujours 0. Les autres widgets de la page restent sur les seuls leviers actifs.
+  const filteredLeversWithCancelled = useMemo(() => {
+    let levers = data.levers;
     Object.entries(financeFilters).forEach(([key, value]) => {
       if (!value || value.length === 0) return;
       const def = filterDefs.find((d) => d.key === key);
@@ -141,8 +145,16 @@ export default function FinancePage() {
     });
     return levers;
   }, [data, financeFilters, filterDefs]);
+  const filteredLevers = useMemo(
+    () => filteredLeversWithCancelled.filter((l) => l.status !== "cancelled"),
+    [filteredLeversWithCancelled]
+  );
 
   const filteredData = useMemo(() => ({ ...data, levers: filteredLevers }), [data, filteredLevers]);
+  const hierarchyTableData = useMemo(
+    () => ({ ...data, levers: filteredLeversWithCancelled }),
+    [data, filteredLeversWithCancelled]
+  );
 
   // ── Widget "Impact P&L par compte" (déplacé depuis le dashboard Performance) ──
   // Filtres géographiques (cascade Région → Pays → Entité).
@@ -295,7 +307,7 @@ export default function FinancePage() {
       </div>
 
       <FinanceHierarchyTable
-        data={filteredData}
+        data={hierarchyTableData}
         hierarchyLevels={hierarchyLevels}
         hierarchyNodes={hierarchyNodes}
       />
