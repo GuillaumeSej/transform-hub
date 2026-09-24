@@ -227,6 +227,9 @@ export function LeversPagePerformance() {
     },
     [data.workstreams, user, clearance]
   );
+  // Porteur / sponsor : ne voit qu'une partie des leviers de chaque chantier — pas de badge
+  // d'avancement de chantier (il serait calculé sur ce seul sous-ensemble).
+  const hasScopedPerimeter = !!user && (hasRole(user, "lever") || hasRole(user, "sponsor"));
   const scopedLevers = useMemo(
     () => data.levers.filter(isInUserScope),
     [data.levers, isInUserScope]
@@ -944,6 +947,7 @@ export function LeversPagePerformance() {
         <Kanban
           levers={filteredLevers}
           progressLevers={programScopedLevers}
+          showWorkstreamProgress={!hasScopedPerimeter}
           workstreams={data.workstreams}
           onCardClick={(id) => router.push(`/levers/detail?id=${id}`)}
           stageOrder={lifecycle.activeCycle}
@@ -953,6 +957,7 @@ export function LeversPagePerformance() {
         <LeverLibraryTree
           levers={filteredLevers}
           progressLevers={programScopedLevers}
+          showWorkstreamProgress={!hasScopedPerimeter}
           workstreams={data.workstreams}
           onTypeClick={(type) => {
             // Bascule sur la vue Table filtrée par Type (`f_type`, voir `filterDefs` ci-dessus) —

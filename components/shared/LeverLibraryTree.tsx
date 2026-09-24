@@ -69,6 +69,7 @@ export function LeverLibraryTree({
   onTypeClick,
   onLeverClick,
   onActionClick,
+  showWorkstreamProgress = true,
 }: {
   /** Leviers à afficher (déjà filtrés/scopés par l'appelant, même ensemble que les vues Table et
    *  Kanban de cette page). */
@@ -77,6 +78,10 @@ export function LeverLibraryTree({
    *  — voir le même paramètre sur `components/shared/Kanban.tsx` pour la raison de le distinguer
    *  de `levers`. */
   progressLevers: Lever[];
+  /** false = pas de badge d'avancement de chantier : profils à périmètre restreint (porteur,
+   *  sponsor) — calculé sur leurs seuls leviers, il différait de l'avancement réel du chantier vu
+   *  par le CTO (décision audit 2026-09-24). */
+  showWorkstreamProgress?: boolean;
   workstreams: Workstream[];
   onTypeClick: (type: string) => void;
   onLeverClick: (leverId: string) => void;
@@ -174,7 +179,7 @@ export function LeverLibraryTree({
                   emptyLabel={t("levers.tree.wsLeadEmpty", "Responsable de chantier non renseigné")}
                 />
               )}
-              <Progress pct={wsPct} />
+              {showWorkstreamProgress && <Progress pct={wsPct} />}
             </button>
 
             {wsOpen && (

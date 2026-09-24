@@ -167,6 +167,7 @@ export function Kanban({
    *  d'un workstream doit refléter TOUS ses leviers, pas seulement ceux qui matchent le
    *  filtre courant. Défaut = `levers`, pour les appelants qui n'ont qu'un seul ensemble sous la main. */
   progressLevers = levers,
+  showWorkstreamProgress = true,
 }: {
   levers: Lever[];
   onCardClick: (id: string) => void;
@@ -174,6 +175,10 @@ export function Kanban({
   stageLabel?: (status: LeverStatus) => string;
   workstreams?: Workstream[];
   progressLevers?: Lever[];
+  /** false = pas de badge d'avancement de chantier : profils à périmètre restreint (porteur,
+   *  sponsor) — calculé sur leurs seuls leviers, il différait de l'avancement réel du chantier vu
+   *  par le CTO (décision audit 2026-09-24). */
+  showWorkstreamProgress?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -224,7 +229,9 @@ export function Kanban({
               <span className="rounded-full border border-border bg-white px-1.5 py-px text-[10px] font-semibold text-tertiary">
                 {activeWsLevers.length}
               </span>
-              <DeclaredProgressBadge pct={declaredPct} className="ml-auto" />
+              {showWorkstreamProgress && (
+                <DeclaredProgressBadge pct={declaredPct} className="ml-auto" />
+              )}
             </div>
             <div className="p-3">
               {activeWsLevers.length === 0 ? (
