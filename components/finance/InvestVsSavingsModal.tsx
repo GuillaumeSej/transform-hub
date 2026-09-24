@@ -6,6 +6,7 @@ import { Modal } from "@/components/shared/Modal";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { InvestVsSavingsLeverRow } from "@/lib/financeCosts";
 import type { Workstream } from "@/types";
+import { onActivateKey } from "@/lib/a11y";
 
 /** Pop-up de détail d'une période du graphique "Coût d'investissement vs Savings" : par chantier
  *  puis par levier — gains bruts, OPEX, CAPEX, économie nette (négative en rouge). */
@@ -98,7 +99,11 @@ export function InvestVsSavingsLeverTable({
                       <tr
                         key={r.leverId}
                         className="cursor-pointer border-b border-border/50 hover:bg-neutral-50"
+                        tabIndex={0}
                         onClick={() => router.push(`/levers/detail?id=${r.leverId}`)}
+                        onKeyDown={onActivateKey(() =>
+                          router.push(`/levers/detail?id=${r.leverId}`)
+                        )}
                       >
                         <td className="px-2 py-1.5 pl-5 text-secondary">
                           {r.leverCode} — {r.leverName}

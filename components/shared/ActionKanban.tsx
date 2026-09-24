@@ -132,7 +132,7 @@ export function ActionKanban({
   return (
     <div>
       {hasBlockingDependency && (
-        <div className="mb-3 flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800">
+        <div className="mb-3 flex items-center gap-1.5 rounded-md border border-rag-amber/40 bg-rag-amber-light px-2.5 py-1.5 text-[11px] font-semibold text-rag-amber">
           <Lock size={12} className="shrink-0" aria-hidden />
           {t("shared.actionKanban.blockingDependency", "Dépendance bloquante sur ce levier")}
         </div>

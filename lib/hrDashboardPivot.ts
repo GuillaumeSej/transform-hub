@@ -17,7 +17,8 @@
 
 import type { MovementType, WorkforceMovement } from "@/types";
 import type { PivotRow } from "@/lib/dashboardPivot";
-import { fteEffect } from "@/lib/hrEngine";
+import { fteEffect, hrPeriodKey, hrPeriodLabel } from "@/lib/hrEngine";
+import { movementSalarySavings } from "@/lib/hrProgramSummary";
 
 export type { PivotRow };
 
@@ -49,10 +50,12 @@ export const HR_METRIC_REGISTRY: HrMetricDef[] = [
     getValue: (m) => fteEffect(m),
   },
   {
+    // Définition unique (M7) : économies NETTES de masse salariale = −salaryImpact (un
+    // recrutement compte négativement) — identique au KPI et au graphique d'économies.
     key: "salarySavings",
-    label: "Économies salariales (salaire chargé)",
+    label: "Économies nettes de masse salariale",
     aggregation: "sum",
-    getValue: (m) => m.savings,
+    getValue: (m) => movementSalarySavings(m, "actual"),
   },
   {
     key: "socialCost",
@@ -64,7 +67,7 @@ export const HR_METRIC_REGISTRY: HrMetricDef[] = [
     key: "netEconomy",
     label: "Économie nette (savings − ENR)",
     aggregation: "sum",
-    getValue: (m) => m.savings - m.cost,
+    getValue: (m) => movementSalarySavings(m, "actual") - m.cost,
   },
   {
     key: "netFirstYearImpact",
@@ -89,44 +92,45 @@ export function getHrMetricDef(key: string): HrMetricDef | undefined {
 export interface HrDimensionDef {
   key: string;
   label: string;
+  /** Clé de regroupement STABLE (indépendante de la langue). */
   getValue: (m: WorkforceMovement) => string;
+  /** Libellé d'affichage localisé d'un groupe — absent = la clé elle-même. */
+  getLabel?: (m: WorkforceMovement, locale?: string) => string;
 }
 
 const FALLBACK_LABEL = "Non renseigné";
 const NOT_APPLICABLE = "Non applicable";
 
-const MONTH_LABELS = [
-  "Jan",
-  "Fév",
-  "Mar",
-  "Avr",
-  "Mai",
-  "Juin",
-  "Juil",
-  "Août",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Déc",
-];
-
-/** Libellé "<mois> <année>" à partir d'une date ISO (YYYY-MM-DD) — retourne le libellé de repli si
- *  la date est absente ou mal formée, plutôt que d'afficher "undefined". */
-function monthLabel(date: string | null | undefined): string {
-  if (!date) return FALLBACK_LABEL;
+/** Décompose une date ISO (YYYY-MM-DD) en année + mois (0-11) — `null` si absente/mal formée. */
+function yearMonth(date: string | null | undefined): { year: number; month: number } | null {
+  if (!date) return null;
   const month = Number(date.slice(5, 7)) - 1;
-  const year = date.slice(0, 4);
-  if (Number.isNaN(month) || month < 0 || month > 11 || !year) return FALLBACK_LABEL;
-  return `${MONTH_LABELS[month]} ${year}`;
+  const year = Number(date.slice(0, 4));
+  if (!Number.isFinite(year) || Number.isNaN(month) || month < 0 || month > 11) return null;
+  return { year, month };
 }
 
-/** Libellé "T<n> <année>" à partir d'une date ISO — même repli que `monthLabel`. */
-function quarterLabel(date: string | null | undefined): string {
-  if (!date) return FALLBACK_LABEL;
-  const month = Number(date.slice(5, 7)) - 1;
-  const year = date.slice(0, 4);
-  if (Number.isNaN(month) || month < 0 || month > 11 || !year) return FALLBACK_LABEL;
-  return `T${Math.floor(month / 3) + 1} ${year}`;
+/** Clé stable "YYYY-MM" (mois) / "YYYY-Qn" (trimestre) d'une date — clé de regroupement et de tri,
+ *  séparée du libellé affiché (m15). Repli sur "Non renseigné" si la date est invalide. */
+function periodKey(date: string | null | undefined, granularity: "month" | "quarter"): string {
+  const ym = yearMonth(date);
+  if (!ym) return FALLBACK_LABEL;
+  return granularity === "month"
+    ? hrPeriodKey(ym.year, ym.month, "month")
+    : hrPeriodKey(ym.year, Math.floor(ym.month / 3), "quarter");
+}
+
+/** Libellé localisé ("mars 2026", "Mar 2026", "T1 2026", "Q1 2026") d'une date. */
+function periodLabel(
+  date: string | null | undefined,
+  granularity: "month" | "quarter",
+  locale?: string
+): string {
+  const ym = yearMonth(date);
+  if (!ym) return FALLBACK_LABEL;
+  return granularity === "month"
+    ? hrPeriodLabel(ym.year, ym.month, "month", locale)
+    : hrPeriodLabel(ym.year, Math.floor(ym.month / 3), "quarter", locale);
 }
 
 /** Dimensions RH sélectionnables — mécanisme (type de mouvement), département source/destination,
@@ -147,11 +151,17 @@ export const HR_DIMENSION_REGISTRY: HrDimensionDef[] = [
   { key: "hrOwner", label: "Responsable RH", getValue: (m) => m.hrOwner || FALLBACK_LABEL },
   { key: "status", label: "Statut", getValue: (m) => m.status },
   { key: "pse", label: "PSE", getValue: (m) => (m.inPSE ? "Oui" : "Non") },
-  { key: "plannedMonth", label: "Mois (date prévue)", getValue: (m) => monthLabel(m.plannedDate) },
+  {
+    key: "plannedMonth",
+    label: "Mois (date prévue)",
+    getValue: (m) => periodKey(m.plannedDate, "month"),
+    getLabel: (m, locale) => periodLabel(m.plannedDate, "month", locale),
+  },
   {
     key: "plannedQuarter",
     label: "Trimestre (date prévue)",
-    getValue: (m) => quarterLabel(m.plannedDate),
+    getValue: (m) => periodKey(m.plannedDate, "quarter"),
+    getLabel: (m, locale) => periodLabel(m.plannedDate, "quarter", locale),
   },
 ];
 
@@ -181,28 +191,35 @@ function aggregate(movements: WorkforceMovement[], metric: HrMetricDef): number 
 export function pivotWorkforceByDimension(
   movements: WorkforceMovement[],
   metricKey: string,
-  dimensionKey: string
+  dimensionKey: string,
+  options: { locale?: string } = {}
 ): PivotRow[] {
   const metric = getHrMetricDef(metricKey);
   const dim = getHrDimensionDef(dimensionKey);
   if (!metric || !dim) return [];
 
-  const groups = new Map<string, WorkforceMovement[]>();
+  const groups = new Map<string, { label: string; movements: WorkforceMovement[] }>();
   for (const m of movements) {
     const raw = dim.getValue(m);
     const key = raw && raw.trim() !== "" ? raw : FALLBACK_LABEL;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(m);
+    if (!groups.has(key)) {
+      const label = key === FALLBACK_LABEL ? key : (dim.getLabel?.(m, options.locale) ?? key);
+      groups.set(key, { label, movements: [] });
+    }
+    groups.get(key)!.movements.push(m);
   }
 
-  return Array.from(groups.entries())
-    .map(([key, group]) => ({
-      key,
-      label: key,
-      value: aggregate(group, metric),
-      count: group.length,
-    }))
-    .sort((a, b) => b.value - a.value);
+  const rows = Array.from(groups.entries()).map(([key, group]) => ({
+    key,
+    label: group.label,
+    value: aggregate(group.movements, metric),
+    count: group.movements.length,
+  }));
+  // Dimensions temporelles : ordre chronologique (clé ISO) plutôt que par valeur.
+  if (dimensionKey === "plannedMonth" || dimensionKey === "plannedQuarter") {
+    return rows.sort((a, b) => a.key.localeCompare(b.key));
+  }
+  return rows.sort((a, b) => b.value - a.value);
 }
 
 /** Utilitaire d'affichage : liste des 5 types Gooduelle (Août 2026). Non utilisé par le moteur

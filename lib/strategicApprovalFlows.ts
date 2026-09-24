@@ -8,6 +8,8 @@
  */
 import { requestMilestoneApproval as requestMilestoneApprovalLogic } from "@/lib/axisLogic";
 import {
+  findPeriodCollision,
+  MeasurementPeriodCollisionError,
   submitIndicatorValue,
   type IndicatorValueInput,
   type MeasurementEditPatch,
@@ -104,13 +106,20 @@ export function approverLabel(
   return a.approverUsername ?? a.approverUsernames[0] ?? "";
 }
 
-/** Saisie d'une valeur KPI (KPI et KPI marché) : publiée directement, ou soumise à validation. */
+/** Saisie d'une valeur KPI (KPI et KPI marché) : publiée directement, ou soumise à validation.
+ *  `existing` (mesures connues de l'indicateur) : une période DÉJÀ renseignée lève
+ *  `MeasurementPeriodCollisionError` AVANT toute écriture/demande — l'appelant propose alors de
+ *  remplacer la mesure existante (correction routée, `editKpiValueFlow`) ou refuse. */
 export async function submitKpiValueFlow<M>(
   gate: ApprovalGate | null | undefined,
   indicator: Pick<Indicator, "id" | "name">,
   input: IndicatorValueInput,
-  addMeasurement: (input: IndicatorValueInput) => Promise<M>
+  addMeasurement: (input: IndicatorValueInput) => Promise<M>,
+  existing?: Pick<IndicatorMeasurement, "id" | "indicatorId" | "period">[]
 ): Promise<FlowOutcome> {
+  if (existing && findPeriodCollision(existing, indicator.id, input.period)) {
+    throw new MeasurementPeriodCollisionError(input.period.trim());
+  }
   const target: StrategicApprovalTarget = {
     type: "indicateur",
     id: indicator.id,

@@ -6,7 +6,9 @@ import type {
   Lever,
   Workstream,
 } from "@/types";
-import { MONTH_LABELS, leverImpactsOf } from "@/lib/engine";
+import { MONTH_LABELS, isInvestCostEngaged, leverImpactsOf } from "@/lib/engine";
+import { impactDatesOf } from "@/lib/impactKinds";
+import { parseLocalDate } from "@/lib/impactStatus";
 
 /**
  * Sélecteurs purs pour les graphiques de suivi des coûts du module Finance
@@ -98,46 +100,32 @@ export function isInvestNature(nature: ActionImpact["nature"]): boolean {
   return nature !== "opex_rec";
 }
 
-/** Date de référence d'un coût pour le bucketing temporel :
- *  - CAPEX one-shot : `capexDeploymentDate` (date de comptabilisation).
- *  - CAPEX lissé : `capexStartDate` (début de la période de lissage) — la fin est
- *    `capexDeploymentDate`, voir `bucketCostsByPeriod` qui répartit le montant entre les deux.
- *  - OPEX (récurrent ou one-off), ou CAPEX sans date renseignée : date de début de l'action, seule
- *    date toujours disponible sur une ligne de coût. */
+/** Date de référence d'un coût pour le bucketing temporel — la date PROPRE de la ligne (audit M6 ;
+ *  avant, tout OPEX était daté au début du levier) :
+ *  - CAPEX lissé : `capexStartDate` (début de la période de lissage — la fin est
+ *    `capexDeploymentDate`, voir `attributeCostRowsToPeriods` qui répartit le montant entre les deux) ;
+ *  - sinon (CAPEX one-shot, OPEX one-off/récurrent) : date de début de la ligne
+ *    (`capexDeploymentDate ?? capexStartDate`, voir `impactDatesOf`) ;
+ *  - repli : date de début du levier. */
 function referenceDate(impact: ActionImpact, lever: Lever): string {
-  if (impact.nature === "capex") {
-    if (impact.capexAllocationMode === "smoothed" && impact.capexStartDate) {
-      return impact.capexStartDate;
-    }
-    if (impact.capexDeploymentDate) return impact.capexDeploymentDate;
+  if (
+    impact.nature === "capex" &&
+    impact.capexAllocationMode === "smoothed" &&
+    impact.capexStartDate
+  ) {
+    return impact.capexStartDate;
   }
-  return lever.start;
+  return impact.capexDeploymentDate ?? impact.capexStartDate ?? lever.start;
 }
 
-/** Date de référence d'un gain : `gainDate` (encaissement réel) si renseignée, sinon date de
- *  début de l'action qui le porte — même repli que `referenceDate` pour les coûts. */
-function savingReferenceDate(impact: ActionImpact, lever: Lever): string {
-  return impact.gainDate ?? lever.start;
-}
-
-/** Un coût est "déjà engagé" si sa date de référence (voir `referenceDate`) est passée, ou —
- *  pour un OPEX sans date CAPEX dédiée — si l'action qui le porte est en cours ou terminée. Un
- *  levier/action encore "à faire" avec une date de début future reste "à venir". */
+/** Un coût est "déjà engagé" à `today` — règle DATÉE unique partagée avec le KPI du dashboard
+ *  (`engine.isInvestCostEngaged`, audit M8) : sa date propre est passée ; sans date, le levier est
+ *  « Réalisé », ou « Exécuté » et démarré. */
 export function isCostEngaged(
   row: Pick<CostImpactRow, "impact" | "lever">,
   today: Date = new Date()
 ): boolean {
-  const { impact, lever } = row;
-  if (impact.nature === "capex") {
-    const refDate =
-      impact.capexAllocationMode === "smoothed"
-        ? impact.capexStartDate
-        : impact.capexDeploymentDate;
-    if (refDate) return new Date(refDate).getTime() <= today.getTime();
-  }
-  if (lever.status === "delivered") return true;
-  if (lever.status === "in_progress") return new Date(lever.start).getTime() <= today.getTime();
-  return false; // idée / qualifié / validé : pas encore engagé
+  return isInvestCostEngaged(row.impact, row.lever, today);
 }
 
 /** Répartition Engagé / À venir / Total (€M) des coûts "Invest" (CAPEX + OPEX one-off,
@@ -215,6 +203,17 @@ function periodLabel(sortKey: string, granularity: FinanceGranularity): string {
   return granularity === "quarter" ? `Q${part} ${year}` : `${MONTH_LABELS[Number(part)]} ${year}`;
 }
 
+/** Index de mois absolu (année × 12 + mois) d'une date ISO — `NaN` si invalide. */
+function monthIndexOf(date: string | undefined): number {
+  if (!date) return NaN;
+  const d = parseLocalDate(date);
+  return Number.isNaN(d.getTime()) ? NaN : d.getFullYear() * 12 + d.getMonth();
+}
+
+function periodKeyOfMonthIndex(mi: number, granularity: FinanceGranularity): string {
+  return periodSortKey(new Date(Math.floor(mi / 12), mi % 12, 1), granularity);
+}
+
 /** Liste ordonnée des clés de période (mois) couvrant [start, end] inclus — sert à répartir un
  *  CAPEX lissé au prorata sur sa période de lissage. */
 function monthKeysBetween(start: Date, end: Date): string[] {
@@ -249,8 +248,8 @@ function attributeCostRowsToPeriods(
       impact.capexStartDate &&
       impact.capexDeploymentDate
     ) {
-      const start = new Date(impact.capexStartDate);
-      const end = new Date(impact.capexDeploymentDate);
+      const start = parseLocalDate(impact.capexStartDate);
+      const end = parseLocalDate(impact.capexDeploymentDate);
       const months = monthKeysBetween(start <= end ? start : end, start <= end ? end : start);
       const perMonth = impact.amount / months.length;
       for (const monthKey of months) {
@@ -260,7 +259,7 @@ function attributeCostRowsToPeriods(
       }
       continue;
     }
-    const ref = new Date(referenceDate(impact, lever));
+    const ref = parseLocalDate(referenceDate(impact, lever));
     out.push({ ...row, periodAmount: impact.amount, periodKey: periodSortKey(ref, granularity) });
   }
   return out;
@@ -331,38 +330,147 @@ export function costRowsForPeriod(
     .map((row) => ({ lever: row.lever, amount: row.periodAmount }));
 }
 
-/** Coûts OPEX récurrents (run-rate annuel) par période, à partir de la date de début de l'action
- *  qui les porte — alimente `bucketInvestVsSavingsByPeriod` (champ `opexRecStarted`). Simplification
- *  assumée : un OPEX récurrent n'a pas de date de fin dans le modèle actuel (voir ActionImpact),
- *  donc chaque ligne est affichée une seule fois, sur la période de démarrage de son action — pas
- *  répétée automatiquement sur les périodes suivantes. */
+// ─── Coût d'investissement vs Savings : flux par levier et par période ────────────────────────
+
+/** Flux d'UN levier sur UNE période du graphique « Coût d'investissement vs Savings ». */
+type InvestVsSavingsEntry = {
+  lever: Lever;
+  periodKey: string;
+  grossSavings: number;
+  opexRec: number;
+  capex: number;
+  opexOneOff: number;
+};
+
+/** Ligne RÉCURRENTE (montant annualisé) avec sa période d'effet [début, fin] en index de mois. */
+type RecurringFlow = {
+  lever: Lever;
+  kind: "gain" | "opexRec";
+  annual: number;
+  fromMi: number;
+  toMi: number; // Infinity = sans date de fin
+};
+
+/** Lignes récurrentes des leviers actifs, avec la même assiette que `engine.leverImpactTotals`
+ *  (audit M6 — les impacts ETP étaient ignorés) : gain annuel (hors one-off) et départ ETP →
+ *  gain ; OPEX récurrent et recrutement ETP → OPEX récurrent. Date de début PROPRE de la ligne
+ *  (gain : `gainDate`, sinon fin du levier — même repli que `engine.impactTrajectory` ; coût :
+ *  `capexDeploymentDate ?? capexStartDate`, sinon début du levier), fin = `endDate` si renseignée. */
+function recurringFlows(data: BeTrackData): RecurringFlow[] {
+  const out: RecurringFlow[] = [];
+  for (const lever of data.levers) {
+    if (lever.status === "cancelled") continue;
+    for (const imp of leverImpactsOf(lever)) {
+      let kind: RecurringFlow["kind"] | null = null;
+      if (imp.type === "saving") kind = imp.gainRecurrence === "oneoff" ? null : "gain";
+      else if (imp.type === "fte") kind = imp.fteDirection === "hire" ? "opexRec" : "gain";
+      else if (imp.nature === "opex_rec") kind = "opexRec";
+      if (!kind || !imp.amount) continue;
+      const { start, end } = impactDatesOf(imp);
+      const fromMi = monthIndexOf(start ?? (kind === "gain" ? lever.end : lever.start));
+      if (!Number.isFinite(fromMi)) continue;
+      const endMi = monthIndexOf(end);
+      out.push({
+        lever,
+        kind,
+        annual: imp.amount,
+        fromMi,
+        toMi: Number.isFinite(endMi) ? Math.max(fromMi, endMi) : Infinity,
+      });
+    }
+  }
+  return out;
+}
+
+/** Tous les flux « Invest vs Savings » par levier et par période : coûts d'investissement (CAPEX,
+ *  lissage compris, et OPEX one-off) à leur date propre ; gains récurrents et OPEX récurrent en
+ *  RUN-RATE — 1/12 du montant annualisé chaque mois depuis leur date de début, jusqu'à leur date
+ *  de fin si renseignée (audit M6 : un gain annuel n'était compté qu'une fois, au trimestre de sa
+ *  date, ce qui faussait le cumul, le ROI et le délai de retour). Horizon : de la première date à
+ *  12 mois après la dernière date connue (au moins un an plein de run-rate) — toutes les périodes
+ *  de l'horizon sont présentes, même vides. Leviers annulés exclus. */
+function investVsSavingsEntries(
+  data: BeTrackData,
+  granularity: FinanceGranularity
+): { entries: InvestVsSavingsEntry[]; periodKeys: string[] } {
+  const investRows = attributeCostRowsToPeriods(
+    flattenCostImpacts(data).filter(({ impact }) => isInvestNature(impact.nature)),
+    "month"
+  );
+  const flows = recurringFlows(data);
+  const marks: number[] = [];
+  const monthKeyToIndex = (key: string) => {
+    const [y, m] = key.split("-").map(Number);
+    return y * 12 + m;
+  };
+  for (const r of investRows) marks.push(monthKeyToIndex(r.periodKey));
+  for (const f of flows) {
+    marks.push(f.fromMi);
+    if (Number.isFinite(f.toMi)) marks.push(f.toMi);
+  }
+  if (marks.length === 0) return { entries: [], periodKeys: [] };
+  const startMi = Math.min(...marks);
+  const endMi = Math.max(...marks) + 11;
+
+  const byKey = new Map<string, InvestVsSavingsEntry>();
+  const entryFor = (lever: Lever, periodKey: string) => {
+    const k = `${periodKey}|${lever.id}`;
+    let e = byKey.get(k);
+    if (!e) {
+      e = { lever, periodKey, grossSavings: 0, opexRec: 0, capex: 0, opexOneOff: 0 };
+      byKey.set(k, e);
+    }
+    return e;
+  };
+  for (const r of investRows) {
+    const mi = monthKeyToIndex(r.periodKey);
+    const e = entryFor(r.lever, periodKeyOfMonthIndex(mi, granularity));
+    if (r.impact.nature === "capex") e.capex += r.periodAmount;
+    else e.opexOneOff += r.periodAmount;
+  }
+  for (const f of flows) {
+    const last = Math.min(f.toMi, endMi);
+    for (let mi = f.fromMi; mi <= last; mi++) {
+      const e = entryFor(f.lever, periodKeyOfMonthIndex(mi, granularity));
+      if (f.kind === "gain") e.grossSavings += f.annual / 12;
+      else e.opexRec += f.annual / 12;
+    }
+  }
+  const periodKeys: string[] = [];
+  for (let mi = startMi; mi <= endMi; mi++) {
+    const key = periodKeyOfMonthIndex(mi, granularity);
+    if (periodKeys[periodKeys.length - 1] !== key) periodKeys.push(key);
+  }
+  return { entries: Array.from(byKey.values()), periodKeys };
+}
+
+/** Coûts OPEX récurrents (run-rate) par période : 1/12 du montant annualisé chaque mois depuis la
+ *  date de début de la ligne (recrutements ETP compris), jusqu'à sa date de fin si renseignée —
+ *  même attribution que `bucketInvestVsSavingsByPeriod` (champ `opexRecStarted`). */
 export function bucketRecurrentOpexByPeriod(
   data: BeTrackData,
   granularity: FinanceGranularity = "quarter"
 ): CostPeriodPoint[] {
-  const rows = flattenCostImpacts(data).filter(({ impact }) => impact.nature === "opex_rec");
+  const { entries } = investVsSavingsEntries(data, granularity);
   const byPeriod = new Map<string, number>();
-  for (const { impact, lever } of rows) {
-    const d = new Date(lever.start);
-    const key = periodSortKey(d, granularity);
-    byPeriod.set(key, (byPeriod.get(key) ?? 0) + impact.amount);
+  for (const e of entries) {
+    if (e.opexRec) byPeriod.set(e.periodKey, (byPeriod.get(e.periodKey) ?? 0) + e.opexRec);
   }
   return pointsFromPeriodAmounts(byPeriod);
 }
 
-/** Gains bruts (tous les impacts `type==="saving"`) par période — même principe non-répété que
- *  `bucketRecurrentOpexByPeriod` : chaque gain est affiché une seule fois, sur sa période de
- *  référence (`gainDate` si renseignée, sinon date de début de l'action). */
+/** Gains bruts récurrents (run-rate, départs ETP compris) par période — même attribution que
+ *  `bucketInvestVsSavingsByPeriod` (champ `grossSavings`). Gains one-off exclus. */
 export function bucketSavingsByPeriod(
   data: BeTrackData,
   granularity: FinanceGranularity = "quarter"
 ): CostPeriodPoint[] {
-  const rows = flattenSavingImpacts(data);
+  const { entries } = investVsSavingsEntries(data, granularity);
   const byPeriod = new Map<string, number>();
-  for (const { impact, lever } of rows) {
-    const d = new Date(savingReferenceDate(impact, lever));
-    const key = periodSortKey(d, granularity);
-    byPeriod.set(key, (byPeriod.get(key) ?? 0) + impact.amount);
+  for (const e of entries) {
+    if (e.grossSavings) {
+      byPeriod.set(e.periodKey, (byPeriod.get(e.periodKey) ?? 0) + e.grossSavings);
+    }
   }
   return pointsFromPeriodAmounts(byPeriod);
 }
@@ -373,72 +481,55 @@ export type InvestVsSavingsPoint = {
   /** Coûts d'investissement (CAPEX + OPEX one-off) de la période — même logique de lissage que
    *  `bucketCostsByPeriod`. */
   investCost: number;
-  /** Somme des gains (`type==="saving"`) dont la période de référence tombe sur cette période. */
+  /** Gains bruts récurrents de la période (run-rate : 1/12 du montant annualisé par mois actif). */
   grossSavings: number;
-  /** OPEX récurrent démarré sur cette période (voir `bucketRecurrentOpexByPeriod`). */
+  /** OPEX récurrent de la période (run-rate, recrutements ETP compris). Nom historique conservé. */
   opexRecStarted: number;
   /** `grossSavings - opexRecStarted`. */
   netSavings: number;
   /** Résultat net de LA période, capex inclus : `netSavings - investCost`. Négatif tant que
-   *  l'investissement domine (pas encore de gains, ou gains encore faibles), positif dès que les
-   *  gains nets dépassent l'investissement de la période — c'est la valeur affichée en barre
-   *  (positive/négative) du graphique. */
+   *  l'investissement domine, positif dès que les gains nets dépassent l'investissement de la
+   *  période — c'est la valeur affichée en barre (positive/négative) du graphique. */
   netPeriodResult: number;
-  /** Cumul de `netPeriodResult` depuis le début de la fenêtre affichée — la courbe de breakeven :
-   *  le point où elle repasse au-dessus de 0 est le mois/trimestre de retour sur investissement. */
+  /** Cumul de `netPeriodResult` depuis le début de l'horizon — la courbe de breakeven : le point où
+   *  elle repasse au-dessus de 0 est le mois/trimestre de retour sur investissement. */
   netCumulative: number;
 };
 
-/** Compare, période par période, les coûts d'investissement (CAPEX + OPEX one-off, intégrés à
- *  leurs dates réelles) aux gains — bruts et nets de l'OPEX récurrent démarré sur la même période.
- *  Alimente le graphique "Coût d'investissement vs Savings" : une barre signée par période
- *  (`netPeriodResult`, négative tant que l'investissement domine, positive dès que les gains nets
- *  le dépassent) + une courbe de cumul (`netCumulative`) qui matérialise le breakeven — le point où
- *  elle repasse au-dessus de 0. Tooltip détaillé au survol (décomposition investCost/grossSavings/
- *  opexRecStarted/netSavings). */
+/** Compare, période par période, les coûts d'investissement (CAPEX + OPEX one-off, à leurs dates
+ *  réelles) aux gains récurrents en run-rate, nets de l'OPEX récurrent en run-rate (voir
+ *  `investVsSavingsEntries`). Alimente le graphique "Coût d'investissement vs Savings" : une barre
+ *  signée par période (`netPeriodResult`) + une courbe de cumul (`netCumulative`) qui matérialise
+ *  le breakeven. Toutes les périodes de l'horizon sont présentes (cumul continu). */
 export function bucketInvestVsSavingsByPeriod(
   data: BeTrackData,
   granularity: FinanceGranularity = "quarter"
 ): InvestVsSavingsPoint[] {
-  const investPoints = bucketCostsByPeriod(data, granularity, isInvestNature);
-  const savingsPoints = bucketSavingsByPeriod(data, granularity);
-  const opexPoints = bucketRecurrentOpexByPeriod(data, granularity);
-
-  const byKey = new Map<
-    string,
-    { investCost: number; grossSavings: number; opexRecStarted: number }
-  >();
-  const ensure = (key: string) => {
-    let entry = byKey.get(key);
-    if (!entry) {
-      entry = { investCost: 0, grossSavings: 0, opexRecStarted: 0 };
-      byKey.set(key, entry);
-    }
-    return entry;
-  };
-  investPoints.forEach((p) => {
-    ensure(p.sortKey).investCost = p.delta;
-  });
-  savingsPoints.forEach((p) => {
-    ensure(p.sortKey).grossSavings = p.delta;
-  });
-  opexPoints.forEach((p) => {
-    ensure(p.sortKey).opexRecStarted = p.delta;
-  });
-
-  const sortedKeys = Array.from(byKey.keys()).sort();
+  const { entries, periodKeys } = investVsSavingsEntries(data, granularity);
+  const byKey = new Map<string, { investCost: number; grossSavings: number; opexRec: number }>();
+  for (const key of periodKeys) byKey.set(key, { investCost: 0, grossSavings: 0, opexRec: 0 });
+  for (const e of entries) {
+    const v = byKey.get(e.periodKey);
+    if (!v) continue;
+    v.investCost += e.capex + e.opexOneOff;
+    v.grossSavings += e.grossSavings;
+    v.opexRec += e.opexRec;
+  }
   let cumulative = 0;
-  return sortedKeys.map((key) => {
+  return periodKeys.map((key) => {
     const v = byKey.get(key)!;
-    const netSavings = round2(v.grossSavings - v.opexRecStarted);
-    const netPeriodResult = round2(netSavings - v.investCost);
+    const grossSavings = round2(v.grossSavings);
+    const opexRecStarted = round2(v.opexRec);
+    const investCost = round2(v.investCost);
+    const netSavings = round2(grossSavings - opexRecStarted);
+    const netPeriodResult = round2(netSavings - investCost);
     cumulative = round2(cumulative + netPeriodResult);
     return {
-      period: periodLabel(key, granularityHintFromKey(key)),
+      period: periodLabel(key, granularity),
       sortKey: key,
-      investCost: round2(v.investCost),
-      grossSavings: round2(v.grossSavings),
-      opexRecStarted: round2(v.opexRecStarted),
+      investCost,
+      grossSavings,
+      opexRecStarted,
       netSavings,
       netPeriodResult,
       netCumulative: cumulative,
@@ -505,8 +596,11 @@ export type HierarchyCostSlice = {
   rows: { lever: Lever; amount: number }[];
   /** `true` s'il existe des `HierarchyNode` enfants (niveau suivant, `parentId === node.id`) — le
    *  composant descend d'un niveau au clic si `true`, sinon ouvre directement la décomposition par
-   *  workstream. */
+   *  workstream. Toujours `false` pour une part « (direct) ». */
   hasChildren: boolean;
+  /** Part « (direct) » : coûts rattachés DIRECTEMENT au nœud parent du drill (feuille plus macro que
+   *  le niveau affiché). `node` est alors le parent lui-même — l'appelant suffixe son libellé. */
+  isDirect?: boolean;
 };
 
 function resolveAncestorAtLevel(
@@ -522,6 +616,20 @@ function resolveAncestorAtLevel(
   return null;
 }
 
+/** Le nœud `ancestorId` figure-t-il dans la chaîne de `leafId` (lui-même compris) ? */
+function chainContains(
+  leafId: string,
+  ancestorId: string,
+  byId: Map<string, HierarchyNode>
+): boolean {
+  let cur: HierarchyNode | null = byId.get(leafId) ?? null;
+  while (cur) {
+    if (cur.id === ancestorId) return true;
+    cur = cur.parentId ? (byId.get(cur.parentId) ?? null) : null;
+  }
+  return false;
+}
+
 /** Niveaux financiers configurés pour l'entreprise, triés par `order` croissant (le plus macro en
  *  premier) — vue affichée initialement par le donut "Répartition des coûts par centre de coût /
  *  P&L" (`levels[0]`). */
@@ -531,10 +639,15 @@ export function sortedHierarchyLevels(levels: HierarchyLevelDef[]): HierarchyLev
 
 /** Répartition des coûts (tous types de nature confondus — CAPEX, OPEX récurrent, one-off) par
  *  nœud d'arborescence financière, à un niveau (`levelKey`) et sous un parent donnés (`parentId`,
- *  `null` = niveau racine). Un levier sans `hierarchyLeafId`, ou dont la chaîne de `parentId` ne
- *  remonte pas jusqu'à `levelKey`, n'est compté dans aucune part (plutôt que dans une part
- *  "Non affecté" fictive — le produit demande un état vide clair si l'arborescence n'est pas
- *  configurée, pas une part fourre-tout). */
+ *  `null` = niveau racine). Rattachement d'une ligne : son propre `impact.hierarchyLeafId` en
+ *  priorité, sinon celui du levier (audit M9 — seul le levier était lu, alors que c'est l'impact
+ *  qui porte la maille fine depuis la suppression du rattachement par défaut du levier). Une ligne
+ *  sans rattachement résolvable n'est comptée dans aucune part (état vide clair plutôt qu'une part
+ *  fourre-tout).
+ *
+ *  Drill dans un nœud qui porte lui-même des coûts (ligne rattachée au parent, plus macro que le
+ *  niveau affiché) : ces coûts forment une part « (direct) » (`isDirect`), pour que la somme des
+ *  parts d'un niveau égale toujours la part cliquée au niveau au-dessus (ils disparaissaient). */
 export function costsByHierarchyNode(
   data: BeTrackData,
   hierarchyNodes: HierarchyNode[],
@@ -545,25 +658,43 @@ export function costsByHierarchyNode(
   const childrenParentIds = new Set(
     hierarchyNodes.filter((n) => n.parentId).map((n) => n.parentId as string)
   );
-  const rows = flattenCostImpacts(data);
+  const rows = flattenCostImpacts(data).map(({ lever, impact }) => ({
+    lever,
+    amount: impact.amount,
+    leafId: impact.hierarchyLeafId ?? lever.hierarchyLeafId,
+  }));
   const nodesAtLevel = hierarchyNodes.filter(
     (n) => n.levelKey === levelKey && (n.parentId ?? null) === (parentId ?? null)
   );
 
-  return nodesAtLevel
-    .map((node) => {
-      const nodeRows = rows
-        .filter(({ lever }) => {
-          if (!lever.hierarchyLeafId) return false;
-          const ancestor = resolveAncestorAtLevel(lever.hierarchyLeafId, levelKey, byId);
-          return ancestor?.id === node.id;
-        })
-        .map(({ lever, impact }) => ({ lever, amount: impact.amount }));
-      const amount = round2(nodeRows.reduce((sum, r) => sum + r.amount, 0));
-      return { node, amount, rows: nodeRows, hasChildren: childrenParentIds.has(node.id) };
-    })
-    .filter((slice) => slice.amount > 0)
-    .sort((a, b) => b.amount - a.amount);
+  const slices: HierarchyCostSlice[] = nodesAtLevel.map((node) => {
+    const nodeRows = rows
+      .filter(({ leafId }) => {
+        if (!leafId) return false;
+        return resolveAncestorAtLevel(leafId, levelKey, byId)?.id === node.id;
+      })
+      .map(({ lever, amount }) => ({ lever, amount }));
+    const amount = round2(nodeRows.reduce((sum, r) => sum + r.amount, 0));
+    return { node, amount, rows: nodeRows, hasChildren: childrenParentIds.has(node.id) };
+  });
+
+  const parent = parentId ? byId.get(parentId) : undefined;
+  if (parent) {
+    const directRows = rows
+      .filter(
+        ({ leafId }) =>
+          !!leafId &&
+          chainContains(leafId, parent.id, byId) &&
+          !resolveAncestorAtLevel(leafId, levelKey, byId)
+      )
+      .map(({ lever, amount }) => ({ lever, amount }));
+    const amount = round2(directRows.reduce((sum, r) => sum + r.amount, 0));
+    if (amount > 0) {
+      slices.push({ node: parent, amount, rows: directRows, hasChildren: false, isDirect: true });
+    }
+  }
+
+  return slices.filter((slice) => slice.amount > 0).sort((a, b) => b.amount - a.amount);
 }
 
 // ─── Détail d'une période du graphique "Coût d'investissement vs Savings" ─────────────────────
@@ -582,56 +713,37 @@ export type InvestVsSavingsLeverRow = {
 };
 
 /** Décomposition par levier d'une période du graphique "Coût d'investissement vs Savings" (mêmes
- *  règles d'attribution que `bucketInvestVsSavingsByPeriod`). */
+ *  flux que `bucketInvestVsSavingsByPeriod` — voir `investVsSavingsEntries`). `periodKey === null`
+ *  = tout l'horizon (vue « Total » du détail de calcul). */
 export function investVsSavingsRowsForPeriod(
   data: BeTrackData,
   granularity: FinanceGranularity,
-  periodKey: string
+  periodKey: string | null
 ): InvestVsSavingsLeverRow[] {
+  const { entries } = investVsSavingsEntries(data, granularity);
   const byLever = new Map<string, InvestVsSavingsLeverRow>();
-  const ensure = (lever: Lever) => {
-    let r = byLever.get(lever.id);
+  for (const e of entries) {
+    if (periodKey !== null && e.periodKey !== periodKey) continue;
+    let r = byLever.get(e.lever.id);
     if (!r) {
       r = {
-        leverId: lever.id,
-        leverCode: lever.code,
-        leverName: lever.name,
-        wsId: lever.ws,
+        leverId: e.lever.id,
+        leverCode: e.lever.code,
+        leverName: e.lever.name,
+        wsId: e.lever.ws,
         grossSavings: 0,
         opexRec: 0,
         opexOneOff: 0,
         capex: 0,
         net: 0,
       };
-      byLever.set(lever.id, r);
+      byLever.set(e.lever.id, r);
     }
-    return r;
-  };
-  for (const { impact, lever } of flattenSavingImpacts(data)) {
-    if (periodSortKey(new Date(savingReferenceDate(impact, lever)), granularity) === periodKey)
-      ensure(lever).grossSavings += impact.amount;
+    r.grossSavings += e.grossSavings;
+    r.opexRec += e.opexRec;
+    r.opexOneOff += e.opexOneOff;
+    r.capex += e.capex;
   }
-  for (const { impact, lever } of flattenCostImpacts(data)) {
-    if (
-      impact.nature === "opex_rec" &&
-      periodSortKey(new Date(lever.start), granularity) === periodKey
-    )
-      ensure(lever).opexRec += impact.amount;
-  }
-  for (const { lever, amount } of costRowsForPeriod(
-    data,
-    granularity,
-    periodKey,
-    (n) => n === "capex"
-  ))
-    ensure(lever).capex += amount;
-  for (const { lever, amount } of costRowsForPeriod(
-    data,
-    granularity,
-    periodKey,
-    (n) => n === "oneoff"
-  ))
-    ensure(lever).opexOneOff += amount;
   return Array.from(byLever.values())
     .map((r) => ({
       ...r,

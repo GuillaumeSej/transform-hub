@@ -6,6 +6,7 @@ import fr from "@/lib/i18n/dictionaries/fr";
 import en from "@/lib/i18n/dictionaries/en";
 import de from "@/lib/i18n/dictionaries/de";
 import es from "@/lib/i18n/dictionaries/es";
+import { setFormatLocale } from "@/lib/format";
 
 const LOCALE_KEY = "betrack_locale_v1";
 
@@ -68,6 +69,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
+
+  // Locale par défaut des helpers de formatage (lib/format.ts, `engine.fmtCurr`/`fmtInt`) —
+  // posée pendant le rendu (idempotent) pour que les enfants de ce même passage la voient déjà.
+  setFormatLocale(locale);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

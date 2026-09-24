@@ -1,12 +1,4 @@
-import type { Locale } from "@/lib/i18n/locales";
-
-/** Balise BCP 47 utilisée pour le formatage `Intl` de chaque langue de l'app. */
-const INTL_LOCALE: Record<Locale, string> = {
-  fr: "fr-FR",
-  en: "en-US",
-  de: "de-DE",
-  es: "es-ES",
-};
+import { INTL_LOCALE_TAGS as INTL_LOCALE, type Locale } from "@/lib/i18n/locales";
 
 /**
  * Montant COMPACT dans la devise du programme (ex. `7,7 M €` en fr, `€7.7M` en en) — pour les

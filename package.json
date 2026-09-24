@@ -11,8 +11,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "serve:export": "serve out -l 4173",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed",
     "format": "prettier --write .",
     "prepare": "husky",
     "create-admin": "node scripts/create-admin.js",

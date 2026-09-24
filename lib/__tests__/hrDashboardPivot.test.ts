@@ -125,15 +125,16 @@ describe("hrDashboardPivot — pivotWorkforceByDimension", () => {
   });
 
   it("salarySavings/socialCost/netEconomy/netFirstYearImpact aggregate the persisted fields", () => {
+    // Économies NETTES de masse salariale (−salaryImpact) : le recrutement M2 (+60 000) les réduit.
     const savingsRows = pivotWorkforceByDimension(movements, "salarySavings", "country");
-    expect(savingsRows.find((r) => r.key === "France")?.value).toBe(100000);
+    expect(savingsRows.find((r) => r.key === "France")?.value).toBe(100000 - 60000);
 
     const costRows = pivotWorkforceByDimension(movements, "socialCost", "country");
     expect(costRows.find((r) => r.key === "France")?.value).toBe(29000);
 
     const netEcoRows = pivotWorkforceByDimension(movements, "netEconomy", "country");
-    // France: (100000 - 20000) + (0 - 9000) = 71000
-    expect(netEcoRows.find((r) => r.key === "France")?.value).toBe(71000);
+    // France: (100000 - 20000) + (-60000 - 9000) = 11000
+    expect(netEcoRows.find((r) => r.key === "France")?.value).toBe(11000);
 
     const netRows = pivotWorkforceByDimension(movements, "netFirstYearImpact", "country");
     // France: (-100000 + 20000) + (60000 + 9000) = -80000 + 69000 = -11000
@@ -161,10 +162,18 @@ describe("hrDashboardPivot — pivotWorkforceByDimension", () => {
     expect(rows.some((r) => r.label === "IT")).toBe(true);
   });
 
-  it("plannedMonth / plannedQuarter derive readable labels from plannedDate", () => {
+  it("plannedMonth / plannedQuarter use stable keys and localized labels", () => {
     const monthRows = pivotWorkforceByDimension(movements, "movementCount", "plannedMonth");
-    expect(monthRows.some((r) => r.label === "Mar 2026")).toBe(true);
+    expect(monthRows.some((r) => r.key === "2026-03" && r.label === "mars 2026")).toBe(true);
     const quarterRows = pivotWorkforceByDimension(movements, "movementCount", "plannedQuarter");
-    expect(quarterRows.some((r) => r.label === "T1 2026")).toBe(true);
+    expect(quarterRows.some((r) => r.key === "2026-Q1" && r.label === "T1 2026")).toBe(true);
+    const enMonth = pivotWorkforceByDimension(movements, "movementCount", "plannedMonth", {
+      locale: "en-GB",
+    });
+    expect(enMonth.some((r) => r.key === "2026-03" && r.label === "Mar 2026")).toBe(true);
+    const enQuarter = pivotWorkforceByDimension(movements, "movementCount", "plannedQuarter", {
+      locale: "en-GB",
+    });
+    expect(enQuarter.some((r) => r.label === "Q1 2026")).toBe(true);
   });
 });

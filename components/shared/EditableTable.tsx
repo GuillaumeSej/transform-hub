@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { onActivateKey } from "@/lib/a11y";
 
 export type ColumnDef<T> = {
   key: keyof T & string;
@@ -294,7 +295,9 @@ export function EditableTable<T extends { id: string }>({
             {filtered.map((row) => (
               <tr
                 key={row.id}
+                tabIndex={onRowClick ? 0 : undefined}
                 onClick={() => onRowClick?.(row)}
+                onKeyDown={onRowClick ? onActivateKey(() => onRowClick(row)) : undefined}
                 className={cn(
                   "border-b border-border hover:bg-neutral-50",
                   onRowClick && "cursor-pointer"
@@ -459,7 +462,10 @@ export function EditableTable<T extends { id: string }>({
         {filtered.map((row) => (
           <div
             key={row.id}
+            role={onRowClick ? "button" : undefined}
+            tabIndex={onRowClick ? 0 : undefined}
             onClick={() => onRowClick?.(row)}
+            onKeyDown={onRowClick ? onActivateKey(() => onRowClick(row)) : undefined}
             className={cn("p-3", onRowClick && "cursor-pointer active:bg-neutral-50")}
           >
             <div className="mb-2 flex flex-wrap items-center gap-2">

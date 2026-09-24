@@ -28,6 +28,8 @@ import { effectiveLeafLevel, leafLevels } from "@/lib/hierarchyLogic";
 import { useRole } from "@/lib/hooks/useRole";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Comment, Company, HierarchyNode, LeverImpact } from "@/types";
+import { intlTag } from "@/lib/format";
+import { SegmentedControl } from "@/components/shared/SegmentedControl";
 
 const inputClass =
   "w-full min-w-0 truncate rounded-sm border border-transparent bg-transparent px-1 py-1 text-[12px] hover:border-border focus:border-bp-coral focus:bg-white focus:outline-none disabled:cursor-default disabled:hover:border-transparent disabled:text-primary";
@@ -42,13 +44,15 @@ const thClass =
 const scrollShellClass =
   "impacts-editor-scroll overflow-x-auto rounded-md border border-border bg-white";
 
+// Palette de marque uniquement (tokens bp-*/rag-*/info-*, voir tailwind.config.ts) — une teinte
+// distincte par type d'impact.
 const TYPE_STYLE: Record<ImpactTypeKey, string> = {
-  fte: "bg-violet-100 text-violet-700",
-  opex_rec: "bg-amber-100 text-amber-800",
-  opex_oneoff: "bg-orange-100 text-orange-800",
-  capex: "bg-sky-100 text-sky-800",
-  gain_rec: "bg-emerald-100 text-emerald-800",
-  gain_oneoff: "bg-teal-100 text-teal-800",
+  fte: "bg-bp-purple/10 text-bp-purple",
+  opex_rec: "bg-rag-amber-light text-rag-amber",
+  opex_oneoff: "bg-bp-light-pink/40 text-bp-red-brick",
+  capex: "bg-info-blue-light text-info-blue",
+  gain_rec: "bg-bp-warm-gray/40 text-bp-warm-brown",
+  gain_oneoff: "bg-neutral-100 text-neutral-700",
 };
 
 /** Sélecteur segmenté compact (2 choix) intégré à la ligne. */
@@ -64,21 +68,16 @@ function Segmented({
   disabled?: boolean;
 }) {
   return (
-    <span className="inline-flex shrink-0 overflow-hidden rounded-sm border border-border text-[10px] font-semibold">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          disabled={disabled}
-          title={o.title}
-          aria-pressed={value === o.value}
-          onClick={() => onChange(o.value)}
-          className={`px-1.5 py-0.5 ${value === o.value ? "bg-bp-coral text-white" : "bg-white text-tertiary hover:bg-neutral-100"}`}
-        >
-          {o.label}
-        </button>
-      ))}
-    </span>
+    <SegmentedControl
+      size="xs"
+      className="shrink-0"
+      label={options.map((o) => o.title).join(" / ")}
+      showLabel={false}
+      disabled={disabled}
+      options={options}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 
@@ -145,7 +144,7 @@ function GeographyLeafSelect({
 function formatCommentTs(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("fr-FR", {
+  return d.toLocaleString(intlTag(), {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
@@ -774,7 +773,7 @@ export function ImpactsEditor({
                           className="h-3.5 w-3.5 accent-bp-coral"
                         />
                         <span
-                          className={`text-[11px] font-semibold ${uiStatus === "done" ? "text-emerald-700" : "text-tertiary"} ${futureWarn ? "underline decoration-bp-coral decoration-dotted" : ""}`}
+                          className={`text-[11px] font-semibold ${uiStatus === "done" ? "text-rag-green-dark" : "text-tertiary"} ${futureWarn ? "underline decoration-bp-coral decoration-dotted" : ""}`}
                         >
                           {t("impactsEditor.statusDone", "Réalisé")}
                         </span>
@@ -788,7 +787,7 @@ export function ImpactsEditor({
                                 e.stopPropagation();
                                 toggle();
                               }}
-                              className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9.5px] font-semibold text-amber-800"
+                              className="rounded-full bg-rag-amber-light px-1.5 py-0.5 text-[9.5px] font-semibold text-rag-amber"
                             >
                               {t("impactsEditor.pendingFinance", "En attente validation finance")}
                             </button>
@@ -808,7 +807,7 @@ export function ImpactsEditor({
                                   onClick={() =>
                                     update(imp.id, decideImpactRealized(imp, "approved", user))
                                   }
-                                  className="flex-1 rounded-sm bg-emerald-600 px-2 py-1 text-[10.5px] font-semibold text-white"
+                                  className="flex-1 rounded-sm bg-rag-green px-2 py-1 text-[10.5px] font-semibold text-white"
                                 >
                                   {t("impactsEditor.approve", "Valider")}
                                 </button>
@@ -842,7 +841,7 @@ export function ImpactsEditor({
                             onClick={() => stopEditing(imp.id)}
                             aria-label={t("common.validate", "Valider")}
                             title={t("common.validate", "Valider")}
-                            className="rounded-sm p-0.5 text-emerald-700 hover:bg-emerald-50"
+                            className="rounded-sm p-0.5 text-rag-green-dark hover:bg-rag-green-light"
                           >
                             <Check size={14} />
                           </button>

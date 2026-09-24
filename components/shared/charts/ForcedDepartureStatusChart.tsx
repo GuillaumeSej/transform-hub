@@ -79,7 +79,7 @@ export function ForcedDepartureStatusChart({
         />
         <Bar
           dataKey="dueSoon"
-          name={t("shared.forcedDepartureStatusChart.dueSoon", "À venir < 90 j")}
+          name={t("shared.forcedDepartureStatusChart.dueSoon", "À venir ≤ 90 j")}
           stackId="status"
           fill="#FFB1B5"
         />

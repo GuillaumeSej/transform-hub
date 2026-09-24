@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { hrProgramSummary, targetFteFromBaseline } from "@/lib/hrProgramSummary";
+import {
+  actualMovementFte,
+  hrProgramSummary,
+  movementSalarySavings,
+  planMovementFte,
+  targetFteFromBaseline,
+} from "@/lib/hrProgramSummary";
 import type { WorkforceMovement, WorkforceMovementSnapshot } from "@/types";
 
 function makeMovement(overrides: Partial<WorkforceMovement>): WorkforceMovement {
@@ -39,8 +45,22 @@ describe("hrProgramSummary", () => {
 
   it("aggregates realized values from status='Réalisé' only", () => {
     const s = hrProgramSummary([
-      makeMovement({ id: "M1", status: "Réalisé", savings: 100000, cost: 20000, fte: 3 }),
-      makeMovement({ id: "M2", status: "Planifié", savings: 50000, cost: 10000, fte: 2 }),
+      makeMovement({
+        id: "M1",
+        status: "Réalisé",
+        salaryImpact: -100000,
+        savings: 100000,
+        cost: 20000,
+        fte: 3,
+      }),
+      makeMovement({
+        id: "M2",
+        status: "Planifié",
+        salaryImpact: -50000,
+        savings: 50000,
+        cost: 10000,
+        fte: 2,
+      }),
     ]);
     expect(s.salarySavings.realized).toBe(100000);
     expect(s.socialCost.realized).toBe(20000);
@@ -53,14 +73,14 @@ describe("hrProgramSummary", () => {
     const s = hrProgramSummary([
       makeMovement({
         id: "M1",
-        savings: 50000,
+        salaryImpact: -50000,
         cost: 10000,
         fte: 2,
-        lockedPlan: snapshot({ fte: 3, savings: 100000, cost: 15000 }),
+        lockedPlan: snapshot({ fte: 3, salaryImpact: -100000, cost: 15000 }),
       }),
-      makeMovement({ id: "M2", savings: 30000, cost: 5000, fte: 1 }),
+      makeMovement({ id: "M2", salaryImpact: -30000, cost: 5000, fte: 1 }),
     ]);
-    // lockedPlan.savings 100000 + brut 30000 = 130000
+    // −lockedPlan.salaryImpact 100000 + −salaryImpact brut 30000 = 130000
     expect(s.salarySavings.target).toBe(130000);
     // lockedPlan.cost 15000 + brut 5000 = 20000
     expect(s.socialCost.target).toBe(20000);
@@ -71,18 +91,18 @@ describe("hrProgramSummary", () => {
     const s = hrProgramSummary([
       makeMovement({
         id: "M1",
-        savings: 50000,
+        salaryImpact: -50000,
         cost: 10000,
         fte: 2,
-        lockedPlan: snapshot({ fte: 3, savings: 100000, cost: 15000 }),
-        reforecast: snapshot({ fte: 3, savings: 90000, cost: 18000 }),
+        lockedPlan: snapshot({ fte: 3, salaryImpact: -100000, cost: 15000 }),
+        reforecast: snapshot({ fte: 3, salaryImpact: -90000, cost: 18000 }),
       }),
       makeMovement({
         id: "M2",
-        savings: 30000,
+        salaryImpact: -30000,
         cost: 5000,
         fte: 1,
-        lockedPlan: snapshot({ savings: 40000, cost: 6000 }),
+        lockedPlan: snapshot({ salaryImpact: -40000, cost: 6000 }),
         // pas de reforecast → repli sur lockedPlan
       }),
     ]);
@@ -96,10 +116,10 @@ describe("hrProgramSummary", () => {
       makeMovement({
         id: "M1",
         status: "Réalisé",
-        savings: 50000,
+        salaryImpact: -50000,
         cost: 10000,
         fte: 2,
-        lockedPlan: snapshot({ fte: 5, savings: 100000, cost: 20000 }),
+        lockedPlan: snapshot({ fte: 5, salaryImpact: -100000, cost: 20000 }),
       }),
     ]);
     expect(s.salarySavings.progressPct).toBe(50);
@@ -134,6 +154,35 @@ describe("hrProgramSummary", () => {
     expect(s.salarySavings.target).toBe(0);
     expect(s.socialCost.target).toBe(0);
     expect(s.fte.target).toBe(0);
+  });
+});
+
+describe("hrProgramSummary — économies nettes de masse salariale (M7)", () => {
+  it("uses −salaryImpact so that hires reduce savings (same definition as the chart)", () => {
+    const s = hrProgramSummary([
+      makeMovement({ id: "M1", status: "Réalisé", salaryImpact: -120000, savings: 120000 }),
+      // Recrutement : savings persisté à 0 mais +60 000 de masse salariale.
+      makeMovement({
+        id: "M2",
+        type: "Recrutement",
+        status: "Réalisé",
+        salaryImpact: 60000,
+        savings: 0,
+        cost: 0,
+      }),
+    ]);
+    expect(s.salarySavings.realized).toBe(60000);
+    expect(s.salarySavings.target).toBe(60000);
+    expect(movementSalarySavings(makeMovement({ salaryImpact: 60000 }))).toBe(-60000);
+  });
+});
+
+describe("planMovementFte / actualMovementFte (M10)", () => {
+  it("plan views use lockedPlan.fte ?? fte, actual views use fte", () => {
+    const locked = makeMovement({ fte: 2, lockedPlan: snapshot({ fte: 3 }) });
+    expect(planMovementFte(locked)).toBe(3);
+    expect(actualMovementFte(locked)).toBe(2);
+    expect(planMovementFte(makeMovement({ fte: 2 }))).toBe(2);
   });
 });
 

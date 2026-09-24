@@ -1,5 +1,10 @@
 import * as engine from "@/lib/engine";
-import { ACTION_IMPORT_HEADERS, ACTION_STATUS_LABEL } from "@/lib/leverExcelImport";
+import {
+  ACTION_IMPORT_HEADERS,
+  ACTION_STATUS_LABEL,
+  IMPACT_IMPORT_HEADERS,
+  SAVING_TYPE_LABEL,
+} from "@/lib/leverExcelImport";
 import { DEFAULT_LIFECYCLE_STAGES, resolveStatusLabel } from "@/lib/status-config";
 import type { Alert, BeTrackData, Lever, LifecycleStage, RiskLevel } from "@/types";
 
@@ -9,6 +14,17 @@ import type { Alert, BeTrackData, Lever, LifecycleStage, RiskLevel } from "@/typ
  * dans `lib/leverExcelImport.ts`, utilisé par `LeverImportButton` — voir ce fichier pour le format
  * des 3 feuilles attendues et la logique de validation/upsert par Code.
  */
+
+/** Longueur maximale d'une cellule Excel (au-delà, SheetJS lève une exception à l'écriture). */
+export const EXCEL_CELL_MAX_LENGTH = 32767;
+
+/** Texte borné à la limite d'une cellule Excel (l'import sait reconnaître une description
+ *  tronquée et conserve alors la version complète en base). */
+export function truncateForExcel(text: string): { value: string; truncated: boolean } {
+  return text.length > EXCEL_CELL_MAX_LENGTH
+    ? { value: text.slice(0, EXCEL_CELL_MAX_LENGTH), truncated: true }
+    : { value: text, truncated: false };
+}
 
 export function leverToExcelRow(
   lever: Lever,
@@ -53,6 +69,9 @@ export function leverToExcelRow(
     Risque: engine.computeLeverRisk(lever.id, alerts, riskThresholds).level,
     "Impact estimé brut (€M)": lever.grossSavings,
     "Impact estimé net (€M)": lever.netSavings,
+    // Mêmes valeurs que l'écran (fiche, tableau Finance) — colonnes informatives, ignorées à l'import.
+    "Planifié initial": engine.displayedLockedPlanNet(lever).value,
+    "Réactualisé (net)": engine.displayedReforecastNet(lever).value,
     "Réalisé à date (€M)": engine.realizedSavings(lever),
     "Impact estimé (ETP)": lever.fteImpact,
     "Réalisé à date (ETP)": engine.realizedFte(lever),
@@ -64,7 +83,7 @@ export function leverToExcelRow(
     "Dépendances (ID:type, séparées par ;)": lever.dependencies
       .map((d) => `${d.targetId}:${d.type}`)
       .join("; "),
-    Description: lever.description,
+    Description: truncateForExcel(lever.description ?? "").value,
     "Créé le": lever.createdAt,
     "Dernière mise à jour": lever.lastUpdate,
   };
@@ -78,16 +97,19 @@ const IMPACT_NATURE_EXPORT = {
 } as const;
 
 /** Lignes de la feuille "Impacts" (impacts portés par le levier) — mêmes colonnes que
- *  `IMPACT_IMPORT_HEADERS` (lib/leverExcelImport.ts) ; "Nom de l'action" reste vide. */
+ *  `IMPACT_IMPORT_HEADERS` (lib/leverExcelImport.ts) ; "Nom de l'action" reste vide. Le libellé
+ *  est exporté : c'est la clé de rapprochement qui permet au ré-import de conserver l'id, les
+ *  commentaires et la validation finance de chaque ligne. */
 export function leverImpactsToExcelRows(lever: Lever): Record<string, string | number>[] {
   return engine.leverImpactsOf(lever).map((imp) => ({
     "Code Levier": lever.code,
     "Nom de l'action": "",
+    Libellé: imp.label,
     Type: IMPACT_TYPE_EXPORT[imp.type],
     Nature: imp.type === "cost" ? IMPACT_NATURE_EXPORT[imp.nature] : "",
     "Montant (€M)": imp.amount,
     ETP: imp.fteCount ?? "",
-    "Type de gain": "",
+    "Type de gain": imp.savingType ? SAVING_TYPE_LABEL[imp.savingType] : "",
     "Date CAPEX": imp.capexDeploymentDate ?? "",
     "Date gain": imp.gainDate ?? "",
     "Poste de coût": imp.pnlMap ?? "",
@@ -108,6 +130,9 @@ export function leverImpactsToExcelRows(lever: Lever): Record<string, string | n
       : "",
   }));
 }
+
+/** En-têtes de la feuille "Impacts" de l'export (ordre du modèle d'import). */
+export const IMPACT_EXPORT_HEADERS = [...IMPACT_IMPORT_HEADERS];
 
 /** Lignes de la feuille "Actions" de l'export — mêmes colonnes et libellés que
  *  `ACTION_IMPORT_HEADERS` : ré-importer un export conserve ainsi les plans d'action (sans cette

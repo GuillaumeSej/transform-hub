@@ -65,12 +65,11 @@ import {
   chantierShadesForAxis,
   displayMilestoneId,
   effectiveDueDate,
-  isStrategicLeadOf,
-  milestoneProgressPct,
+  canDecideMilestone,
+  currentMilestoneFillPct,
   milestoneTransitionState,
   numberIndicators,
   progressBucket,
-  resolveMilestoneAutoFlags,
   sumProjetBudgets,
   type ProgressBucket,
 } from "@/lib/axisLogic";
@@ -87,7 +86,7 @@ import {
   pendingApprovals,
 } from "@/lib/strategicApprovalFlows";
 import { cn } from "@/lib/utils";
-import { addDays, parseISO } from "@/lib/dateUtils";
+import { addDays, parseISO, todayISO } from "@/lib/dateUtils";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantier } from "@/lib/firestore/chantiers";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
@@ -97,7 +96,6 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
 import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import type {
   ActionPrerequisite,
@@ -113,6 +111,7 @@ import type {
   MilestoneId,
   MaturityStageConfig,
 } from "@/types";
+import { formatCurrency, formatNumber, intlTag } from "@/lib/format";
 
 /**
  * Fiche chantier dédiée (round 4, point 9 ; devenue panneau au round 6, point 0) — pendant de
@@ -151,6 +150,20 @@ type ChantierActionFormValues = Pick<
   | "consumedBudget"
   | "consumedFte"
 >;
+
+/** Champs optionnels du formulaire projet qu'une édition doit pouvoir EFFACER — voir l'appel
+ *  `updateChantierAction` du mode édition. `consumedFte` n'est volontairement pas listé : le
+ *  formulaire ne l'édite plus (valeur historique préservée). */
+const CLEARABLE_PROJET_FIELDS: Partial<ChantierAction> = {
+  description: undefined,
+  owner: undefined,
+  sponsor: undefined,
+  indicatorId: undefined,
+  budget: undefined,
+  consumedBudget: undefined,
+  deliverables: undefined,
+  prerequisites: undefined,
+};
 
 const INPUT_CLASS =
   "mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-primary outline-none focus:border-bp-coral";
@@ -201,24 +214,6 @@ const BUCKET_BORDER_CLASS: Record<ProgressBucket, string> = {
 // Losanges de livrable : code visuel partagé `deliverableMarker.tsx` (Fait plein encre, À faire
 // creux, En retard plein rouge corail) — livrable = échéance unique + statut binaire.
 
-/** Pourcentage d'avancement AFFICHÉ d'un levier sur l'onglet "Progression" (round 12) — jalons
- *  E0→E4 (`milestoneProgressPct`), UNIVERSELLEMENT pour tout levier qu'il soit rattaché à un KPI ou
- *  non (round 18, ancien aiguillage vers un mappage d'affichage `kanbanStatus` supprimé). Items
- *  auto résolus via `resolveMilestoneAutoFlags` (même appel que la pastille de la carte levier,
- *  onglet "Leviers") — `action.milestones` absent est géré par `milestoneProgressPct` lui-même
- *  (0 %). */
-function progressionPctFor(
-  action: ChantierAction,
-  allChantiers: Chantier[],
-  allActions: ChantierAction[]
-): number {
-  const milestoneId = action.milestones?.currentMilestone ?? "E0";
-  return milestoneProgressPct(
-    action,
-    resolveMilestoneAutoFlags(milestoneId, action, allChantiers, allActions)
-  );
-}
-
 /** Largeur de la colonne d'identité des lignes de la timeline de livrables — légèrement plus
  *  étroite que celle du Gantt (`w-64`) : chaque ligne ne porte que le nom du livrable + celui de
  *  son action, pas d'avancement ni d'étape. */
@@ -242,7 +237,7 @@ const TIMELINE_FALLBACK_COLOR = "#a99e9a";
 function formatDateNumeric(iso: string): string {
   const time = parseISO(iso);
   if (Number.isNaN(time)) return iso;
-  return new Date(time).toLocaleDateString("fr-FR", {
+  return new Date(time).toLocaleDateString(intlTag(), {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -262,8 +257,9 @@ function formatRange(start: string, end: string): string {
  *  barre compacte, devise du programme actif en suffixe (même convention que le libellé du champ
  *  `allocatedBudget` : `{label} ({currency})`). */
 function formatBudgetAmount(value: number, currency?: string): string {
-  const formatted = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
-  return currency ? `${formatted} ${currency}` : formatted;
+  return currency
+    ? formatCurrency(value, { currency })
+    : formatNumber(value, { maximumFractionDigits: 0 });
 }
 
 /** « 10/09/2026 10:33 » — horodatage d'un commentaire de livrable (round <n>), à partir d'un ISO
@@ -274,7 +270,7 @@ function formatBudgetAmount(value: number, currency?: string): string {
 function formatCommentTimestamp(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("fr-FR", {
+  return d.toLocaleDateString(intlTag(), {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -873,7 +869,7 @@ export function draftRowToStaffing(
     ...(row.note ? { note: row.note } : {}),
     startDate: row.startDate || projectDates.start,
     endDate: row.endDate || projectDates.end,
-    createdAt: new Date().toISOString().slice(0, 10),
+    createdAt: todayISO(),
   };
 }
 
@@ -947,7 +943,7 @@ function ChantierActionForm({
   onCancel: () => void;
   labels: ChantierActionFormLabels;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const [name, setName] = useState(initial?.name ?? "");
   const [owner, setOwner] = useState<string | undefined>(initial?.owner);
   const [sponsor, setSponsor] = useState<string | undefined>(initial?.sponsor);
@@ -1557,10 +1553,8 @@ export function ChantierDetailPanel({
     const legacyPending =
       !!action.milestoneApproval &&
       pendingApprovals(sa?.approvals, "milestone", action.id).length === 0;
-    const isChantierDecider =
-      !!user &&
-      (isAnyAdmin(user) ||
-        (!!chantier && (isStrategicLeadOf(chantier, user) || chantier.pilote === user.username)));
+    // Même cascade que `resolveApprover("milestone")` : pilote, à défaut responsable d'axe.
+    const isChantierDecider = !!user && canDecideMilestone(chantier ?? undefined, user, data.axes);
     const canApprove =
       !readOnly &&
       !!user &&
@@ -1760,8 +1754,9 @@ export function ChantierDetailPanel({
   // affichée en tête de fiche chantier, qui elle-même remplaçait la lecture directe de
   // `chantier.milestones` (@deprecated, le suivi E0→E4 vit désormais par levier).
   const progressPct = useMemo(
-    () => (chantier ? chantierDeclaredProgress(chantier.id, chantierActions) : 0),
-    [chantier, chantierActions]
+    () =>
+      chantier ? chantierDeclaredProgress(chantier.id, chantierActions, data.projetProgress) : 0,
+    [chantier, chantierActions, data.projetProgress]
   );
 
   // Alertes de dépendance dont CE chantier est le côté bloqué (`sourceId`) — même valeur affichée
@@ -2038,7 +2033,7 @@ export function ChantierDetailPanel({
     try {
       const rest = { ...chantier };
       delete rest[field];
-      await saveChantier({ ...rest, lastUpdate: new Date().toISOString().slice(0, 10) });
+      await saveChantier({ ...rest, lastUpdate: todayISO() });
     } catch (error) {
       console.error("[betrack] échec d'enregistrement du chantier :", error);
       showToast(
@@ -2416,8 +2411,14 @@ export function ChantierDetailPanel({
                       // formulaire de levier éventuellement ouvert par ailleurs). Rejet : ni écriture,
                       // ni tentative — l'input revient à la dernière valeur enregistrée, et un toast
                       // explique pourquoi (même canal que `updateChantierField`/`clearChantierField`).
+                      // Règle symétrique : on refuse seulement de FIXER/BAISSER l'enveloppe sous le
+                      // total des projets. Relever l'enveloppe reste toujours possible (même si elle
+                      // reste sous ce total — la situation s'améliore), comme un projet peut
+                      // toujours dépasser l'enveloppe (information, pas blocage).
                       const leviersBudgetSum = sumProjetBudgets(chantier.id, chantierActions);
-                      if (parsed < leviersBudgetSum) {
+                      const isRaise =
+                        chantier.allocatedBudget !== undefined && parsed > chantier.allocatedBudget;
+                      if (parsed < leviersBudgetSum && !isRaise) {
                         setAllocatedBudgetInput(
                           chantier.allocatedBudget !== undefined
                             ? String(chantier.allocatedBudget)
@@ -2665,7 +2666,7 @@ export function ChantierDetailPanel({
                       labelWidthClassName={TIMELINE_LABEL_WIDTH}
                     />
                     {chantierActions.map((action) => {
-                      const pct = progressionPctFor(action, data.chantiers, data.chantierActions);
+                      const pct = data.projetProgress(action);
                       const left = progressionPctOfComputed(action.start);
                       const width = Math.max(1.5, progressionPctOfComputed(action.end) - left);
                       const dueDeliverables = normalizeDeliverables(action.deliverables).filter(
@@ -2793,7 +2794,15 @@ export function ChantierDetailPanel({
                   ) => {
                     try {
                       if (actionForm.mode === "edit" && actionForm.actionId) {
-                        await data.updateChantierAction(actionForm.actionId, values);
+                        // Le formulaire OMET les champs optionnels vidés : sans cette base de
+                        // clés explicitement `undefined`, la fusion de `updateChantierAction`
+                        // conservait l'ancienne valeur (impossible d'effacer une description, un
+                        // budget, un KPI…). Le hook retire les clés `undefined` avant `setDoc`
+                        // (écrasement intégral), ce qui supprime réellement le champ.
+                        await data.updateChantierAction(actionForm.actionId, {
+                          ...CLEARABLE_PROJET_FIELDS,
+                          ...values,
+                        });
                         showToast(t("strategicAxes.actionUpdated"), values.name, "success");
                       } else {
                         // `customMilestoneActions`/`excludedMilestoneItems` (round "aperçu jalons
@@ -2948,7 +2957,11 @@ export function ChantierDetailPanel({
                   const isFocused = action.id === effectiveFocusActionId;
                   const isOpen = openLeviers.has(action.id);
                   const actionDeliverables = normalizeDeliverables(action.deliverables);
-                  const startInfo = canStartAction(action, data.chantierActions, stages);
+                  const startInfo = canStartAction(
+                    action,
+                    data.chantierActions,
+                    data.projetProgress
+                  );
                   // Défaut défensif pour un levier créé avant l'introduction des jalons E0→E4 (round
                   // 5, déplacé au levier round 7) — ou jamais encore touché : "encore à E0, rien de
                   // répondu". N'est écrit en base qu'à la première interaction réelle.
@@ -2962,15 +2975,9 @@ export function ChantierDetailPanel({
                   // items `auto` du jalon courant comptent tous pour 0, sous-évaluant cette pastille
                   // dès qu'un item auto est réellement à 100. `actionMilestones.currentMilestone`
                   // porte déjà le défaut "E0" ci-dessus, pas besoin de le re-dériver.
-                  const actionProgressPct = milestoneProgressPct(
-                    action,
-                    resolveMilestoneAutoFlags(
-                      actionMilestones.currentMilestone,
-                      action,
-                      data.chantiers,
-                      data.chantierActions
-                    )
-                  );
+                  // Même chiffre partout (board, Gantt, accordéon, feuille de route) : résolveur du
+                  // hook, items auto résolus sur tout le programme.
+                  const actionProgressPct = data.projetProgress(action);
                   // Bucket d'affichage du levier (round <n>) — calculé UNE fois par ligne, réutilisé
                   // par la pastille de statut ET l'accent de bordure gauche ci-dessous, pour que les
                   // deux restent forcément en accord (jamais deux appels distincts à `progressBucket`
@@ -2984,32 +2991,11 @@ export function ChantierDetailPanel({
                   // actif, jamais le cumul. Un item auto sans valeur stockée reprend la même valeur
                   // live que la pastille auto de `MilestoneChecklistPanel` (`autoFlags`) ; un item
                   // manuel absent ou non répondu compte pour 0, comme partout ailleurs ce round.
-                  const currentMilestoneAutoFlags = resolveMilestoneAutoFlags(
-                    actionMilestones.currentMilestone,
-                    action,
-                    data.chantiers,
-                    data.chantierActions
+                  const currentMilestoneAutoFlags = data.projetAutoFlags(action);
+                  // Même liste que la porte de validation (exclusions + actions personnalisées).
+                  const currentMilestoneProgressPct = Math.round(
+                    currentMilestoneFillPct(action, currentMilestoneAutoFlags)
                   );
-                  const currentMilestoneDefs =
-                    MILESTONE_CHECKLISTS[actionMilestones.currentMilestone];
-                  const currentMilestoneStoredItems =
-                    actionMilestones.checklists[actionMilestones.currentMilestone] ?? [];
-                  const currentMilestoneProgressPct =
-                    currentMilestoneDefs.length > 0
-                      ? Math.round(
-                          currentMilestoneDefs.reduce((sum, def) => {
-                            const stored = currentMilestoneStoredItems.find(
-                              (i) => i.itemId === def.itemId
-                            );
-                            const value =
-                              stored?.progressPct !== undefined
-                                ? stored.progressPct
-                                : ((def.auto ? currentMilestoneAutoFlags[def.itemId] : undefined) ??
-                                  0);
-                            return sum + value;
-                          }, 0) / currentMilestoneDefs.length
-                        )
-                      : 0;
                   // KPI rattaché au levier (round 8, purement informatif depuis round 18 — voir
                   // `ChantierAction.indicatorId`) — résolu ici pour affichage round 10 (nom + numéro
                   // global).
@@ -3428,12 +3414,7 @@ export function ChantierDetailPanel({
                                   actionMilestones.checklists[actionMilestones.currentMilestone] ??
                                   []
                                 }
-                                autoFlags={resolveMilestoneAutoFlags(
-                                  actionMilestones.currentMilestone,
-                                  action,
-                                  data.chantiers,
-                                  data.chantierActions
-                                )}
+                                autoFlags={currentMilestoneAutoFlags}
                                 customActions={
                                   action.customMilestoneActions?.[
                                     actionMilestones.currentMilestone

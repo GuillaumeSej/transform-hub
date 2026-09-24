@@ -176,10 +176,22 @@ export function financeTotals(rows: FinanceHierarchyRow[]) {
   };
 }
 
-export type FinanceTreeRow = FinanceHierarchyRow & { children: FinanceHierarchyRow[] };
+/** Ligne enfant du tableau Finance ; `isDirect` = part « (direct) » du parent (montants rattachés au
+ *  nœud parent lui-même, feuille plus macro que le niveau enfant). */
+export type FinanceChildRow = FinanceHierarchyRow & { isDirect?: boolean };
+export type FinanceTreeRow = FinanceHierarchyRow & { children: FinanceChildRow[] };
+
+const FINANCE_VALUE_KEYS = ["planned", "reforecast", "cancelled", "late", "realized"] as const;
+type FinanceValueKey = (typeof FINANCE_VALUE_KEYS)[number];
+
+/** Suffixe d'id de la ligne « (direct) » d'un parent. */
+export const DIRECT_CHILD_SUFFIX = "__direct";
 
 /** Rattache les lignes du niveau enfant à leurs parents (via `HierarchyNode.parentId`). Un enfant
- *  sans parent connu (ou identique au parent : feuille plus macro) n'est pas dupliqué. */
+ *  sans parent connu (ou identique au parent : feuille plus macro) n'est pas dupliqué. Pour que les
+ *  enfants d'un parent SOMMENT toujours au parent, le reste (montants rattachés au parent lui-même)
+ *  devient une ligne « (direct) » (`isDirect`, id `<parent>__direct`) — uniquement si le parent a
+ *  déjà au moins un enfant (sinon il n'est pas dépliable). */
 export function attachChildren(
   parents: FinanceHierarchyRow[],
   children: FinanceHierarchyRow[],
@@ -187,15 +199,89 @@ export function attachChildren(
 ): FinanceTreeRow[] {
   const parentOf = new Map(nodes.map((n) => [n.id, n.parentId]));
   const parentIds = new Set(parents.map((p) => p.nodeId));
-  return parents.map((p) => ({
-    ...p,
-    children: children.filter(
+  return parents.map((p) => {
+    const own: FinanceChildRow[] = children.filter(
       (c) =>
         c.nodeId !== p.nodeId &&
         parentIds.has(parentOf.get(c.nodeId) ?? "") &&
         parentOf.get(c.nodeId) === p.nodeId
-    ),
+    );
+    if (own.length > 0) {
+      const direct: FinanceChildRow = {
+        nodeId: `${p.nodeId}${DIRECT_CHILD_SUFFIX}`,
+        code: p.code,
+        label: p.label,
+        planned: 0,
+        reforecast: 0,
+        cancelled: 0,
+        late: 0,
+        realized: 0,
+        isDirect: true,
+      };
+      let hasResidual = false;
+      for (const k of FINANCE_VALUE_KEYS) {
+        const residual = p[k] - own.reduce((s, c) => s + c[k], 0);
+        if (Math.abs(residual) > 1e-9) hasResidual = true;
+        direct[k] = residual;
+      }
+      if (hasResidual) own.push(direct);
+    }
+    return { ...p, children: own };
+  });
+}
+
+/** Arrondit `values` au pas `step` (0,1 par défaut) de sorte que leur somme égale EXACTEMENT
+ *  `total` arrondi au même pas — méthode du plus fort reste (les unités manquantes vont aux plus
+ *  grandes parties fractionnaires, les unités en trop sont retirées aux plus petites). Évite qu'un
+ *  tableau affiche des lignes dont la somme diffère de ±0,1 du total affiché. */
+export function roundLargestRemainder(values: number[], total: number, step = 0.1): number[] {
+  if (values.length === 0) return [];
+  const scaled = values.map((v) => v / step);
+  const floors = scaled.map((v) => Math.floor(v + 1e-9));
+  const target = Math.round(total / step + (total >= 0 ? 1e-9 : -1e-9));
+  const diff = target - floors.reduce((s, v) => s + v, 0);
+  const order = scaled
+    .map((v, i) => ({ i, frac: v - floors[i] }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  const n = order.length;
+  const out = [...floors];
+  // diff > 0 : +1 aux plus grands restes ; diff < 0 : −1 aux plus petits.
+  for (let k = 0; k < Math.abs(diff); k++) {
+    if (diff > 0) out[order[k % n].i] += 1;
+    else out[order[n - 1 - (k % n)].i] -= 1;
+  }
+  const decimals = Math.max(0, Math.round(-Math.log10(step)));
+  return out.map((u) => Number((u * step).toFixed(decimals)));
+}
+
+/** Version ARRONDIE (0,1) d'affichage/export du tableau Finance : les parents somment exactement au
+ *  total arrondi (`financeTotals`), les enfants (ligne « (direct) » comprise) à leur parent arrondi. */
+export function roundFinanceTree(
+  tree: FinanceTreeRow[],
+  totals: Record<FinanceValueKey, number>
+): FinanceTreeRow[] {
+  const out: FinanceTreeRow[] = tree.map((r) => ({
+    ...r,
+    children: r.children.map((c) => ({ ...c })),
   }));
+  for (const k of FINANCE_VALUE_KEYS) {
+    const parentVals = roundLargestRemainder(
+      tree.map((r) => r[k]),
+      totals[k]
+    );
+    out.forEach((r, i) => {
+      r[k] = parentVals[i];
+      if (r.children.length === 0) return;
+      const childVals = roundLargestRemainder(
+        tree[i].children.map((c) => c[k]),
+        parentVals[i]
+      );
+      r.children.forEach((c, j) => {
+        c[k] = childVals[j];
+      });
+    });
+  }
+  return out;
 }
 
 /** Projection en barres (pont) de la série PARTAGÉE `engine.savingsSeries` : mêmes valeurs que la

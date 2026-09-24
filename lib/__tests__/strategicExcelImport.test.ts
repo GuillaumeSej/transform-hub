@@ -454,7 +454,7 @@ describe("validateStrategicImportRows", () => {
     expect(resultEmpty.toCreate.actions[0].chantierWeightPct).toBeUndefined();
   });
 
-  it("produit une mesure de baseline depuis 'Valeur initiale' quand elle est numérique, l'ignore silencieusement sinon", () => {
+  it("produit une mesure de baseline depuis 'Valeur initiale' quand elle est numérique (période PRÉCÉDENTE), avertit sinon", () => {
     const sheets: StrategicImportRawSheets = {
       axes: [baseAxisRow()],
       chantiers: [],
@@ -478,6 +478,7 @@ describe("validateStrategicImportRows", () => {
     );
 
     expect(result.errors).toEqual([]);
+    expect(result.warnings.filter((w) => w.code === "baselineNotNumber")).toHaveLength(1);
     expect(result.toCreate.indicators).toHaveLength(3);
     // Une seule mesure produite : les deux autres lignes n'ont pas de baseline numérique
     // exploitable ("Non consolidé" textuelle, "Sans baseline" vide) — jamais une erreur de ligne.
@@ -489,7 +490,8 @@ describe("validateStrategicImportRows", () => {
     expect(measurement.value).toBe(42);
     expect(measurement.companyId).toBe(companyId);
     expect(measurement.reportedBy).toBe("alice.admin");
-    expect(measurement.period).toBe(currentPeriod(withBaseline.frequency));
+    // Période PRÉCÉDANT la période courante : la période courante reste libre pour la 1re saisie.
+    expect(measurement.period < currentPeriod(withBaseline.frequency)).toBe(true);
 
     // `importedBy` omis -> repli sur un libellé générique plutôt qu'une chaîne vide.
     const resultNoImporter = validateStrategicImportRows(

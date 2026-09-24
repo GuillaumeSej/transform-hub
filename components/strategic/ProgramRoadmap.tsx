@@ -4,11 +4,14 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Layers, TriangleAlert } from "lucide-react";
 import {
   axisSponsorLabel,
+  chantierDeclaredProgress,
   chantierShadesByAxis,
   displayMilestoneId,
   isProjetLate,
   programRoadmap,
+  projetProgressResolver,
   type ProgramRoadmapRow,
+  type ProjetProgressLookup,
 } from "@/lib/axisLogic";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -36,6 +39,7 @@ import {
 } from "@/components/strategic/deliverableMarker";
 import { deliverableLateDays, deliverableState } from "@/lib/deliverableState";
 import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
+import { onActivateKey } from "@/lib/a11y";
 
 /**
  * Feuille de route PROGRAMME (round 15) — vue Gantt du plan stratégique COMPLET : une ligne par
@@ -179,6 +183,8 @@ export function ProgramRoadmap({
   labels,
   clickableActionIds = "all",
   users,
+  allActions,
+  progressOf,
 }: {
   /** Pour afficher le nom complet du sponsor d'axe dans l'en-tête par défaut. */
   users?: { username: string; name: string }[];
@@ -213,6 +219,12 @@ export function ProgramRoadmap({
    *  n'est jamais invoqué pour lui, quel que soit le prop `onProjetClick` fourni. Défaut `"all"`
    *  (comportement historique inchangé) : tous les autres appelants restent inutilement affectés. */
   clickableActionIds?: Set<string> | "all";
+  /** Univers NON filtré des projets du programme — l'avancement d'un chantier (en-tête) porte sur
+   *  TOUS ses projets, pas seulement les lignes restant après filtre. Repli sur `actions`. */
+  allActions?: ChantierAction[];
+  /** Avancement complet d'un projet (`useStrategicData().projetProgress`) — même chiffre que la
+   *  fiche chantier, le board et le tableau de bord. Omis = résolu sur `chantiers`/`actions`. */
+  progressOf?: ProjetProgressLookup;
 }) {
   const { t, locale } = useTranslation();
   const formatTimelineDay = (iso: string) => formatTimelineDayBase(iso, locale);
@@ -240,7 +252,14 @@ export function ProgramRoadmap({
   // précise, ou vers Année pour l'aperçu le plus large).
   const [scale, setScale] = useState<TimelineScale>("semester");
 
-  const rows = useMemo(() => programRoadmap(axes, chantiers, actions), [axes, chantiers, actions]);
+  const effectiveProgressOf = useMemo(
+    () => progressOf ?? projetProgressResolver(allChantiers ?? chantiers, allActions ?? actions),
+    [progressOf, allChantiers, chantiers, allActions, actions]
+  );
+  const rows = useMemo(
+    () => programRoadmap(axes, chantiers, actions, effectiveProgressOf),
+    [axes, chantiers, actions, effectiveProgressOf]
+  );
   const grouped = useMemo(() => groupRowsByAxisAndChantier(rows), [rows]);
   /** `axisId` → (`chantierId` → nuance de la couleur d'axe) — même calcul que l'onglet
    *  "Avancement" de `StrategicAxesView.tsx` : un chantier a la même couleur partout. */
@@ -364,18 +383,14 @@ export function ProgramRoadmap({
                     // barre" incohérente à côté du liséré 4px de la carte d'axe) : avancement AGRÉGÉ
                     // du chantier affiché dans l'en-tête, moyenne du `progressPct` de ses leviers —
                     // déjà porté par `chantierGroup.rows`, aucune donnée supplémentaire à charger.
-                    // Même convention d'agrégation que `chantierMilestoneProgressPct`
-                    // (lib/axisLogic.ts, "agrégation chantier = moyenne des leviers"), recalculée ici
-                    // plutôt qu'importée pour rester cohérente avec le `progressPct` par LEVIER déjà
-                    // affiché sur chaque ligne ci-dessous (même parti pris que `ProgramRoadmapRow.
-                    // progressPct` lui-même, voir son doc-comment dans lib/axisLogic.ts).
-                    const chantierProgressPct =
-                      totalLevierCount === 0
-                        ? 0
-                        : Math.round(
-                            chantierGroup.rows.reduce((sum, r) => sum + r.progressPct, 0) /
-                              totalLevierCount
-                          );
+                    // MÊME chiffre que la fiche chantier : moyenne PONDÉRÉE
+                    // (`chantierDeclaredProgress`) sur TOUS les projets du chantier (pas les
+                    // seules lignes filtrées), items automatiques compris (`progressOf`).
+                    const chantierProgressPct = chantierDeclaredProgress(
+                      chantierGroup.chantier.id,
+                      allActions ?? actions,
+                      effectiveProgressOf
+                    );
                     // Portée du chantier = premier début → dernière fin de ses projets (dates ISO,
                     // comparables lexicographiquement) — même dérivation que `chantierBounds`.
                     const chantierStart = chantierGroup.rows.reduce(
@@ -560,9 +575,18 @@ export function ProgramRoadmap({
                                         : ""
                                     }`}
                                     title={row.action.name}
+                                    role={rowClickable ? "button" : undefined}
+                                    tabIndex={rowClickable ? 0 : undefined}
                                     onClick={
                                       rowClickable
                                         ? () => onProjetClick!(row.chantier.id, row.action.id)
+                                        : undefined
+                                    }
+                                    onKeyDown={
+                                      rowClickable
+                                        ? onActivateKey(() =>
+                                            onProjetClick!(row.chantier.id, row.action.id)
+                                          )
                                         : undefined
                                     }
                                   >

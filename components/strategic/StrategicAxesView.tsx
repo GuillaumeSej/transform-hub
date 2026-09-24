@@ -22,12 +22,7 @@ import {
   chantierShadesByAxis,
 } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
-import { saveChantierAction } from "@/lib/firestore/chantierActions";
-import { saveChantier } from "@/lib/firestore/chantiers";
-import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
-import { saveIndicator } from "@/lib/firestore/indicators";
-import { saveIndicatorMeasurement } from "@/lib/firestore/indicatorMeasurements";
-import { saveStrategicAxis } from "@/lib/firestore/strategicAxes";
+import { writeStrategicImport } from "@/lib/firestore/strategicImportWrite";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
@@ -36,7 +31,7 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { isReadOnlyUser } from "@/lib/roleProfiles";
-import type { StrategicImportPreview } from "@/lib/strategicExcelImport";
+import type { StrategicImportWrites } from "@/lib/strategicExcelImport";
 import type { Chantier, MilestoneId } from "@/types";
 
 /**
@@ -47,9 +42,8 @@ import type { Chantier, MilestoneId } from "@/types";
  *
  * Round 17 (permutation) : cette page n'affiche plus les anciens onglets "Feuille de route"
  * (`ProgramRoadmap`, déplacé vers le dashboard exécutif stratégique, `StrategicDashboardView.tsx`,
- * qui en avait besoin comme vue globale programme) / "Cartes" (`AxisKanban`, désormais orphelin et
- * supprimé — ses fonctionnalités propres, donut budgétaire par chantier et drill-down par
- * compteur, sont délibérément abandonnées, décision PO). Cette page affiche désormais, à demeure et
+ * qui en avait besoin comme vue globale programme) / "Cartes" (kanban d'axes, supprimé — décision
+ * PO). Cette page affiche désormais, à demeure et
  * sans bascule, le contenu qui vivait auparavant sur le dashboard sous le widget "chantier-health" :
  * la vue E0→E4 par levier (`ProjetMilestoneBoard`), une section par axe. Le grain "portefeuille
  * d'axes" de cette page (import, création, panneau chantier) reste inchangé — seul le corps de la
@@ -267,23 +261,14 @@ export function StrategicAxesView() {
   /**
    * Écrit les entités validées par `StrategicImportButton` (round 4, point 3 ; étendu round 31 aux
    * mesures de baseline et au staffing ETP) — la librairie d'import (`lib/strategicExcelImport.ts`)
-   * reste pure et n'appelle jamais Firestore, c'est donc ICI, dans l'appelant, qu'on boucle sur les
-   * `save*` déjà existants. Les ids sont déjà alloués par l'importeur (voir doc-comment en tête de
-   * ce fichier) : un `Promise.all` global suffit, l'ordre d'écriture n'a aucune incidence
-   * (Firestore n'impose aucune contrainte d'intégrité référentielle). En cas d'erreur, l'exception
-   * remonte telle quelle à `StrategicImportButton`, qui affiche déjà son propre toast d'échec —
-   * pas de gestion d'erreur dupliquée ici. Les abonnements `onSnapshot` de `useStrategicData`
-   * reprennent la main automatiquement, sans état local à rafraîchir.
+   * reste pure et n'appelle jamais Firestore, c'est donc ICI, dans l'appelant, qu'on écrit les
+   * créations + mises à jour (upsert) par `writeStrategicImport` (`writeBatch` : atomique jusqu'à
+   * 450 écritures, sinon rapport précis de ce qui a été écrit). En cas d'erreur, l'exception
+   * remonte à `StrategicImportButton`, qui l'affiche dans son écran de résultat. Les abonnements
+   * `onSnapshot` de `useStrategicData` reprennent la main automatiquement.
    */
-  const handleImport = async (toCreate: StrategicImportPreview["toCreate"]) => {
-    await Promise.all([
-      ...toCreate.axes.map((axis) => saveStrategicAxis(axis)),
-      ...toCreate.chantiers.map((chantier) => saveChantier(chantier)),
-      ...toCreate.actions.map((action) => saveChantierAction(action)),
-      ...toCreate.indicators.map((indicator) => saveIndicator(indicator)),
-      ...toCreate.measurements.map((measurement) => saveIndicatorMeasurement(measurement)),
-      ...toCreate.staffing.map((entry) => saveChantierStaffing(entry)),
-    ]);
+  const handleImport = async (writes: StrategicImportWrites) => {
+    await writeStrategicImport(writes);
   };
 
   if (!programsLoading && !activeProgramId) {
@@ -349,6 +334,8 @@ export function StrategicAxesView() {
               chantiers: data.chantiers,
               actions: data.chantierActions,
               indicators: data.indicators,
+              measurements: data.measurements,
+              staffing: data.staffing,
             }}
             companyId={user?.companyId}
             programId={activeProgramId}
@@ -501,6 +488,8 @@ export function StrategicAxesView() {
                           onProjetClick={openChantierPanel}
                           clickableActionIds={data.clickableActionIds}
                           users={data.users}
+                          progressOf={data.projetProgress}
+                          autoFlagsOf={data.projetAutoFlags}
                         />
                       </div>
                     </div>
@@ -522,6 +511,7 @@ export function StrategicAxesView() {
               onAxisClick={openAxis}
               expandAllSignal={expandAllSignal}
               clickableActionIds={data.clickableActionIds}
+              progressOf={data.projetProgress}
             />
           </div>
         </div>
@@ -561,7 +551,9 @@ export function StrategicAxesView() {
                   </span>
                 </span>
                 <span className="w-[120px] shrink-0">
-                  <ProgressBar pct={chantierDeclaredProgress(c.id, data.chantierActions)} />
+                  <ProgressBar
+                    pct={chantierDeclaredProgress(c.id, data.chantierActions, data.projetProgress)}
+                  />
                 </span>
                 <ChevronRight size={14} className="shrink-0 text-tertiary" aria-hidden />
               </button>

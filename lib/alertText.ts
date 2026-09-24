@@ -12,10 +12,22 @@ function fill(template: string, vars: Record<string, string | number>): string {
  *  sert de fallback quand la clé manque dans le dictionnaire actif. */
 export function alertTitle(t: Translate, alert: Alert): string {
   if (!alert.i18n) return alert.title;
-  return fill(t(alert.i18n.titleKey, alert.title), alert.i18n.vars);
+  return fill(t(alert.i18n.titleKey, alert.title), resolveVars(t, alert.i18n));
 }
 
 export function alertDesc(t: Translate, alert: Alert): string {
   if (!alert.i18n) return alert.desc;
-  return fill(t(alert.i18n.descKey, alert.desc), alert.i18n.vars);
+  return fill(t(alert.i18n.descKey, alert.desc), resolveVars(t, alert.i18n));
+}
+
+/** Variables finales : `vars` + chaque variable `nested` traduite puis remplie. */
+function resolveVars(
+  t: Translate,
+  i18n: NonNullable<Alert["i18n"]>
+): Record<string, string | number> {
+  if (!i18n.nested) return i18n.vars;
+  const out: Record<string, string | number> = { ...i18n.vars };
+  for (const [name, n] of Object.entries(i18n.nested))
+    out[name] = fill(t(n.key, n.fallback), n.vars);
+  return out;
 }

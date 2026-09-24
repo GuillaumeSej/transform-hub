@@ -1,7 +1,12 @@
 import type { MovementType, WorkforceMovement } from "@/types";
-import type { BridgeGranularity, DateRange } from "@/lib/hrEngine";
+import type { BridgeGranularity, DateRange, HrSeriesOptions } from "@/lib/hrEngine";
+import { hrPeriodKey, hrPeriodLabel, hrToday } from "@/lib/hrEngine";
 import { isActiveMovement } from "@/lib/workforceLogic";
-import { targetMovementFteImpact } from "@/lib/hrProgramSummary";
+import {
+  movementSalarySavings,
+  planMovementFte,
+  targetMovementFteImpact,
+} from "@/lib/hrProgramSummary";
 
 /**
  * Séries temporelles pour les 4 nouveaux graphiques Gooduelle du Dashboard RH :
@@ -12,24 +17,14 @@ import { targetMovementFteImpact } from "@/lib/hrProgramSummary";
  *
  * Toutes ces fonctions groupent les mouvements en buckets temporels (Mois/Trimestre/Année) et
  * ne contiennent AUCUN accès I/O — elles reçoivent les mouvements déjà filtrés par la page.
- * Le référentiel de "date d'arrêté" est fourni par l'appelant : au-delà, les valeurs
- * réelles sont remplacées par les valeurs prévues (reforecast si dispo, sinon plan).
+ * Le référentiel de "date d'arrêté" est fourni par l'appelant (défaut `hrToday()`) : les
+ * mouvements réalisés comptent au réalisé à leur date effective, les autres en prévision à partir
+ * de leur date prévue — jamais avant la date d'arrêté (un mouvement en retard n'a encore rien
+ * produit).
+ *
+ * Plan : mouvements ABANDONNÉS exclus, comme pour les KPI (M8). Chaque bucket expose une `key`
+ * stable ("2026-02", "2026-Q1", "2026") et un `label` localisé (`options.locale`).
  */
-
-const MONTH_LABELS = [
-  "janv.",
-  "févr.",
-  "mars",
-  "avr.",
-  "mai",
-  "juin",
-  "juil.",
-  "août",
-  "sept.",
-  "oct.",
-  "nov.",
-  "déc.",
-];
 
 /** Structure commune d'un bucket temporel. */
 type BucketKey = {
@@ -51,7 +46,11 @@ function lastDayOfMonth(year: number, monthIdx: number): string {
 }
 
 /** Génère la liste ordonnée des buckets sur la plage `range` selon la granularité. */
-function generateBuckets(range: DateRange, granularity: BridgeGranularity): BucketKey[] {
+function generateBuckets(
+  range: DateRange,
+  granularity: BridgeGranularity,
+  locale?: string
+): BucketKey[] {
   const fromYear = range.from ? Number(range.from.slice(0, 4)) : new Date().getFullYear();
   const toYear = range.to ? Number(range.to.slice(0, 4)) : fromYear + 2;
   const buckets: BucketKey[] = [];
@@ -61,25 +60,22 @@ function generateBuckets(range: DateRange, granularity: BridgeGranularity): Buck
     for (let idx = 0; idx < bucketCount; idx++) {
       let startISO: string;
       let endISO: string;
-      let label: string;
       if (granularity === "month") {
         startISO = firstDayOfMonth(year, idx);
         endISO = lastDayOfMonth(year, idx);
-        label = `${MONTH_LABELS[idx]} ${year}`;
       } else if (granularity === "quarter") {
         const startMonth = idx * 3;
         startISO = firstDayOfMonth(year, startMonth);
         endISO = lastDayOfMonth(year, startMonth + 2);
-        label = `T${idx + 1} ${year}`;
       } else {
         startISO = firstDayOfMonth(year, 0);
         endISO = lastDayOfMonth(year, 11);
-        label = `${year}`;
       }
+      const label = hrPeriodLabel(year, idx, granularity, locale);
       if (range.from && endISO < range.from) continue;
       if (range.to && startISO > range.to) continue;
       buckets.push({
-        key: `${year}-${idx}`,
+        key: hrPeriodKey(year, idx, granularity),
         label,
         startISO,
         endISO,
@@ -124,55 +120,81 @@ function recurringImpactForBucket(
 // ---------- Économies salariales : actual + forecast vs plan + cumul ----------
 
 export type SalarySavingsBucket = {
+  /** Clé stable de la période ("2026-02", "2026-Q1", "2026"). */
+  key: string;
   label: string;
   startISO: string;
   endISO: string;
-  /** Économie récurrente de période, dérivée de `-salaryImpact / 12` à partir de la date d'effet. */
+  /** Économies nettes de masse salariale (€M) des mouvements RÉALISÉS, à partir de leur date
+   *  effective (−salaryImpact proratisé, recrutements négatifs — définition unique M7). */
+  realized: number;
+  /** Économies nettes (€M) des mouvements NON réalisés (prévision), à partir de
+   *  max(date prévue, date d'arrêté) — un mouvement en retard n'a encore rien produit (M9). */
+  forecast: number;
+  /** realized + forecast (€M) — barre "Réalisé + prévision". */
   actualPlusForecast: number;
-  /** Plan initial récurrent, dérivé de `-(lockedPlan.salaryImpact ?? salaryImpact) / 12`. */
+  /** Plan initial récurrent, dérivé de `−(lockedPlan.salaryImpact ?? salaryImpact)`, mouvements
+   *  abandonnés exclus (M8). */
   plan: number;
   /** Cumul Actual+Forecast depuis le début de la plage — €M. */
   cumulActualForecast: number;
   /** Cumul Plan depuis le début de la plage — €M. */
   cumulPlan: number;
-  /** Flag pour distinguer les buckets antérieurs à la date d'arrêté (Actual) des suivants
-   *  (Forecast) — pour la ligne verticale de repère sur le graphique. */
+  /** Bucket postérieur à la date d'arrêté (repère visuel uniquement — le statut réalisé /
+   *  prévision d'une période se lit sur `realized` / `forecast`, pas sur la date du bucket). */
   isFuture: boolean;
 };
 
-/** Économies salariales récurrentes par période et cumul, proratisées mensuellement. */
+/** Économies nettes de masse salariale récurrentes par période et cumul, proratisées
+ *  mensuellement, avec séparation réalisé / prévision par STATUT des mouvements (M9). */
 export function salarySavingsSeries(
   movements: WorkforceMovement[],
   granularity: BridgeGranularity,
   range: DateRange,
-  referenceDate: string
+  referenceDate: string = hrToday(),
+  options: HrSeriesOptions = {}
 ): SalarySavingsBucket[] {
-  const buckets = generateBuckets(range, granularity);
+  const buckets = generateBuckets(range, granularity, options.locale);
   if (buckets.length === 0) return [];
+  const active = movements.filter(isActiveMovement);
 
   let cumulActualForecast = 0;
   let cumulPlan = 0;
   return buckets.map((b) => {
-    let actualForecast = 0;
+    let realized = 0;
+    let forecast = 0;
     let plan = 0;
-    for (const movement of movements) {
+    for (const movement of active) {
       plan += recurringImpactForBucket(
-        -(movement.lockedPlan?.salaryImpact ?? movement.salaryImpact),
+        movementSalarySavings(movement, "target"),
         movement.plannedDate,
         b
       );
-      if (!isActiveMovement(movement)) continue;
       // Économie positive pour une baisse de masse salariale, négative pour un recrutement.
-      actualForecast += recurringImpactForBucket(-movement.salaryImpact, effectDate(movement), b);
+      const savings = movementSalarySavings(movement, "actual");
+      if (movement.status === "Réalisé") {
+        realized += recurringImpactForBucket(savings, effectDate(movement), b);
+      } else {
+        const start =
+          movement.plannedDate && movement.plannedDate > referenceDate
+            ? movement.plannedDate
+            : referenceDate;
+        forecast += recurringImpactForBucket(savings, start, b);
+      }
     }
-    actualForecast /= 1_000_000;
+    realized /= 1_000_000;
+    forecast /= 1_000_000;
     plan /= 1_000_000;
+    const actualForecast = realized + forecast;
     cumulActualForecast += actualForecast;
     cumulPlan += plan;
     return {
+      key: b.key,
       label: b.label,
       startISO: b.startISO,
       endISO: b.endISO,
+      realized: Math.round(realized * 1000) / 1000,
+      forecast: Math.round(forecast * 1000) / 1000,
       actualPlusForecast: Math.round(actualForecast * 1000) / 1000,
       plan: Math.round(plan * 1000) / 1000,
       cumulActualForecast: Math.round(cumulActualForecast * 1000) / 1000,
@@ -185,6 +207,7 @@ export function salarySavingsSeries(
 // ---------- ENR (coûts sociaux exceptionnels) par période + cumul ----------
 
 export type SocialCostBucket = {
+  key: string;
   label: string;
   startISO: string;
   endISO: string;
@@ -194,13 +217,15 @@ export type SocialCostBucket = {
   cumulPlan: number;
 };
 
-/** ENR par période, strictement basé sur la colonne `movement.cost`, compté une seule fois. */
+/** ENR par période, strictement basé sur la colonne `movement.cost`, compté une seule fois.
+ *  Plan : `lockedPlan.cost ?? cost` des mouvements actifs (abandonnés exclus, M8). */
 export function socialCostSeries(
   movements: WorkforceMovement[],
   granularity: BridgeGranularity,
-  range: DateRange
+  range: DateRange,
+  options: HrSeriesOptions = {}
 ): SocialCostBucket[] {
-  const buckets = generateBuckets(range, granularity);
+  const buckets = generateBuckets(range, granularity, options.locale);
   if (buckets.length === 0) return [];
 
   let cumulActualForecast = 0;
@@ -209,11 +234,11 @@ export function socialCostSeries(
     let actualForecast = 0;
     let plan = 0;
     for (const movement of movements) {
+      if (!isActiveMovement(movement)) continue;
       const planDate = movement.plannedDate;
       if (planDate >= b.startISO && planDate <= b.endISO) {
         plan += movement.lockedPlan?.cost ?? movement.cost;
       }
-      if (!isActiveMovement(movement)) continue;
       const date = effectDate(movement);
       if (date >= b.startISO && date <= b.endISO) actualForecast += movement.cost;
     }
@@ -222,6 +247,7 @@ export function socialCostSeries(
     cumulActualForecast += actualForecast;
     cumulPlan += plan;
     return {
+      key: b.key,
       label: b.label,
       startISO: b.startISO,
       endISO: b.endISO,
@@ -236,6 +262,7 @@ export function socialCostSeries(
 // ---------- Économie nette (savings − ENR) ----------
 
 export type NetEconomyBucket = {
+  key: string;
   label: string;
   startISO: string;
   endISO: string;
@@ -249,14 +276,17 @@ export type NetEconomyBucket = {
 export function netEconomySeries(
   movements: WorkforceMovement[],
   granularity: BridgeGranularity,
-  range: DateRange
+  range: DateRange,
+  referenceDate: string = hrToday(),
+  options: HrSeriesOptions = {}
 ): NetEconomyBucket[] {
-  const buckets = generateBuckets(range, granularity);
+  const buckets = generateBuckets(range, granularity, options.locale);
   if (buckets.length === 0) return [];
 
-  const savings = salarySavingsSeries(movements, granularity, range, range.to ?? "9999-12-31");
-  const enr = socialCostSeries(movements, granularity, range);
+  const savings = salarySavingsSeries(movements, granularity, range, referenceDate, options);
+  const enr = socialCostSeries(movements, granularity, range, options);
   return buckets.map((bucket, index) => ({
+    key: bucket.key,
     label: bucket.label,
     startISO: bucket.startISO,
     endISO: bucket.endISO,
@@ -273,6 +303,7 @@ export function netEconomySeries(
 // ---------- Rythme des mouvements ----------
 
 export type MovementRhythmBucket = {
+  key: string;
   label: string;
   startISO: string;
   endISO: string;
@@ -346,9 +377,10 @@ export function movementRhythmAxisDomains(
 export function movementRhythmSeries(
   movements: WorkforceMovement[],
   granularity: BridgeGranularity,
-  range: DateRange
+  range: DateRange,
+  options: HrSeriesOptions = {}
 ): MovementRhythmBucket[] {
-  const buckets = generateBuckets(range, granularity);
+  const buckets = generateBuckets(range, granularity, options.locale);
   if (buckets.length === 0) return [];
 
   const emptyByType = (): Record<MovementType, number> => ({
@@ -373,7 +405,8 @@ export function movementRhythmSeries(
     if (!b) continue;
     const cell = map.get(b.key)!;
     // Les transferts sont affichés en volume brut signé : entrants positifs, sortants négatifs.
-    const targetFte = m.lockedPlan?.fte ?? m.fte;
+    // Vue PLAN : ETP = lockedPlan.fte ?? fte (règle M10).
+    const targetFte = planMovementFte(m);
     if (m.type === "Recrutement") cell[m.type] += targetFte;
     else if (m.type === "Attrition" || m.type === "Départ forcé") cell[m.type] -= targetFte;
     else if (m.type === "Transfert entrant") cell[m.type] += targetFte;
@@ -391,6 +424,7 @@ export function movementRhythmSeries(
       .reduce((sum, movement) => sum + targetMovementFteImpact(movement), 0);
     cumul += net;
     return {
+      key: b.key,
       label: b.label,
       startISO: b.startISO,
       endISO: b.endISO,

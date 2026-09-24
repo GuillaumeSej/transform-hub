@@ -2,13 +2,13 @@
 
 import { useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { FilterDef, MultiActiveFilters } from "@/components/shared/FilterBar";
+import type { FilterDef, MultiActiveFilters } from "@/components/shared/filterTypes";
 import { parseFilterValues, serializeFilterValues } from "@/lib/filterUtils";
 
 /**
- * Version multi-sélection de `useFilterBarState` : état d'un `<DropdownFilterBar multiple>`
- * synchronisé dans l'URL (`?key=a,b` — valeurs encodées, séparées par des virgules ; une ancienne
- * URL `?key=a` reste valide). `namespace` : même rôle que dans `useFilterBarState`.
+ * État d'un `<DropdownFilterBar multiple>` synchronisé dans l'URL (`?key=a,b` — valeurs encodées,
+ * séparées par des virgules ; une ancienne URL `?key=a` reste valide). `namespace` : préfixe des
+ * paramètres d'URL, pour faire cohabiter deux barres de filtres sur une même page.
  */
 export function useMultiFilterBarState<T>(
   filterDefs: FilterDef<T>[],

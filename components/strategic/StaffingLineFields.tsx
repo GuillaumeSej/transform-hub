@@ -70,12 +70,12 @@ export function StaffingLineFields({
   };
 
   const inputClass = (field: keyof StaffingLineInput) =>
-    `${INPUT_CLASS} ${errorFor(field) ? "border-red-400" : "border-border"}`;
+    `${INPUT_CLASS} ${errorFor(field) ? "border-rag-red" : "border-border"}`;
 
   const errorNode = (field: keyof StaffingLineInput) => {
     const msg = errorFor(field);
     return msg ? (
-      <span role="alert" className="mt-0.5 block text-[11px] font-normal text-red-600">
+      <span role="alert" className="mt-0.5 block text-[11px] font-normal text-rag-red">
         {msg}
       </span>
     ) : null;
@@ -178,7 +178,7 @@ export function StaffingLineFields({
       </label>
       {extraFields}
       {outside && (
-        <p className="flex items-start gap-1.5 text-[11px] text-amber-700 sm:col-span-3">
+        <p className="flex items-start gap-1.5 text-[11px] text-rag-amber sm:col-span-3">
           <AlertTriangle size={12} className="mt-0.5 shrink-0" />
           {t(...STAFFING_LINE_MESSAGES.outsideProject)}
         </p>
@@ -193,9 +193,9 @@ export function MissingDatesBadge({ onClick }: { onClick?: () => void }) {
   const { t } = useTranslation();
   const label = t("staffing.datesMissing", "Dates à compléter");
   const cls =
-    "inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-200";
+    "inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-rag-amber-light px-2 py-0.5 text-[10px] font-semibold text-rag-amber ring-1 ring-rag-amber/40";
   return onClick ? (
-    <button type="button" onClick={onClick} className={`${cls} hover:bg-amber-100`}>
+    <button type="button" onClick={onClick} className={`${cls} hover:bg-rag-amber-light`}>
       <AlertTriangle size={10} /> {label}
     </button>
   ) : (

@@ -1,8 +1,6 @@
-// SCOPE (PO explicite, round 4) : `EffortScoringGrid` ne doit JAMAIS être importé ailleurs que
-// par la future fiche chantier dédiée (`app/(app)/levers/chantier/ChantierDetailClient.tsx`) —
-// en particulier PAS par `StrategicAxesView.tsx`, `AxisKanban.tsx`, `ChantierGantt.tsx`, ni
-// `StrategicDashboardView.tsx` ("je ne veux pas qu'elle apparaisse autre part"). Ce fichier n'est
-// monté nulle part dans cette passe — l'intégration sur la fiche chantier est une passe séparée.
+// SCOPE (PO explicite, round 4) : `EffortScoringGrid` n'est monté QUE dans la fiche chantier
+// (`ChantierDetailPanel.tsx`) — jamais dans `StrategicAxesView.tsx`, `ChantierGantt.tsx` ni
+// `StrategicDashboardView.tsx` ("je ne veux pas qu'elle apparaisse autre part").
 "use client";
 
 import {

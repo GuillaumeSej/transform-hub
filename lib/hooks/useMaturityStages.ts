@@ -15,8 +15,8 @@ import type { MaturityStageConfig } from "@/types";
  *    aurait volontairement retirées.
  *
  * Retourne le tableau brut (et non un objet de résolveurs comme `useLifecycleLabels`) : les
- * composants stratégiques partagés reçoivent la liste d'étapes en prop (voir
- * `components/strategic/AxisStageBadge.tsx`), une seule forme circule donc partout.
+ * composants stratégiques partagés reçoivent la liste d'étapes en prop, une seule forme circule
+ * donc partout.
  */
 export function useMaturityStages(
   programId: string | null | undefined,

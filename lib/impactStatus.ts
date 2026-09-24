@@ -27,6 +27,16 @@ export function coerceImpactStatus(imp: LeverImpact, status: ImpactStatus): Impa
   return isRecurringImpact(imp) ? "ongoing" : "done";
 }
 
+/** Parse une date de l'app : une chaîne date seule ("YYYY-MM-DD") est une date CALENDAIRE LOCALE
+ *  (minuit local) — `new Date("2026-03-01")` l'interprète en UTC, ce qui la décale à la veille
+ *  dans un fuseau négatif (et fausse les comparaisons « date passée » autour de minuit). Toute
+ *  autre forme (date-heure ISO…) est déléguée à `new Date`. */
+export function parseLocalDate(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return new Date(value);
+}
+
 /**
  * Statut effectif d'un impact. Champ explicite s'il existe (normalisé selon la récurrence) ;
  * sinon dérivé de la date de début : futur ou absente → planned ; passée → done (ponctuel) /
@@ -40,9 +50,46 @@ export function impactStatusOf(
   if (imp.status) return coerceImpactStatus(imp, imp.status);
   const start = impactStartDateOf(imp) ?? fallbackDate;
   if (!start) return "planned";
-  const d = new Date(start);
+  const d = parseLocalDate(start);
   if (Number.isNaN(d.getTime()) || d > today) return "planned";
   return isRecurringImpact(imp) ? "ongoing" : "done";
+}
+
+/**
+ * RÈGLE UNIQUE « impact réalisé » (audit M7) — utilisée par le réalisé à date
+ * (`engine.realizedSavings`/`realizedGrossSavings`/`realizedFte`, P&L, tableau Finance) ET, par
+ * complément, par le retard (`isImpactLate` → `engine` « En retard ») : un impact est réalisé quand
+ * son statut effectif (`impactStatusOf` : explicite, sinon dérivé de sa date de début — ce que
+ * montre la case « Réalisé » de l'éditeur d'impacts) n'est pas « planned » ET qu'il n'attend pas
+ * la validation finance (`realizedApproval.status === "pending"`). Sans workflow de validation
+ * (champ absent, données antérieures) ou une fois approuvé, il compte. Un impact rejeté est repassé
+ * « planned » par `decideImpactRealized`, donc non réalisé.
+ */
+export function isImpactRealized(imp: LeverImpact, today: Date = new Date()): boolean {
+  if (impactStatusOf(imp, today) === "planned") return false;
+  return imp.realizedApproval?.status !== "pending";
+}
+
+/**
+ * Impact « en retard » — complément exact de `isImpactRealized` (jamais les deux à la fois) : non
+ * réalisé, PAS en attente de validation finance (déjà déclaré réalisé : c'est la validation qui
+ * est attendue, pas l'exécution), et dont la date de début (sinon `fallbackDate`, ex. fin du
+ * levier) est passée. Avec la règle de dérivation par date de `impactStatusOf`, cela vise les
+ * impacts explicitement laissés/remis « planifiés » (décochés, ou rejetés par la finance) après
+ * leur date prévue. `fallbackDate` (ex. fin du levier) ne sert que d'ÉCHÉANCE à un impact sans
+ * date propre — il ne le rend jamais « réalisé » (un impact sans date n'est réalisé que coché).
+ */
+export function isImpactLate(
+  imp: LeverImpact,
+  today: Date = new Date(),
+  fallbackDate?: string
+): boolean {
+  if (isImpactRealized(imp, today)) return false;
+  if (imp.realizedApproval?.status === "pending") return false;
+  const start = impactStartDateOf(imp) ?? fallbackDate;
+  if (!start) return false;
+  const d = parseLocalDate(start);
+  return !Number.isNaN(d.getTime()) && d.getTime() < today.getTime();
 }
 
 /** Un profil finance peut décider (approuver/rejeter) la validation d'un impact réalisé. */

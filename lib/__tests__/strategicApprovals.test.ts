@@ -292,15 +292,32 @@ describe("buildApproval / stripUndefined", () => {
 });
 
 describe("applyApprovedPayload", () => {
+  // Check-list E0 complète (E0-A1 est automatique : aucune alerte de dépendance → 100).
+  const E0_COMPLETE = {
+    E0: ["E0-A2", "E0-B1", "E0-B2", "E0-C1"].map((itemId) => ({ itemId, progressPct: 100 })),
+  };
   it("milestone : avance le jalon et retire le marqueur", () => {
     const a = action({
-      milestones: { currentMilestone: "E0", passedMilestones: [], checklists: {} },
+      milestones: { currentMilestone: "E0", passedMilestones: [], checklists: E0_COMPLETE },
       milestoneApproval: { targetMilestone: "E1", requestedBy: "carl", requestedAt: "" },
     });
     const e = applyApprovedPayload(approval(), data({ chantierActions: [a] }));
     expect(e.saveActions[0].milestones?.currentMilestone).toBe("E1");
     expect(e.saveActions[0].milestones?.passedMilestones).toEqual(["E0"]);
     expect(e.saveActions[0].milestoneApproval).toBeUndefined();
+  });
+  it("milestone : check-list redevenue incomplète depuis la demande -> refus à l'approbation", () => {
+    const a = action({
+      milestones: {
+        currentMilestone: "E0",
+        passedMilestones: [],
+        checklists: { E0: [...E0_COMPLETE.E0.slice(1), { itemId: "E0-A2", progressPct: 50 }] },
+      },
+      milestoneApproval: { targetMilestone: "E1", requestedBy: "carl", requestedAt: "" },
+    });
+    expect(() => applyApprovedPayload(approval(), data({ chantierActions: [a] }))).toThrow(
+      /plus complet/
+    );
   });
   it("milestone périmé ou cible absente -> erreur", () => {
     const a = action({

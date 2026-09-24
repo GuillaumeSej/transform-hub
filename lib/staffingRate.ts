@@ -101,7 +101,14 @@ export function staffingRateLevel(
 }
 
 export function staffingRatePct(mobilised: number, available: number): number | null {
-  return available > 0 ? Math.round((mobilised / available) * 100) : null;
+  const raw = staffingRateRawPct(mobilised, available);
+  return raw === null ? null : Math.round(raw);
+}
+
+/** Taux NON arrondi — c'est lui qui décide du niveau d'alerte (`staffingRateLevel`) : 100,4 %
+ *  est déjà sur-staffé même si l'affichage arrondi montre « 100 % ». */
+export function staffingRateRawPct(mobilised: number, available: number): number | null {
+  return available > 0 ? (mobilised / available) * 100 : null;
 }
 
 /** Filtre les lignes sur les chantiers rattachés à au moins un des axes sélectionnés. Sélection
@@ -159,7 +166,7 @@ export function staffingRatePoint(
     available,
     mobilised,
     ratePct,
-    level: staffingRateLevel(ratePct, mobilised, thresholds),
+    level: staffingRateLevel(staffingRateRawPct(mobilised, available), mobilised, thresholds),
   };
 }
 
@@ -176,7 +183,9 @@ export function staffingRateSeries(
 ): StaffingRatePoint[] {
   const dated = entries.filter((e) => e.startDate);
   if (dated.length === 0) return [];
-  let min = dated[0].startDate as string;
+  // Bornes élargies à `today` des DEUX côtés : un staffing qui ne commence que dans le futur doit
+  // quand même laisser voir la période courante.
+  let min = today;
   let max = today;
   for (const e of dated) {
     if ((e.startDate as string) < min) min = e.startDate as string;
@@ -184,8 +193,16 @@ export function staffingRateSeries(
     if (last && last > max) max = last;
   }
   const periods = periodRange(min, max, g, 1000);
+  // Fenêtre des `maxPeriods` DERNIÈRES périodes… sauf si elle exclurait la période courante
+  // (staffing planifié loin dans le futur) : on la décale alors pour inclure la période courante
+  // (avec un tiers de la fenêtre d'historique avant elle).
+  const todayIndex = periods.findIndex((p) => p.start <= today && today <= p.end);
+  let start = Math.max(0, periods.length - maxPeriods);
+  if (todayIndex >= 0 && todayIndex < start) {
+    start = Math.max(0, todayIndex - Math.floor(maxPeriods / 3));
+  }
   return periods
-    .slice(-maxPeriods)
+    .slice(start, start + maxPeriods)
     .map((p) => staffingRatePoint(dated, totalAvailable, p, thresholds));
 }
 
@@ -269,7 +286,7 @@ export function staffingPeriodCell(
     available,
     mobilised,
     ratePct,
-    level: staffingRateLevel(ratePct, mobilised, thresholds),
+    level: staffingRateLevel(staffingRateRawPct(mobilised, available), mobilised, thresholds),
     contributions,
   };
 }
@@ -408,7 +425,7 @@ export function periodStaffingDetail(
       available,
       mobilised,
       ratePct,
-      level: staffingRateLevel(ratePct, mobilised, thresholds),
+      level: staffingRateLevel(staffingRateRawPct(mobilised, available), mobilised, thresholds),
       groups,
     };
   });
@@ -427,7 +444,7 @@ export function periodStaffingDetail(
     available,
     mobilised,
     ratePct,
-    level: staffingRateLevel(ratePct, mobilised, thresholds),
+    level: staffingRateLevel(staffingRateRawPct(mobilised, available), mobilised, thresholds),
     teams,
   };
 }

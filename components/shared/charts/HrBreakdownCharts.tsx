@@ -32,6 +32,7 @@ import {
 } from "@/components/shared/MovementNetBalanceSummary";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { WorkforceMovement } from "@/types";
+import { intlTag } from "@/lib/format";
 
 // Palette catégorielle validée (dataviz, tous checks PASS sur surface claire).
 export const HR_CATEGORICAL = ["#FF3C47", "#421799", "#320300", "#FFB1B5", "#421799", "#A99E9A"];
@@ -183,7 +184,7 @@ export function DepartmentMovementsChart({
             tick={{ fontSize: 10 }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={(v: number) => v.toLocaleString("fr-FR")}
+            tickFormatter={(v: number) => v.toLocaleString(intlTag())}
           />
           <Tooltip
             cursor={{ fill: "rgba(0,0,0,0.04)" }}
@@ -339,7 +340,7 @@ export function MovementRealizationChart({
         <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
         <Tooltip
           formatter={(value, name) => [
-            `${Number(value).toLocaleString("fr-FR")} ${t("etp.column.fte", "ETP")}`,
+            `${Number(value).toLocaleString(intlTag())} ${t("etp.column.fte", "ETP")}`,
             String(name),
           ]}
         />
@@ -364,7 +365,7 @@ export function MovementRealizationChart({
 /** Formateur ETP par défaut (module scope, pas d'accès direct à `t`) — reçoit `t` en paramètre et
  * renvoie le formateur, appelé depuis le corps des composants ci-dessous. */
 const defaultFteFormat = (t: (key: string, fallback?: string) => string) => (v: number) =>
-  `${v.toLocaleString("fr-FR")} ${t("etp.column.fte", "ETP")}`;
+  `${v.toLocaleString(intlTag())} ${t("etp.column.fte", "ETP")}`;
 
 /** Donut générique (mouvements par pays par défaut) — palette catégorielle validée, ordre fixe.
  * `formatValue` permet de réutiliser ce composant pour n'importe quelle métrique du builder

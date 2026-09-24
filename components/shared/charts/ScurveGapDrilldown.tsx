@@ -14,8 +14,10 @@ import {
   type DrilldownGroup,
 } from "@/lib/savingsDrilldown";
 import type { HierarchyLevelDef, HierarchyNode, Workstream } from "@/types";
+import { formatMillions } from "@/lib/format";
+import { onActivateKey } from "@/lib/a11y";
 
-const fmt = (v: number) => `€${Math.round(v * 10) / 10}M`;
+const fmt = (v: number) => formatMillions(v);
 
 /** Formatte un écart signé (+/−) avec sa couleur (vert = gain, rouge = perte), cohérent avec le
  *  reste de l'app (`text-rag-green-dark` / `text-rag-red`). */
@@ -24,7 +26,7 @@ const fmtSigned = (v: number) => {
   const sign = r > 0 ? "+" : r < 0 ? "−" : "";
   const abs = Math.abs(r);
   const cls = r > 0 ? "text-rag-green-dark" : r < 0 ? "text-rag-red" : "text-tertiary";
-  return { text: `${sign}€${abs}M`, cls };
+  return { text: `${sign}${formatMillions(abs)}`, cls };
 };
 
 /** Détail de l'écart réalisé − planifié initial à une période (signé : positif = gain, négatif =
@@ -100,7 +102,10 @@ export function ScurveGapDrilldown({
       <Fragment key={g.id}>
         <tr
           className="cursor-pointer border-t border-border hover:bg-neutral-50"
+          tabIndex={0}
+          aria-expanded={open}
           onClick={() => toggle(g.id)}
+          onKeyDown={onActivateKey(() => toggle(g.id))}
         >
           <td className="py-2 pr-2">
             <span className="inline-flex items-center gap-1 font-medium text-primary">

@@ -10,6 +10,7 @@ import {
   chantierShadesForAxis,
   milestoneProgressPct,
   projetMilestoneCounts,
+  type ProjetProgressLookup,
 } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
@@ -158,6 +159,7 @@ export function AxisChantierProjetAccordion({
   onAxisClick,
   expandAllSignal = 0,
   clickableActionIds = "all",
+  progressOf = (a) => milestoneProgressPct(a),
 }: {
   /** Ordre d'apparition = numérotation "Axe {n}" (position 1-based, jamais retriée). */
   axes: StrategicAxis[];
@@ -173,6 +175,9 @@ export function AxisChantierProjetAccordion({
   expandAllSignal?: number;
   /** Round 25 (RBAC `chantier_contributor`) — un projet hors de cet ensemble reste rendu mais inerte. */
   clickableActionIds?: Set<string> | "all";
+  /** Avancement complet d'un projet (`useStrategicData().projetProgress`, items auto compris) —
+   *  même chiffre que le board et la fiche chantier. Omis = mode dégradé. */
+  progressOf?: ProjetProgressLookup;
 }) {
   const { t } = useTranslation();
   const { tooltip: deliverableTooltip } = useDeliverableStateText();
@@ -245,7 +250,7 @@ export function AxisChantierProjetAccordion({
               count={fmt("strategicAxes.tree.chantiersN", "{n} chantier(s)", {
                 n: axisChantiers.length,
               })}
-              pct={axisProgressPct(axis.id, chantiers, chantierActions)}
+              pct={axisProgressPct(axis.id, chantiers, chantierActions, progressOf)}
             />
 
             {axisOpen && (
@@ -288,7 +293,7 @@ export function AxisChantierProjetAccordion({
                           count={fmt("strategicAxes.tree.projetsN", "{n} projet(s)", {
                             n: projets.length,
                           })}
-                          pct={chantierDeclaredProgress(chantier.id, chantierActions)}
+                          pct={chantierDeclaredProgress(chantier.id, chantierActions, progressOf)}
                         />
 
                         {chantierOpen && (
@@ -327,7 +332,7 @@ export function AxisChantierProjetAccordion({
                                           t: total,
                                         }
                                       )}
-                                      pct={milestoneProgressPct(action)}
+                                      pct={progressOf(action)}
                                     />
                                     {action.deliverables && action.deliverables.length > 0 && (
                                       <span className="flex flex-wrap items-center gap-1 px-2.5 pb-2">

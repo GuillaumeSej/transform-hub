@@ -413,25 +413,50 @@ describe("financeCosts — costRowsForPeriod", () => {
   });
 });
 
-describe("financeCosts — bucketSavingsByPeriod", () => {
-  it("buckets savings on gainDate when present, else the action's start date", () => {
+describe("financeCosts — bucketSavingsByPeriod (run-rate, audit M6)", () => {
+  it("spreads an annual gain as a monthly run-rate from its own date, over a 12-month horizon", () => {
     const lever = {
       ...baseLever,
-      actions: [
-        action({
-          start: "2026-01-10",
-          impacts: [
-            impact({ id: "s1", type: "saving", amount: 5, gainDate: "2026-06-01" }),
-            impact({ id: "s2", type: "saving", amount: 2 }),
-          ],
+      impacts: [impact({ id: "s1", type: "saving", amount: 12, gainDate: "2026-07-01" })],
+    };
+    // Horizon : juil. 2026 → juin 2027 (12 mois après la dernière date) ; 1 €M par mois.
+    const points = bucketSavingsByPeriod(makeData([lever]), "year");
+    expect(points).toEqual([
+      { period: "2026", sortKey: "2026", delta: 6, cumulative: 6 },
+      { period: "2027", sortKey: "2027", delta: 6, cumulative: 12 },
+    ]);
+  });
+
+  it("stops the run-rate at the impact's end date, includes FTE departures, falls back to lever end", () => {
+    const lever = {
+      ...baseLever,
+      end: "2026-10-15",
+      impacts: [
+        impact({
+          id: "s1",
+          type: "saving",
+          amount: 12,
+          gainDate: "2026-01-01",
+          endDate: "2026-03-31",
         }),
+        impact({
+          id: "f1",
+          type: "fte",
+          nature: "opex_rec",
+          fteDirection: "departure",
+          amount: 2.4,
+          gainDate: "2026-01-01",
+          endDate: "2026-03-31",
+        }),
+        // Sans date propre : fin du levier (octobre 2026).
+        impact({ id: "s2", type: "saving", amount: 1.2, endDate: "2026-12-31" }),
       ],
     };
     const points = bucketSavingsByPeriod(makeData([lever]), "quarter");
-    expect(points).toEqual([
-      { period: "Q1 2026", sortKey: "2026-Q1", delta: 2, cumulative: 2 },
-      { period: "Q2 2026", sortKey: "2026-Q2", delta: 5, cumulative: 7 },
-    ]);
+    const q = (k: string) => points.find((p) => p.sortKey === k)?.delta ?? 0;
+    expect(q("2026-Q1")).toBe(3.6); // (12 + 2,4) / 12 × 3 mois
+    expect(q("2026-Q2")).toBe(0);
+    expect(q("2026-Q4")).toBe(0.3); // 1,2 / 12 × 3 mois (oct.-déc.)
   });
 });
 
@@ -489,8 +514,10 @@ describe("financeCosts — bucketInvestVsSavingsByPeriod", () => {
       ],
     };
     const points = bucketInvestVsSavingsByPeriod(makeData([lever]), "year");
-    expect(points.map((p) => p.netPeriodResult)).toEqual([-10, 6, 6]);
-    expect(points.map((p) => p.netCumulative)).toEqual([-10, -4, 2]);
+    // Run-rate (audit M6) : le gain de 2027 court aussi en 2028 (6 + 6), au lieu d'être compté une
+    // seule fois l'année de sa date.
+    expect(points.map((p) => p.netPeriodResult)).toEqual([-10, 6, 12]);
+    expect(points.map((p) => p.netCumulative)).toEqual([-10, -4, 8]);
   });
 });
 

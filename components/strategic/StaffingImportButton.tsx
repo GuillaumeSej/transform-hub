@@ -2,14 +2,19 @@
 
 import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { Download, Upload } from "lucide-react";
+import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import {
-  STAFFING_IMPORT_EXAMPLE_ROWS,
   STAFFING_IMPORT_HEADERS,
+  STAFFING_IMPORT_ISSUES,
   STAFFING_IMPORT_SHEET_NAME,
+  buildStaffingTemplateRows,
+  staffingToExcelRows,
   validateStaffingImportRows,
+  type StaffingImportError,
   type StaffingImportPreview,
 } from "@/lib/staffingExcelImport";
+import { readSpreadsheetFile } from "@/lib/excelFileRead";
+import { formatImportIssue } from "@/lib/importIssue";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import { useToast } from "@/lib/hooks/useToast";
@@ -77,9 +82,11 @@ export function StaffingImportButton({
 
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
+    // Exemples construits avec un chantier/une équipe RÉELS mais commentés ("#") : ignorés à
+    // l'import tant que l'utilisateur ne les active pas (voir buildStaffingTemplateRows).
     const sheet = XLSX.utils.aoa_to_sheet([
       [...STAFFING_IMPORT_HEADERS],
-      ...STAFFING_IMPORT_EXAMPLE_ROWS,
+      ...buildStaffingTemplateRows(chantiers, chantierActions, knownDepartments),
     ]);
     XLSX.utils.book_append_sheet(wb, sheet, STAFFING_IMPORT_SHEET_NAME);
     XLSX.writeFile(wb, "modele_effectifs.xlsx");
@@ -90,24 +97,56 @@ export function StaffingImportButton({
     );
   };
 
-  const handleImportFile = async (file: File) => {
-    const workbook = file.name.toLowerCase().endsWith(".csv")
-      ? XLSX.read(await file.text(), { type: "string" })
-      : XLSX.read(await file.arrayBuffer(), { type: "array" });
-
-    const rawRows = findStaffingSheet(workbook);
-    const result = validateStaffingImportRows(
-      rawRows,
-      companyId,
-      programId,
-      chantiers,
-      chantierActions,
-      staffing,
-      knownDepartments
+  /** Export au format d'import (aller-retour : ré-importer le fichier inchangé ne crée rien). */
+  const exportStaffing = () => {
+    const rows = staffingToExcelRows(staffing, chantiers, chantierActions);
+    const wb = XLSX.utils.book_new();
+    const sheet =
+      rows.length > 0
+        ? XLSX.utils.json_to_sheet(rows, { header: [...STAFFING_IMPORT_HEADERS] })
+        : XLSX.utils.aoa_to_sheet([[...STAFFING_IMPORT_HEADERS]]);
+    XLSX.utils.book_append_sheet(wb, sheet, STAFFING_IMPORT_SHEET_NAME);
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    XLSX.writeFile(wb, `effectifs_${stamp}.xlsx`);
+    showToast(
+      t("shared.excelIO.exportSuccessTitle", "Export Excel généré"),
+      t("staffingImport.exportDoneBody", "{n} ligne(s) de staffing exportée(s)").replace(
+        "{n}",
+        String(rows.length)
+      ),
+      "success"
     );
-    setFileName(file.name);
-    setPreview(result);
   };
+
+  const handleImportFile = async (file: File) => {
+    try {
+      // CSV décodé UTF-8 / Windows-1252 + raw : accents corrects, "0,5" et "01/03/2026" gardés
+      // en texte puis lus au format français (lib/excelFileRead.ts, lib/excelParse.ts).
+      const workbook = await readSpreadsheetFile(file);
+      const rawRows = findStaffingSheet(workbook);
+      const result = validateStaffingImportRows(
+        rawRows,
+        companyId,
+        programId,
+        chantiers,
+        chantierActions,
+        staffing,
+        knownDepartments
+      );
+      setFileName(file.name);
+      setPreview(result);
+    } catch (err) {
+      showToast(
+        t("staffingImport.errorTitle"),
+        err instanceof Error ? err.message : String(err),
+        "error"
+      );
+    }
+  };
+
+  const issueText = (issue: StaffingImportError) =>
+    formatImportIssue(t, "staffingImport.issue", STAFFING_IMPORT_ISSUES, issue);
 
   const createCount = (p: StaffingImportPreview | null) =>
     p ? p.rows.filter((r) => !r.isUpdate).length : 0;
@@ -142,6 +181,9 @@ export function StaffingImportButton({
     <>
       <Button variant="outline" size="sm" onClick={downloadTemplate}>
         <Download size={13} /> {t("staffingImport.templateButton")}
+      </Button>
+      <Button variant="outline" size="sm" onClick={exportStaffing}>
+        <FileSpreadsheet size={13} /> {t("staffingImport.exportButton", "Exporter")}
       </Button>
       <input
         ref={fileInputRef}
@@ -191,16 +233,29 @@ export function StaffingImportButton({
             <strong className="text-rag-red">{preview?.errors.length ?? 0}</strong>{" "}
             {t("staffingImport.errorRow")}
           </span>
+          <span>
+            <strong className="text-rag-amber">{preview?.warnings.length ?? 0}</strong>{" "}
+            {t("shared.hrExcelButtons.warningsUnit", "avertissement(s)")}
+          </span>
         </div>
         <div className="max-h-[360px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
-          {preview?.errors.length === 0 ? (
+          {(preview?.errors.length ?? 0) + (preview?.warnings.length ?? 0) === 0 ? (
             <p className="text-tertiary">{t("shared.excelIO.noAnomalies")}</p>
           ) : (
-            preview?.errors.map((e, i) => (
-              <div key={i} className="text-secondary">
-                {t("staffingImport.lineLabel")} {e.rowNumber} : {e.reason}
-              </div>
-            ))
+            <>
+              {preview?.errors.map((e, i) => (
+                <div key={`e${i}`} className="text-rag-red">
+                  {e.rowNumber > 0 ? `${t("staffingImport.lineLabel")} ${e.rowNumber} : ` : ""}
+                  {issueText(e)}
+                </div>
+              ))}
+              {preview?.warnings.map((w, i) => (
+                <div key={`w${i}`} className="text-secondary">
+                  {`${t("staffingImport.lineLabel")} ${w.rowNumber} : `}
+                  {issueText(w)}
+                </div>
+              ))}
+            </>
           )}
         </div>
       </Modal>

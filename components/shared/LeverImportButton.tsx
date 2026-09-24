@@ -5,12 +5,18 @@ import * as XLSX from "xlsx";
 import { Download, Upload } from "lucide-react";
 import {
   ACTION_IMPORT_HEADERS,
+  formatLeverImportMessage,
   IMPACT_IMPORT_HEADERS,
   LEVER_IMPORT_HEADERS,
+  LEVER_IMPORT_MESSAGES,
   leverImportTemplateRows,
   validateLeverImportRows,
+  type LeverImportError,
   type LeverImportPreview,
+  type LeverImportSheet,
 } from "@/lib/leverExcelImport";
+import { normalizeHeaderKey, XLSX_READ_OPTIONS } from "@/lib/excelParse";
+import { useRole } from "@/lib/hooks/useRole";
 import type { BeTrackData, LifecycleStage, Workstream } from "@/types";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
@@ -26,16 +32,59 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 
 const SHEET_NAMES = { leviers: "Leviers", actions: "Actions", impacts: "Impacts" } as const;
 
-/** Trouve une feuille par nom insensible à la casse — un utilisateur qui renomme légèrement
- *  l'onglet ("leviers" au lieu de "Leviers") ne doit pas être bloqué. */
+/** Nom réel d'un onglet, trouvé sans tenir compte de la casse, des accents ni des espaces. */
+function findSheetName(workbook: XLSX.WorkBook, name: string): string | undefined {
+  return workbook.SheetNames.find((n) => normalizeHeaderKey(n) === normalizeHeaderKey(name));
+}
+
 /** `null` quand la feuille est absente du fichier (≠ feuille présente mais vide) — voir
  *  `LeverImportRawSheets` : une feuille Actions absente ne doit pas vider les plans d'action. */
 function findSheet(workbook: XLSX.WorkBook, name: string): Record<string, unknown>[] | null {
-  const sheetName = workbook.SheetNames.find((n) => n.toLowerCase() === name.toLowerCase());
+  const sheetName = findSheetName(workbook, name);
   if (!sheetName) return null;
   return XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
     defval: "",
   });
+}
+
+/** Cellules contenant une formule sans valeur calculée (classeur généré par un outil qui ne
+ *  recalcule pas) : lues vides, elles passeraient pour des cellules non renseignées. */
+function formulaCellsWithoutValue(
+  workbook: XLSX.WorkBook
+): { sheet: LeverImportSheet; cell: string; rowNumber: number }[] {
+  const out: { sheet: LeverImportSheet; cell: string; rowNumber: number }[] = [];
+  for (const sheet of Object.values(SHEET_NAMES)) {
+    const name = findSheetName(workbook, sheet);
+    const ws = name ? workbook.Sheets[name] : undefined;
+    if (!ws) continue;
+    for (const [addr, cell] of Object.entries(ws)) {
+      if (addr.startsWith("!")) continue;
+      const c = cell as XLSX.CellObject;
+      if (c.f && (c.v === undefined || c.v === null || c.v === "")) {
+        out.push({ sheet, cell: addr, rowNumber: XLSX.utils.decode_cell(addr).r + 1 });
+      }
+    }
+  }
+  return out;
+}
+
+/** Aperçu réduit à une erreur bloquante (fichier illisible, CSV, onglet manquant). */
+function blockingPreview(code: "noLeversSheet" | "csvNotSupported"): LeverImportPreview {
+  return {
+    toUpsert: [],
+    errors: [
+      { sheet: "Leviers", rowNumber: 0, code, vars: {}, reason: LEVER_IMPORT_MESSAGES[code] },
+    ],
+    warnings: [],
+    createCount: 0,
+    updateCount: 0,
+    unchangedCount: 0,
+    unchangedCodes: [],
+    actionsRemoved: [],
+    impactsRemoved: [],
+    actionsSheetPresent: false,
+    toCreateWorkstreams: [],
+  };
 }
 
 /**
@@ -77,6 +126,13 @@ export function LeverImportButton({
 }) {
   const { showToast } = useToast();
   const { t } = useTranslation();
+  const { user } = useRole();
+  /** Message traduit d'une erreur/d'un avertissement d'import (code + variables). */
+  const messageOf = (e: LeverImportError) =>
+    formatLeverImportMessage(
+      t(`shared.leverImport.msg.${e.code}`, LEVER_IMPORT_MESSAGES[e.code]),
+      e.vars
+    );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<LeverImportPreview | null>(null);
   const [fileName, setFileName] = useState("");
@@ -93,7 +149,11 @@ export function LeverImportButton({
     const wb = XLSX.utils.book_new();
 
     const defaultProgram = programs.find((p) => p.id === defaultProgramId);
-    const example = leverImportTemplateRows(defaultProgram?.name ?? "", data.workstreams[0]?.name);
+    const example = leverImportTemplateRows(
+      defaultProgram?.name ?? "",
+      data.workstreams[0]?.name,
+      data.pnlAccounts[0]?.name ?? data.pnlAccounts[0]?.id ?? "GA"
+    );
     const leversSheet = XLSX.utils.aoa_to_sheet([[...LEVER_IMPORT_HEADERS], ...example.leviers]);
     XLSX.utils.book_append_sheet(wb, leversSheet, SHEET_NAMES.leviers);
     const actionsSheet = XLSX.utils.aoa_to_sheet([[...ACTION_IMPORT_HEADERS], ...example.actions]);
@@ -113,12 +173,28 @@ export function LeverImportButton({
   };
 
   const handleImportFile = async (file: File) => {
-    const workbook = file.name.toLowerCase().endsWith(".csv")
-      ? XLSX.read(await file.text(), { type: "string" })
-      : XLSX.read(await file.arrayBuffer(), { type: "array" });
+    setFileName(file.name);
+    // Un CSV ne porte qu'une feuille : il ne peut pas décrire leviers + actions + impacts.
+    if (file.name.toLowerCase().endsWith(".csv")) {
+      setPreview(blockingPreview("csvNotSupported"));
+      return;
+    }
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(await file.arrayBuffer(), XLSX_READ_OPTIONS);
+    } catch (err) {
+      console.error("[betrack] lecture du fichier d'import :", err);
+      setPreview(blockingPreview("noLeversSheet"));
+      return;
+    }
+    const leviers = findSheet(workbook, SHEET_NAMES.leviers);
+    if (leviers === null) {
+      setPreview(blockingPreview("noLeversSheet"));
+      return;
+    }
 
     const sheets = {
-      leviers: findSheet(workbook, SHEET_NAMES.leviers) ?? [],
+      leviers,
       actions: findSheet(workbook, SHEET_NAMES.actions),
       impacts: findSheet(workbook, SHEET_NAMES.impacts),
     };
@@ -129,9 +205,19 @@ export function LeverImportButton({
       companyId,
       programs,
       lifecycleStages,
-      defaultProgramId
+      defaultProgramId,
+      { importer: user }
     );
-    setFileName(file.name);
+    for (const f of formulaCellsWithoutValue(workbook)) {
+      const vars = { cell: `${f.sheet}!${f.cell}` };
+      result.warnings.push({
+        sheet: f.sheet,
+        rowNumber: f.rowNumber,
+        code: "formulaNoValue",
+        vars,
+        reason: formatLeverImportMessage(LEVER_IMPORT_MESSAGES.formulaNoValue, vars),
+      });
+    }
     setPreview(result);
   };
 
@@ -142,8 +228,12 @@ export function LeverImportButton({
     if (!preview) return;
     setImporting(true);
     try {
-      if (preview.toCreateWorkstreams.length > 0) {
-        await onCreateWorkstreams(preview.toCreateWorkstreams);
+      // Garde-fou M13 : ne jamais renvoyer un chantier dont l'id existe déjà (l'enregistrement se
+      // fait par id et écraserait le chantier existant).
+      const existingWsIds = new Set(data.workstreams.map((w) => w.id));
+      const newWorkstreams = preview.toCreateWorkstreams.filter((w) => !existingWsIds.has(w.id));
+      if (newWorkstreams.length > 0) {
+        await onCreateWorkstreams(newWorkstreams);
       }
       const { createdCount, updatedCount } = await onImport(rowsToUpsert);
       const wsNote =
@@ -218,7 +308,7 @@ export function LeverImportButton({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".xlsx,.xls,.csv"
+        accept=".xlsx,.xls"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -263,6 +353,10 @@ export function LeverImportButton({
             {t("shared.leverImportButton.updateCountLabel", "levier(s) à mettre à jour")}
           </span>
           <span>
+            <strong className="text-tertiary">{preview?.unchangedCount ?? 0}</strong>{" "}
+            {t("shared.leverImportButton.unchangedCountLabel", "levier(s) inchangé(s)")}
+          </span>
+          <span>
             <strong className="text-rag-red">{preview?.errors.length ?? 0}</strong>{" "}
             {t("shared.leverImportButton.errorRowsLabel", "ligne(s) en erreur")}
           </span>
@@ -300,6 +394,26 @@ export function LeverImportButton({
             )}
           </div>
         )}
+        {preview && preview.impactsRemoved.length > 0 && (
+          <div className="mb-3 rounded-md border border-rag-red/40 bg-rag-red/5 p-2.5 text-xs text-secondary">
+            <strong className="text-rag-red">
+              {t(
+                "shared.leverImportButton.impactsRemovedTitle",
+                "{n} ligne(s) d'impact existante(s) seront supprimée(s)"
+              ).replace(
+                "{n}",
+                String(preview.impactsRemoved.reduce((sum, r) => sum + r.labels.length, 0))
+              )}
+            </strong>{" "}
+            {t(
+              "shared.leverImportButton.impactsRemovedBody",
+              "car absentes de la feuille Impacts du fichier : {list}."
+            ).replace(
+              "{list}",
+              preview.impactsRemoved.map((r) => `${r.code} (${r.labels.join(" ; ")})`).join(", ")
+            )}
+          </div>
+        )}
         {preview && !preview.actionsSheetPresent && preview.updateCount > 0 && (
           <div className="mb-3 rounded-md border border-border bg-neutral-50 p-2.5 text-xs text-tertiary">
             {t(
@@ -316,12 +430,35 @@ export function LeverImportButton({
           ) : (
             preview?.errors.map((e, i) => (
               <div key={i} className="text-secondary">
-                [{e.sheet}] {t("shared.leverImportButton.lineLabel", "Ligne")} {e.rowNumber} :{" "}
-                {e.reason}
+                [{e.sheet}]{" "}
+                {e.rowNumber > 0 && (
+                  <>
+                    {t("shared.leverImportButton.lineLabel", "Ligne")} {e.rowNumber} :{" "}
+                  </>
+                )}
+                {messageOf(e)}
               </div>
             ))
           )}
         </div>
+        {preview && preview.warnings.length > 0 && (
+          <div className="mt-3 max-h-[160px] space-y-1.5 overflow-y-auto rounded-md border border-bp-coral/30 bg-bp-coral/5 p-3 text-xs">
+            <p className="font-semibold text-primary">
+              {t("shared.leverImportButton.warningsTitle", "Avertissements (import non bloqué)")}
+            </p>
+            {preview.warnings.map((w, i) => (
+              <div key={i} className="text-secondary">
+                [{w.sheet}]{" "}
+                {w.rowNumber > 1 && (
+                  <>
+                    {t("shared.leverImportButton.lineLabel", "Ligne")} {w.rowNumber} :{" "}
+                  </>
+                )}
+                {messageOf(w)}
+              </div>
+            ))}
+          </div>
+        )}
       </Modal>
 
       <LeverOwnerReconciliationDialog

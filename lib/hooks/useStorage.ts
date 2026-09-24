@@ -5,6 +5,7 @@ import * as leversLogic from "@/lib/leversLogic";
 import * as leversDb from "@/lib/firestore/levers";
 import * as workforceLogic from "@/lib/workforceLogic";
 import * as workforceDb from "@/lib/firestore/workforce";
+import { deriveWorkforceBaseline, withDerivedWorkforceBaseline } from "@/lib/hrEngine";
 import * as alertsDb from "@/lib/firestore/alerts";
 import * as programDb from "@/lib/firestore/programConfig";
 import {
@@ -237,11 +238,13 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         // `workforceMeta` n'a pas encore été chargé (ou qu'aucun document workforce n'existe pour
         // cette entreprise), on retombe sur un périmètre VIDE — jamais sur `mockData.workforce` :
         // voir emptyWorkforceMeta() plus haut.
-        workforce: {
+        // Baseline absente (entreprise neuve, base saisie sans méta) : dérivée des employés
+        // (`withDerivedWorkforceBaseline`, lib/hrEngine.ts) — une méta explicite reste prioritaire.
+        workforce: withDerivedWorkforceBaseline({
           ...(workforceMeta ?? emptyWorkforceMeta()),
           employees,
           movements,
-        },
+        }),
         // Référentiel statique : le module Operations est encore un Placeholder (aucune page ne
         // lit ni ne mute ces données) — pas de persistance tant que le module n'est pas construit.
         operations: mockData.operations,
@@ -631,6 +634,78 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     [persistAudit, companyId]
   );
 
+  /** Renommage réel d'un matricule (voir `workforceLogic.renameEmployee`) — NON optimiste :
+   *  l'écriture (employés + mouvements repointés, un seul batch) est attendue et toute erreur
+   *  (matricule déjà pris, écriture refusée) est propagée à l'appelant. */
+  const renameEmployee = useCallback(
+    async (oldId: string, newId: string) => {
+      const result = workforceLogic.renameEmployee(
+        employeesRef.current,
+        movementsRef.current,
+        oldId,
+        newId,
+        DEMO_USER
+      );
+      if (result.employee.id === oldId) return result;
+      await workforceDb.saveWorkforceBatch(companyId, {
+        employees: result.employees,
+        ...(result.movedMovements > 0 ? { movements: result.movements } : {}),
+      });
+      employeesRef.current = result.employees;
+      setEmployees(result.employees);
+      if (result.movedMovements > 0) {
+        movementsRef.current = result.movements;
+        setMovements(result.movements);
+      }
+      persistAudit(result.auditEntries);
+      return result;
+    },
+    [persistAudit, companyId]
+  );
+
+  /** Import Excel RH en masse (voir `lib/hrExcel.ts::buildHrImportPlan`) — NON optimiste : une
+   *  seule écriture groupée (liste employés + liste mouvements + baseline recalculée) attendue
+   *  avant de mettre à jour l'écran ; une erreur est propagée (l'appelant affiche un toast
+   *  d'échec au lieu d'un faux « Import terminé »). */
+  const importWorkforce = useCallback(
+    async (importedEmployees: Employee[], importedMovements: WorkforceMovement[]) => {
+      const result = workforceLogic.mergeWorkforceImport(
+        employeesRef.current,
+        movementsRef.current,
+        importedEmployees,
+        importedMovements,
+        DEMO_USER
+      );
+      const employeesChanged = importedEmployees.length > 0;
+      const meta = employeesChanged
+        ? workforceLogic.mergeDerivedWorkforceBaseline(
+            workforceMetaRef.current ?? emptyWorkforceMeta(),
+            deriveWorkforceBaseline(result.employees)
+          )
+        : undefined;
+      await workforceDb.saveWorkforceBatch(companyId, {
+        ...(employeesChanged ? { employees: result.employees } : {}),
+        ...(importedMovements.length > 0 ? { movements: result.movements } : {}),
+        ...(meta ? { meta } : {}),
+      });
+      if (employeesChanged) {
+        employeesRef.current = result.employees;
+        setEmployees(result.employees);
+      }
+      if (importedMovements.length > 0) {
+        movementsRef.current = result.movements;
+        setMovements(result.movements);
+      }
+      if (meta) {
+        workforceMetaRef.current = meta;
+        setWorkforceMeta(meta);
+      }
+      persistAudit(result.auditEntries);
+      return result;
+    },
+    [persistAudit, companyId]
+  );
+
   const updateDepartment = useCallback(
     (name: string, patch: Partial<Department>) => {
       const currentMeta = workforceMetaRef.current ?? emptyWorkforceMeta();
@@ -676,6 +751,8 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     validateMovement,
     deleteWorkforceMovement,
     upsertEmployee,
+    renameEmployee,
+    importWorkforce,
     updateDepartment,
   };
 }

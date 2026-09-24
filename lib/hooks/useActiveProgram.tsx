@@ -6,6 +6,7 @@ import { resolveProgramType } from "@/lib/axisLogic";
 import { getConsolidatedPerformancePrograms } from "@/lib/consolidatedProgramAccess";
 import { useRole } from "@/lib/hooks/useRole";
 import type { Program, ProgramType } from "@/types";
+import { setFormatCurrency } from "@/lib/format";
 
 /**
  * Valeur sentinelle de `activeProgramId`/`setActiveProgramId` qui active le mode "vue consolidée"
@@ -180,6 +181,10 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
     }),
     [programs, activeProgram, setActiveProgramId, loading, isConsolidatedView, consolidatedPrograms]
   );
+
+  // Devise par défaut des helpers de formatage (lib/format.ts, `engine.fmtCurr`) — posée pendant
+  // le rendu (idempotent) pour que les enfants rendus dans ce même passage l'utilisent déjà.
+  setFormatCurrency(activeProgram?.currency);
 
   return <ActiveProgramContext.Provider value={value}>{children}</ActiveProgramContext.Provider>;
 }

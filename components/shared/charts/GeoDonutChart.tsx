@@ -1,6 +1,7 @@
 "use client";
 
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { formatMillions } from "@/lib/format";
 
 const COLORS = ["#FF3C47", "#991D1F", "#FF797B", "#806659", "#A99E9A", "#320300"];
 
@@ -23,7 +24,7 @@ export function GeoDonutChart({ data }: { data: GeoDonutPoint[] }) {
             <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(value) => `€${Number(value).toFixed(1)}M`} />
+        <Tooltip formatter={(value) => formatMillions(Number(value))} />
         <Legend
           wrapperStyle={{ fontSize: 11 }}
           layout="vertical"

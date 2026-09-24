@@ -31,7 +31,18 @@ describe("gapEntriesAt — pas de dérive d'arrondi vs la courbe globale (bug li
           type: "saving",
           nature: "opex_rec",
           gainRecurrence: "annual",
-          gainDate: "2020-01-01", // largement passé : compté réalisé ET en retard (voir plus haut)
+          gainDate: "2020-01-01", // largement passé : compté réalisé (statut dérivé de la date)
+        } as LeverImpact,
+        // Reste à réaliser (réactualisé = impacts, audit C3) : explicitement encore planifié.
+        {
+          id: `${id}-rest`,
+          label: "Reste",
+          amount: netSavings - realized,
+          type: "saving",
+          nature: "opex_rec",
+          gainRecurrence: "annual",
+          gainDate: "2020-01-01",
+          status: "planned",
         } as LeverImpact,
       ],
     }) as unknown as Lever;
@@ -45,8 +56,8 @@ describe("gapEntriesAt — pas de dérive d'arrondi vs la courbe globale (bug li
     const data = { program: { fyStart: "2026-01-01" }, levers } as unknown as BeTrackData;
     const today = new Date("2026-06-01");
 
-    const global = engine.savingsSeries(data, "month", today).find((p) => p.month === "Mar");
-    const entries = gapEntriesAt(data, "month", "Mar", today);
+    const global = engine.savingsSeries(data, "month", today).find((p) => p.month === "Mar 2026");
+    const entries = gapEntriesAt(data, "month", "Mar 2026", today);
     const summedRealized = Math.round(entries.reduce((s, e) => s + e.realized, 0) * 10) / 10;
 
     expect(global?.gap.delay).toBeCloseTo(-0.1, 5);

@@ -16,8 +16,9 @@ import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import {
   computeIndicatorDelta,
   countOnTrackAtRisk,
+  indicatorReadingState,
   latestMeasurement,
-  resolveIndicatorStatus,
+  latestNumericMeasurement,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
@@ -106,7 +107,9 @@ export function IndicatorStatusSummary({
   interaction?: OverviewInteraction;
 }) {
   const { t } = useTranslation();
-  const { total, onTrack, atRisk } = countOnTrackAtRisk(indicators);
+  // Avec les mesures : un KPI qualitatif / jamais mesuré / sans cible est compté « Sans donnée »,
+  // jamais comme « sur la trajectoire » (`indicatorReadingState`).
+  const { total, onTrack, atRisk, noData } = countOnTrackAtRisk(indicators, measurements);
   const cumulative = sumLatestQuantitativeValues(indicators, measurements);
   const onTrackPct = total > 0 ? (onTrack / total) * 100 : 0;
   const atRiskPct = total > 0 ? (atRisk / total) * 100 : 0;
@@ -120,6 +123,7 @@ export function IndicatorStatusSummary({
     title: labels?.title ?? t("kpi.summary.title", "Santé des indicateurs"),
     byAxis: labels?.byAxis ?? t("kpi.summary.byAxis", "Par axe"),
     ofIndicators: labels?.ofIndicators ?? t("kpi.summary.ofIndicators", "des indicateurs"),
+    noData: t("kpi.summary.noData", "Sans donnée"),
   };
 
   return (
@@ -149,7 +153,9 @@ export function IndicatorStatusSummary({
               </div>
             </div>
             <p className="max-w-sm flex-1 text-[12px] leading-relaxed text-secondary">
-              {atRisk} {l.atRisk.toLowerCase()} · {total} {l.tracked.toLowerCase()}
+              {atRisk} {l.atRisk.toLowerCase()}
+              {noData > 0 ? ` · ${noData} ${l.noData.toLowerCase()}` : ""} · {total}{" "}
+              {l.tracked.toLowerCase()}
             </p>
           </div>
           <div
@@ -178,10 +184,12 @@ export function IndicatorStatusSummary({
         <div className={className}>
           <IndicatorStatusOverview
             indicators={indicators}
+            measurements={measurements}
             axes={axes}
             total={total}
             onTrack={onTrack}
             atRisk={atRisk}
+            noData={noData}
             labels={l}
             interaction={interaction}
           />
@@ -201,6 +209,7 @@ export function IndicatorStatusSummary({
 }
 
 type OverviewLabels = {
+  noData: string;
   tracked: string;
   onTrack: string;
   atRisk: string;
@@ -289,18 +298,23 @@ function StatusSplitBar({
  */
 function IndicatorStatusOverview({
   indicators,
+  measurements,
   axes,
   total,
   onTrack,
   atRisk,
+  noData,
   labels: l,
   interaction,
 }: {
   indicators: Indicator[];
+  measurements: IndicatorMeasurement[];
   axes?: Pick<StrategicAxis, "id" | "name" | "color">[];
   total: number;
   onTrack: number;
   atRisk: number;
+  /** Indicateurs sans lecture possible (qualitatifs, jamais mesurés, sans cible). */
+  noData: number;
   labels: OverviewLabels;
   interaction?: OverviewInteraction;
 }) {
@@ -312,15 +326,23 @@ function IndicatorStatusOverview({
       .map((axis) => {
         let axisOnTrack = 0;
         let axisAtRisk = 0;
+        let axisNoData = 0;
         for (const indicator of indicators) {
           if (indicator.axisId !== axis.id) continue;
-          if (resolveIndicatorStatus(indicator) === "at_risk") axisAtRisk += 1;
+          const state = indicatorReadingState(indicator, measurements);
+          if (state === "at_risk") axisAtRisk += 1;
+          else if (state === "no_data") axisNoData += 1;
           else axisOnTrack += 1;
         }
-        return { axis, onTrack: axisOnTrack, atRisk: axisAtRisk, total: axisOnTrack + axisAtRisk };
+        return {
+          axis,
+          onTrack: axisOnTrack,
+          atRisk: axisAtRisk,
+          total: axisOnTrack + axisAtRisk + axisNoData,
+        };
       })
       .filter((row) => row.total > 0);
-  }, [axes, indicators]);
+  }, [axes, indicators, measurements]);
 
   const tiles: { status: IndicatorRiskStatus; label: string; count: number }[] = [
     { status: "on_track", label: l.onTrack, count: onTrack },
@@ -393,6 +415,13 @@ function IndicatorStatusOverview({
                   </button>
                 );
               })}
+              {noData > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-tertiary">
+                  <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-neutral-300" />
+                  <span className="font-semibold">{l.noData}</span>
+                  <span className="tabular-nums">{pct(noData)}%</span>
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -503,8 +532,8 @@ function IndicatorStatusOverview({
                         title={interaction.labels.filterAxisAtRisk.replace("{name}", row.axis.name)}
                         className={`inline-flex w-10 shrink-0 cursor-pointer items-center justify-end gap-0.5 rounded-md border px-1 py-1 tabular-nums transition ${FOCUS_RING} ${atRiskTone} ${
                           atRiskFilterActive
-                            ? "border-current bg-red-50"
-                            : "border-transparent hover:border-current hover:bg-red-50"
+                            ? "border-current bg-rag-red-light"
+                            : "border-transparent hover:border-current hover:bg-rag-red-light"
                         }`}
                       >
                         {atRiskContent}
@@ -695,6 +724,9 @@ function BusinessKpiCard({
   const yearMeasurements = modalYear.filtered;
 
   const latest = latestMeasurement(indicator.id, measurements);
+  // Dernière valeur CHIFFRÉE : un commentaire seul saisi ensuite ne masque pas le chiffre (statut,
+  // avancement et valeur affichée lisent la même mesure).
+  const latestNumeric = latestNumericMeasurement(indicator.id, measurements);
   const correction = useMeasurementCorrection({
     indicator,
     measurements,
@@ -704,12 +736,14 @@ function BusinessKpiCard({
   });
   const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
   const value =
-    latest?.value !== undefined ? `${latest.value}${unitSuffix}` : (latest?.note ?? l.noValue);
+    latestNumeric?.value !== undefined
+      ? `${latestNumeric.value}${unitSuffix}`
+      : (latest?.note ?? l.noValue);
 
   // Écart signé + progression vers la cible (round 4, point 1) : `undefined` (pas d'objectif
   // chiffré, ou dernière mesure sans valeur numérique) → `IndicatorDeltaStat` ne rend rien, la
   // carte retombe sur son seul libellé d'objectif texte déjà affiché plus bas.
-  const delta = computeIndicatorDelta(indicator, latest, measurements);
+  const delta = computeIndicatorDelta(indicator, latestNumeric, measurements);
 
   // Une carte sans aucune mesure n'ouvre rien : la modale n'aurait qu'un graphique vide à montrer.
   const hasHistory = measurements.length > 0;
@@ -737,7 +771,7 @@ function BusinessKpiCard({
         {indicator.objectiveValue !== undefined
           ? `${l.objective} : ${indicator.objectiveValue}${unitSuffix}`
           : indicator.objective}
-        {latest ? ` · ${latest.period}` : ""}
+        {(latestNumeric ?? latest) ? ` · ${(latestNumeric ?? latest)!.period}` : ""}
       </div>
       {/* Avancement vers la cible finale + palier courant (les deux cibles visibles). */}
       <IndicatorProgressDetail delta={delta} unit={indicator.unit} compact className="mt-1" />
@@ -790,6 +824,8 @@ function BusinessKpiCard({
           addMeasurement={addMeasurement}
           open={fillOpen}
           onOpenChange={setFillOpen}
+          measurements={measurements}
+          updateMeasurement={updateMeasurement}
         />
       )}
       {hasHistory && (

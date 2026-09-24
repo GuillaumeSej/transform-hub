@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/shared/Modal";
 import type { MovementAlert, MovementAlertKind } from "@/lib/hrEngine";
-import { etpAlertFilterLink, etpMovementDeepLink } from "@/lib/hrMovementLink";
+import { etpMovementDeepLink } from "@/lib/hrMovementLink";
+import { alertedMovementIds } from "@/lib/hrEngine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Locale } from "@/lib/i18n/locales";
 import {
@@ -14,6 +15,7 @@ import {
   movementTypeLabel,
 } from "@/lib/hrMovementLabels";
 import type { Lever, MovementType } from "@/types";
+import { intlTag } from "@/lib/format";
 
 type T = (key: string, fallback?: string) => string;
 
@@ -37,13 +39,6 @@ const TYPE_DOT: Record<MovementType, string> = {
   "Transfert sortant": "bg-bp-warm-brown",
 };
 
-const INTL_LOCALE: Record<Locale, string> = {
-  fr: "fr-FR",
-  en: "en-GB",
-  de: "de-DE",
-  es: "es-ES",
-};
-
 /** « 2026-03-12 » → « 12 mars 2026 » (locale active). Lu en UTC pour éviter tout décalage de jour. */
 function formatIsoDate(
   iso: string | undefined,
@@ -53,7 +48,7 @@ function formatIsoDate(
   if (!iso) return null;
   const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat(INTL_LOCALE[locale] ?? "fr-FR", {
+  return new Intl.DateTimeFormat(intlTag(locale), {
     day: "numeric",
     month,
     year: "numeric",
@@ -118,15 +113,15 @@ function fmtFte(n: number, unit: string): string {
  *
  * - Clic sur une ligne → détail du mouvement dans la Base ETP (`etpMovementDeepLink`, ouvre sa
  *   modale d'édition).
- * - Pied de modale → Base ETP, onglet mouvements, filtrée sur la/les catégorie(s) affichée(s)
- *   (`etpAlertFilterLink`, filtre `f_alert` visible et modifiable dans la barre de filtres).
+ * - Pied de modale → Base ETP, onglet mouvements, restreinte aux mouvements affichés (ids, via
+ *   `etpMovementDeepLink`) : même périmètre que le dashboard (programme, filtres, plage).
+ * - Compteurs exprimés en mouvements distincts (un mouvement peut porter plusieurs alertes).
  */
 export function MovementAlertsSummaryModal({
   open,
   onOpenChange,
   alerts,
   initialKind = null,
-  kindLabels,
   levers,
   programLabels = {},
 }: {
@@ -136,7 +131,9 @@ export function MovementAlertsSummaryModal({
   /** Catégorie ouverte à l'ouverture (clic sur une puce) — `null` = toutes. */
   initialKind?: MovementAlertKind | null;
   /** Libellés du filtre `f_alert` de la Base ETP (`hr.alert.*`) — valeurs passées dans l'URL. */
-  kindLabels: Record<MovementAlertKind, string>;
+  /** @deprecated Plus utilisé : le lien "Voir dans la page détaillée" porte désormais les ids
+   *  des mouvements affichés (M4), plus les libellés du filtre `f_alert`. */
+  kindLabels?: Record<MovementAlertKind, string>;
   levers: Lever[];
   programLabels?: Record<string, string>;
 }) {
@@ -175,18 +172,23 @@ export function MovementAlertsSummaryModal({
   const visibleGroups = activeKind ? groups.filter((g) => g.kind === activeKind) : groups;
   const dash = "—";
 
-  const bilan = `${t("hr.alertsModal.summary.total", "{n} alerte(s)").replace(
+  // Compteurs en MOUVEMENTS distincts : un mouvement peut porter plusieurs alertes (M4).
+  const distinctCount = (items: MovementAlert[]) => alertedMovementIds(items).length;
+  const bilan = `${t("hr.alertsModal.summary.totalMovements", "{n} mouvement(s) en alerte").replace(
     "{n}",
-    String(alerts.length)
-  )} : ${groups.map((g) => summaryPart(t, g.kind, g.items.length)).join(", ")}`;
+    String(distinctCount(alerts))
+  )} : ${groups.map((g) => summaryPart(t, g.kind, distinctCount(g.items))).join(", ")}`;
 
   const openMovement = (id: string) => {
     onOpenChange(false);
     router.push(etpMovementDeepLink([id]));
   };
+  // Base ETP restreinte EXACTEMENT aux mouvements affichés (ids) : même périmètre que le
+  // dashboard (programme, filtres, plage) — le filtre `f_alert` de la Base ETP recalculait les
+  // alertes sur toute l'entreprise, d'où des populations différentes (M4).
   const goToDetailedPage = () => {
     onOpenChange(false);
-    router.push(etpAlertFilterLink(visibleGroups.map((g) => kindLabels[g.kind])));
+    router.push(etpMovementDeepLink(alertedMovementIds(visibleGroups.flatMap((g) => g.items))));
   };
   const toggleSection = (kind: MovementAlertKind) =>
     setCollapsed((prev) => {
@@ -414,7 +416,7 @@ export function MovementAlertsSummaryModal({
               onClick={() => setActiveKind(null)}
               className={tabClass(activeKind === null)}
             >
-              {t("hr.alertsModal.tabAll", "Toutes")} · {alerts.length}
+              {t("hr.alertsModal.tabAll", "Toutes")} · {distinctCount(alerts)}
             </button>
             {groups.map((g) => (
               <button
@@ -425,7 +427,7 @@ export function MovementAlertsSummaryModal({
                 onClick={() => setActiveKind(g.kind)}
                 className={tabClass(activeKind === g.kind)}
               >
-                {sectionTitle(t, g.kind)} · {g.items.length}
+                {sectionTitle(t, g.kind)} · {distinctCount(g.items)}
               </button>
             ))}
           </div>

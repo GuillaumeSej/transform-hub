@@ -34,6 +34,9 @@ export type PeriodToolbarProgram =
  *  - Préréglages en pastilles segmentées ; celle dont la plage correspond exactement à la plage
  *    courante est mise en évidence (sinon la pilule Période affiche "Personnalisée").
  *  - "Réinitialiser" (si `onReset` fourni) — désactivé quand la plage est déjà celle par défaut.
+ *  - Borne vide = plage OUVERTE de ce côté (affichée "…") : l'appelant doit l'interpréter comme
+ *    "sans limite", jamais comme une plage vide. La saisie garantit `from ≤ to` : une borne qui
+ *    dépasse l'autre entraîne celle-ci (m10).
  *  - `sticky` : reste visible en haut de la zone de défilement du contenu.
  */
 export function PeriodToolbar({
@@ -75,7 +78,8 @@ export function PeriodToolbar({
     return isNaN(d.getTime()) ? iso : dateFmt.format(d);
   };
   const rangeLabel = `${fmt(fromISO)} → ${fmt(toISO)}`;
-  const summary = summarizeRange(fromISO, toISO);
+  const summary =
+    fromISO && toISO ? summarizeRange(fromISO, toISO) : { months: 0, quarters: 0, years: 0 };
 
   const programLabel =
     program?.kind === "consolidated"
@@ -318,8 +322,15 @@ function RangePill({
                 className={inputClass}
                 value={fromISO}
                 min={minISO}
-                max={maxISO}
-                onChange={(e) => onRangeChange({ fromISO: e.target.value, toISO })}
+                max={toISO || maxISO}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  // from > to : la fin suit le début (jamais de plage inversée).
+                  onRangeChange({
+                    fromISO: next,
+                    toISO: next && toISO && next > toISO ? next : toISO,
+                  });
+                }}
               />
             </label>
             <label className="flex flex-col gap-1 text-[11px] font-medium text-secondary">
@@ -329,9 +340,16 @@ function RangePill({
                 aria-label={t("shared.dateRangePicker.toLabel", "Date de fin")}
                 className={inputClass}
                 value={toISO}
-                min={minISO}
+                min={fromISO || minISO}
                 max={maxISO}
-                onChange={(e) => onRangeChange({ fromISO, toISO: e.target.value })}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  // to < from : le début suit la fin. Vide = plage ouverte (voir en-tête).
+                  onRangeChange({
+                    fromISO: next && fromISO && next < fromISO ? next : fromISO,
+                    toISO: next,
+                  });
+                }}
               />
             </label>
           </div>

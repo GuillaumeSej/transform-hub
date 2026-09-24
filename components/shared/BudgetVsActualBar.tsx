@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 
+import { useTranslation } from "@/lib/i18n/useTranslation";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,6 +36,7 @@ export function BudgetVsActualBar({
   label?: string;
   className?: string;
 }): JSX.Element {
+  const { t } = useTranslation();
   const overBudget = consumed > planned;
 
   return (
@@ -48,7 +50,7 @@ export function BudgetVsActualBar({
           {overBudget ? (
             <span className="flex shrink-0 items-center gap-1 rounded-full bg-rag-red-light px-1.5 py-0.5 text-[10px] font-bold text-rag-red">
               <AlertTriangle size={11} className="shrink-0" aria-hidden />
-              Dépassé
+              {t("shared.budgetVsActual.over", "Dépassé")}
             </span>
           ) : null}
         </span>

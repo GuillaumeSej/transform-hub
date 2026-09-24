@@ -27,6 +27,7 @@ import {
 import { SavingsStepDrilldownModal } from "@/components/shared/SavingsStepDrilldownModal";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { HierarchyLevelDef, HierarchyNode, ImpactNatureDef, Lever, Workstream } from "@/types";
+import { formatMillions } from "@/lib/format";
 
 export const WATERFALL_COLORS = {
   total: "#806659",
@@ -47,7 +48,7 @@ export const OPEX_SEGMENT_COLORS = [
 
 /** Écart entre catégories (part de la bande) — sert aussi au calcul des traits de liaison. */
 const BAR_GAP = 0.15;
-const fmt = (v: number) => `€${Math.round(v * 10) / 10}M`;
+const fmt = (v: number) => formatMillions(v);
 
 const TOTAL_KEYS = ["initial", "target", "gross", "net"];
 const MAX_LEGEND = 6;
@@ -339,7 +340,7 @@ export function SavingsWaterfallChart({
               tick={{ fontSize: 12 }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v) => `€${v}M`}
+              tickFormatter={(v) => formatMillions(Number(v))}
             />
             {/* Tooltip vide : pas d'infobulle au survol, mais fournit l'index actif pour le clic. */}
             <Tooltip content={() => null} cursor={false} />

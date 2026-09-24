@@ -347,8 +347,11 @@ export function CompanyFieldsEditor({
               >
                 {level}
                 <button
+                  type="button"
+                  aria-label={t("common.remove", "Retirer")}
+                  title={t("common.remove", "Retirer")}
                   onClick={() => removeLevel(level)}
-                  className="text-text-secondary hover:text-red-500"
+                  className="text-text-secondary hover:text-rag-red"
                 >
                   <X size={12} />
                 </button>
@@ -397,8 +400,11 @@ export function CompanyFieldsEditor({
               >
                 {direction}
                 <button
+                  type="button"
+                  aria-label={t("common.remove", "Retirer")}
+                  title={t("common.remove", "Retirer")}
                   onClick={() => removeDirection(direction)}
-                  className="text-text-secondary hover:text-red-500"
+                  className="text-text-secondary hover:text-rag-red"
                 >
                   <X size={12} />
                 </button>

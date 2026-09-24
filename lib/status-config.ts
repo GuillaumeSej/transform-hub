@@ -83,6 +83,35 @@ export const GATE_BY_STATUS: Partial<Record<LeverStatus, LeverApprovalGate>> = O
 
 // ─── Configurable lifecycle helpers ─────────────────────────────────────────
 
+const APPROVAL_GATES: readonly LeverApprovalGate[] = ["qualified", "validated", "in_progress"];
+
+/** Portes de validation EFFECTIVES (étapes à n'atteindre que via demande → approbation) selon le
+ *  référentiel de cycle de vie du programme : les étapes `qualified`/`validated`/`in_progress`
+ *  dont l'admin a coché « validation requise » (`LifecycleStage.validationRequired`, éditeur
+ *  `components/admin/LifecycleEditor.tsx`). Sans référentiel fourni (appelant sans contexte
+ *  programme : import, scripts, tests historiques) → les 3 portes, comportement historique. */
+export function gatedStatusesFor(lifecycleStages?: LifecycleStage[]): LeverApprovalGate[] {
+  if (!lifecycleStages || lifecycleStages.length === 0) return [...APPROVAL_GATES];
+  return APPROVAL_GATES.filter(
+    (gate) => lifecycleStages.find((s) => s.key === gate)?.validationRequired === true
+  );
+}
+
+/** Porte de validation à franchir DEPUIS `status` (l'étape suivante du cycle, si elle est une
+ *  porte effective — voir `gatedStatusesFor`). Sans référentiel : `GATE_BY_STATUS` historique. */
+export function nextGateFor(
+  status: LeverStatus,
+  lifecycleStages?: LifecycleStage[]
+): LeverApprovalGate | undefined {
+  if (!lifecycleStages || lifecycleStages.length === 0) return GATE_BY_STATUS[status];
+  const idx = STATUS_CYCLE.indexOf(status);
+  if (idx === -1) return undefined;
+  const next = STATUS_CYCLE[idx + 1];
+  return (gatedStatusesFor(lifecycleStages) as LeverStatus[]).includes(next)
+    ? (next as LeverApprovalGate)
+    : undefined;
+}
+
 /** Référentiel de cycle de vie par défaut (5 étapes, seule la décision de lancement est une gate). */
 export const DEFAULT_LIFECYCLE_STAGES: LifecycleStage[] = [
   { key: "idea", label: "Identifié", validationRequired: false },

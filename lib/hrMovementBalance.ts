@@ -1,7 +1,8 @@
 import type { WorkforceMovement } from "@/types";
 import { isActiveMovement } from "@/lib/workforceLogic";
-import { targetMovementFteImpact } from "@/lib/hrProgramSummary";
+import { planMovementFte, targetMovementFteImpact } from "@/lib/hrProgramSummary";
 import type { TransferDirection } from "@/lib/hrEngine";
+import { intlTag } from "@/lib/format";
 
 /**
  * Bilan net d'une liste de mouvements — alimente la ligne "Bilan net : ±N ETP" des infobulles
@@ -64,7 +65,7 @@ export function movementNetBalance(
       abandonedCount += 1;
       continue;
     }
-    const fte = m.lockedPlan?.fte ?? m.fte;
+    const fte = planMovementFte(m); // vue plan (règle M10, lib/hrProgramSummary.ts)
     const transferIn = () =>
       (options.transferDirection?.(m) ?? (m.type === "Transfert entrant" ? "in" : "out")) === "in";
     const target =
@@ -96,7 +97,7 @@ export function movementNetBalance(
 
 /** Valeur signée : « +3 », « −2,5 », « 0 ». Format français par défaut ; passer la locale active
  *  (`useTranslation().locale`) pour le séparateur décimal de la langue affichée. */
-export function formatSignedFr(value: number, locale: string = "fr-FR"): string {
+export function formatSignedFr(value: number, locale: string = intlTag()): string {
   const abs = Math.abs(value).toLocaleString(locale, { maximumFractionDigits: 1 });
   if (value > 0) return `+${abs}`;
   if (value < 0) return `−${abs}`;

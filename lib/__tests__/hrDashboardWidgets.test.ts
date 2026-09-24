@@ -16,17 +16,38 @@ import {
   migrateFteWidgetsToFullWidth,
   migrateMovementsMergedWidget,
   migrateMovementProgressWidget,
+  loadHrDashboardLayout,
   type HrWidgetInstance,
 } from "@/lib/hrDashboardWidgets";
 
 describe("hrDashboardWidgets — buildHrDefaultLayout", () => {
-  it("has one instance per registry entry, in registry order", () => {
+  it("has one instance per non-builder registry entry, in registry order", () => {
     const layout = buildHrDefaultLayout();
-    expect(layout).toHaveLength(HR_WIDGET_REGISTRY.length);
+    const defaults = HR_WIDGET_REGISTRY.filter((def) => !def.builderEnabled);
+    expect(layout).toHaveLength(defaults.length);
     layout.forEach((w, i) => {
-      expect(w.type).toBe(HR_WIDGET_REGISTRY[i].type);
-      expect(w.span).toBe(HR_WIDGET_REGISTRY[i].defaultSpan);
+      expect(w.type).toBe(defaults[i].type);
+      expect(w.span).toBe(defaults[i].defaultSpan);
     });
+  });
+
+  it("exposes a reachable builder widget (hr-pivot) outside the default layout (m6)", () => {
+    expect(getHrWidgetDef("hr-pivot")?.builderEnabled).toBe(true);
+    expect(buildHrDefaultLayout().some((w) => w.type === "hr-pivot")).toBe(false);
+  });
+
+  it("drops only unknown widgets from a saved layout instead of resetting it (m13)", () => {
+    window.localStorage.setItem(
+      "betrack_hr_dashboard_layout_v5",
+      JSON.stringify([
+        { instanceId: "a", type: "pse-summary", span: "L" },
+        { instanceId: "b", type: "removed-widget", span: "M" },
+      ])
+    );
+    const layout = loadHrDashboardLayout();
+    expect(layout.find((w) => w.instanceId === "a")?.span).toBe("L");
+    expect(layout.some((w) => w.instanceId === "b")).toBe(false);
+    window.localStorage.clear();
   });
 
   it("seeds defaultCustomViews for builder-enabled widget types", () => {

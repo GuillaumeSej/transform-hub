@@ -23,9 +23,17 @@ import {
 } from "@/lib/hierarchyLogic";
 import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type { LeverStatus } from "@/types";
-import { impactStartDateOf, impactStatusOf } from "@/lib/impactStatus";
+import {
+  impactStatusOf,
+  isImpactLate,
+  isImpactRealized,
+  isRecurringImpact,
+  parseLocalDate,
+} from "@/lib/impactStatus";
 import { impactDatesOf } from "@/lib/impactKinds";
 import { isActiveMovement } from "@/lib/workforceLogic";
+import { formatCompactCurrency, formatMillions, formatNumber } from "@/lib/format";
+import { workstreamDeclaredProgress } from "@/lib/workstreamLogic";
 
 /**
  * Portage fidèle du moteur de calcul `ENGINE` du prototype HTML historique de Guillaume
@@ -150,17 +158,6 @@ export function leverActionProgress(lever: Pick<Lever, "actions">): number {
   return Math.round(total);
 }
 
-/** Fraction (0-1) du plan du levier considérée comme réalisée : avancement des actions ; sans
- *  action, 1 si livré sinon 0. N'est PLUS utilisée par `realizedSavings`/`realizedGrossSavings`/
- *  `realizedFte` (round 6 — voir `impactsRealizedNet`, sommée impact par impact plutôt qu'au
- *  prorata de l'avancement du plan d'action) ; reste utilisée par `pnlImpactDetailed` pour la
- *  répartition du réalisé par compte P&L (portée volontairement inchangée pour ce round). */
-function realizationFraction(lever: Lever): number {
-  if (lever.status === "delivered") return 1;
-  if ((lever.actions ?? []).length === 0) return 0;
-  return leverActionProgress(lever) / 100;
-}
-
 /** Gains bruts / OPEX récurrent / ETP RÉALISÉS À DATE, sommés directement depuis le statut de
  *  chaque impact (`impactStatusOf` : explicite si l'utilisateur a coché/décoché "Réalisé", sinon
  *  dérivé de la date de début) — PAS au prorata de l'avancement du plan d'action. C'est ce qui
@@ -178,7 +175,9 @@ function impactsRealizedNet(
   let opexRec = 0;
   let fte = 0;
   for (const imp of impacts) {
-    if (impactStatusOf(imp, today) === "planned") continue; // pas encore réalisé
+    // Règle UNIQUE « réalisé » (audit M7) : statut effectif non planifié ET validé par la finance
+    // (ou sans workflow de validation) — voir `isImpactRealized`, complément de `isImpactLate`.
+    if (!isImpactRealized(imp, today)) continue;
     if (imp.type === "saving") {
       if (imp.gainRecurrence !== "oneoff") gross += imp.amount;
       if (imp.fteCount) fte += imp.fteCount;
@@ -292,10 +291,57 @@ export function reforecastSnapshotOf(lever: Lever): FinancialSnapshot | undefine
   };
 }
 
+/** Valeur « Réactualisé » (net annualisé) d'un levier. Levier porteur d'impacts : TOUJOURS le net
+ *  de ses impacts (`leverImpactTotals`), quel que soit son stade — règle « réactualisé = impacts »
+ *  (C3) appliquée aussi avant « Exécuté ». Avant, un levier validé affichait son plan figé jusqu'au
+ *  passage à « Exécuté », puis sautait brutalement au net de ses impacts (écart jamais visible
+ *  avant, alors que rien n'avait changé ce jour-là). Sans impact : reforecast enregistré, sinon plan
+ *  figé, sinon net courant. `isReforecast` = une réactualisation a été ouverte (`lever.reforecast`). */
 export function displayedReforecastNet(lever: Lever): { value: number; isReforecast: boolean } {
+  const isReforecast = !!lever.reforecast;
+  if (lever.impacts && lever.impacts.length > 0) {
+    return { value: leverImpactTotals(lever).netAnnual, isReforecast };
+  }
   const snap = reforecastSnapshotOf(lever);
   if (snap) return { value: snap.netSavings, isReforecast: true };
   return { value: lever.lockedPlan?.netSavings ?? lever.netSavings, isReforecast: false };
+}
+
+/** Snapshot financier « réactualisé » COMPLET d'un levier (brut, net, OPEX, CAPEX) — même chaîne que
+ *  `displayedReforecastNet` : impacts si le levier en porte, sinon reforecast enregistré, sinon plan
+ *  figé, sinon champs courants. À utiliser pour toute ventilation qui doit se recouper avec la valeur
+ *  « Réactualisé » (pivot du dashboard, coûts réactualisés, OPEX récurrent de la cascade). */
+export function displayedReforecastSnapshot(lever: Lever): FinancialSnapshot {
+  if (lever.impacts && lever.impacts.length > 0) {
+    const t = leverImpactTotals(lever);
+    return {
+      grossSavings: t.grossAnnual,
+      netSavings: t.netAnnual,
+      opexOneOff: t.opexOneOff,
+      opexRec: t.opexRec,
+      capex: t.capex,
+    };
+  }
+  const snap = reforecastSnapshotOf(lever) ?? lever.lockedPlan;
+  if (snap) return snap;
+  return {
+    grossSavings: lever.grossSavings,
+    netSavings: lever.netSavings,
+    opexOneOff: lever.opexOneOff,
+    opexRec: lever.opexRec,
+    capex: lever.capex,
+  };
+}
+
+/** Taux de réalisation (%) = réalisé / cible, défini UNE fois pour toutes les vues (fiche levier,
+ *  KPI programme, synthèse chantier, page Workstreams). Cible ≤ 0 (levier/ensemble net négatif ou
+ *  nul) : 0 % — un ratio de deux négatifs (« −1 réalisé sur −2 prévu ») afficherait sinon 50 % de
+ *  « réalisation » d'une perte. Réalisé négatif : 0 % (jamais de pourcentage négatif). Pas de
+ *  plafond à 100 (dépassement de cible légitime ; les jauges clampent à l'affichage). */
+export function realizationPct(realized: number, target: number): number {
+  if (!(target > 0)) return 0;
+  const pct = (realized / target) * 100;
+  return pct > 0 ? Math.round(pct) : 0;
 }
 
 /** « Avancement » d'un levier — SEULE formule derrière ce libellé, partout (liste, Kanban,
@@ -311,12 +357,21 @@ export function leverProgressPct(lever: Pick<Lever, "actions" | "status">): numb
 }
 
 /** « Avancement » d'un chantier (workstream) : moyenne des `leverProgressPct` de ses leviers non
- *  abandonnés, PONDÉRÉE PAR LEUR VALEUR (économie nette réactualisée, `displayedReforecastNet`,
- *  bornée à 0) — un gros levier pèse plus (décision audit 2026-09-24, C1). Si aucun levier n'a de
- *  valeur positive, moyenne simple. `null` si le chantier n'a aucun levier actif. */
+ *  abandonnés, pondérée :
+ *   - par les POIDS DÉCLARÉS (`Lever.workstreamWeightPct`, saisis dans LeverForm) dès qu'au moins
+ *     un levier du chantier en porte un — même mécanique que `workstreamDeclaredProgress`
+ *     (lib/workstreamLogic.ts : poids implicite réparti entre les leviers sans poids) ;
+ *   - sinon PAR LEUR VALEUR (économie nette réactualisée, `displayedReforecastNet`, bornée à 0) —
+ *     un gros levier pèse plus (décision audit 2026-09-24, C1). Si aucun levier n'a de valeur
+ *     positive, moyenne simple.
+ *  `null` si le chantier n'a aucun levier actif. */
 export function workstreamProgressPct(levers: Lever[], workstreamId: string): number | null {
   const active = levers.filter((l) => l.ws === workstreamId && l.status !== "cancelled");
   if (active.length === 0) return null;
+  if (active.some((l) => typeof l.workstreamWeightPct === "number")) {
+    const declared = workstreamDeclaredProgress(active, workstreamId, leverProgressPct);
+    if (declared !== null) return Math.round(declared);
+  }
   const weights = active.map((l) => Math.max(0, displayedReforecastNet(l).value));
   const totalWeight = weights.reduce((a, b) => a + b, 0);
   const pct =
@@ -333,10 +388,7 @@ export function workstreamProgressPct(levers: Lever[], workstreamId: string): nu
  *  (pas de plafond à 100 : un levier qui dépasse sa cible réactualisée peut légitimement afficher
  *  plus, les composants d'affichage (`RadialProgress`/`ProgressBar`) clampent déjà visuellement). */
 export function displayedProgressPct(lever: Lever): number {
-  const reforecast = displayedReforecastNet(lever).value;
-  if (!reforecast) return 0;
-  const pct = (realizedSavings(lever) / reforecast) * 100;
-  return pct > 0 ? Math.round(pct) : 0;
+  return realizationPct(realizedSavings(lever), displayedReforecastNet(lever).value);
 }
 
 export function realizedFte(lever: Lever): number {
@@ -357,6 +409,62 @@ function implementationCosts(snapshot: { capex: number; opexOneOff: number }): n
   return snapshot.capex + snapshot.opexOneOff;
 }
 
+/** Un coût « Invest » (CAPEX / OPEX one-off) est-il déjà engagé à `today` ? Règle DATÉE unique
+ *  (KPI « CAPEX & coûts one-off » du dashboard, donut « Coûts engagés vs à venir », tableau des
+ *  chantiers — audit M8 ; avant : prorata du champ stocké et périmé `lever.progress`) :
+ *   - CAPEX lissé : engagé dès le début du lissage ; CAPEX one-shot : à sa date de déploiement ;
+ *   - OPEX one-off : à sa date propre si renseignée ;
+ *   - sans date : engagé si le levier est « Réalisé », ou « Exécuté » et démarré. */
+export function isInvestCostEngaged(
+  impact: LeverImpact,
+  lever: Pick<Lever, "status" | "start">,
+  today: Date = new Date()
+): boolean {
+  const refDate =
+    impact.nature === "capex" && impact.capexAllocationMode === "smoothed"
+      ? impact.capexStartDate
+      : (impact.capexDeploymentDate ?? impact.capexStartDate);
+  if (refDate) {
+    const d = parseLocalDate(refDate);
+    if (!Number.isNaN(d.getTime())) return d.getTime() <= today.getTime();
+  }
+  if (lever.status === "delivered") return true;
+  if (lever.status === "in_progress") {
+    return parseLocalDate(lever.start).getTime() <= today.getTime();
+  }
+  return false;
+}
+
+/** Coûts Invest (CAPEX + OPEX one-off, €M) ENGAGÉS d'un levier à `today` — somme datée de ses
+ *  lignes de coût (`isInvestCostEngaged`). Levier sans ligne de coût détaillée (saisie macro) :
+ *  coûts d'implémentation × avancement affiché (`leverProgressPct`, jamais le champ stocké et
+ *  périmé `lever.progress`). */
+export function leverEngagedInvestCost(lever: Lever, today: Date = new Date()): number {
+  const { capex, opexOneOff } = leverEngagedInvestCostByNature(lever, today);
+  return capex + opexOneOff;
+}
+
+/** `leverEngagedInvestCost`, ventilé CAPEX / OPEX one-off (tableau des chantiers du dashboard). */
+export function leverEngagedInvestCostByNature(
+  lever: Lever,
+  today: Date = new Date()
+): { capex: number; opexOneOff: number } {
+  if (lever.status === "cancelled") return { capex: 0, opexOneOff: 0 };
+  const costs = leverImpactsOf(lever).filter((i) => i.type === "cost" && i.nature !== "opex_rec");
+  if (costs.length > 0) {
+    let capex = 0;
+    let opexOneOff = 0;
+    for (const i of costs) {
+      if (!isInvestCostEngaged(i, lever, today)) continue;
+      if (i.nature === "capex") capex += i.amount;
+      else opexOneOff += i.amount;
+    }
+    return { capex, opexOneOff };
+  }
+  const f = leverProgressPct(lever) / 100;
+  return { capex: lever.capex * f, opexOneOff: lever.opexOneOff * f };
+}
+
 export function programSummary(data: BeTrackData): ProgramSummary {
   const active = data.levers.filter((l) => l.status !== "cancelled");
   const target = active.reduce((s, l) => s + l.netSavings, 0);
@@ -370,12 +478,10 @@ export function programSummary(data: BeTrackData): ProgramSummary {
 
   // Coûts d'implémentation (CAPEX + one-off, jamais l'OPEX récurrent) : plan / engagé / reforecast.
   const plannedCosts = active.reduce((s, l) => s + implementationCosts(l.lockedPlan ?? l), 0);
-  const engagedCosts = active.reduce(
-    (s, l) => s + implementationCosts(l) * (l.status === "delivered" ? 1 : l.progress / 100),
-    0
-  );
+  // Engagé : règle DATÉE commune au donut Finance (audit M8), voir `leverEngagedInvestCost`.
+  const engagedCosts = active.reduce((s, l) => s + leverEngagedInvestCost(l), 0);
   const reforecastCosts = active.reduce(
-    (s, l) => s + implementationCosts(reforecastSnapshotOf(l) ?? l.lockedPlan ?? l),
+    (s, l) => s + implementationCosts(displayedReforecastSnapshot(l)),
     0
   );
 
@@ -442,10 +548,11 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     // Réalisé / réactualisé (jamais / plan initial) — même convention que `displayedProgressPct`
     // (fiche levier) : un progrès ne peut afficher 100 % que si le réalisé égale la cible
     // RÉACTUALISÉE, pas la cible initiale (qui peut avoir été revue depuis).
-    progressPct: reforecastTarget > 0 ? Math.round((realized / reforecastTarget) * 100) : 0,
+    progressPct: realizationPct(realized, reforecastTarget),
     capex: Math.round(capex * 10) / 10,
     opex: Math.round(opex * 10) / 10,
-    fteImpact,
+    // Somme de flottants (0,1 + 0,2 = 0,30000000000000004) : arrondi au dixième d'ETP.
+    fteImpact: Math.round(fteImpact * 10) / 10,
     leverCount: active.length,
     onTrack,
     atRisk,
@@ -478,7 +585,7 @@ export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSu
     target: Math.round(target * 10) / 10,
     reforecastTarget: Math.round(reforecastTarget * 10) / 10,
     realized: Math.round(realized * 10) / 10,
-    progressPct: reforecastTarget > 0 ? Math.round((realized / reforecastTarget) * 100) : 0,
+    progressPct: realizationPct(realized, reforecastTarget),
     capex: Math.round(capex * 10) / 10,
     opex: Math.round(opex * 10) / 10,
     leverCount: levers.length,
@@ -487,12 +594,16 @@ export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSu
   };
 }
 
-// ─── P&L Impact détaillé (plan vs réalisé, ventilé par période) ──────────────
+// ─── P&L Impact détaillé (plan vs réactualisé vs réalisé, ventilé par période) ──────────────
 
 export type PnlDetailedPoint = {
   accountId: string;
   accountName: string;
+  /** « Planifié initial » net (plan figé `lockedPlan`, abandonnés compris — `plannedInitialNet`). */
   plan: number;
+  /** « Réactualisé » net (`displayedReforecastNet`, leviers actifs). */
+  reforecast: number;
+  /** Réalisé net (impacts réalisés, `realizedSavings`). */
   realized: number;
 };
 
@@ -505,7 +616,7 @@ export type PnlPeriodFilter = {
 
 function dateMatchesPeriod(dateStr: string | undefined, filter: PnlPeriodFilter): boolean {
   if (!dateStr) return false;
-  const d = new Date(dateStr);
+  const d = parseLocalDate(dateStr);
   if (isNaN(d.getTime())) return false;
   const year = String(d.getFullYear());
   if (year !== filter.year) return false;
@@ -519,161 +630,168 @@ function dateMatchesPeriod(dateStr: string | undefined, filter: PnlPeriodFilter)
   return true;
 }
 
-/** Sentinelle pour les montants dont le rattachement P&L n'a pas (encore) été précisé : à la
- *  création d'un levier, il n'y a plus de rattachement à un compte P&L par défaut (ça se fait au
- *  niveau de chaque action/impact, via `ActionImpact.hierarchyLeafId`) — tant qu'un impact n'a pas
- *  de rattachement fin, son montant apparaît dans ce bucket plutôt que d'être arbitrairement
- *  rattaché à un compte. */
-/** Montant signé d'une ligne d'impact pour le P&L (gain +, coût −) ; `null` pour un gain one-off
- *  (jamais agrégé aux totaux annualisés). */
-function impactSignedAmount(imp: LeverImpact): number | null {
+/** Montant signé d'une ligne d'impact dans le NET annualisé (règle « net = brut − OPEX récurrent »,
+ *  `leverImpactTotals.netAnnual`) : gain récurrent +, départ ETP +, recrutement ETP −, OPEX
+ *  récurrent − ; `null` pour ce qui n'entre JAMAIS dans le net (CAPEX, OPEX one-off, gain one-off).
+ *  Base commune du P&L et du tableau Finance, pour que leurs ventilations se recoupent avec les
+ *  totaux par levier (audit M3/M5 : les deux comptaient CAPEX/one-off, en valeur absolue côté
+ *  Finance, en déduction côté P&L). */
+export function impactNetSigned(imp: LeverImpact): number | null {
   if (imp.type === "saving") return imp.gainRecurrence === "oneoff" ? null : imp.amount;
   if (imp.type === "fte") return imp.fteDirection === "hire" ? -imp.amount : imp.amount;
-  return -imp.amount;
+  if (imp.nature === "opex_rec") return -imp.amount;
+  return null;
+}
+
+/** Répartit un total de levier (`total`, ex. plan figé) sur ses lignes nettes (`signed`) : chaque
+ *  ligne garde son montant SIGNÉ exact, et l'écart `total − Σ signés` (plan figé ≠ impacts actuels)
+ *  est réparti au prorata des |montants|. La somme des parts vaut exactement `total` ; quand le
+ *  total EST la somme des impacts (réactualisé), chaque ligne reçoit exactement son montant. */
+export function allocateLeverTotal(total: number, signed: number[]): number[] {
+  if (signed.length === 0) return [];
+  const sum = signed.reduce((s, v) => s + v, 0);
+  const abs = signed.reduce((s, v) => s + Math.abs(v), 0);
+  if (abs === 0) return signed.map(() => total / signed.length);
+  return signed.map((v) => v + ((total - sum) * Math.abs(v)) / abs);
+}
+
+/** Ligne nette d'un levier, avec ses dates : `date` = date de la ligne (début de l'impact, sinon fin
+ *  du levier ; fin de l'action pour les impacts legacy portés par les actions), `realized` = compte
+ *  dans le réalisé (`isImpactRealized` ; action « faite » en legacy), `realDate` = date du réalisé. */
+type LeverNetLine = {
+  imp: LeverImpact;
+  signed: number;
+  date: string | undefined;
+  realized: boolean;
+  realDate: string | undefined;
+};
+
+function leverNetLines(lever: Lever, today: Date): LeverNetLine[] {
+  const cancelled = lever.status === "cancelled";
+  if (lever.impacts && lever.impacts.length > 0) {
+    const out: LeverNetLine[] = [];
+    for (const imp of lever.impacts) {
+      const signed = impactNetSigned(imp);
+      if (signed === null || signed === 0) continue;
+      const date = impactDatesOf(imp).start ?? lever.end;
+      out.push({
+        imp,
+        signed,
+        date,
+        realized: !cancelled && isImpactRealized(imp, today),
+        realDate: date,
+      });
+    }
+    return out;
+  }
+  // Legacy : impacts encore portés par les actions (données non migrées) — même règle que
+  // `realizedSavings` (actions « faites »).
+  const out: LeverNetLine[] = [];
+  for (const action of lever.actions ?? []) {
+    for (const imp of action.impacts ?? []) {
+      const signed = impactNetSigned(imp);
+      if (signed === null || signed === 0) continue;
+      out.push({
+        imp,
+        signed,
+        date: action.end,
+        realized: !cancelled && action.status === "done",
+        realDate: action.deliveredDate ?? action.end,
+      });
+    }
+  }
+  return out;
 }
 
 export const UNALLOCATED_ACCOUNT_ID = "__unallocated__";
 
-/** Impact P&L détaillé : plan vs réalisé par compte, ventilé par période.
+/** Impact P&L détaillé par compte : planifié initial / réactualisé / réalisé, ventilés par période.
  *
- *  - **Plan** : pour chaque levier/sous-levier, `lockedPlan.netSavings ?? netSavings` est
- *    comptabilisé au mois de sa date de fin prévue (`end`). Si le levier a des sous-leviers,
- *    chaque sous-levier est ventilé séparément (sur sa propre date de fin).
- *  - **Réalisé** : pour chaque levier/sous-levier en M5 (delivered), `netSavings` est
- *    comptabilisé au mois de `deliveredDate` (date de passage en M5). Les leviers non M5
- *    ne comptent pas dans le réalisé P&L.
- *  - Si aucun filtre de période, les totaux couvrent tout l'exercice.
+ *  MÊMES définitions que les totaux par levier (audit M5 — le P&L avait ses propres règles : plan
+ *  = impacts courants CAPEX/one-off déduits, réalisé = plan × avancement des actions) :
+ *  - **Plan** : « Planifié initial » net (`displayedLockedPlanNet`, abandonnés compris) ;
+ *  - **Réactualisé** : net réactualisé (`displayedReforecastNet`, leviers actifs) ;
+ *  - **Réalisé** : impacts réalisés (`isImpactRealized`), soit `realizedSavings`.
+ *  Chaque total de levier est réparti sur ses lignes nettes (`allocateLeverTotal`) puis rattaché
+ *  au compte et à la date de la ligne (début de l'impact, sinon fin du levier). CAPEX, OPEX one-off
+ *  et gains one-off n'entrent jamais dans le net, donc jamais dans ce P&L annualisé. Sans filtre de
+ *  période, les totaux par compte égalent la somme des totaux des leviers.
  *
- *  Comptes P&L : si `hierarchyLevels` contient un niveau `semantic === "pnl"` avec des
- *  `hierarchyNodes` (domaine "financial") configurés pour ce niveau, ce sont CES nœuds qui
- *  font foi pour la liste des comptes — TOUS apparaissent dans le résultat (même sans aucun
- *  levier dessus, à plan=0/realized=0). Le rattachement de chaque montant suit cet ordre de
- *  priorité : 1) rattachement fin de CET impact (`ActionImpact.hierarchyLeafId`, voir
- *  `resolveImpactAccount`) ; 2) repli sur le rattachement du levier porteur (`hierarchyLeafId`,
- *  compat ascendante/legacy) ; 3) repli sur l'ancien système sans arborescence
- *  (`impact.pnlMap || lever.pnlMap`) ; 4) si toujours rien, le bucket `UNALLOCATED_ACCOUNT_ID`
- *  ("Gains non attribués"). Si aucune arborescence financière avec un niveau "pnl" n'est
- *  configurée, le comportement est identique à avant (aucun changement pour les entreprises sans
- *  arborescence). */
+ *  Comptes P&L : si `hierarchyLevels` contient un niveau `semantic === "pnl"` avec des nœuds
+ *  (domaine "financial"), ce sont CES nœuds qui font foi — TOUS apparaissent (même à 0). Rattachement
+ *  d'une ligne : 1) `impact.hierarchyLeafId` ; 2) `lever.hierarchyLeafId` ; 3) `impact.pnlMap ||
+ *  lever.pnlMap` (sans arborescence) ; 4) bucket `UNALLOCATED_ACCOUNT_ID` (« Gains non attribués »). */
 export function pnlImpactDetailed(
   data: BeTrackData,
   periodFilter?: PnlPeriodFilter,
   hierarchyNodes?: HierarchyNode[],
-  hierarchyLevels?: HierarchyLevelDef[]
+  hierarchyLevels?: HierarchyLevelDef[],
+  today: Date = new Date()
 ): PnlDetailedPoint[] {
-  const active = data.levers.filter((l) => l.status !== "cancelled");
-
   const pnlLevel = hierarchyLevels?.find((level) => level.semantic === "pnl");
   const financialNodes = pnlLevel ? nodesForDomain(hierarchyNodes ?? [], "financial") : [];
   const pnlNodes = pnlLevel ? financialNodes.filter((node) => node.levelKey === pnlLevel.key) : [];
   const useHierarchy = !!pnlLevel && pnlNodes.length > 0;
 
-  const map = new Map<string, { plan: number; realized: number }>();
+  const map = new Map<string, { plan: number; reforecast: number; realized: number }>();
   if (useHierarchy) {
-    // Pré-remplit TOUS les comptes réellement configurés dans l'arborescence, même sans levier
-    // dessus — c'est le point clé du besoin : voir tous les blocs P&L définis, remplis ou vides.
-    for (const node of pnlNodes) {
-      map.set(node.code, { plan: 0, realized: 0 });
-    }
+    // Pré-remplit TOUS les comptes réellement configurés dans l'arborescence, même sans levier.
+    for (const node of pnlNodes) map.set(node.code, { plan: 0, reforecast: 0, realized: 0 });
   }
-
-  const addPlan = (pnlMap: string, amount: number) => {
-    const e = map.get(pnlMap) ?? { plan: 0, realized: 0 };
-    e.plan += amount;
-    map.set(pnlMap, e);
-  };
-  const addRealized = (pnlMap: string, amount: number) => {
-    const e = map.get(pnlMap) ?? { plan: 0, realized: 0 };
-    e.realized += amount;
-    map.set(pnlMap, e);
-  };
-
-  // Résout le compte P&L (macro) d'un levier via son `hierarchyLeafId`, `undefined` si
-  // l'arborescence n'est pas utilisable ou si le levier n'a pas (encore) de leaf id — auquel
-  // cas l'appelant retombe sur `lever.pnlMap`/`impact.pnlMap` pour ce levier précis.
-  const resolveLeverAccount = (lever: Lever): string | undefined => {
-    if (!useHierarchy || !lever.hierarchyLeafId) return undefined;
-    const path = resolveHierarchyPath(lever.hierarchyLeafId, financialNodes, hierarchyLevels ?? []);
-    return path.find((entry) => entry.levelKey === pnlLevel!.key)?.code;
-  };
-
-  // Même mécanique que `resolveLeverAccount`, appliquée au rattachement fin de CET impact
-  // (`ActionImpact.hierarchyLeafId`) — résolution prioritaire, voir doc-comment ci-dessus.
-  const resolveImpactAccount = (impact: LeverImpact): string | undefined => {
-    if (!useHierarchy || !impact.hierarchyLeafId) return undefined;
-    const path = resolveHierarchyPath(
-      impact.hierarchyLeafId,
-      financialNodes,
-      hierarchyLevels ?? []
-    );
-    return path.find((entry) => entry.levelKey === pnlLevel!.key)?.code;
-  };
-
-  for (const lever of active) {
-    const hierarchyAccount = resolveLeverAccount(lever);
-    // Modèle actuel : impacts portés par le levier (gains one-off exclus : jamais dans le P&L
-    // annualisé). Plan à la date de gain (sinon fin du levier) ; réalisé au prorata de
-    // l'avancement des actions, à la date de livraison (sinon fin du levier).
-    if (lever.impacts && lever.impacts.length > 0) {
-      const frac = realizationFraction(lever);
-      for (const impact of lever.impacts) {
-        const signed = impactSignedAmount(impact);
-        if (signed === null) continue;
-        const account =
-          resolveImpactAccount(impact) ??
-          hierarchyAccount ??
-          (impact.pnlMap || lever.pnlMap) ??
-          UNALLOCATED_ACCOUNT_ID;
-        const planDate = impact.gainDate ?? impact.capexDeploymentDate ?? lever.end;
-        if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) addPlan(account, signed);
-        if (frac > 0) {
-          const realDate = lever.deliveredDate ?? lever.end;
-          if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
-            addRealized(account, signed * frac);
-          }
-        }
-      }
-      continue;
+  const entry = (account: string) => {
+    let e = map.get(account);
+    if (!e) {
+      e = { plan: 0, reforecast: 0, realized: 0 };
+      map.set(account, e);
     }
-    const actionImpacts = (lever.actions ?? []).flatMap((action) =>
-      (action.impacts ?? []).map((impact) => ({ action, impact }))
-    );
-    if (actionImpacts.length > 0) {
-      for (const { action, impact } of actionImpacts) {
-        const account =
-          resolveImpactAccount(impact) ??
-          hierarchyAccount ??
-          (impact.pnlMap || lever.pnlMap) ??
-          UNALLOCATED_ACCOUNT_ID;
-        const signedAmount = impact.type === "saving" ? impact.amount : -impact.amount;
-        if (!periodFilter || dateMatchesPeriod(action.end, periodFilter)) {
-          addPlan(account, signedAmount);
-        }
-        if (action.status === "done") {
-          const realDate = action.deliveredDate ?? action.end;
-          if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
-            addRealized(account, signedAmount);
-          }
-        }
+    return e;
+  };
+  const inPeriod = (date: string | undefined) =>
+    !periodFilter || dateMatchesPeriod(date, periodFilter);
+
+  const accountOfLeaf = (leafId: string | undefined): string | undefined => {
+    if (!useHierarchy || !leafId) return undefined;
+    const path = resolveHierarchyPath(leafId, financialNodes, hierarchyLevels ?? []);
+    return path.find((p) => p.levelKey === pnlLevel!.key)?.code;
+  };
+
+  for (const lever of data.levers) {
+    const isCancelled = lever.status === "cancelled";
+    const plan = displayedLockedPlanNet(lever).value;
+    const refo = isCancelled ? 0 : displayedReforecastNet(lever).value;
+    const leverAccount = accountOfLeaf(lever.hierarchyLeafId);
+    const lines = leverNetLines(lever, today);
+
+    if (lines.length === 0) {
+      // Levier sans ligne nette détaillée : bloc unique à sa date de fin.
+      const account = leverAccount ?? (lever.pnlMap || undefined) ?? UNALLOCATED_ACCOUNT_ID;
+      if (inPeriod(lever.end)) {
+        entry(account).plan += plan;
+        entry(account).reforecast += refo;
       }
+      const real = realizedSavings(lever);
+      if (real !== 0 && inPeriod(lever.deliveredDate ?? lever.end)) entry(account).realized += real;
       continue;
     }
 
-    // Levier sans impacts d'action détaillés : traité comme un bloc unique.
-    const account = hierarchyAccount ?? lever.pnlMap ?? UNALLOCATED_ACCOUNT_ID;
-    const planAmount = lever.lockedPlan?.netSavings ?? lever.netSavings;
-    const planDate = lever.end;
-    if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) {
-      addPlan(account, planAmount);
-    }
-    if (lever.status === "delivered") {
-      const realDate = lever.deliveredDate ?? lever.end;
-      if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
-        addRealized(account, lever.netSavings);
+    const signed = lines.map((x) => x.signed);
+    const planParts = allocateLeverTotal(plan, signed);
+    const refoParts = isCancelled ? signed.map(() => 0) : allocateLeverTotal(refo, signed);
+    lines.forEach((line, i) => {
+      const account =
+        accountOfLeaf(line.imp.hierarchyLeafId) ??
+        leverAccount ??
+        (line.imp.pnlMap || lever.pnlMap || undefined) ??
+        UNALLOCATED_ACCOUNT_ID;
+      if (inPeriod(line.date)) {
+        entry(account).plan += planParts[i];
+        entry(account).reforecast += refoParts[i];
       }
-    }
+      if (line.realized && inPeriod(line.realDate)) entry(account).realized += line.signed;
+    });
   }
 
+  const r1 = (n: number) => Math.round(n * 10) / 10;
   return Array.from(map.entries())
     .map(([id, vals]) => ({
       accountId: id,
@@ -683,8 +801,9 @@ export function pnlImpactDetailed(
           : ((useHierarchy ? pnlNodes.find((node) => node.code === id)?.label : undefined) ??
             data.pnlAccounts.find((a) => a.id === id)?.name ??
             id),
-      plan: Math.round(vals.plan * 10) / 10,
-      realized: Math.round(vals.realized * 10) / 10,
+      plan: r1(vals.plan),
+      reforecast: r1(vals.reforecast),
+      realized: r1(vals.realized),
     }))
     .sort((a, b) => b.plan - a.plan);
 }
@@ -770,8 +889,17 @@ const RISK_SEVERITY: Record<RiskLevel, number> = { critical: 3, high: 2, medium:
  * déterminé le niveau retenu, avec la valeur réelle et le seuil comparé. */
 export type LeverRiskAssessment = {
   level: RiskLevel;
+  /** Texte français de repli (exports, tests) — l'UI affiche `leverRiskReasonText()`. */
   reason: string;
+  /** Motif structuré, traduit à l'affichage par `leverRiskReasonText()` (lib/leverRiskText.ts) :
+   *  les montants restent numériques pour être formatés dans la langue/devise actives. */
+  reasonI18n: LeverRiskReason;
 };
+
+export type LeverRiskReason =
+  | { kind: "none" }
+  | { kind: "delay"; level: RiskLevel; days: number; thresholdDays: number }
+  | { kind: "amount"; level: RiskLevel; amount: number; thresholdAmount: number };
 
 const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
   critical: "critique",
@@ -781,9 +909,7 @@ const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
 };
 
 function fmtRiskAmount(amount: number): string {
-  return amount >= 1000
-    ? `${(amount / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} k€`
-    : `${Math.round(amount).toLocaleString("fr-FR")} €`;
+  return formatCompactCurrency(amount, { locale: "fr", maximumFractionDigits: 0 });
 }
 
 /** Risque d'un levier dérivé des alertes qui lui sont liées (Alert.scope === leverId, non
@@ -834,15 +960,22 @@ export function computeLeverRisk(
   const level = byDelay && RISK_SEVERITY[byDelay] > RISK_SEVERITY[byAmount] ? byDelay : byAmount;
 
   let reason: string;
+  let reasonI18n: LeverRiskReason;
   if (level === "low") {
     reason = "Aucun critère de risque dépassé : niveau faible.";
+    reasonI18n = { kind: "none" };
   } else if (byDelay && RISK_SEVERITY[byDelay] >= RISK_SEVERITY[byAmount]) {
-    reason = `Retard : la plus ancienne alerte ouverte date de ${Math.floor(oldestOpenDays)} jours (seuil ${RISK_LEVEL_LABELS[level]} : ${delayThreshold?.delayDays} jours).`;
+    const days = Math.floor(oldestOpenDays);
+    const thresholdDays = delayThreshold?.delayDays ?? 0;
+    reason = `Retard : la plus ancienne alerte ouverte date de ${days} jours (seuil ${RISK_LEVEL_LABELS[level]} : ${thresholdDays} jours).`;
+    reasonI18n = { kind: "delay", level, days, thresholdDays };
   } else {
-    reason = `Montant à risque : ${fmtRiskAmount(total)} d'alertes ouvertes (seuil ${RISK_LEVEL_LABELS[level]} : ${fmtRiskAmount(amountThreshold?.minAmount ?? 0)}).`;
+    const thresholdAmount = amountThreshold?.minAmount ?? 0;
+    reason = `Montant à risque : ${fmtRiskAmount(total)} d'alertes ouvertes (seuil ${RISK_LEVEL_LABELS[level]} : ${fmtRiskAmount(thresholdAmount)}).`;
+    reasonI18n = { kind: "amount", level, amount: total, thresholdAmount };
   }
 
-  return { level, reason };
+  return { level, reason, reasonI18n };
 }
 
 /**
@@ -872,11 +1005,11 @@ export function underperformers(data: BeTrackData, wsId?: string, now: number = 
     .sort((a, b) => b.lateActionsCount - a.lateActionsCount);
 }
 
+/** Montant en M (unité des données Plan Performance) → montant compact dans la langue et la devise
+ *  actives (`7,7 M €` en fr, `€7.7M` en en) — délègue à `formatCompactCurrency` (lib/format.ts). */
 export function fmtCurr(v: number | null | undefined, dec = 1): string {
   if (v === null || v === undefined) return "—";
-  const abs = Math.abs(v);
-  if (abs >= 1) return `€${v.toFixed(dec)}M`;
-  return `€${(v * 1000).toFixed(0)}K`;
+  return formatMillions(v, dec);
 }
 
 export function fmtPct(v: number): string {
@@ -884,7 +1017,7 @@ export function fmtPct(v: number): string {
 }
 
 export function fmtInt(v: number): string {
-  return v.toLocaleString("fr-FR");
+  return formatNumber(v);
 }
 
 // ---------- Sous-leviers, plan d'action, rollup de progression ----------
@@ -1333,9 +1466,44 @@ export function leverEndQuarterLabel(lever: Lever): string {
 /** Index de mois fiscal (0-11) correspondant à `dateStr`, relatif à `fyStart` — clampé aux bornes
  * de l'exercice (les dates hors exercice sont rattachées au premier ou dernier mois). */
 function fiscalMonthIndex(dateStr: string, fyStart: Date): number {
-  const d = new Date(dateStr);
+  return fiscalMonthIndexOfDate(parseLocalDate(dateStr), fyStart);
+}
+
+function fiscalMonthIndexOfDate(d: Date, fyStart: Date): number {
   const idx = (d.getFullYear() - fyStart.getFullYear()) * 12 + d.getMonth() - fyStart.getMonth();
   return Math.min(11, Math.max(0, idx));
+}
+
+/** Premier jour de l'exercice fiscal à utiliser pour la courbe en S / le pont. `fyStart` = celui
+ *  du PROGRAMME sélectionné (l'appelant le passe, ou le porte dans `data.program.fyStart`) ; valeur
+ *  vide/invalide (cas du vestige `data.program.fyStart = ""` depuis la migration multi-programmes,
+ *  qui donnait une date NaN et une série entièrement à 0) → année civile de `today`. */
+export function resolveFiscalYearStart(
+  fyStart: string | undefined,
+  today: Date = new Date()
+): Date {
+  const d = fyStart ? parseLocalDate(fyStart.length === 7 ? `${fyStart}-01` : fyStart) : null;
+  if (d && !Number.isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), 1);
+  return new Date(today.getFullYear(), 0, 1);
+}
+
+/** Libellés RÉELS des 12 mois de l'exercice commençant à `fyStart` (« Apr 2026 » … « Mar 2027 ») —
+ *  avant, l'index de mois FISCAL était libellé avec les noms de mois CIVILS (« Jan » = 1er mois de
+ *  l'exercice, même s'il commençait en avril). */
+export function fiscalMonthLabels(fyStart: Date): string[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + i, 1);
+    return `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+  });
+}
+
+/** Libellés des 4 trimestres de l'exercice : trimestre CIVIL du premier mois de chaque trimestre
+ *  fiscal (« Q2 2026 » pour avril-juin), même format « Qn AAAA » que le reste de l'app. */
+export function fiscalQuarterLabels(fyStart: Date): string[] {
+  return [0, 3, 6, 9].map((offset) => {
+    const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + offset, 1);
+    return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
+  });
 }
 
 /**
@@ -1405,39 +1573,33 @@ export type SavingsSeriesPoint = {
  *  levier. Distinct de `underperformers`/`isActionLate` (retard du PLAN D'ACTION, utilisé par les
  *  alertes et le KPI "Leviers à risque") : ici on regarde si l'argent/l'ETP attendu à telle date a
  *  effectivement été constaté comme réalisé, indépendamment du statut des actions. */
-function isLeverLate(lever: Lever, today: Date): boolean {
+export function isLeverLate(lever: Lever, today: Date = new Date()): boolean {
   if (lever.status === "delivered" || lever.status === "cancelled") return false;
-  return leverImpactsOf(lever).some((imp) => {
-    // Explicitement confirmé réalisé/en cours → jamais en retard, quelle que soit la date. On
-    // regarde `imp.status` DIRECTEMENT plutôt que `impactStatusOf` : celle-ci dérive un statut
-    // "réalisé" par défaut dès qu'une date est passée et qu'aucun statut n'a été saisi (pratique
-    // pour l'affichage des données historiques, mais l'inverse de ce qu'il faut ici — un impact
-    // jamais confirmé et dont la date est dépassée doit compter comme en retard, pas comme réalisé).
-    if (imp.status === "done" || imp.status === "ongoing") return false;
-    const start = impactStartDateOf(imp) ?? lever.end;
-    const d = new Date(start);
-    return !Number.isNaN(d.getTime()) && d.getTime() < today.getTime();
-  });
+  // Même règle que le réalisé (audit M7) : `isImpactLate` est le complément exact de
+  // `isImpactRealized` — un impact ne peut plus être à la fois compté réalisé ET en retard (avant,
+  // un impact daté dans le passé sans statut saisi était les deux). Échéance d'un impact sans date
+  // propre : la fin du levier.
+  return leverImpactsOf(lever).some((imp) => isImpactLate(imp, today, lever.end));
 }
 
 export function savingsSeries(
   data: BeTrackData,
   granularity: TimeGranularity = "month",
-  today: Date = new Date()
+  today: Date = new Date(),
+  /** Début d'exercice du PROGRAMME affiché (prioritaire sur `data.program.fyStart`, vestige
+   *  mono-programme souvent vide) — voir `resolveFiscalYearStart`. */
+  fyStartOverride?: string
 ): SavingsSeriesPoint[] {
-  const fyStart = new Date(data.program.fyStart);
+  const fyStart = resolveFiscalYearStart(fyStartOverride || data.program?.fyStart, today);
   const all = data.levers;
   const active = all.filter((l) => l.status !== "cancelled");
   const cancelled = all.filter((l) => l.status === "cancelled");
   const N = 12;
   const idxOf = (date: string) => fiscalMonthIndex(date, fyStart);
-  const todayIdx = Math.min(
-    N - 1,
-    Math.max(
-      0,
-      (today.getFullYear() - fyStart.getFullYear()) * 12 + today.getMonth() - fyStart.getMonth()
-    )
-  );
+  // Index NON borné de la période courante : négatif avant l'exercice (aucun réalisé affiché),
+  // ≥ 12 après (tout l'exercice est échu).
+  const rawTodayIdx =
+    (today.getFullYear() - fyStart.getFullYear()) * 12 + today.getMonth() - fyStart.getMonth();
 
   const planned = new Array(N).fill(0);
   const reforecast = new Array(N).fill(0);
@@ -1459,9 +1621,9 @@ export function savingsSeries(
     let actI = -1;
     if (real !== 0) {
       const d = l.deliveredDate
-        ? new Date(l.deliveredDate)
-        : new Date(Math.min(new Date(l.end).getTime(), today.getTime()));
-      actI = idxOf(d.toISOString().slice(0, 10));
+        ? parseLocalDate(l.deliveredDate)
+        : new Date(Math.min(parseLocalDate(l.end).getTime(), today.getTime()));
+      actI = fiscalMonthIndexOfDate(d, fyStart);
       actualDelta[actI] += real;
     }
     const late = isLeverLate(l, today);
@@ -1484,9 +1646,9 @@ export function savingsSeries(
 
   const r1 = (n: number) => Math.round(n * 10) / 10;
   let cumActual = 0;
-  const monthly: SavingsSeriesPoint[] = MONTH_LABELS.map((label, i) => {
+  const monthly: SavingsSeriesPoint[] = fiscalMonthLabels(fyStart).map((label, i) => {
     cumActual += actualDelta[i];
-    const shown = i <= todayIdx;
+    const shown = i <= rawTodayIdx;
     const late = lateGap[i];
     const other = otherGap[i];
     return {
@@ -1526,25 +1688,31 @@ export function savingsSeries(
     };
   });
   if (granularity === "month") return monthly;
+  const quarterLabels = fiscalQuarterLabels(fyStart);
   return [2, 5, 8, 11].map((endIdx, q) => {
     const from = q * 3;
+    // Trimestre EN COURS : point pris au mois courant (valeurs cumulées à date, réalisé compris)
+    // plutôt qu'au dernier mois du trimestre, encore futur — avant, le réalisé du trimestre en
+    // cours était masqué (null) jusqu'à sa clôture.
+    const pointIdx = rawTodayIdx >= from && rawTodayIdx < endIdx ? rawTodayIdx : endIdx;
     return {
-      ...monthly[endIdx],
-      month: `Q${q + 1}`,
-      actualDelta: r1(monthly.slice(from, endIdx + 1).reduce((s, p) => s + p.actualDelta, 0)),
+      ...monthly[pointIdx],
+      month: quarterLabels[q],
+      actualDelta: r1(monthly.slice(from, pointIdx + 1).reduce((s, p) => s + p.actualDelta, 0)),
     };
   });
 }
 
 /** S-curve à 3 courbes (Plan initial / Réalisé / Réactualisé) — projection de `savingsSeries`
  * (mêmes valeurs que le pont `financialBridge`). Voir `savingsSeries` pour les règles. */
-export function sCurve3(data: BeTrackData, granularity: TimeGranularity = "month") {
-  return savingsSeries(data, granularity).map(({ month, planned, reforecast, actual }) => ({
-    month,
-    planned,
-    reforecast,
-    actual,
-  }));
+export function sCurve3(
+  data: BeTrackData,
+  granularity: TimeGranularity = "month",
+  fyStart?: string
+) {
+  return savingsSeries(data, granularity, new Date(), fyStart).map(
+    ({ month, planned, reforecast, actual }) => ({ month, planned, reforecast, actual })
+  );
 }
 
 export type MarimekkoPairKey = "function-country" | "workstream-project" | "workstream-lever";
@@ -2145,10 +2313,10 @@ export function savingsWaterfall(data: BeTrackData): SavingsWaterfall {
   };
 }
 
-/** OPEX récurrent annuel d'un levier (snapshot réactualisé ?? plan figé ?? courant). */
+/** OPEX récurrent annuel d'un levier — même chaîne que `displayedReforecastNet` (voir
+ *  `displayedReforecastSnapshot`), pour que brut − OPEX = net réactualisé dans la cascade. */
 export function leverOpexRecOf(l: Lever): number {
-  const snap = reforecastSnapshotOf(l) ?? l.lockedPlan ?? l;
-  return snap.opexRec ?? 0;
+  return displayedReforecastSnapshot(l).opexRec ?? 0;
 }
 
 // ─── Finance par niveau de hiérarchie ───────────────────────────────────────
@@ -2167,45 +2335,102 @@ export type FinanceHierarchyRow = {
 
 export const UNATTRIBUTED_NODE_ID = "__unattributed__";
 
-/** Plage [année min, année max] couverte par un impact (début/fin) — `null` si aucune date. */
-function impactYearRange(imp: LeverImpact): [number, number] | null {
+/** Plage d'années [début, fin] couverte par un impact — audit M4 :
+ *  - impact RÉCURRENT (gain annuel, OPEX récurrent, ETP) : run-rate CHAQUE année depuis sa date de
+ *    début, jusqu'à sa date de fin si renseignée, sinon sans fin (`Infinity`) — avant, un récurrent
+ *    sans date de fin n'était rattaché qu'à son année de début ;
+ *  - impact ponctuel (CAPEX, OPEX one-off, gain one-off) : son année (CAPEX lissé : sa période).
+ *  Date de début absente : fin du levier pour un gain (même repli que `impactTrajectory`), début du
+ *  levier pour un coût. `null` si aucune date exploitable. */
+export function impactYearRange(
+  imp: LeverImpact,
+  lever?: Pick<Lever, "start" | "end">
+): [number, number] | null {
+  const isGain = imp.type === "saving" || (imp.type === "fte" && imp.fteDirection === "departure");
   const { start, end } = impactDatesOf(imp);
-  const y1 = start ? new Date(start).getFullYear() : undefined;
-  const y2 = end ? new Date(end).getFullYear() : y1;
+  const yearOf = (d: string | undefined) => {
+    if (!d) return undefined;
+    const y = parseLocalDate(d).getFullYear();
+    return Number.isNaN(y) ? undefined : y;
+  };
+  const y1 = yearOf(start) ?? yearOf(isGain ? lever?.end : lever?.start);
+  const y2 = yearOf(end);
+  if (isRecurringImpact(imp)) {
+    if (y1 === undefined) return y2 === undefined ? null : [y2, y2];
+    return [y1, y2 !== undefined ? Math.max(y1, y2) : Infinity];
+  }
   if (y1 === undefined && y2 === undefined) return null;
-  if (Number.isNaN(y1 as number) && Number.isNaN(y2 as number)) return null;
   const lo = y1 ?? (y2 as number);
-  const hi = y2 ?? (y1 as number);
+  const hi = y2 ?? lo;
   return [Math.min(lo, hi), Math.max(lo, hi)];
 }
 
-/** L'impact couvre-t-il au moins une des années demandées ? */
-function impactMatchesYears(imp: LeverImpact, years: Set<number>): boolean {
-  const range = impactYearRange(imp);
+/** L'impact est-il actif (run-rate ou ponctuel) sur au moins une des années demandées ? */
+export function impactActiveInYears(
+  imp: LeverImpact,
+  years: Set<number>,
+  lever?: Pick<Lever, "start" | "end">
+): boolean {
+  const range = impactYearRange(imp, lever);
   if (!range) return false;
-  for (let y = range[0]; y <= range[1]; y++) if (years.has(y)) return true;
+  for (const y of Array.from(years)) if (y >= range[0] && y <= range[1]) return true;
   return false;
+}
+
+/** Années proposées par le filtre « Années » du tableau Finance : années couvertes par les impacts
+ *  des leviers (plage `impactYearRange` — un récurrent sans fin court jusqu'à la dernière année
+ *  connue, au moins l'année de `today`), ou la période du levier s'il n'a aucun impact. */
+export function financeYearOptions(levers: Lever[], today: Date = new Date()): number[] {
+  const ranges: [number, number][] = [];
+  for (const l of levers) {
+    const imps = leverImpactsOf(l);
+    if (imps.length === 0) {
+      const a = parseLocalDate(l.start).getFullYear();
+      const b = parseLocalDate(l.end).getFullYear();
+      const lo = Number.isNaN(a) ? b : a;
+      const hi = Number.isNaN(b) ? a : b;
+      if (!Number.isNaN(lo) && !Number.isNaN(hi)) ranges.push([Math.min(lo, hi), Math.max(lo, hi)]);
+      continue;
+    }
+    for (const imp of imps) {
+      const r = impactYearRange(imp, l);
+      if (r) ranges.push(r);
+    }
+  }
+  if (ranges.length === 0) return [];
+  const finiteMax = Math.max(
+    today.getFullYear(),
+    ...ranges.flatMap(([lo, hi]) => (Number.isFinite(hi) ? [lo, hi] : [lo]))
+  );
+  const years = new Set<number>();
+  for (const [lo, hi] of ranges) {
+    const top = Number.isFinite(hi) ? hi : finiteMax;
+    for (let y = lo; y <= top; y++) years.add(y);
+  }
+  return Array.from(years).sort((a, b) => a - b);
 }
 
 /**
  * Finance (€M) par nœud du niveau `levelOrder` (`HierarchyLevelDef.order`) de l'arborescence
- * financière : chaque levier est rattaché via `hierarchyLeafId` (ou celui de ses impacts, au prorata
- * du |montant net| de chaque impact) puis remonté à l'ancêtre du niveau demandé via `parentId`.
- * Une feuille plus macro que le niveau demandé reste sur son propre nœud. Sans rattachement :
- * ligne "Non attribué". Le total de toutes les lignes égale la somme des leviers.
+ * financière. Chaque levier est ventilé sur ses lignes NETTES (`impactNetSigned` : gain récurrent +,
+ * OPEX récurrent/recrutement −, CAPEX et ponctuels EXCLUS) — audit M3, avant : prorata du |montant|
+ * de toutes les lignes, CAPEX compris, ce qui attribuait du gain net à un centre de coût porteur
+ * d'un simple CAPEX. Chaque total du levier (planifié initial, réactualisé) est réparti par
+ * `allocateLeverTotal` (montant signé exact + écart au prorata des |montants|) ; le réalisé est la
+ * somme EXACTE des lignes réalisées (`isImpactRealized`). Chaque ligne est rattachée via
+ * `impact.hierarchyLeafId ?? lever.hierarchyLeafId`, remontée à l'ancêtre du niveau demandé ; une
+ * feuille plus macro reste sur son propre nœud ; sans rattachement : « Non attribué ». Sans filtre
+ * années, le total des lignes égale la somme des leviers.
  *
- * `opts.years` (optionnel) restreint aux impacts dont la date (début/fin) couvre au moins une des
- * années données : un levier sans AUCUN impact dans ces années est totalement exclu (poids nul), et
- * pour un levier partiellement couvert, tous les montants (planifié initial, réactualisé, réalisé,
- * en retard) sont mis à l'échelle de la part de son poids d'impacts qui tombe dans ces années —
- * seul `planifié initial` (`lockedPlan`, un scalaire figé au niveau levier, jamais décomposé par
- * impact) est nécessairement une approximation proportionnelle ; réactualisé/réalisé suivent le
- * même prorata pour rester cohérents entre colonnes plutôt que de mélanger une colonne exacte et une
- * colonne approximée.
+ * `opts.years` (optionnel, audit M4) : ne garde que les lignes ACTIVES sur une des années (un
+ * récurrent est un run-rate de chaque année depuis son début, jusqu'à sa fin si renseignée — voir
+ * `impactYearRange`) ; un levier sans ligne active est exclu. Levier sans ligne nette : bloc unique
+ * sur sa feuille, retenu si sa période [début, fin] couvre une des années.
  *
- * `opts.unrounded` : montants NON arrondis — à utiliser pour tout total (voir `financeTotals`) :
- * sommer des lignes déjà arrondies à 0,1 dérivait du total réel (ex. Réactualisé 39,3 au tableau
- * Finance contre 39,4 au dashboard pour les mêmes leviers). Par défaut, lignes arrondies à 0,1.
+ * « En retard » : pour un levier en retard (`isLeverLate`), réactualisé − réalisé (≥ 0) des lignes
+ * retenues, réparti au prorata de l'écart de chaque ligne.
+ *
+ * `opts.unrounded` : montants NON arrondis — à utiliser pour tout total (voir `financeTotals`).
  */
 export function financeByHierarchyLevel(
   data: BeTrackData,
@@ -2238,11 +2463,26 @@ export function financeByHierarchyLevel(
     }
     return row;
   };
-  const resolveNode = (leafId: string | undefined): HierarchyNode | undefined => {
-    if (!leafId) return undefined;
-    const chain = resolveHierarchyNodeChain(leafId, financial, levels);
-    if (chain.length === 0) return undefined;
-    return chain.find((n) => n.levelKey === targetKey) ?? chain[chain.length - 1];
+  const rowForLeaf = (leafId: string | undefined): FinanceHierarchyRow => {
+    const chain = leafId ? resolveHierarchyNodeChain(leafId, financial, levels) : [];
+    const node =
+      chain.length > 0
+        ? (chain.find((n) => n.levelKey === targetKey) ?? chain[chain.length - 1])
+        : undefined;
+    return node
+      ? rowFor(node.id, node.code, node.label)
+      : rowFor(UNATTRIBUTED_NODE_ID, "", "Non attribué");
+  };
+  const leverInYears = (l: Lever) => {
+    if (!years) return true;
+    const a = parseLocalDate(l.start).getFullYear();
+    const b = parseLocalDate(l.end).getFullYear();
+    const lo = Number.isNaN(a) ? b : a;
+    const hi = Number.isNaN(b) ? a : b;
+    if (Number.isNaN(lo) || Number.isNaN(hi)) return false;
+    for (const y of Array.from(years))
+      if (y >= Math.min(lo, hi) && y <= Math.max(lo, hi)) return true;
+    return false;
   };
 
   for (const l of data.levers) {
@@ -2250,56 +2490,50 @@ export function financeByHierarchyLevel(
     const locked = displayedLockedPlanNet(l).value;
     const isCancelled = l.status === "cancelled";
     const refo = isCancelled ? 0 : displayedReforecastNet(l).value;
-    const real = isCancelled ? 0 : realizedSavings(l);
-    const late = !isCancelled && isLeverLate(l, today) ? Math.max(0, refo - real) : 0;
+    const late = !isCancelled && isLeverLate(l, today);
+    const lines = leverNetLines(l, today);
 
-    // Répartition par feuille
-    const shares = new Map<string | undefined, number>();
-    const imps = leverImpactsOf(l);
-    for (const imp of imps) {
-      const w = Math.abs(impactSignedAmount(imp) ?? 0);
-      if (w === 0) continue;
-      const key = imp.hierarchyLeafId ?? l.hierarchyLeafId;
-      shares.set(key, (shares.get(key) ?? 0) + w);
+    if (lines.length === 0) {
+      if (!leverInYears(l)) continue;
+      const real = isCancelled ? 0 : realizedSavings(l);
+      const row = rowForLeaf(l.hierarchyLeafId);
+      row.planned += locked;
+      row.reforecast += refo;
+      if (isCancelled) row.cancelled += locked;
+      row.realized += real;
+      if (late) row.late += Math.max(0, refo - real);
+      continue;
     }
-    if (shares.size === 0) shares.set(l.hierarchyLeafId, 1);
-    const totalW = Array.from(shares.values()).reduce((s, v) => s + v, 0) || 1;
 
-    // Filtre années : ne garde que le poids des impacts qui couvrent une des années sélectionnées,
-    // et met tous les montants du levier à l'échelle de ce sous-poids (voir docstring de la fonction).
-    let leafShares = shares;
-    let scale = 1;
-    if (years) {
-      const yearShares = new Map<string | undefined, number>();
-      for (const imp of imps) {
-        const w = Math.abs(impactSignedAmount(imp) ?? 0);
-        if (w === 0 || !impactMatchesYears(imp, years)) continue;
-        const key = imp.hierarchyLeafId ?? l.hierarchyLeafId;
-        yearShares.set(key, (yearShares.get(key) ?? 0) + w);
-      }
-      const yearW = Array.from(yearShares.values()).reduce((s, v) => s + v, 0);
-      if (yearW === 0) continue; // aucun impact de ce levier dans les années sélectionnées
-      leafShares = yearShares;
-      scale = yearW / totalW;
-    }
-    const scaledLocked = locked * scale;
-    const scaledRefo = refo * scale;
-    const scaledReal = real * scale;
-    const scaledLate = late * scale;
-    const leafTotalW = Array.from(leafShares.values()).reduce((s, v) => s + v, 0) || 1;
+    const signed = lines.map((x) => x.signed);
+    const planParts = allocateLeverTotal(locked, signed);
+    const refoParts = isCancelled ? signed.map(() => 0) : allocateLeverTotal(refo, signed);
+    const realParts = lines.map((x) => (x.realized ? x.signed : 0));
+    const kept = lines.map((x) => !years || impactActiveInYears(x.imp, years, l));
+    if (!kept.some(Boolean)) continue;
 
-    for (const [leafId, w] of Array.from(leafShares.entries())) {
-      const f = w / leafTotalW;
-      const node = resolveNode(leafId);
-      const row = node
-        ? rowFor(node.id, node.code, node.label)
-        : rowFor(UNATTRIBUTED_NODE_ID, "", "Non attribué");
-      row.planned += scaledLocked * f;
-      row.reforecast += scaledRefo * f;
-      if (isCancelled) row.cancelled += scaledLocked * f;
-      row.late += scaledLate * f;
-      row.realized += scaledReal * f;
+    // Retard : réactualisé − réalisé des lignes retenues, réparti au prorata de l'écart par ligne.
+    let lateParts = lines.map(() => 0);
+    if (late) {
+      const keptIdx = lines.map((_, i) => i).filter((i) => kept[i]);
+      const lateTotal = Math.max(
+        0,
+        keptIdx.reduce((s, i) => s + refoParts[i] - realParts[i], 0)
+      );
+      const gaps = lines.map((_, i) => (kept[i] ? Math.max(0, refoParts[i] - realParts[i]) : 0));
+      const gapSum = gaps.reduce((s, v) => s + v, 0);
+      if (lateTotal > 0 && gapSum > 0) lateParts = gaps.map((g) => (lateTotal * g) / gapSum);
     }
+
+    lines.forEach((line, i) => {
+      if (!kept[i]) return;
+      const row = rowForLeaf(line.imp.hierarchyLeafId ?? l.hierarchyLeafId);
+      row.planned += planParts[i];
+      row.reforecast += refoParts[i];
+      if (isCancelled) row.cancelled += planParts[i];
+      row.late += lateParts[i];
+      row.realized += realParts[i];
+    });
   }
   const round = !opts.unrounded;
   return Array.from(rows.values())

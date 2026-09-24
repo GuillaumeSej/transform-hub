@@ -38,10 +38,16 @@ import {
 } from "@/lib/hierarchyLogic";
 import {
   HIERARCHY_EXCEL_HEADERS,
-  hierarchyNodeToExcelRow,
+  HIERARCHY_FINANCIAL_HEADERS,
+  HIERARCHY_IMPORT_ISSUES,
+  hierarchyExportFileName,
+  hierarchyToExcelRows,
   validateHierarchyImportRows,
+  type HierarchyImportError,
   type HierarchyImportPreview,
 } from "@/lib/hierarchyExcel";
+import { readSpreadsheetFile } from "@/lib/excelFileRead";
+import { formatImportIssue } from "@/lib/importIssue";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
@@ -445,9 +451,17 @@ export function HierarchyEditor({
 
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new();
-    const sheet = XLSX.utils.aoa_to_sheet([[...HIERARCHY_EXCEL_HEADERS]]);
+    const withFinancial = sortedLevels.some((l) => l.semantic === "pnl");
+    const sheet = XLSX.utils.aoa_to_sheet([
+      withFinancial
+        ? [...HIERARCHY_EXCEL_HEADERS, ...HIERARCHY_FINANCIAL_HEADERS]
+        : [...HIERARCHY_EXCEL_HEADERS],
+    ]);
     XLSX.utils.book_append_sheet(wb, sheet, "Arborescence");
-    XLSX.writeFile(wb, "template_arborescence.xlsx");
+    XLSX.writeFile(
+      wb,
+      `template_arborescence_${domain === "geographic" ? "geographique" : "financiere"}.xlsx`
+    );
     showToast(
       t("adminHierarchy.toastTemplateDownloadedTitle", "Modèle téléchargé"),
       t(
@@ -459,56 +473,106 @@ export function HierarchyEditor({
   };
 
   const exportTree = () => {
-    const nodesById = new Map(nodes.map((n) => [n.id, n]));
-    const rows = nodes.map((n) => hierarchyNodeToExcelRow(n, sortedLevels, nodesById));
+    // Uniquement les nœuds de niveaux configurés (ré-importables), colonnes financières incluses.
+    const { rows, headers, orphans } = hierarchyToExcelRows(nodes, sortedLevels);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Arborescence");
+    XLSX.utils.book_append_sheet(
+      wb,
+      rows.length > 0
+        ? XLSX.utils.json_to_sheet(rows, { header: headers })
+        : XLSX.utils.aoa_to_sheet([headers]),
+      "Arborescence"
+    );
     const company = companies.find((c) => c.id === companyId);
-    XLSX.writeFile(wb, `arborescence_${company?.name ?? companyId}.xlsx`);
+    XLSX.writeFile(wb, hierarchyExportFileName(company?.name ?? companyId, domain));
     showToast(
       t("adminHierarchy.toastExportGeneratedTitle", "Export Excel généré"),
       t("adminHierarchy.toastExportGeneratedBody", "{n} nœud(s) exporté(s)").replace(
         "{n}",
         String(rows.length)
-      ),
+      ) +
+        (orphans > 0
+          ? t(
+              "adminHierarchy.exportOrphansSuffix",
+              " · {n} valeur(s) orpheline(s) non exportée(s)"
+            ).replace("{n}", String(orphans))
+          : ""),
       "success"
     );
   };
 
+  const issueText = (issue: HierarchyImportError) =>
+    (issue.rowNumber > 0
+      ? `${t("adminHierarchy.rowLabel", "Ligne {n} :").replace("{n}", String(issue.rowNumber))} `
+      : "") + formatImportIssue(t, "adminHierarchy.issue", HIERARCHY_IMPORT_ISSUES, issue);
+
   const handleImportFile = async (file: File) => {
     if (sortedLevels.length === 0) return;
-    const workbook = file.name.toLowerCase().endsWith(".csv")
-      ? XLSX.read(await file.text(), { type: "string" })
-      : XLSX.read(await file.arrayBuffer(), { type: "array" });
-    const sheetName = workbook.SheetNames[0];
-    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
-      defval: "",
-    });
-    const preview = validateHierarchyImportRows(rawRows, sortedLevels, nodes, companyId, domain);
-    setImportFileName(file.name);
-    setImportPreview(preview);
+    try {
+      // CSV décodé UTF-8 / Windows-1252 + raw : accents corrects, "1 234,5" gardé en texte puis
+      // lu au format français (lib/excelFileRead.ts, lib/excelParse.ts).
+      const workbook = await readSpreadsheetFile(file);
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      const mergedRanges = (sheet["!merges"] ?? []).map((m) => XLSX.utils.encode_range(m));
+      const preview = validateHierarchyImportRows(rawRows, sortedLevels, nodes, companyId, domain, {
+        mergedRanges,
+      });
+      setImportFileName(file.name);
+      setImportPreview(preview);
+    } catch (error) {
+      console.error("[betrack] lecture du fichier d'arborescence :", error);
+      showToast(
+        t("adminHierarchy.toastImportReadFailedTitle", "Fichier illisible"),
+        error instanceof Error ? error.message : String(error),
+        "error"
+      );
+    }
   };
 
+  /** Écriture après validation COMPLÈTE (bouton désactivé tant qu'il reste une erreur) : nœuds
+   *  triés du macro au plus fin (un parent est toujours écrit avant ses enfants), par lots ; en
+   *  cas d'échec en cours de route, le toast indique combien de nœuds ont déjà été enregistrés. */
   const confirmImport = async () => {
-    if (!importPreview || importPreview.toCreate.length === 0) return;
+    if (!importPreview || importPreview.errors.length > 0) return;
+    const toWrite = [...importPreview.toCreate, ...importPreview.toUpdate];
+    if (toWrite.length === 0) return;
+    const levelOrder = new Map(sortedLevels.map((l, i) => [l.key, i]));
+    toWrite.sort((a, b) => (levelOrder.get(a.levelKey) ?? 0) - (levelOrder.get(b.levelKey) ?? 0));
+    const CHUNK = 400;
+    let written = 0;
     setImporting(true);
     try {
-      await saveHierarchyNodesBatch(importPreview.toCreate);
+      for (let i = 0; i < toWrite.length; i += CHUNK) {
+        const chunk = toWrite.slice(i, i + CHUNK);
+        await saveHierarchyNodesBatch(chunk);
+        written += chunk.length;
+      }
       showToast(
         t("adminHierarchy.toastImportDoneTitle", "Import Excel terminé"),
-        t("adminHierarchy.toastImportDoneBody", "{n} nœud(s) créé(s)").replace(
-          "{n}",
-          String(importPreview.toCreate.length)
-        ) +
-          (importPreview.errors.length > 0
-            ? t("adminHierarchy.toastImportDoneErrorsSuffix", " · {n} ligne(s) ignorée(s)").replace(
-                "{n}",
-                String(importPreview.errors.length)
-              )
-            : ""),
+        t(
+          "adminHierarchy.toastImportDoneCreatedUpdated",
+          "{created} nœud(s) créé(s) · {updated} mis à jour"
+        )
+          .replace("{created}", String(importPreview.toCreate.length))
+          .replace("{updated}", String(importPreview.toUpdate.length)),
         "success"
       );
       setImportPreview(null);
+    } catch (error) {
+      console.error("[betrack] import de l'arborescence :", error);
+      showToast(
+        t("adminHierarchy.toastImportFailedTitle", "Échec de l'import"),
+        t(
+          "adminHierarchy.toastImportPartialBody",
+          "{written} nœud(s) sur {total} enregistré(s) avant l'échec : {error}"
+        )
+          .replace("{written}", String(written))
+          .replace("{total}", String(toWrite.length))
+          .replace("{error}", error instanceof Error ? error.message : String(error)),
+        "error"
+      );
     } finally {
       setImporting(false);
     }
@@ -610,6 +674,9 @@ export function HierarchyEditor({
                   </td>
                   <td className="px-4 py-2.5 text-center">
                     <button
+                      type="button"
+                      aria-label={t("common.moveUp", "Monter")}
+                      title={t("common.moveUp", "Monter")}
                       onClick={() => moveLevel(level.key, "up")}
                       disabled={idx === 0}
                       className="mr-1 text-text-secondary hover:text-bp-coral disabled:opacity-30"
@@ -617,6 +684,9 @@ export function HierarchyEditor({
                       <ChevronUp size={14} />
                     </button>
                     <button
+                      type="button"
+                      aria-label={t("common.moveDown", "Descendre")}
+                      title={t("common.moveDown", "Descendre")}
                       onClick={() => moveLevel(level.key, "down")}
                       disabled={idx === sortedLevels.length - 1}
                       className="text-text-secondary hover:text-bp-coral disabled:opacity-30"
@@ -626,8 +696,11 @@ export function HierarchyEditor({
                   </td>
                   <td className="px-4 py-2.5 text-center">
                     <button
+                      type="button"
+                      aria-label={t("common.delete", "Supprimer")}
+                      title={t("common.delete", "Supprimer")}
                       onClick={() => removeLevel(level.key)}
-                      className="text-text-secondary hover:text-red-500"
+                      className="text-text-secondary hover:text-rag-red"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -694,6 +767,9 @@ export function HierarchyEditor({
               <div className="flex items-center justify-between">
                 <div>
                   <button
+                    type="button"
+                    aria-label={t("common.moveUp", "Monter")}
+                    title={t("common.moveUp", "Monter")}
                     onClick={() => moveLevel(level.key, "up")}
                     disabled={idx === 0}
                     className="mr-1 text-text-secondary hover:text-bp-coral disabled:opacity-30"
@@ -701,6 +777,9 @@ export function HierarchyEditor({
                     <ChevronUp size={16} />
                   </button>
                   <button
+                    type="button"
+                    aria-label={t("common.moveDown", "Descendre")}
+                    title={t("common.moveDown", "Descendre")}
                     onClick={() => moveLevel(level.key, "down")}
                     disabled={idx === sortedLevels.length - 1}
                     className="text-text-secondary hover:text-bp-coral disabled:opacity-30"
@@ -709,8 +788,11 @@ export function HierarchyEditor({
                   </button>
                 </div>
                 <button
+                  type="button"
+                  aria-label={t("common.delete", "Supprimer")}
+                  title={t("common.delete", "Supprimer")}
                   onClick={() => removeLevel(level.key)}
-                  className="text-text-secondary hover:text-red-500"
+                  className="text-text-secondary hover:text-rag-red"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -890,8 +972,11 @@ export function HierarchyEditor({
                           )}
                           <td className="px-4 py-2 text-center">
                             <button
+                              type="button"
+                              aria-label={t("common.delete", "Supprimer")}
+                              title={t("common.delete", "Supprimer")}
                               onClick={() => removeNode(n.id)}
-                              className="text-text-secondary hover:text-red-500"
+                              className="text-text-secondary hover:text-rag-red"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -1048,8 +1133,11 @@ export function HierarchyEditor({
                         )}
                       </div>
                       <button
+                        type="button"
+                        aria-label={t("common.delete", "Supprimer")}
+                        title={t("common.delete", "Supprimer")}
                         onClick={() => removeNode(n.id)}
-                        className="shrink-0 text-text-secondary hover:text-red-500"
+                        className="shrink-0 text-text-secondary hover:text-rag-red"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -1196,7 +1284,11 @@ export function HierarchyEditor({
             </Button>
             <Button
               variant="primary"
-              disabled={importing || (importPreview?.toCreate.length ?? 0) === 0}
+              disabled={
+                importing ||
+                (importPreview?.errors.length ?? 0) > 0 ||
+                (importPreview?.toCreate.length ?? 0) + (importPreview?.toUpdate.length ?? 0) === 0
+              }
               onClick={() => void confirmImport()}
             >
               {t("adminHierarchy.confirmImport", "Confirmer l'import")}
@@ -1210,22 +1302,44 @@ export function HierarchyEditor({
             {t("adminHierarchy.nodesReadyToCreate", "nœud(s) prêt(s) à créer")}
           </span>
           <span>
+            <strong className="text-rag-amber">{importPreview?.toUpdate.length ?? 0}</strong>{" "}
+            {t("adminHierarchy.nodesToUpdate", "nœud(s) à mettre à jour")}
+          </span>
+          <span>
+            <strong>{importPreview?.unchanged ?? 0}</strong>{" "}
+            {t("adminHierarchy.nodesUnchanged", "inchangé(s)")}
+          </span>
+          <span>
             <strong className="text-rag-red">{importPreview?.errors.length ?? 0}</strong>{" "}
             {t("adminHierarchy.rowsInError", "ligne(s) en erreur")}
           </span>
         </div>
+        {(importPreview?.errors.length ?? 0) > 0 && (
+          <p className="mb-2 text-xs font-semibold text-rag-red">
+            {t(
+              "adminHierarchy.importBlockedByErrors",
+              "Import bloqué : corrigez les erreurs ci-dessous puis ré-importez le fichier (rien n'a été écrit)."
+            )}
+          </p>
+        )}
         <div className="max-h-[320px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
-          {importPreview?.errors.length === 0 ? (
+          {(importPreview?.errors.length ?? 0) + (importPreview?.warnings.length ?? 0) === 0 ? (
             <p className="text-tertiary">
               {t("adminHierarchy.noAnomalies", "Aucune anomalie détectée.")}
             </p>
           ) : (
-            importPreview?.errors.map((e, i) => (
-              <div key={i} className="text-secondary">
-                {t("adminHierarchy.rowLabel", "Ligne {n} :").replace("{n}", String(e.rowNumber))}{" "}
-                {e.reason}
-              </div>
-            ))
+            <>
+              {importPreview?.errors.map((e, i) => (
+                <div key={`e${i}`} className="text-rag-red">
+                  {issueText(e)}
+                </div>
+              ))}
+              {importPreview?.warnings.map((w, i) => (
+                <div key={`w${i}`} className="text-secondary">
+                  {issueText(w)}
+                </div>
+              ))}
+            </>
           )}
         </div>
       </Modal>

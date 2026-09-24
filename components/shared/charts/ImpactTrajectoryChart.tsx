@@ -20,6 +20,7 @@ import {
 } from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Lever } from "@/types";
+import { formatMillions } from "@/lib/format";
 
 const toggleBtn = (active: boolean) =>
   `px-3 py-1 text-xs font-semibold ${active ? "bg-black text-white" : "bg-white text-secondary"}`;
@@ -216,8 +217,8 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
             )}
             {view === "financial" ? (
               <>
-                <Bar dataKey="gain" fill="#3f9d6a" {...barProps} />
-                <Bar dataKey="cost" fill="#e0655a" {...barProps} />
+                <Bar dataKey="gain" fill="#806659" {...barProps} />
+                <Bar dataKey="cost" fill="#FF3C47" {...barProps} />
                 <Line
                   type="monotone"
                   dataKey="cumulativeNet"
@@ -232,7 +233,7 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
               <Line
                 type="stepAfter"
                 dataKey="fte"
-                stroke="#3b82c4"
+                stroke="#320300"
                 strokeWidth={2}
                 dot={false}
                 activeDot={false}
@@ -262,7 +263,7 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
   );
 }
 
-const fmtAmt = (v: number) => `${(Math.round(v * 100) / 100).toLocaleString("fr-FR")} €M`;
+const fmtAmt = (v: number) => formatMillions(v, 2);
 
 function PeriodDetail({ point }: { point: ImpactTrajectoryPoint }) {
   const { t } = useTranslation();

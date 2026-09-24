@@ -911,7 +911,7 @@ export function IndicatorsEditor({
                   <button
                     onClick={() => void remove(indicator)}
                     aria-label={t("common.delete", "Supprimer")}
-                    className="text-text-secondary hover:text-red-500"
+                    className="text-text-secondary hover:text-rag-red"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -952,7 +952,7 @@ export function IndicatorsEditor({
                 <button
                   onClick={() => void remove(indicator)}
                   aria-label={t("common.delete", "Supprimer")}
-                  className="text-text-secondary hover:text-red-500"
+                  className="text-text-secondary hover:text-rag-red"
                 >
                   <Trash2 size={16} />
                 </button>

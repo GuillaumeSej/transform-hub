@@ -1,34 +1,38 @@
 import type { Chantier, ChantierAction, ChantierStaffing } from "@/types";
+import {
+  canonicalizeRowKeys,
+  excelRowNumber,
+  isBlankCell,
+  normalizeHeaderKey,
+  parseCellDate,
+  parseCellNumber,
+} from "@/lib/excelParse";
+import { makeIssue, type ImportIssue } from "@/lib/importIssue";
 
 /**
- * Import Excel des lignes de staffing (`ChantierStaffing`) d'un programme — utilisé par
- * `StaffingImportButton`, mirror structurel de `lib/strategicExcelImport.ts` (même idiome
- * `validate*Rows` -> aperçu + erreurs ligne par ligne, même conventions de parsing/dates, aucun
- * appel Firestore dans ce fichier — l'écriture reste à la charge de l'appelant, voir plus bas).
+ * Import/export Excel des lignes de staffing (`ChantierStaffing`) d'un programme — utilisé par
+ * `StaffingImportButton` (même idiome `validate*Rows` -> aperçu + anomalies ligne par ligne, aucun
+ * appel Firestore dans ce fichier — l'écriture reste à la charge de l'appelant).
  *
- * Format retenu : UNE feuille, une ligne par entrée de staffing — colonnes Chantier / Fonction /
- * ETP / Date début / Date fin / Levier (optionnel) / Note (optionnel). `Chantier` et `Levier` sont
- * résolus par NOM exact (insensible à la casse) contre les listes passées par l'appelant
- * (`chantiers`/`chantierActions`, déjà scopées au programme actif) — contrairement à
- * `lib/strategicExcelImport.ts`, il n'y a pas de colonne "Code" : le staffing s'importe dans un
- * plan déjà construit (axes/chantiers/leviers déjà créés), une clé technique séparée n'apporterait
- * rien.
+ * Format : UNE feuille, une ligne par entrée de staffing — colonnes Chantier / Fonction / ETP /
+ * Date début / Date fin / Levier (optionnel) / Note (optionnel). `Chantier`, `Fonction` et `Levier`
+ * sont résolus par NOM (insensible à la casse, aux accents et aux espaces multiples). Les lignes
+ * dont la 1re cellule commence par "#" sont des commentaires (ignorées) — c'est ainsi que le
+ * modèle présente ses exemples. L'export (`staffingToExcelRows`) produit exactement ce format :
+ * un fichier exporté puis ré-importé sans modification ne crée rien et ne produit aucune erreur.
  *
- * **Upsert, pas création systématique** (décision actée avec le PO, voir le plan round 7,
- * section « Effectifs ») : `saveChantierStaffing` (lib/firestore/chantierStaffing.ts) fait déjà un
- * upsert par id (`setDoc` sur `entry.id`), donc pas de nouvelle fonction Firestore nécessaire — la
- * seule question est QUEL id écrire. On calcule une clé métier par ligne
- * (`chantierId + fonction + dateDébut + dateFin + levier optionnel`) et on la compare :
- *  - aux entrées DÉJÀ EN BASE (`existingStaffing`, passées par l'appelant) ;
- *  - aux lignes DÉJÀ TRAITÉES plus haut dans CE MÊME fichier (deux lignes qui décrivent la même
- *    période/fonction/levier dans le fichier importé doivent fusionner sur UNE entrée, pas se
- *    dupliquer entre elles).
- * Une clé qui matche réutilise l'id (et le `createdAt`) de l'entrée trouvée — l'entrée résultante
- * est une MISE À JOUR ; sinon un nouvel id est alloué — c'est une CRÉATION. Plus simple et plus sûr
- * qu'un couple suppression+recréation (pas de fenêtre où la ligne n'existe plus).
+ * **Upsert par clé métier** (`chantierId + fonction + dateDébut + dateFin + levier`) : une ligne
+ * dont la clé correspond à une entrée DÉJÀ EN BASE réutilise son id (mise à jour) ; sinon un nouvel
+ * id est alloué (création). Deux lignes du MÊME fichier avec la même clé sont une ERREUR (on ne
+ * sait pas laquelle retenir) — audit du 24/09/2026, auparavant la dernière écrasait l'autre.
+ *
+ * Contrôles (audit du 24/09/2026) : dates lues via `lib/excelParse.ts` (date illisible ou
+ * impossible = erreur, plus de repli silencieux sur ""), début > fin = erreur, 0 < ETP ≤ 5, équipe
+ * absente de la base ETP = erreur à la création mais simple avertissement pour une ligne existante
+ * (une équipe peut avoir quitté la base ETP depuis la saisie).
  */
 
-// ---------- En-têtes (utilisés par le bouton "Modèle Excel") ----------
+// ---------- En-têtes / modèle ----------
 
 export const STAFFING_IMPORT_SHEET_NAME = "ETP";
 
@@ -42,52 +46,92 @@ export const STAFFING_IMPORT_HEADERS = [
   "Note",
 ] as const;
 
-// Round 13 : la colonne "Fonction" doit désormais matcher le nom EXACT d'une équipe de la base ETP
-// entreprise (`Employee.department`, `/hr/etp`) — plus une union fermée à 9 valeurs. Les libellés
-// d'exemple ci-dessous sont volontairement génériques (pas garantis d'exister dans une base ETP
-// réelle) : la note "à remplacer avant import" le précise explicitement sur la 1re ligne.
-export const STAFFING_IMPORT_EXAMPLE_ROWS: (string | number)[][] = [
-  [
-    "Refonte du parcours achats",
-    "Support (IT/Finance/HR)",
-    1,
-    "2026-01-01",
-    "2026-06-30",
-    "",
-    'Exemple — remplacer "Fonction" par le nom exact d\'une équipe de votre base ETP (/hr/etp)',
-  ],
-  [
-    "Refonte du parcours achats",
-    "Support (IT/Finance/HR)",
-    0.5,
-    "2026-01-01",
-    "",
-    "Cartographier le processus actuel",
-    "",
-  ],
-];
+/** ETP maximal accepté pour une ligne de staffing (au-delà : faute de frappe probable). */
+export const STAFFING_MAX_FTE = 5;
 
-// ---------- Référentiel équipe (round 13 : base ETP entreprise, plus de 9 valeurs figées) --------
+/** Modèles français des anomalies — recopiés dans fr.ts sous `staffingImport.issue.*`. */
+export const STAFFING_IMPORT_ISSUES: Record<string, string> = {
+  missingColumns: "Colonnes obligatoires absentes : {columns}",
+  missingChantier: '"Chantier" est obligatoire',
+  unknownChantier: 'Chantier "{value}" introuvable',
+  unknownFunction: 'Fonction "{value}" inconnue (attendu : {expected})',
+  functionLeftBase:
+    'Équipe "{value}" absente de la base ETP — ligne existante mise à jour quand même',
+  invalidFte: '"ETP" doit être un nombre strictement positif et au plus {max} (lu : "{value}")',
+  invalidDate: '{column} "{value}" illisible ou impossible (attendu JJ/MM/AAAA ou AAAA-MM-JJ)',
+  startAfterEnd: "Date début ({start}) postérieure à la date fin ({end})",
+  unknownAction: 'Levier "{value}" introuvable sur le chantier "{chantier}"',
+  duplicateRow: "Ligne en doublon (même chantier, fonction, dates et levier que la ligne {other})",
+  noDepartments: "aucune équipe dans la base ETP",
+};
 
-/** Résout la cellule "Fonction" contre la liste des équipes RÉELLES de la base ETP entreprise
- *  (`Employee.department`, passée par l'appelant — voir `validateStaffingImportRows`), insensible
- *  à la casse/aux espaces. Remplace l'ancienne résolution contre `StaffingFunction` (union fermée à
- *  9 valeurs, retirée de `types/index.ts`) : la liste d'équipes n'est plus figée dans ce fichier,
- *  elle vient de la base ETP de l'entreprise important le fichier. Renvoie le nom CANONIQUE tel que
- *  stocké dans la base ETP (pas la casse saisie dans le fichier) pour que les agrégats par équipe
- *  ne se fragmentent jamais sur une différence de casse. */
-function resolveFunction(raw: string, knownDepartments: string[]): string | undefined {
-  const lower = raw.trim().toLowerCase();
-  return knownDepartments.find((d) => d.toLowerCase() === lower);
+/** Clé de comparaison des noms : casse, accents et espaces multiples ignorés. */
+function nameKey(v: string): string {
+  return normalizeHeaderKey(v);
 }
 
-function functionNamesForError(knownDepartments: string[]): string {
-  return knownDepartments.length > 0
-    ? knownDepartments.join(", ")
-    : "aucune équipe dans la base ETP";
+/**
+ * Lignes d'exemple du modèle — construites avec un chantier et une équipe RÉELS de l'entreprise,
+ * mais COMMENTÉES ("# " devant le chantier) : elles sont ignorées à l'import tant que
+ * l'utilisateur ne retire pas le "#". La 1re ligne explique la convention.
+ */
+export function buildStaffingTemplateRows(
+  chantiers: Chantier[],
+  chantierActions: ChantierAction[],
+  knownDepartments: string[]
+): (string | number)[][] {
+  const chantier = chantiers[0];
+  const team = knownDepartments[0];
+  const action = chantier ? chantierActions.find((a) => a.chantierId === chantier.id) : undefined;
+  const rows: (string | number)[][] = [
+    [
+      "# Les lignes commençant par # sont ignorées. Retirez le # d'un exemple pour l'importer.",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
+  ];
+  if (chantier && team) {
+    rows.push([`# ${chantier.name}`, team, 1, "01/01/2026", "30/06/2026", "", ""]);
+    if (action) rows.push([`# ${chantier.name}`, team, 0.5, "01/01/2026", "", action.name, ""]);
+  }
+  return rows;
 }
 
-// ---------- Parsing utilitaire (mêmes conventions que lib/strategicExcelImport.ts) ----------
+// ---------- Export ----------
+
+/** Lignes d'export (même format que l'import) — dates au format JJ/MM/AAAA. */
+export function staffingToExcelRows(
+  staffing: ChantierStaffing[],
+  chantiers: Chantier[],
+  chantierActions: ChantierAction[]
+): Record<string, string | number>[] {
+  const frDate = (iso?: string) => {
+    if (!iso) return "";
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+  };
+  return staffing
+    .map((s) => ({
+      Chantier: chantiers.find((c) => c.id === s.chantierId)?.name ?? s.chantierId,
+      Fonction: s.function,
+      ETP: s.fte,
+      "Date début": frDate(s.startDate),
+      "Date fin": frDate(s.endDate),
+      Levier: s.actionId ? (chantierActions.find((a) => a.id === s.actionId)?.name ?? "") : "",
+      Note: s.note ?? "",
+    }))
+    .sort(
+      (a, b) =>
+        String(a.Chantier).localeCompare(String(b.Chantier)) ||
+        String(a.Fonction).localeCompare(String(b.Fonction))
+    );
+}
+
+// ---------- Parsing utilitaire ----------
 
 function str(v: unknown): string {
   if (v === undefined || v === null) return "";
@@ -95,79 +139,24 @@ function str(v: unknown): string {
 }
 
 function isRowEmpty(row: Record<string, unknown>): boolean {
-  return Object.values(row).every((v) => str(v) === "");
-}
-
-/** Tolérant à la virgule décimale (saisie française), comme `parseFte` de
- *  `ChantierStaffingEditor.tsx` — dupliqué ici pour la même raison d'autonomie que les autres
- *  helpers de ce fichier. `undefined` = invalide (vide compris, ou ≤ 0) : un ETP doit être
- *  strictement positif. */
-function parseFteCell(v: unknown): number | undefined {
-  if (v === undefined || v === null || v === "") return undefined;
-  const parsed = typeof v === "number" ? v : Number(String(v).trim().replace(",", "."));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-/** Identique à `parseFlexibleDate` de `lib/strategicExcelImport.ts` (dupliquée, même motif) —
- *  accepte une date Excel native, une date sérielle Excel, une chaîne ISO ou JJ/MM/AAAA. Retourne
- *  "" si vide ou non interprétable : contrairement aux dates de `lib/strategicExcelImport.ts`
- *  (obligatoires), les dates de staffing sont OPTIONNELLES (voir `ChantierStaffing.startDate`),
- *  donc une cellule vide n'est jamais une erreur ici.
- */
-function parseFlexibleDate(v: unknown): string {
-  if (v === undefined || v === null || v === "") return "";
-  if (v instanceof Date) {
-    return Number.isNaN(v.getTime()) ? "" : v.toISOString().slice(0, 10);
-  }
-  if (typeof v === "number" && Number.isFinite(v)) {
-    const ms = Date.UTC(1899, 11, 30) + v * 86400000;
-    const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
-  }
-  const s = String(v).trim();
-  if (!s) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const fr = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-  if (fr) {
-    const [, d, m, y] = fr;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-  const parsed = new Date(s);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+  return Object.values(row).every((v) => isBlankCell(v));
 }
 
 function nowDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 let idSeq = 0;
-/** Id alloué pour de vrai (comme `makeId` de `lib/strategicExcelImport.ts`), pas un id de session
- *  jetable : c'est cet id qui sera écrit tel quel par `saveChantierStaffing`, via l'appelant.
- *  Compteur de séquence par appel pour garantir l'unicité même si plusieurs lignes du même fichier
- *  sont traitées dans la même milliseconde. Même préfixe "ST" que `newStaffingId()` de
- *  `ChantierStaffingEditor.tsx`. */
+/** Id alloué pour de vrai : c'est cet id qui sera écrit tel quel par `saveChantierStaffing`. Même
+ *  préfixe "ST" que `newStaffingId()` de `ChantierStaffingEditor.tsx`. */
 function makeStaffingId(): string {
   idSeq += 1;
   return `ST-${Date.now().toString(36)}-${idSeq}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function resolveChantier(raw: string, chantiers: Chantier[]): Chantier | undefined {
-  const lower = raw.trim().toLowerCase();
-  return chantiers.find((c) => c.name.toLowerCase() === lower);
-}
-
-function resolveAction(
-  raw: string,
-  chantierId: string,
-  chantierActions: ChantierAction[]
-): ChantierAction | undefined {
-  const lower = raw.trim().toLowerCase();
-  return chantierActions.find((a) => a.chantierId === chantierId && a.name.toLowerCase() === lower);
-}
-
-/** Clé métier d'upsert — voir doc-comment en tête de fichier. Chaîne simple (jointure par "|") :
- *  aucun des composants ne peut contenir "|" (noms de fonction/dates ISO/ids), pas besoin d'un
- *  échappement plus robuste. */
+/** Clé métier d'upsert — voir doc-comment en tête de fichier. La fonction est comparée
+ *  normalisée (casse/accents/espaces) pour qu'une variation de saisie ne duplique pas une ligne. */
 function staffingMatchKey(
   chantierId: string,
   fn: string,
@@ -175,30 +164,29 @@ function staffingMatchKey(
   endDate: string,
   actionId: string | undefined
 ): string {
-  return [chantierId, fn, startDate, endDate, actionId ?? ""].join("|");
+  return [chantierId, nameKey(fn), startDate, endDate, actionId ?? ""].join("|");
 }
 
 // ---------- Types publics ----------
 
-export type StaffingImportError = { rowNumber: number; reason: string };
+export type StaffingImportError = ImportIssue;
 
 export type StaffingImportRow = {
   rowNumber: number;
   entry: ChantierStaffing;
-  /** true = une entrée existante (même clé métier) a été trouvée, `entry.id` la réutilise —
-   *  false = nouvelle entrée, `entry.id` est fraîchement alloué. */
+  /** true = une entrée existante (même clé métier) a été trouvée, `entry.id` la réutilise. */
   isUpdate: boolean;
 };
 
 export type StaffingImportPreview = {
   rows: StaffingImportRow[];
   errors: StaffingImportError[];
+  warnings: StaffingImportError[];
 };
 
 /**
  * Valide les lignes brutes de la feuille "ETP" et produit un aperçu (lignes prêtes à écrire,
- * classées création/mise à jour, + erreurs ligne par ligne) sans rien écrire — voir doc-comment en
- * tête de fichier pour le format complet et la logique d'upsert.
+ * classées création/mise à jour, + erreurs/avertissements ligne par ligne) sans rien écrire.
  */
 export function validateStaffingImportRows(
   rawRows: Record<string, unknown>[],
@@ -207,14 +195,19 @@ export function validateStaffingImportRows(
   chantiers: Chantier[],
   chantierActions: ChantierAction[],
   existingStaffing: ChantierStaffing[],
-  /** Noms d'équipe réels de la base ETP entreprise (round 13) — la colonne "Fonction" doit
-   *  matcher l'un de ces noms, voir `resolveFunction` ci-dessus. */
+  /** Noms d'équipe réels de la base ETP entreprise — la colonne "Fonction" doit matcher l'un
+   *  d'eux (ou, pour une ligne existante, l'équipe déjà enregistrée). */
   knownDepartments: string[]
 ): StaffingImportPreview {
   const errors: StaffingImportError[] = [];
+  const warnings: StaffingImportError[] = [];
   const rows: StaffingImportRow[] = [];
   const resolvedCompanyId = companyId ?? "";
   const resolvedProgramId = programId ?? "";
+  const error = (rowNumber: number, code: string, vars: Record<string, string | number> = {}) =>
+    errors.push(makeIssue(STAFFING_IMPORT_ISSUES, "error", rowNumber, code, vars));
+  const warning = (rowNumber: number, code: string, vars: Record<string, string | number> = {}) =>
+    warnings.push(makeIssue(STAFFING_IMPORT_ISSUES, "warning", rowNumber, code, vars));
 
   const existingByKey = new Map<string, ChantierStaffing>();
   for (const entry of existingStaffing) {
@@ -229,63 +222,105 @@ export function validateStaffingImportRows(
       entry
     );
   }
-  // Deux lignes du MÊME fichier qui partagent la même clé doivent fusionner sur une seule entrée
-  // (la 2e met à jour ce que la 1re vient de créer/matcher), pas se dupliquer entre elles.
-  const seenInBatch = new Map<string, ChantierStaffing>();
+  const seenInBatch = new Map<string, number>();
 
-  rawRows.forEach((row, i) => {
-    const rowNumber = i + 2; // ligne 1 = en-têtes
-    if (isRowEmpty(row)) return;
+  const prepared = rawRows.map((raw, i) => ({
+    row: canonicalizeRowKeys(raw, STAFFING_IMPORT_HEADERS).row,
+    rowNumber: excelRowNumber(raw, i),
+  }));
+  if (prepared.length > 0) {
+    const present = new Set(prepared.flatMap((p) => Object.keys(p.row)));
+    const missing = ["Chantier", "Fonction", "ETP"].filter((c) => !present.has(c));
+    if (missing.length > 0) {
+      error(0, "missingColumns", { columns: missing.join(", ") });
+      return { rows, errors, warnings };
+    }
+  }
+
+  for (const { row, rowNumber } of prepared) {
+    if (isRowEmpty(row)) continue;
 
     const chantierRaw = str(row["Chantier"]);
+    if (chantierRaw.startsWith("#")) continue; // ligne de commentaire (exemples du modèle)
     if (!chantierRaw) {
-      errors.push({ rowNumber, reason: `"Chantier" est obligatoire` });
-      return;
+      error(rowNumber, "missingChantier");
+      continue;
     }
-    const chantier = resolveChantier(chantierRaw, chantiers);
+    const chantier = chantiers.find((c) => nameKey(c.name) === nameKey(chantierRaw));
     if (!chantier) {
-      errors.push({ rowNumber, reason: `Chantier "${chantierRaw}" introuvable` });
-      return;
+      error(rowNumber, "unknownChantier", { value: chantierRaw });
+      continue;
     }
 
-    const functionRaw = str(row["Fonction"]);
-    const fn = functionRaw ? resolveFunction(functionRaw, knownDepartments) : undefined;
-    if (!fn) {
-      errors.push({
-        rowNumber,
-        reason: `Fonction "${functionRaw}" inconnue (attendu : ${functionNamesForError(knownDepartments)})`,
-      });
-      return;
+    const fteRaw = row["ETP"];
+    const fteParsed = parseCellNumber(fteRaw);
+    const fte = fteParsed?.ok ? fteParsed.value : undefined;
+    if (fte === undefined || !(fte > 0) || fte > STAFFING_MAX_FTE) {
+      error(rowNumber, "invalidFte", { max: STAFFING_MAX_FTE, value: str(fteRaw) });
+      continue;
     }
 
-    const fte = parseFteCell(row["ETP"]);
-    if (fte === undefined) {
-      errors.push({ rowNumber, reason: `"ETP" doit être un nombre strictement positif` });
-      return;
+    let dateError = false;
+    const readDate = (column: "Date début" | "Date fin"): string => {
+      const r = parseCellDate(row[column]);
+      if (!r) return "";
+      if (r.ok) return r.value;
+      error(rowNumber, "invalidDate", { column, value: r.raw });
+      dateError = true;
+      return "";
+    };
+    const startDate = readDate("Date début");
+    const endDate = readDate("Date fin");
+    if (dateError) continue;
+    if (startDate && endDate && startDate > endDate) {
+      error(rowNumber, "startAfterEnd", { start: startDate, end: endDate });
+      continue;
     }
-
-    const startDate = parseFlexibleDate(row["Date début"]);
-    const endDate = parseFlexibleDate(row["Date fin"]);
 
     const actionRaw = str(row["Levier"]);
     let actionId: string | undefined;
     if (actionRaw) {
-      const action = resolveAction(actionRaw, chantier.id, chantierActions);
+      const action = chantierActions.find(
+        (a) => a.chantierId === chantier.id && nameKey(a.name) === nameKey(actionRaw)
+      );
       if (!action) {
-        errors.push({
-          rowNumber,
-          reason: `Levier "${actionRaw}" introuvable sur le chantier "${chantier.name}"`,
-        });
-        return;
+        error(rowNumber, "unknownAction", { value: actionRaw, chantier: chantier.name });
+        continue;
       }
       actionId = action.id;
     }
 
+    const functionRaw = str(row["Fonction"]);
+    const knownFn = functionRaw
+      ? knownDepartments.find((d) => nameKey(d) === nameKey(functionRaw))
+      : undefined;
+    const key = staffingMatchKey(chantier.id, functionRaw, startDate, endDate, actionId);
+    const matched = functionRaw ? existingByKey.get(key) : undefined;
+    let fn: string;
+    if (knownFn) fn = knownFn;
+    else if (matched) {
+      // Équipe sortie de la base ETP depuis la saisie : la ligne existante reste modifiable.
+      fn = matched.function;
+      warning(rowNumber, "functionLeftBase", { value: functionRaw });
+    } else {
+      error(rowNumber, "unknownFunction", {
+        value: functionRaw,
+        expected:
+          knownDepartments.length > 0
+            ? knownDepartments.join(", ")
+            : STAFFING_IMPORT_ISSUES.noDepartments,
+      });
+      continue;
+    }
+
+    const firstRow = seenInBatch.get(key);
+    if (firstRow !== undefined) {
+      error(rowNumber, "duplicateRow", { other: firstRow });
+      continue;
+    }
+    seenInBatch.set(key, rowNumber);
+
     const note = str(row["Note"]);
-
-    const key = staffingMatchKey(chantier.id, fn, startDate, endDate, actionId);
-    const matched = seenInBatch.get(key) ?? existingByKey.get(key);
-
     const entry: ChantierStaffing = {
       id: matched?.id ?? makeStaffingId(),
       companyId: resolvedCompanyId,
@@ -293,16 +328,25 @@ export function validateStaffingImportRows(
       chantierId: chantier.id,
       function: fn,
       fte,
-      ...(note !== "" ? { note } : {}),
+      ...(note !== "" ? { note } : matched?.note ? { note: matched.note } : {}),
       ...(startDate !== "" ? { startDate } : {}),
       ...(endDate !== "" ? { endDate } : {}),
       ...(actionId ? { actionId } : {}),
       createdAt: matched?.createdAt ?? nowDate(),
     };
-
     rows.push({ rowNumber, entry, isUpdate: matched !== undefined });
-    seenInBatch.set(key, entry);
-  });
+  }
 
-  return { rows, errors };
+  // Une ligne en doublon invalide aussi la 1re occurrence (on ne sait pas laquelle est juste).
+  const duplicatedFirstRows = new Set(
+    errors.filter((e) => e.code === "duplicateRow").map((e) => Number(e.vars.other))
+  );
+  const kept = rows.filter((r) => !duplicatedFirstRows.has(r.rowNumber));
+  duplicatedFirstRows.forEach((n) => {
+    const dupOf = errors.find((e) => e.code === "duplicateRow" && Number(e.vars.other) === n);
+    error(n, "duplicateRow", { other: dupOf?.rowNumber ?? n });
+  });
+  errors.sort((a, b) => a.rowNumber - b.rowNumber);
+
+  return { rows: kept, errors, warnings };
 }

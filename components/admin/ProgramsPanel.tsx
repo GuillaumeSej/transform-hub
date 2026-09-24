@@ -100,7 +100,7 @@ const PROGRAM_TABS: {
 
 /** Pastille de type de programme — même style que le badge « Stratégique » historique (pill,
  *  fond translucide + texte de la couleur d'accent), simplement sur l'accent bleu du design system
- *  (`info-blue`, déjà utilisé pour StageBadge/AxisStageBadge) plutôt que le corail réservé aux
+ *  (`info-blue`, déjà utilisé pour StageBadge) plutôt que le corail réservé aux
  *  actions/accents primaires — pour rester visuellement distinct du corail sans introduire une
  *  nouvelle couleur hors design system. Partagée entre la liste (lignes/cartes) et l'en-tête de la
  *  fiche « Gérer ». */
@@ -703,14 +703,20 @@ export function ProgramsPanel({
                     <SlidersHorizontal size={13} /> {t("adminPrograms.manage", "Gérer")}
                   </button>
                   <button
+                    type="button"
+                    aria-label={t("common.edit", "Modifier")}
+                    title={t("common.edit", "Modifier")}
                     onClick={() => startEdit(p)}
                     className="mr-2 text-text-secondary hover:text-bp-coral"
                   >
                     <Pencil size={14} />
                   </button>
                   <button
+                    type="button"
+                    aria-label={t("common.delete", "Supprimer")}
+                    title={t("common.delete", "Supprimer")}
                     onClick={() => remove(p.id)}
-                    className="text-text-secondary hover:text-red-500"
+                    className="text-text-secondary hover:text-rag-red"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -749,14 +755,20 @@ export function ProgramsPanel({
                 <SlidersHorizontal size={13} /> {t("adminPrograms.manage", "Gérer")}
               </button>
               <button
+                type="button"
+                aria-label={t("common.edit", "Modifier")}
+                title={t("common.edit", "Modifier")}
                 onClick={() => startEdit(p)}
                 className="text-text-secondary hover:text-bp-coral"
               >
                 <Pencil size={16} />
               </button>
               <button
+                type="button"
+                aria-label={t("common.delete", "Supprimer")}
+                title={t("common.delete", "Supprimer")}
                 onClick={() => remove(p.id)}
-                className="text-text-secondary hover:text-red-500"
+                className="text-text-secondary hover:text-rag-red"
               >
                 <Trash2 size={16} />
               </button>

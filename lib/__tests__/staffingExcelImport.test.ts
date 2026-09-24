@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { validateStaffingImportRows } from "@/lib/staffingExcelImport";
+import {
+  STAFFING_IMPORT_HEADERS,
+  STAFFING_IMPORT_ISSUES,
+  buildStaffingTemplateRows,
+  staffingToExcelRows,
+  validateStaffingImportRows,
+} from "@/lib/staffingExcelImport";
+import fr from "@/lib/i18n/dictionaries/fr";
 import type { Chantier, ChantierAction, ChantierStaffing } from "@/types";
 
 const companyId = "C1";
@@ -160,11 +167,15 @@ describe("validateStaffingImportRows", () => {
     expect(created?.entry.id).not.toBe("ST-existing-1");
   });
 
-  it("fusionne deux lignes du même fichier qui partagent la même clé métier plutôt que de dupliquer", () => {
+  it("rejette deux lignes du même fichier qui partagent la même clé métier (doublon)", () => {
     const chantiers = [baseChantier()];
 
     const result = validateStaffingImportRows(
-      [baseRow({ ETP: 1 }), baseRow({ ETP: 3 })],
+      // 2e ligne : mêmes noms mais casse/espaces différents -> même clé.
+      [
+        baseRow({ ETP: 1 }),
+        baseRow({ ETP: 3, Chantier: "refonte  du parcours ACHATS", Fonction: "rh" }),
+      ],
       companyId,
       programId,
       chantiers,
@@ -173,12 +184,12 @@ describe("validateStaffingImportRows", () => {
       knownDepartments
     );
 
-    expect(result.errors).toEqual([]);
-    expect(result.rows).toHaveLength(2);
-    // La 2e ligne "met à jour" l'entrée créée par la 1re — même id, dernière valeur d'ETP retenue.
-    expect(result.rows[1].isUpdate).toBe(true);
-    expect(result.rows[1].entry.id).toBe(result.rows[0].entry.id);
-    expect(result.rows[1].entry.fte).toBe(3);
+    // Audit 24/09/2026 : on ne sait pas laquelle retenir -> les deux lignes sont en erreur.
+    expect(result.rows).toEqual([]);
+    expect(result.errors.map((e) => [e.rowNumber, e.code])).toEqual([
+      [2, "duplicateRow"],
+      [3, "duplicateRow"],
+    ]);
   });
 
   it("ne plante jamais sur des lignes vides", () => {
@@ -203,5 +214,161 @@ describe("validateStaffingImportRows", () => {
     );
     expect(result.errors).toEqual([]);
     expect(result.rows).toEqual([]);
+  });
+});
+
+describe("validateStaffingImportRows — contrôles de l'audit du 24/09/2026", () => {
+  const run = (rows: Record<string, unknown>[], existing: ChantierStaffing[] = []) =>
+    validateStaffingImportRows(
+      rows,
+      companyId,
+      programId,
+      [baseChantier()],
+      [baseAction()],
+      existing,
+      knownDepartments
+    );
+
+  it("date illisible ou impossible = erreur (plus de repli silencieux sur une date vide)", () => {
+    const result = run([
+      baseRow({ "Date début": "31/02/2026" }),
+      baseRow({ "Date fin": "bientôt", Fonction: "IT / SI" }),
+    ]);
+    expect(result.rows).toEqual([]);
+    expect(result.errors.map((e) => e.code)).toEqual(["invalidDate", "invalidDate"]);
+  });
+
+  it("lit les dates FR, les séries Excel et refuse début > fin", () => {
+    const ok = run([baseRow({ "Date début": "01/03/2026", "Date fin": 46203, ETP: "0,5" })]);
+    expect(ok.errors).toEqual([]);
+    expect(ok.rows[0].entry.startDate).toBe("2026-03-01");
+    expect(ok.rows[0].entry.endDate).toBe("2026-06-30");
+    expect(ok.rows[0].entry.fte).toBe(0.5);
+
+    const ko = run([baseRow({ "Date début": "2026-07-01", "Date fin": "2026-06-30" })]);
+    expect(ko.errors.map((e) => e.code)).toEqual(["startAfterEnd"]);
+  });
+
+  it("ETP borné : 0 < ETP ≤ 5", () => {
+    const result = run([
+      baseRow({ ETP: 0 }),
+      baseRow({ ETP: "6", Fonction: "IT / SI" }),
+      baseRow({ ETP: "abc", "Date fin": "" }),
+      baseRow({ ETP: 5, "Date début": "" }),
+    ]);
+    expect(result.errors.map((e) => [e.rowNumber, e.code])).toEqual([
+      [2, "invalidFte"],
+      [3, "invalidFte"],
+      [4, "invalidFte"],
+    ]);
+    expect(result.rows).toHaveLength(1);
+  });
+
+  it("noms tolérants aux espaces multiples / accents / casse", () => {
+    const result = run([
+      baseRow({
+        Chantier: "  Refonte   du parcours achats ",
+        Fonction: "it /  si",
+        Levier: "cartographier le  processus actuel",
+      }),
+    ]);
+    expect(result.errors).toEqual([]);
+    expect(result.rows[0].entry.function).toBe("IT / SI");
+    expect(result.rows[0].entry.actionId).toBe("CA1");
+  });
+
+  it("équipe sortie de la base ETP : avertissement (pas erreur) pour une ligne existante", () => {
+    const existing: ChantierStaffing = {
+      id: "ST-old",
+      companyId,
+      programId,
+      chantierId: "CH1",
+      function: "Logistique",
+      fte: 1,
+      startDate: "2026-01-01",
+      endDate: "2026-06-30",
+      note: "Paul",
+      createdAt: "2025-12-01",
+    };
+    const result = run([baseRow({ Fonction: "Logistique", ETP: 2 })], [existing]);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.map((w) => w.code)).toEqual(["functionLeftBase"]);
+    expect(result.rows[0].isUpdate).toBe(true);
+    expect(result.rows[0].entry).toMatchObject({
+      id: "ST-old",
+      function: "Logistique",
+      fte: 2,
+      note: "Paul",
+    });
+
+    const creation = run([baseRow({ Fonction: "Logistique" })]);
+    expect(creation.errors.map((e) => e.code)).toEqual(["unknownFunction"]);
+  });
+
+  it("les lignes commentées (#) du modèle sont ignorées", () => {
+    const template = buildStaffingTemplateRows([baseChantier()], [baseAction()], knownDepartments);
+    // Les exemples référencent un chantier et une équipe réels de l'entreprise…
+    expect(template.some((r) => r[0] === "# Refonte du parcours achats" && r[1] === "RH")).toBe(
+      true
+    );
+    const rows = template.map((r) =>
+      Object.fromEntries(STAFFING_IMPORT_HEADERS.map((h, i) => [h, r[i] ?? ""]))
+    );
+    // …mais ne sont jamais importés tels quels.
+    const result = run(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.rows).toEqual([]);
+  });
+
+  it("aller-retour : ré-importer l'export inchangé ne crée rien et ne produit aucune erreur", () => {
+    const existing: ChantierStaffing[] = [
+      {
+        id: "ST-1",
+        companyId,
+        programId,
+        chantierId: "CH1",
+        function: "RH",
+        fte: 0.5,
+        startDate: "2026-01-01",
+        endDate: "2026-06-30",
+        actionId: "CA1",
+        note: "Marie",
+        createdAt: "2025-12-01",
+      },
+      {
+        id: "ST-2",
+        companyId,
+        programId,
+        chantierId: "CH1",
+        function: "IT / SI",
+        fte: 2,
+        createdAt: "2025-12-01",
+      },
+    ];
+    const exported = staffingToExcelRows(existing, [baseChantier()], [baseAction()]);
+    const result = run(exported, existing);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.rows.map((r) => [r.entry.id, r.isUpdate])).toEqual([
+      ["ST-2", true],
+      ["ST-1", true],
+    ]);
+    for (const r of result.rows) {
+      expect(r.entry).toEqual(existing.find((e) => e.id === r.entry.id));
+    }
+  });
+
+  it("numéros de ligne Excel exacts malgré les lignes vides (__rowNum__)", () => {
+    const row = baseRow({ Chantier: "Inconnu" });
+    Object.defineProperty(row, "__rowNum__", { value: 6, enumerable: false });
+    expect(run([row]).errors[0].rowNumber).toBe(7);
+  });
+});
+
+describe("STAFFING_IMPORT_ISSUES ↔ dictionnaire français", () => {
+  it("chaque modèle est présent à l'identique dans fr.ts", () => {
+    for (const [code, template] of Object.entries(STAFFING_IMPORT_ISSUES)) {
+      expect(fr[`staffingImport.issue.${code}`], code).toBe(template);
+    }
   });
 });

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { resolveIndicatorStatus } from "@/lib/axisLogic";
 import { readKpi, type LinkedKpi } from "@/lib/chantierKpis";
 import type { Chantier, Indicator, IndicatorMeasurement } from "@/types";
 
@@ -78,9 +77,15 @@ export function SuccessKpiList({
         {t("strategicChantierDetail.successKpis.target", "Cible")} : {fmt(r.target)}
         {r.progressPct !== undefined ? ` · ${r.approximate ? "≈" : ""}${r.progressPct} %` : ""}
         {" · "}
+        {/* Point = statut de CETTE lecture (cible du critère si surchargée), pas le statut
+            propre du KPI vs son objectif — sinon point et ligne pouvaient se contredire. */}
         <span
           className={
-            resolveIndicatorStatus(indicator) === "at_risk" ? "text-rag-red" : "text-rag-green"
+            r.status === "at_risk"
+              ? "text-rag-red"
+              : r.status === "on_track"
+                ? "text-rag-green"
+                : "text-tertiary"
           }
         >
           ●
@@ -159,6 +164,8 @@ export function SuccessKpiList({
               {!readOnly && (
                 <button
                   type="button"
+                  aria-label={t("common.remove", "Retirer")}
+                  title={t("common.remove", "Retirer")}
                   onClick={() => remove(kpi.id)}
                   className="shrink-0 text-tertiary hover:text-rag-red"
                 >

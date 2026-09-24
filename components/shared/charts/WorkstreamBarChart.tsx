@@ -14,6 +14,7 @@ import {
   useYAxisScale,
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { formatMillions } from "@/lib/format";
 
 export type WorkstreamBarPoint = {
   label: string;
@@ -314,7 +315,7 @@ export function WorkstreamBarChart({
   const resolvedLabelTarget = labelTarget ?? t("chart.bar.target", "Cible réactualisée");
   const resolvedLabelRealized = labelRealized ?? t("chart.bar.realized", "Réalisé");
   const resolvedLabelPlanned = labelPlanned ?? t("chart.bar.planned", "Planifié initial");
-  const fmt = (v: number) => `€${v}M`;
+  const fmt = (v: number) => formatMillions(v);
   const hasPlanned = data.some((d) => d.planned !== undefined);
 
   if (data.length === 0) {
@@ -372,7 +373,7 @@ export function WorkstreamBarChart({
             tick={{ fontSize: 11 }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={(v) => `€${v}M`}
+            tickFormatter={(v) => formatMillions(Number(v))}
             domain={[0, Math.ceil(maxValue * 1.05)]}
           />
           <Legend

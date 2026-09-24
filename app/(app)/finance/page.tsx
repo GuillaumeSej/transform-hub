@@ -19,11 +19,12 @@ import * as engine from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Company, HierarchyLevelDef, HierarchyNode, Lever } from "@/types";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
-import { type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/filterTypes";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter } from "@/lib/filterUtils";
 import { MultiSelect } from "@/components/shared/MultiSelect";
+import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/leversLogic";
 
 /**
  * Module Finance — le compte de résultat configuré (baseline P&L éditable, reforecast, waterfall)
@@ -132,19 +133,34 @@ export default function FinancePage() {
     { namespace: "finance" }
   );
 
+  // Périmètre de la page = MÊME périmètre que le dashboard exécutif (audit M2 : la page chargeait
+  // TOUS les leviers de l'entreprise, tous programmes et niveaux de confidentialité confondus, d'où
+  // des totaux ≠ dashboard) : programme actif (ou programmes de la vue consolidée) + règle de
+  // visibilité des vues agrégées (`filterAggregateVisibleLevers`).
+  const { activeProgram, isConsolidatedView, consolidatedPrograms } = useActiveProgram();
+  const scopedLevers = useMemo(
+    () =>
+      filterProgramScopedLevers(filterAggregateVisibleLevers(data.levers, user, company), {
+        programId: activeProgram?.id,
+        isConsolidatedView,
+        consolidatedProgramIds: consolidatedPrograms.map((p) => p.id),
+      }),
+    [data.levers, user, company, activeProgram, isConsolidatedView, consolidatedPrograms]
+  );
+
   // Leviers filtrés par la barre, ABANDONNÉS COMPRIS : le tableau par niveau financier en a besoin
   // pour sa colonne « Annulé » et pour le « Planifié initial » (qui les inclut, voir
   // `engine.plannedInitialNet`) — avant, ils étaient retirés ici et la colonne « Annulé » valait
   // toujours 0. Les autres widgets de la page restent sur les seuls leviers actifs.
   const filteredLeversWithCancelled = useMemo(() => {
-    let levers = data.levers;
+    let levers = scopedLevers;
     Object.entries(financeFilters).forEach(([key, value]) => {
       if (!value || value.length === 0) return;
       const def = filterDefs.find((d) => d.key === key);
       if (def) levers = levers.filter((l) => matchesFilter(def.getValue(l), value));
     });
     return levers;
-  }, [data, financeFilters, filterDefs]);
+  }, [scopedLevers, financeFilters, filterDefs]);
   const filteredLevers = useMemo(
     () => filteredLeversWithCancelled.filter((l) => l.status !== "cancelled"),
     [filteredLeversWithCancelled]
@@ -178,35 +194,54 @@ export default function FinancePage() {
 
   const pnlGeoOptions = useMemo(() => {
     const vals = new Set<string>();
-    data.levers.forEach((l) => {
+    scopedLevers.forEach((l) => {
       if (l.geography) vals.add(l.geography);
     });
     return Array.from(vals).sort();
-  }, [data]);
+  }, [scopedLevers]);
   const pnlCountryOptions = useMemo(() => {
     const vals = new Set<string>();
-    data.levers
+    scopedLevers
       .filter((l) => matchesFilter(l.geography, pnlFilterGeo))
       .forEach((l) => {
         if (l.country) vals.add(l.country);
       });
     return Array.from(vals).sort();
-  }, [data, pnlFilterGeo]);
+  }, [scopedLevers, pnlFilterGeo]);
   const pnlEntityOptions = useMemo(() => {
     const vals = new Set<string>();
-    data.levers
+    scopedLevers
       .filter((l) => matchesFilter(l.geography, pnlFilterGeo))
       .filter((l) => matchesFilter(l.country, pnlFilterCountry))
       .forEach((l) => {
         if (l.entity) vals.add(l.entity);
       });
     return Array.from(vals).sort();
-  }, [data, pnlFilterGeo, pnlFilterCountry]);
+  }, [scopedLevers, pnlFilterGeo, pnlFilterCountry]);
 
-  const pnlFilteredData = useMemo(
-    () => ({ ...data, levers: pnlFilteredLevers }),
-    [data, pnlFilteredLevers]
-  );
+  // P&L : leviers filtrés ABANDONNÉS COMPRIS — leur plan figé fait partie du « Planifié initial »
+  // (même définition que les KPI, `plannedInitialNet`), réactualisé/réalisé à 0 (audit M5).
+  const pnlFilteredData = useMemo(() => {
+    const cancelled = filteredLeversWithCancelled.filter((l) => {
+      if (l.status !== "cancelled") return false;
+      return (
+        matchesFilter(l.geography, pnlFilterGeo) &&
+        matchesFilter(l.country, pnlFilterCountry) &&
+        matchesFilter(l.entity, pnlFilterEntity)
+      );
+    });
+    return {
+      ...data,
+      levers: [...pnlFilteredLevers, ...cancelled],
+    };
+  }, [
+    data,
+    pnlFilteredLevers,
+    filteredLeversWithCancelled,
+    pnlFilterGeo,
+    pnlFilterCountry,
+    pnlFilterEntity,
+  ]);
 
   // Filtre temporel (cascade Année → Trimestre → Mois). `data.program.fyStart` (ProgramConfig,
   // legacy mono-programme) est un vestige souvent vide/invalide pour une entreprise qui utilise
@@ -214,7 +249,6 @@ export default function FinancePage() {
   // `pnlYear` littéralement "NaN" (aucune ligne ne matchait alors jamais aucune période, tout le
   // tableau "Compte de résultat configuré" et le graphique "Impact P&L par compte" affichaient
   // 0 partout). Priorité : Programme actif (moderne) > ProgramConfig (legacy) > année courante.
-  const { activeProgram } = useActiveProgram();
   const fyYear = useMemo(() => {
     const fromActiveProgram = activeProgram?.fyStart ? new Date(activeProgram.fyStart) : null;
     if (fromActiveProgram && !isNaN(fromActiveProgram.getTime())) {
@@ -268,6 +302,7 @@ export default function FinancePage() {
       pnlDetailedData.map((d) => ({
         account: d.accountName,
         plan: d.plan,
+        reforecast: d.reforecast,
         realized: d.realized,
       })),
     [pnlDetailedData]
@@ -290,7 +325,7 @@ export default function FinancePage() {
           graphiques ci-dessous ET au widget "Impact P&L par compte"/tableau "Compte de résultat
           configuré" (voir `filteredData`/`pnlFilteredLevers`). */}
       <DropdownFilterBar
-        items={data.levers.filter((l) => l.status !== "cancelled")}
+        items={scopedLevers.filter((l) => l.status !== "cancelled")}
         multiple
         defs={filterDefs}
         active={financeFilters}
@@ -399,6 +434,7 @@ export default function FinancePage() {
             data={pnlData}
             labelPlan={t("chart.pnl.plan")}
             labelRealized={t("chart.pnl.realized")}
+            labelReforecast={t("chart.pnl.reforecast", "Réactualisé")}
           />
         </CardBody>
       </Card>

@@ -84,7 +84,7 @@ export function MovementStatusByTypeChart({
         />
         <Bar
           dataKey="dueSoon"
-          name={t("shared.hrOwnerActionTable.dueSoon", "À venir < 90 j")}
+          name={t("shared.hrOwnerActionTable.dueSoon", "À venir ≤ 90 j")}
           stackId="status"
           fill="#FFB1B5"
           onClick={handleClick("dueSoon")}

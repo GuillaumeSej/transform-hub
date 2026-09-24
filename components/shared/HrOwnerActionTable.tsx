@@ -2,6 +2,7 @@
 
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { OwnerActionStatus, OwnerActionCell, OwnerActionRow } from "@/lib/hrExecution";
+import { intlTag } from "@/lib/format";
 
 function getColumns(
   t: (key: string, fallback?: string) => string
@@ -10,7 +11,7 @@ function getColumns(
     { key: "overdue", label: t("hr.alert.overdue", "En retard"), className: "text-bp-coral" },
     {
       key: "dueSoon",
-      label: t("shared.hrOwnerActionTable.dueSoon", "À venir < 90 j"),
+      label: t("shared.hrOwnerActionTable.dueSoon", "À venir ≤ 90 j"),
       className: "text-primary",
     },
     {
@@ -42,7 +43,7 @@ function CellValue({
     <span className="inline-flex flex-col leading-tight">
       <strong className="text-[13px] tabular-nums">{value.count}</strong>
       <span className="text-[9.5px] text-tertiary">
-        {value.fte.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}{" "}
+        {value.fte.toLocaleString(intlTag(), { maximumFractionDigits: 1 })}{" "}
         {t("shared.hrOwnerActionTable.fteAbbrev", "ETP")}
       </span>
     </span>

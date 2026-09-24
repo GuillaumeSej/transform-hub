@@ -31,7 +31,11 @@ describe("chantierKpis", () => {
       target: 100,
       progressPct: 38,
       approximate: false,
+      status: "at_risk",
     });
+    // M9 : le statut suit la cible LUE (surcharge du critère), pas le statut propre du KPI.
+    expect(readKpi(ind("a"), m, 40).status).toBe("on_track");
+    expect(readKpi(ind("a"), [], 40).status).toBe("no_data");
     expect(readKpi(ind("a"), m, 200).progressPct).toBe(17); // (50-20)/(200-20)
     // Une seule mesure = la baseline elle-même : rien n'a bougé → 0.
     expect(readKpi(ind("a"), [m[1]]).progressPct).toBe(0);

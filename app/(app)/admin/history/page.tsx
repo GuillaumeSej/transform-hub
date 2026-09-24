@@ -7,19 +7,20 @@ import type { AuditEntry, Lever } from "@/types";
 import { subscribeAuditLog, subscribeLevers, filterAuditByCompany } from "@/lib/firestore/levers";
 import { useRole } from "@/lib/hooks/useRole";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { intlTag } from "@/lib/format";
 
 const ACTION_COLORS: Record<string, string> = {
-  created: "bg-green-100 text-green-700",
-  updated: "bg-blue-100 text-blue-700",
-  deleted: "bg-red-100 text-red-700",
-  completed: "bg-purple-100 text-purple-700",
-  validated: "bg-amber-100 text-amber-700",
-  commented: "bg-gray-100 text-gray-600",
+  created: "bg-rag-green-light text-rag-green-dark",
+  updated: "bg-info-blue-light text-info-blue",
+  deleted: "bg-rag-red-light text-rag-red",
+  completed: "bg-bp-purple/10 text-bp-purple",
+  validated: "bg-rag-amber-light text-rag-amber",
+  commented: "bg-neutral-100 text-neutral-600",
   // Demande de validation (voir lib/leversLogic.ts::requestLeverApproval/
   // approveLeverGate/rejectLeverApproval).
-  approval_requested: "bg-amber-100 text-amber-700",
-  approval_approved: "bg-amber-100 text-amber-700",
-  approval_rejected: "bg-red-100 text-red-700",
+  approval_requested: "bg-rag-amber-light text-rag-amber",
+  approval_approved: "bg-rag-amber-light text-rag-amber",
+  approval_rejected: "bg-rag-red-light text-rag-red",
 };
 
 function actionLabels(t: (key: string, fallback?: string) => string): Record<string, string> {
@@ -39,7 +40,7 @@ function actionLabels(t: (key: string, fallback?: string) => string): Record<str
 function formatTimestamp(ts: string): string {
   try {
     const d = new Date(ts);
-    return d.toLocaleDateString("fr-FR", {
+    return d.toLocaleDateString(intlTag(), {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -192,15 +193,18 @@ export default function AdminHistoryPage() {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((entry, idx) => (
-              <tr key={idx} className="border-b border-border hover:bg-bg-elevated/50">
+            {sorted.map((entry) => (
+              <tr
+                key={`${entry.ts}|${entry.user}|${entry.action}|${entry.entity}|${entry.field}`}
+                className="border-b border-border hover:bg-bg-elevated/50"
+              >
                 <td className="px-4 py-2.5 font-mono text-xs text-text-secondary whitespace-nowrap">
                   {formatTimestamp(entry.ts)}
                 </td>
                 <td className="px-4 py-2.5 font-medium text-text-primary">{entry.user}</td>
                 <td className="px-4 py-2.5">
                   <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ACTION_COLORS[entry.action] ?? "bg-gray-100 text-gray-600"}`}
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ACTION_COLORS[entry.action] ?? "bg-neutral-100 text-neutral-600"}`}
                   >
                     {ACTION_LABELS[entry.action] ?? entry.action}
                   </span>
@@ -236,14 +240,17 @@ export default function AdminHistoryPage() {
 
       {/* Mobile (< sm) : une carte par entrée, tout le contenu empilé verticalement. */}
       <div className="divide-y divide-border rounded-xl border border-border sm:hidden">
-        {sorted.map((entry, idx) => (
-          <div key={idx} className="p-3">
+        {sorted.map((entry) => (
+          <div
+            key={`${entry.ts}|${entry.user}|${entry.action}|${entry.entity}|${entry.field}`}
+            className="p-3"
+          >
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <span className="font-mono text-[11px] text-text-secondary">
                 {formatTimestamp(entry.ts)}
               </span>
               <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${ACTION_COLORS[entry.action] ?? "bg-gray-100 text-gray-600"}`}
+                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${ACTION_COLORS[entry.action] ?? "bg-neutral-100 text-neutral-600"}`}
               >
                 {ACTION_LABELS[entry.action] ?? entry.action}
               </span>

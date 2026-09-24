@@ -11,6 +11,7 @@ import {
   costsByHierarchyNode,
   flattenCostImpacts,
   groupCostsByWorkstream,
+  isCostEngaged,
   isInvestNature,
   sortedHierarchyLevels,
   type HierarchyCostSlice,
@@ -50,26 +51,27 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
   const [rawPath, setRawPath] = useState<DrillStep[]>([]);
   const [leafLever, setLeafLever] = useState<{ wsId: string; leverId: string } | null>(null);
 
-  // "Engagé" reflète la MÊME notion que le KPI héros "CAPEX & coûts one-off" du dashboard exécutif
-  // (`engine.programSummary(data).engagedCosts`) : facteur d'avancement par levier (100% si livré,
-  // sinon `progress`%) appliqué à chaque ligne de coût "Invest" — répartit chaque ligne entre
-  // "engagé" et "à venir" au prorata de l'avancement ; le total reste inchangé.
+  // "Engagé" = règle DATÉE unique (`isCostEngaged` → `engine.isInvestCostEngaged`), la MÊME que le
+  // KPI héros "CAPEX & coûts one-off" du dashboard (`programSummary.engagedCosts`) — audit M8 :
+  // avant, chaque ligne était proratisée par le champ stocké et périmé `lever.progress`.
   const split = useMemo(() => {
     const investRows = flattenCostImpacts(data).filter(({ impact }) =>
       isInvestNature(impact.nature)
     );
+    const today = new Date();
     const engagedRows: { lever: Lever; amount: number }[] = [];
     const upcomingRows: { lever: Lever; amount: number }[] = [];
     let engaged = 0;
     let upcoming = 0;
-    for (const { impact, lever } of investRows) {
-      const engagedFactor = lever.status === "delivered" ? 1 : lever.progress / 100;
-      const engagedAmount = impact.amount * engagedFactor;
-      const upcomingAmount = impact.amount - engagedAmount;
-      if (engagedAmount !== 0) engagedRows.push({ lever, amount: engagedAmount });
-      if (upcomingAmount !== 0) upcomingRows.push({ lever, amount: upcomingAmount });
-      engaged += engagedAmount;
-      upcoming += upcomingAmount;
+    for (const row of investRows) {
+      if (row.impact.amount === 0) continue;
+      if (isCostEngaged(row, today)) {
+        engagedRows.push({ lever: row.lever, amount: row.impact.amount });
+        engaged += row.impact.amount;
+      } else {
+        upcomingRows.push({ lever: row.lever, amount: row.impact.amount });
+        upcoming += row.impact.amount;
+      }
     }
     return {
       engagedRows,
@@ -237,10 +239,22 @@ export function CostByHierarchyChart({
   const currentLevelKey = levels[path.length]?.key;
   const currentParentId = path.length > 0 ? path[path.length - 1].id : null;
 
-  const slices = useMemo(() => {
+  const rawSlices = useMemo(() => {
     if (!currentLevelKey) return [];
     return costsByHierarchyNode(data, hierarchyNodes, currentLevelKey, currentParentId);
   }, [data, hierarchyNodes, currentLevelKey, currentParentId]);
+  // Part « (direct) » (coûts rattachés au nœud parent lui-même, audit M9) : libellé suffixé pour la
+  // distinguer du parent dans le donut et le fil d'Ariane.
+  const slices = useMemo(
+    () =>
+      rawSlices.map((s) => ({
+        ...s,
+        displayLabel: s.isDirect
+          ? t("finance.drill.directSlice", "{name} (direct)").replace("{name}", s.node.label)
+          : s.node.label,
+      })),
+    [rawSlices, t]
+  );
 
   const groups = useMemo(() => {
     if (!leafSlice) return [];
@@ -281,7 +295,7 @@ export function CostByHierarchyChart({
         ) : (
           <BudgetDonutChart
             key={currentParentId ?? "root"}
-            data={slices.map((s) => ({ name: s.node.label, value: s.amount }))}
+            data={slices.map((s) => ({ name: s.displayLabel, value: s.amount }))}
             formatValue={fmt}
             centerLabel={levels[info.levelNumber - 1]?.label}
             clickHint={
@@ -290,7 +304,7 @@ export function CostByHierarchyChart({
                 : t("finance.drill.tooltipNext", "Cliquez pour détailler")
             }
             onSliceClick={(name) => {
-              const slice = slices.find((s) => s.node.label === name);
+              const slice = slices.find((s) => s.displayLabel === name);
               if (!slice) return;
               if (shouldDrillDown(path.length, levels.length, slice.hasChildren)) {
                 setRawPath([...path, { id: slice.node.id, label: slice.node.label }]);
@@ -306,7 +320,15 @@ export function CostByHierarchyChart({
         onOpenChange={(open) => {
           if (!open) setLeafSlice(null);
         }}
-        title={[...path.map((s) => s.label), leafSlice?.node.label ?? ""]
+        title={[
+          ...path.map((s) => s.label),
+          leafSlice?.isDirect
+            ? t("finance.drill.directSlice", "{name} (direct)").replace(
+                "{name}",
+                leafSlice.node.label
+              )
+            : (leafSlice?.node.label ?? ""),
+        ]
           .filter(Boolean)
           .join(" › ")}
         groups={groups}

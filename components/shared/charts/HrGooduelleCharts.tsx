@@ -39,6 +39,7 @@ import {
   MovementNetBalanceSummary,
   netBalanceColor,
 } from "@/components/shared/MovementNetBalanceSummary";
+import { formatMillions, intlTag } from "@/lib/format";
 
 /** Palette 5-types alignée sur les tokens dataviz BeTrack / BearingPoint : famille rouge,
  *  taupes et violet de secours. Vert et orange sont volontairement exclus par la charte. */
@@ -60,8 +61,8 @@ const COLOR_NET_NEG = "#FF3C47"; // coral : économie nette négative
 const COLOR_NET_CUMUL = "#320300"; // deep-red : cumul net
 const COLOR_INK = "#320300"; // deep-red : cumul mouvements
 
-const fmtMEur = (v: number) => `${v.toFixed(1)} M€`;
-const fmtEtp = (v: number) => v.toLocaleString("fr-FR");
+const fmtMEur = (v: number) => formatMillions(v, 1);
+const fmtEtp = (v: number) => v.toLocaleString(intlTag());
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // 1. Économies salariales (Actual + Forecast vs Plan) + cumul — double échelle Y
@@ -103,8 +104,9 @@ export function SavingsPeriodCumulChart({
     actual: false,
     plan: false,
   });
-  // Période épinglée par un clic sur le graphique (détail affiché sous le graphique).
-  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  // Période épinglée par un clic sur le graphique (détail affiché sous le graphique) — mémorisée
+  // par CLÉ stable ("2026-03"), jamais par libellé localisé.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   if (buckets.length === 0) {
     return (
@@ -114,9 +116,11 @@ export function SavingsPeriodCumulChart({
     );
   }
 
-  const selected = buckets.find((b) => b.label === selectedLabel) ?? null;
+  const selected = buckets.find((b) => b.key === selectedKey) ?? null;
 
   const labelActual = t("shared.hrGooduelleCharts.legendActualForecast", "Réalisé + prévision");
+  const labelRealized = t("shared.hrGooduelleCharts.badgeActual", "Réalisé");
+  const labelForecast = t("shared.hrGooduelleCharts.badgeForecast", "Prévision");
   const labelPlan = t("shared.hrGooduelleCharts.legendPlan", "Plan initial");
   const labelPeriod = t("shared.hrGooduelleCharts.axisPeriod", "Par période");
   const labelCumul = t("shared.hrGooduelleCharts.axisCumul", "Cumul");
@@ -133,13 +137,21 @@ export function SavingsPeriodCumulChart({
   const onChartClick = (state: any) => {
     const label = state?.activeLabel;
     if (typeof label !== "string" && typeof label !== "number") return;
-    const key = String(label);
-    setSelectedLabel((prev) => (prev === key ? null : key));
+    const key = buckets.find((b) => b.label === String(label))?.key;
+    if (!key) return;
+    setSelectedKey((prev) => (prev === key ? null : key));
   };
 
   // Barres des périodes non sélectionnées estompées quand une période est épinglée.
-  const cellOpacity = (b: SalarySavingsBucket) =>
-    selected && b.label !== selected.label ? 0.35 : 1;
+  const cellOpacity = (b: SalarySavingsBucket) => (selected && b.key !== selected.key ? 0.35 : 1);
+  // Badge de la période épinglée selon le STATUT des mouvements qui la composent (M9) — et non
+  // selon la position du bucket par rapport à aujourd'hui.
+  const statusBadge = (b: SalarySavingsBucket) =>
+    b.realized !== 0 && b.forecast !== 0
+      ? labelActual
+      : b.forecast !== 0
+        ? labelForecast
+        : labelRealized;
 
   return (
     <div>
@@ -224,16 +236,38 @@ export function SavingsPeriodCumulChart({
               strokeDasharray="3 3"
             />
           )}
+          {/* Réalisé (mouvements au statut « Réalisé ») + prévision (non réalisés, jamais avant
+              aujourd'hui) empilés : la barre totale reste « Réalisé + prévision » (M9). */}
           <Bar
             yAxisId="period"
-            dataKey="actualPlusForecast"
-            name={`${labelActual} — ${labelPeriod.toLowerCase()}`}
+            dataKey="realized"
+            stackId="actualForecast"
+            name={`${labelRealized} — ${labelPeriod.toLowerCase()}`}
             fill={COLOR_SAVINGS}
             hide={hidden.actual}
             cursor="pointer"
           >
             {buckets.map((b) => (
-              <Cell key={b.label} fill={COLOR_SAVINGS} fillOpacity={cellOpacity(b)} />
+              <Cell key={b.key} fill={COLOR_SAVINGS} fillOpacity={cellOpacity(b)} />
+            ))}
+          </Bar>
+          <Bar
+            yAxisId="period"
+            dataKey="forecast"
+            stackId="actualForecast"
+            name={`${labelForecast} — ${labelPeriod.toLowerCase()}`}
+            fill={COLOR_SAVINGS}
+            hide={hidden.actual}
+            cursor="pointer"
+          >
+            {buckets.map((b) => (
+              <Cell
+                key={b.key}
+                fill={COLOR_SAVINGS}
+                fillOpacity={0.4 * cellOpacity(b)}
+                stroke={COLOR_SAVINGS}
+                strokeDasharray="3 2"
+              />
             ))}
           </Bar>
           <Bar
@@ -245,7 +279,7 @@ export function SavingsPeriodCumulChart({
             cursor="pointer"
           >
             {buckets.map((b) => (
-              <Cell key={b.label} fill={COLOR_PLAN} fillOpacity={cellOpacity(b)} />
+              <Cell key={b.key} fill={COLOR_PLAN} fillOpacity={cellOpacity(b)} />
             ))}
           </Bar>
           <Line
@@ -278,59 +312,65 @@ export function SavingsPeriodCumulChart({
             <div className="flex items-center gap-2">
               <span className="font-semibold text-primary">{selected.label}</span>
               <span className="rounded-sm border border-border px-1.5 py-px text-[10px] text-secondary">
-                {selected.isFuture
-                  ? t("shared.hrGooduelleCharts.badgeForecast", "Prévision")
-                  : t("shared.hrGooduelleCharts.badgeActual", "Réalisé")}
+                {statusBadge(selected)}
               </span>
+              {selected.realized !== 0 && selected.forecast !== 0 && (
+                <span className="text-[10.5px] text-tertiary">
+                  {labelRealized} {fmtMEur(selected.realized)} · {labelForecast}{" "}
+                  {fmtMEur(selected.forecast)}
+                </span>
+              )}
             </div>
             <button
               type="button"
-              onClick={() => setSelectedLabel(null)}
+              onClick={() => setSelectedKey(null)}
               className="text-[11px] text-tertiary underline-offset-2 hover:text-primary hover:underline"
             >
               {t("common.close", "Fermer")}
             </button>
           </div>
-          <table className="w-full tabular-nums">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-wide text-tertiary">
-                <th className="py-0.5 text-left font-medium" />
-                <th className="py-0.5 text-right font-medium">{labelPeriod}</th>
-                <th className="py-0.5 text-right font-medium">{labelCumul}</th>
-              </tr>
-            </thead>
-            <tbody className="text-secondary">
-              <tr>
-                <td className="py-0.5">
-                  <span className="inline-flex items-center gap-1.5">
-                    <BarLineSwatch color={COLOR_SAVINGS} />
-                    {labelActual}
-                  </span>
-                </td>
-                <td className="py-0.5 text-right">{fmtMEur(selected.actualPlusForecast)}</td>
-                <td className="py-0.5 text-right">{fmtMEur(selected.cumulActualForecast)}</td>
-              </tr>
-              <tr>
-                <td className="py-0.5">
-                  <span className="inline-flex items-center gap-1.5">
-                    <BarLineSwatch color={COLOR_PLAN_LINE} dashed />
-                    {labelPlan}
-                  </span>
-                </td>
-                <td className="py-0.5 text-right">{fmtMEur(selected.plan)}</td>
-                <td className="py-0.5 text-right">{fmtMEur(selected.cumulPlan)}</td>
-              </tr>
-              <tr className="border-t border-border font-semibold text-primary">
-                <td className="pt-1">{labelGap}</td>
-                <td className="pt-1 text-right">
-                  {fmtSignedMEur(selected.actualPlusForecast - selected.plan)}
-                </td>
-                <td className="pt-1 text-right">
-                  {fmtSignedMEur(selected.cumulActualForecast - selected.cumulPlan)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full tabular-nums">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wide text-tertiary">
+                  <th className="py-0.5 text-left font-medium" />
+                  <th className="py-0.5 text-right font-medium">{labelPeriod}</th>
+                  <th className="py-0.5 text-right font-medium">{labelCumul}</th>
+                </tr>
+              </thead>
+              <tbody className="text-secondary">
+                <tr>
+                  <td className="py-0.5">
+                    <span className="inline-flex items-center gap-1.5">
+                      <BarLineSwatch color={COLOR_SAVINGS} />
+                      {labelActual}
+                    </span>
+                  </td>
+                  <td className="py-0.5 text-right">{fmtMEur(selected.actualPlusForecast)}</td>
+                  <td className="py-0.5 text-right">{fmtMEur(selected.cumulActualForecast)}</td>
+                </tr>
+                <tr>
+                  <td className="py-0.5">
+                    <span className="inline-flex items-center gap-1.5">
+                      <BarLineSwatch color={COLOR_PLAN_LINE} dashed />
+                      {labelPlan}
+                    </span>
+                  </td>
+                  <td className="py-0.5 text-right">{fmtMEur(selected.plan)}</td>
+                  <td className="py-0.5 text-right">{fmtMEur(selected.cumulPlan)}</td>
+                </tr>
+                <tr className="border-t border-border font-semibold text-primary">
+                  <td className="pt-1">{labelGap}</td>
+                  <td className="pt-1 text-right">
+                    {fmtSignedMEur(selected.actualPlusForecast - selected.plan)}
+                  </td>
+                  <td className="pt-1 text-right">
+                    {fmtSignedMEur(selected.cumulActualForecast - selected.cumulPlan)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <p className="mt-1 text-[11px] text-tertiary">

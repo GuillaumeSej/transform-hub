@@ -54,29 +54,32 @@ const fixture = data([
 ]);
 
 describe("investVsSavingsCalc — buildInvestVsSavingsCalc (période)", () => {
+  // Run-rate (audit M6) : horizon mars 2028 + 11 mois → 2026..2029 ; OPEX récurrent 1/an dès
+  // janv. 2026 ; gain L2 (3/an) dès avril 2026 → 2,25 en 2026 ; gains L1 6/an dès mars 2027 et
+  // mars 2028.
   it("reprend les montants du graphique et sépare CAPEX / OPEX ponctuel", () => {
     const calc = buildInvestVsSavingsCalc(fixture, "year", "2026")!;
     const point = bucketInvestVsSavingsByPeriod(fixture, "year")[0];
     expect(calc.scope).toBe("period");
     expect(calc.periodLabel).toBe("2026");
     expect(calc.grossSavings).toBe(point.grossSavings);
-    expect(calc.grossSavings).toBe(3);
+    expect(calc.grossSavings).toBe(2.25);
     expect(calc.opexRec).toBe(1);
-    expect(calc.netSavings).toBe(2);
+    expect(calc.netSavings).toBe(1.25);
     expect(calc.capex).toBe(10);
     expect(calc.opexOneOff).toBe(2);
     expect(calc.investCost).toBe(12);
     expect(calc.netResult).toBe(point.netPeriodResult);
-    expect(calc.netResult).toBe(-10);
-    expect(calc.cumulative).toBe(-10);
-    expect(calc.roiPct).toBe(-83.3);
+    expect(calc.netResult).toBe(-10.75);
+    expect(calc.cumulative).toBe(-10.75);
+    expect(calc.roiPct).toBe(-89.6);
   });
 
   it("classe les leviers par impact absolu sur le résultat net (top 5)", () => {
     const calc = buildInvestVsSavingsCalc(fixture, "year", "2026")!;
     expect(calc.topLevers.map((r) => [r.leverId, r.net])).toEqual([
       ["L1", -13],
-      ["L2", 3],
+      ["L2", 2.25],
     ]);
   });
 
@@ -93,15 +96,16 @@ describe("investVsSavingsCalc — vue Total et délai de retour", () => {
   it("somme l'horizon complet et fusionne les leviers", () => {
     const calc = buildInvestVsSavingsCalc(fixture, "year", null)!;
     expect(calc.scope).toBe("total");
-    expect(calc.periodLabel).toBe("2026 → 2028");
-    expect(calc.grossSavings).toBe(15);
+    expect(calc.periodLabel).toBe("2026 → 2029");
+    expect(calc.grossSavings).toBe(26.75); // 2,25 + 8 + 14 + 2,5
     expect(calc.investCost).toBe(12);
-    expect(calc.netResult).toBe(2);
-    expect(calc.cumulative).toBe(2);
-    expect(calc.roiPct).toBe(16.7);
+    expect(calc.netResult).toBe(11.58);
+    expect(calc.cumulative).toBe(11.58);
+    // ROI = résultat net de l'horizon / investissement, même assiette que les barres.
+    expect(calc.roiPct).toBe(96.5);
     const l1 = calc.rows.find((r) => r.leverId === "L1")!;
-    expect(l1.grossSavings).toBe(12);
-    expect(l1.net).toBe(-1);
+    expect(l1.grossSavings).toBe(18); // 5 (2027) + 11 (2028) + 2 (2029)
+    expect(l1.net).toBe(2.83);
   });
 
   it("repère le breakeven (1re période où le cumul repasse ≥ 0)", () => {
@@ -113,5 +117,37 @@ describe("investVsSavingsCalc — vue Total et délai de retour", () => {
 
   it("renvoie null sans aucune donnée", () => {
     expect(buildInvestVsSavingsCalc(data([]), "year", null)).toBeNull();
+  });
+
+  it("inclut les impacts ETP (recrutement = OPEX récurrent, départ = gain)", () => {
+    const withFte = data([
+      {
+        ...lever("F1", []),
+        impacts: [
+          {
+            id: "h",
+            label: "h",
+            type: "fte",
+            nature: "opex_rec",
+            fteDirection: "hire",
+            amount: 1.2,
+            capexDeploymentDate: "2026-01-01",
+          },
+          {
+            id: "d",
+            label: "d",
+            type: "fte",
+            nature: "opex_rec",
+            fteDirection: "departure",
+            amount: 2.4,
+            gainDate: "2026-01-01",
+          },
+        ],
+      } as unknown as Lever,
+    ]);
+    const calc = buildInvestVsSavingsCalc(withFte, "year", "2026")!;
+    expect(calc.grossSavings).toBe(2.4);
+    expect(calc.opexRec).toBe(1.2);
+    expect(calc.netSavings).toBe(1.2);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Plus, TriangleAlert, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
@@ -14,7 +14,7 @@ import {
   movementStatusLabel,
   movementTypeLabel,
 } from "@/lib/hrMovementLabels";
-import { movementStatusPatch } from "@/lib/workforceLogic";
+import { isActiveMovement, movementStatusPatch } from "@/lib/workforceLogic";
 import { computeMovementFinancials, tenureYears } from "@/lib/hrFinancials";
 import { fmtCurr } from "@/lib/engine";
 import { Button } from "@/components/shared/Button";
@@ -23,12 +23,16 @@ import { Modal } from "@/components/shared/Modal";
 import { MovementForm, type MovementFormValues } from "@/components/shared/MovementForm";
 import { HrExcelButtons } from "@/components/shared/HrExcelButtons";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import { type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/filterTypes";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesAnyFilter, matchesFilter } from "@/lib/filterUtils";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
-import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
+import {
+  subscribeCompanies,
+  subscribeHierarchyNodes,
+  subscribePrograms,
+} from "@/lib/firestore/admin";
 import type {
   Company,
   Employee,
@@ -36,9 +40,12 @@ import type {
   HierarchyNode,
   MovementStatus,
   MovementType,
+  Program,
   WorkforceMovement,
 } from "@/types";
-import { useTranslation } from "@/lib/i18n/useTranslation";
+import { translate, useTranslation } from "@/lib/i18n/useTranslation";
+import { LOCALES } from "@/lib/i18n/locales";
+import { intlTag } from "@/lib/format";
 
 type EtpRow = {
   id: string;
@@ -119,17 +126,107 @@ function alertKindLabels(
   };
 }
 
-function alertKindLabel(
-  labels: Record<hr.MovementAlertKind | "none", string>,
-  kind: hr.MovementAlertKind | null
+// Valeurs de filtre STABLES (indépendantes de la langue de l'interface) : les filtres "Alerte",
+// "Validé RH", "Mouvement prévu" et "PSE" stockent ces codes dans l'URL et n'affichent le libellé
+// traduit que via `formatValue` — auparavant ils stockaient le libellé traduit, si bien qu'un lien
+// (ou une URL partagée) cessait de filtrer dès qu'on changeait de langue.
+type AlertFilterCode = hr.MovementAlertKind | "none";
+const ALERT_LABEL_KEYS: Record<AlertFilterCode, [string, string]> = {
+  overdue: ["hr.alert.overdue", "En retard"],
+  due: ["hr.alert.due", "Échéance proche"],
+  toValidate: ["hr.alert.toValidate", "À valider"],
+  leverMismatch: ["hr.alert.leverMismatch", "Désynchronisé levier"],
+  none: ["etp.alert.none", "Aucune"],
+};
+type YesNoCode = "yes" | "no";
+const YES_NO_LABEL_KEYS: Record<YesNoCode, [string, string]> = {
+  yes: ["etp.yes", "Oui"],
+  no: ["etp.no", "Non"],
+};
+
+/** Ramène une valeur de filtre héritée (libellé traduit dans N'IMPORTE quelle langue, ex. lien
+ *  `etpAlertFilterLink` construit avec les libellés affichés) vers son code stable. */
+function toStableFilterCode<C extends string>(
+  value: string,
+  labelKeys: Record<C, [string, string]>
 ): string {
-  return labels[kind ?? "none"];
+  if (value in labelKeys) return value;
+  for (const [code, [key, fallback]] of Object.entries(labelKeys) as [C, [string, string]][]) {
+    if (value === fallback || LOCALES.some((locale) => translate(locale, key, fallback) === value))
+      return code;
+  }
+  return value;
+}
+
+const STABLE_CODE_FILTERS: Record<string, Record<string, [string, string]>> = {
+  f_alert: ALERT_LABEL_KEYS,
+  f_hrValidated: YES_NO_LABEL_KEYS,
+  f_hasMovement: YES_NO_LABEL_KEYS,
+  f_pse: YES_NO_LABEL_KEYS,
+};
+
+/** Normalise les filtres actifs (codes stables) — renvoie null si rien à changer. */
+function normalizeStableFilters(
+  active: Record<string, string[] | undefined>
+): Record<string, string[]> | null {
+  let changed = false;
+  const next: Record<string, string[]> = {};
+  for (const [key, values] of Object.entries(active)) {
+    if (!values) continue;
+    const labelKeys = STABLE_CODE_FILTERS[key];
+    const mapped = labelKeys ? values.map((v) => toStableFilterCode(v, labelKeys)) : values;
+    if (mapped.some((v, i) => v !== values[i])) changed = true;
+    next[key] = Array.from(new Set(mapped));
+  }
+  return changed ? next : null;
+}
+
+/** Mouvement "courant" d'un employé pour la ligne Base ETP : jamais un mouvement abandonné ; un
+ *  mouvement en cours (non réalisé) prime sur un mouvement déjà réalisé, puis la date prévue la
+ *  plus proche. */
+function currentMovementByEmployee(movements: WorkforceMovement[]): Map<string, WorkforceMovement> {
+  const rank = (m: WorkforceMovement) => (m.status === "Réalisé" ? 1 : 0);
+  const map = new Map<string, WorkforceMovement>();
+  for (const m of movements) {
+    if (!m.empId || !isActiveMovement(m)) continue;
+    const cur = map.get(m.empId);
+    if (
+      !cur ||
+      rank(m) < rank(cur) ||
+      (rank(m) === rank(cur) && (m.plannedDate || "") < (cur.plannedDate || ""))
+    )
+      map.set(m.empId, m);
+  }
+  return map;
 }
 
 export default function BaseEtpPage() {
   const { t } = useTranslation();
   const ALERT_LABELS = alertKindLabels(t);
+  const alertFilterLabel = useCallback(
+    (code: string) => {
+      const entry = ALERT_LABEL_KEYS[code as AlertFilterCode];
+      return entry ? t(entry[0], entry[1]) : code;
+    },
+    [t]
+  );
+  const yesNoLabel = useCallback(
+    (code: string) => {
+      const entry = YES_NO_LABEL_KEYS[code as YesNoCode];
+      return entry ? t(entry[0], entry[1]) : code;
+    },
+    [t]
+  );
   const { user } = useRole();
+  const [programs, setPrograms] = useState<Program[]>([]);
+  useEffect(() => {
+    if (!user?.companyId) {
+      setPrograms([]);
+      return;
+    }
+    return subscribePrograms(setPrograms, user.companyId);
+  }, [user?.companyId]);
+  const programNameById = useMemo(() => new Map(programs.map((p) => [p.id, p.name])), [programs]);
   const readOnly = isReadOnlyUser(user);
   const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
@@ -216,10 +313,7 @@ export default function BaseEtpPage() {
   }, [alerts]);
 
   const employeeRows: EtpRow[] = useMemo(() => {
-    const movementByEmp = new Map<string, WorkforceMovement>();
-    for (const m of wf.movements) {
-      if (m.empId && !movementByEmp.has(m.empId)) movementByEmp.set(m.empId, m);
-    }
+    const movementByEmp = currentMovementByEmployee(wf.movements);
 
     const baseRows: EtpRow[] = wf.employees.map((e) => {
       const m = movementByEmp.get(e.id) ?? null;
@@ -236,7 +330,7 @@ export default function BaseEtpPage() {
         fte: e.fte,
         salary: e.salary,
         hrOwner: e.hrOwner,
-        hasMovement: m ? t("etp.yes", "Oui") : t("etp.no", "Non"),
+        hasMovement: m ? "yes" : "no",
         movementType: m ? movementTypeLabel(t, m.type) : "—",
         leverCode: lever?.code ?? "—",
         leverId: lever?.id ?? null,
@@ -245,7 +339,7 @@ export default function BaseEtpPage() {
         movementStatus: m
           ? `${movementStatusLabel(t, m.status)}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`
           : "—",
-        pse: m?.inPSE ? t("etp.yes", "Oui") : t("etp.no", "Non"),
+        pse: m?.inPSE ? "yes" : "no",
         movement: m,
         alertKind: m ? (alertByMovement.get(m.id) ?? null) : null,
         employee: e,
@@ -268,14 +362,14 @@ export default function BaseEtpPage() {
           fte: m.fte,
           salary: m.salaryImpact,
           hrOwner: m.hrOwner,
-          hasMovement: t("etp.yes", "Oui"),
+          hasMovement: "yes",
           movementType: movementTypeLabel(t, m.type),
           leverCode: lever?.code ?? "—",
           leverId: lever?.id ?? null,
           plannedDate: m.plannedDate,
           actualDate: m.actualDate ?? "—",
           movementStatus: `${movementStatusLabel(t, m.status)}${m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}`,
-          pse: t("etp.no", "Non"),
+          pse: "no",
           movement: m,
           alertKind: alertByMovement.get(m.id) ?? null,
           employee: null,
@@ -430,16 +524,18 @@ export default function BaseEtpPage() {
         key: "f_hasMovement",
         label: t("etp.filter.hasMovement", "Mouvement prévu"),
         getValue: (r) => r.hasMovement,
+        formatValue: yesNoLabel,
       },
       { key: "f_lever", label: t("etp.linkedLever", "Levier lié"), getValue: (r) => r.leverCode },
-      { key: "f_pse", label: "PSE", getValue: (r) => r.pse },
+      { key: "f_pse", label: "PSE", getValue: (r) => r.pse, formatValue: yesNoLabel },
       {
         key: "f_alert",
         label: t("etp.alertLabel", "Alerte"),
-        getValue: (r) => alertKindLabel(ALERT_LABELS, r.alertKind),
+        getValue: (r) => r.alertKind ?? "none",
+        formatValue: alertFilterLabel,
       },
     ],
-    [t, ALERT_LABELS]
+    [t, yesNoLabel, alertFilterLabel]
   );
 
   const movementFilterDefs: FilterDef<MovementRow>[] = useMemo(
@@ -473,6 +569,7 @@ export default function BaseEtpPage() {
         key: "f_program",
         label: t("dashboard.program", "Programme"),
         getValue: (r) => r.programId,
+        formatValue: (v) => programNameById.get(v) ?? v,
       },
       {
         key: "f_hrOwner",
@@ -494,20 +591,22 @@ export default function BaseEtpPage() {
       {
         key: "f_hrValidated",
         label: t("etp.hrValidated", "Validé RH"),
-        getValue: (r) => (r.hrValidated ? t("etp.yes", "Oui") : t("etp.no", "Non")),
+        getValue: (r) => (r.hrValidated ? "yes" : "no"),
+        formatValue: yesNoLabel,
       },
       { key: "f_lever", label: t("etp.linkedLever", "Levier lié"), getValue: (r) => r.leverCode },
       {
         key: "f_alert",
         label: t("etp.alertLabel", "Alerte"),
-        getValue: (r) => alertKindLabel(ALERT_LABELS, r.alertKind),
+        getValue: (r) => r.alertKind ?? "none",
+        formatValue: alertFilterLabel,
       },
       ...hierarchyFilterDefs,
     ],
-    [t, ALERT_LABELS, geographyFilterDefs, hierarchyFilterDefs]
+    [t, yesNoLabel, alertFilterLabel, programNameById, geographyFilterDefs, hierarchyFilterDefs]
   );
 
-  // Round <n> : passe par le hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts) —
+  // Round <n> : passe par le hook partagé `useMultiFilterBarState` (lib/hooks/useMultiFilterBarState.ts) —
   // remplace une implémentation ad hoc qui avait 2 bugs : (1) le premier clic sur un bouton de
   // filtre ne produisait aucun effet visible (voir le commentaire du hook), et (2) les DEUX
   // `FilterBar` de cette page (employés / mouvements) partageaient le même `setFilters`, donc des
@@ -543,10 +642,8 @@ export default function BaseEtpPage() {
       Object.entries(movementActiveFilters).every(([key, value]) => {
         if (key === "f_alert") {
           const kinds = alertKindsByMovement.get(row.id);
-          const labels = kinds
-            ? Array.from(kinds, (kind) => alertKindLabel(ALERT_LABELS, kind))
-            : [alertKindLabel(ALERT_LABELS, null)];
-          return matchesAnyFilter(labels, value);
+          const codes: string[] = kinds ? Array.from(kinds) : ["none"];
+          return matchesAnyFilter(codes, value);
         }
         const def = movementFilterDefs.find((d) => d.key === key);
         return !def || matchesFilter(def.getValue(row), value);
@@ -558,15 +655,74 @@ export default function BaseEtpPage() {
     movementFilterDefs,
     highlightedMovementIds,
     alertKindsByMovement,
-    ALERT_LABELS,
   ]);
 
+  // Liens/URL hérités qui portent des LIBELLÉS traduits (ex. `etpAlertFilterLink` appelé avec les
+  // libellés affichés, ou une URL copiée avant le passage aux codes) : réécrits une fois en codes
+  // stables pour que le filtre fonctionne quelle que soit la langue.
+  useEffect(() => {
+    const next = normalizeStableFilters(movementActiveFilters);
+    if (next) setMovementFilters(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movementActiveFilters]);
+  useEffect(() => {
+    const next = normalizeStableFilters(etpActiveFilters);
+    if (next) setEtpFilters(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [etpActiveFilters]);
+
+  // Export Excel = ce qui est affiché : employés filtrés (onglet Base ETP) + mouvements filtrés
+  // (onglet Suivi des mouvements, programme compris via le filtre "Programme").
+  const exportEmployees = useMemo(
+    () => filteredEmployees.flatMap((r) => (r.employee ? [r.employee] : [])),
+    [filteredEmployees]
+  );
+  const exportMovements = useMemo(
+    () => filteredMovements.map((r) => r.movement),
+    [filteredMovements]
+  );
+  const exportFiltered =
+    highlightedMovementIds !== null ||
+    Object.keys(etpActiveFilters).length > 0 ||
+    Object.keys(movementActiveFilters).length > 0;
+
   const toValidateCount = alerts.filter((a) => a.kind === "toValidate").length;
-  const plannedCount = wf.movements.filter((m) => m.status !== "Réalisé").length;
+  // "Mouvements à venir" : ni réalisés, ni abandonnés.
+  const plannedCount = wf.movements.filter(
+    (m) => isActiveMovement(m) && m.status !== "Réalisé"
+  ).length;
 
   const handleCellUpdate = (rowId: string, field: keyof EtpRow, value: string | number) => {
     const row = employeeRows.find((r) => r.id === rowId);
     if (!row?.employee) return;
+    if (field === "matricule") {
+      // Renommage RÉEL (voir workforceLogic.renameEmployee) : nouveau matricule libre obligatoire,
+      // l'ancien disparaît et les mouvements rattachés suivent — plus de doublon ni d'écrasement.
+      const oldId = row.employee.id;
+      const newId = String(value).trim();
+      if (newId === oldId) return;
+      const name = row.employee.name;
+      data
+        .renameEmployee(oldId, newId)
+        .then(() =>
+          showToast(
+            t("etp.toast.matriculeRenamed", "Matricule modifié"),
+            t("etp.toast.matriculeRenamedBody", "{name} : {old} → {new}")
+              .replace("{name}", name)
+              .replace("{old}", oldId)
+              .replace("{new}", newId),
+            "success"
+          )
+        )
+        .catch((err: unknown) =>
+          showToast(
+            t("etp.toast.matriculeRenameFailed", "Matricule non modifié"),
+            err instanceof Error ? err.message : String(err),
+            "error"
+          )
+        );
+      return;
+    }
     const patch: Partial<Employee> = {};
     if (field === "salary" || field === "fte") patch[field] = Number(value);
     else if (
@@ -579,8 +735,6 @@ export default function BaseEtpPage() {
       field === "level"
     ) {
       patch[field] = String(value) as never;
-    } else if (field === "matricule") {
-      patch.id = String(value);
     } else return;
     data.upsertEmployee({ ...row.employee, ...patch });
     showToast(t("etp.toast.employeeUpdated", "Employé mis à jour"), row.employee.name, "success");
@@ -742,7 +896,7 @@ export default function BaseEtpPage() {
       align: "right",
       editable: true,
       type: "number",
-      render: (r) => r.salary.toLocaleString("fr-FR"),
+      render: (r) => r.salary.toLocaleString(intlTag()),
     },
     { key: "hrOwner", label: t("etp.filter.hrOwnerLocal", "RH local"), editable: true },
   ];
@@ -930,7 +1084,13 @@ export default function BaseEtpPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <HrExcelButtons data={data} />
+          <HrExcelButtons
+            data={data}
+            employees={exportEmployees}
+            movements={exportMovements}
+            programs={programs}
+            filtered={exportFiltered}
+          />
           {!readOnly && (
             <Button variant="primary" onClick={() => setMovementModal({})}>
               <Plus size={13} /> {t("etp.newMovement", "Nouveau mouvement")}
@@ -942,23 +1102,23 @@ export default function BaseEtpPage() {
       <div className="mb-5 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2">
         <KPICard
           label={t("etp.kpi.currentHeadcount", "Effectif actuel")}
-          value={hr.currentFTE(wf).toLocaleString("fr-FR")}
+          value={hr.currentFTE(wf).toLocaleString(intlTag())}
           icon={Users}
         />
         <KPICard
           label={t("etp.kpi.targetHeadcount", "Effectif cible")}
-          value={hr.targetFTE(wf).toLocaleString("fr-FR")}
+          value={hr.targetFTE(wf).toLocaleString(intlTag())}
           icon={Users}
           accent="green"
         />
         <KPICard
           label={t("hr.landingPlan", "Atterrissage plan")}
-          value={hr.plannedFTE(wf).toLocaleString("fr-FR")}
+          value={hr.plannedFTE(wf).toLocaleString(intlTag())}
           icon={Users}
           accent="brown"
           sub={t("etp.kpi.landingPlanSub", "écart cible : {n} ETP").replace(
             "{n}",
-            (hr.plannedFTE(wf) - hr.targetFTE(wf)).toLocaleString("fr-FR")
+            (hr.plannedFTE(wf) - hr.targetFTE(wf)).toLocaleString(intlTag())
           )}
         />
         <KPICard

@@ -9,7 +9,9 @@ import { DepartmentMovementsChart } from "@/components/shared/charts/HrBreakdown
 import { MovementRhythmChart } from "@/components/shared/charts/HrGooduelleCharts";
 import type { MovementNetBalance } from "@/lib/hrMovementBalance";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { intlTag } from "@/lib/format";
 import type { WorkforceMovement } from "@/types";
+import { SegmentedControl } from "@/components/shared/SegmentedControl";
 
 /**
  * Widget "vue combinée (proposition)" — round 4 clarté dashboard RH.
@@ -55,7 +57,7 @@ export function MovementBreakdownMergedChart({
     balance?: MovementNetBalance
   ) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [mode, setMode] = useState<"dimension" | "period">("dimension");
   const [dimension, setDimension] = useState<MovementBreakdownDimension>("department");
   const [granularity, setGranularity] = useState<BridgeGranularity>("quarter");
@@ -119,7 +121,9 @@ export function MovementBreakdownMergedChart({
         />
       ) : (
         <MovementRhythmChart
-          buckets={movementRhythmSeries(movements, granularity, dateRange)}
+          buckets={movementRhythmSeries(movements, granularity, dateRange, {
+            locale: intlTag(locale),
+          })}
           height={height}
           onBarClick={handlePeriodClick}
         />
@@ -141,20 +145,14 @@ function SegmentedToggle<V extends string>({
   value: V;
   onChange: (v: V) => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <div className="flex rounded-md border border-border-strong p-0.5 text-[11px] font-semibold">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          onClick={() => onChange(o.value)}
-          className={`rounded px-2 py-1 transition ${
-            value === o.value ? "bg-bp-coral text-white" : "text-secondary hover:text-primary"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl<V>
+      label={t("common.segmented.view", "Affichage")}
+      showLabel={false}
+      options={options}
+      value={value}
+      onChange={onChange}
+    />
   );
 }

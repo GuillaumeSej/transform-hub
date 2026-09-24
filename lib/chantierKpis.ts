@@ -1,4 +1,9 @@
-import { computeIndicatorDelta, latestMeasurement } from "@/lib/axisLogic";
+import {
+  computeIndicatorDelta,
+  indicatorReadingState,
+  latestNumericMeasurement,
+  type IndicatorReadingState,
+} from "@/lib/axisLogic";
 import type { ChantierAction, Indicator, IndicatorMeasurement } from "@/types";
 
 /** KPI rattaché aux projets/leviers d'un chantier, dédupliqué, avec la liste des projets porteurs. */
@@ -32,6 +37,10 @@ export type KpiReading = {
   progressPct?: number;
   /** `true` si `progressPct` est un repli approximatif (pas de baseline exploitable). */
   approximate?: boolean;
+  /** Statut de la lecture vs la cible LUE ICI (`targetOverride` si fourni, sinon statut calculé
+   *  de l'indicateur) — le point de couleur doit dire la même chose que la ligne affichée.
+   *  `"no_data"` : rien à comparer. */
+  status: IndicatorReadingState;
 };
 
 /** Valeur actuelle / cible / % d'avancement d'un KPI. `targetOverride` = cible propre au critère de
@@ -41,10 +50,19 @@ export function readKpi(
   measurements: IndicatorMeasurement[],
   targetOverride?: number
 ): KpiReading {
-  const latest = latestMeasurement(indicator.id, measurements);
+  // Dernière valeur CHIFFRÉE (un commentaire seul ne masque pas la valeur).
+  const latest = latestNumericMeasurement(indicator.id, measurements);
   const target = targetOverride ?? indicator.objectiveValue;
   const current = latest?.value;
-  if (target === undefined || current === undefined) return { current, target };
+  const status: IndicatorReadingState =
+    targetOverride !== undefined
+      ? current === undefined || indicator.kind === "qualitative"
+        ? "no_data"
+        : (indicator.direction === "down" ? current <= targetOverride : current >= targetOverride)
+          ? "on_track"
+          : "at_risk"
+      : indicatorReadingState(indicator, measurements);
+  if (target === undefined || current === undefined) return { current, target, status };
   const delta = computeIndicatorDelta(
     { objectiveValue: target, direction: indicator.direction },
     latest,
@@ -55,6 +73,7 @@ export function readKpi(
     target,
     progressPct: delta ? Math.round(delta.progressToFinalPct) : undefined,
     approximate: delta?.approximate,
+    status,
   };
 }
 

@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
-import { toPng } from "html-to-image";
-import pptxgen from "pptxgenjs";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { intlTag } from "@/lib/format";
 
 /** Sélecteur du conteneur de grille (voir `app/(app)/dashboard/page.tsx`) et des widgets qu'il
  * contient — ne référence AUCUN type de widget précis : que ce soit un widget du registre actuel
@@ -75,6 +74,8 @@ export function DashboardExportButton({
   gridSelector = DEFAULT_GRID_SELECTOR,
   coverTitle = "BeTrack — Executive Dashboard",
   fileNamePrefix = "betrack_dashboard",
+  coverDate,
+  contextLines = [],
 }: {
   /** Layout actuellement affiché — seul `.length` est utilisé (désactive l'export si vide) ; type
    *  élargi à `{ length: number }` pour rester utilisable tel quel avec `HrWidgetInstance[]` (voir
@@ -85,6 +86,12 @@ export function DashboardExportButton({
   gridSelector?: string;
   coverTitle?: string;
   fileNamePrefix?: string;
+  /** Texte de date de la couverture (ex. "Données au 24/09/2026" — date des données du
+   *  dashboard). Défaut : date du jour au format local. */
+  coverDate?: string;
+  /** Contexte de lecture (programme, période, filtres actifs…) : listé sur la couverture et
+   *  rappelé en sous-titre de chaque slide pour qu'il reste lisible isolément (m15). */
+  contextLines?: string[];
 }) {
   const { showToast } = useToast();
   const { t } = useTranslation();
@@ -110,6 +117,12 @@ export function DashboardExportButton({
 
     setExporting(true);
     try {
+      // Chargés au clic (import dynamique) : `pptxgenjs` et `html-to-image` pèsent lourd et ne
+      // servent qu'à l'export — ils ne doivent pas alourdir le bundle initial du dashboard.
+      const [{ default: pptxgen }, { toPng }] = await Promise.all([
+        import("pptxgenjs"),
+        import("html-to-image"),
+      ]);
       const pptx = new pptxgen();
       pptx.defineLayout({ name: "BETRACK_WIDE", width: SLIDE_WIDTH_IN, height: SLIDE_HEIGHT_IN });
       pptx.layout = "BETRACK_WIDE";
@@ -125,7 +138,7 @@ export function DashboardExportButton({
         bold: true,
         color: "FFFFFF",
       });
-      cover.addText(new Date().toLocaleDateString("fr-FR"), {
+      cover.addText(coverDate ?? new Date().toLocaleDateString(intlTag()), {
         x: 0.6,
         y: 3.9,
         w: SLIDE_WIDTH_IN - 1.2,
@@ -133,6 +146,18 @@ export function DashboardExportButton({
         fontSize: 14,
         color: "CBD5E1",
       });
+      if (contextLines.length > 0) {
+        cover.addText(contextLines.join("\n"), {
+          x: 0.6,
+          y: 4.5,
+          w: SLIDE_WIDTH_IN - 1.2,
+          h: 1.4,
+          fontSize: 12,
+          color: "94A3B8",
+          valign: "top",
+        });
+      }
+      const slideContext = contextLines.join("  ·  ");
 
       let failures = 0;
       for (const node of nodes) {
@@ -160,6 +185,16 @@ export function DashboardExportButton({
             bold: true,
             color: "1F2937",
           });
+          if (slideContext) {
+            slide.addText(slideContext, {
+              x: 0.5,
+              y: 0.75,
+              w: SLIDE_WIDTH_IN - 1,
+              h: 0.3,
+              fontSize: 10,
+              color: "6B7280",
+            });
+          }
 
           const ratio = naturalW / naturalH || 1;
           let w = IMAGE_MAX_W_IN;

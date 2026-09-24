@@ -54,6 +54,7 @@ import { consolidateLeverFromActions, leverGrossRealizedToDate } from "@/lib/lev
 import { mentionsHiring, reconcileLeverMovements } from "@/lib/leverMovementReconciliation";
 import { fteEffect } from "@/lib/hrEngine";
 import type { ActionStatus, Company, LeverAction, Program } from "@/types";
+import { leverRiskReasonText } from "@/lib/leverRiskText";
 
 const TABS = ["overview", "plan", "impact", "collab"] as const;
 type Tab = (typeof TABS)[number];
@@ -170,7 +171,7 @@ export function LeverDetailClientPerformance() {
     () =>
       lever
         ? engine.computeLeverRisk(lever.id, alerts, riskThresholds)
-        : { level: "low" as const, reason: "" },
+        : { level: "low" as const, reason: "", reasonI18n: { kind: "none" as const } },
     [lever, alerts, riskThresholds]
   );
 
@@ -342,7 +343,7 @@ export function LeverDetailClientPerformance() {
         onClick={() => router.back()}
         className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:text-primary hover:underline"
       >
-        <ArrowLeft size={13} /> Retour au pipeline
+        <ArrowLeft size={13} /> {t("leverDetail.back", "Retour")}
       </button>
 
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
@@ -895,7 +896,7 @@ export function LeverDetailClientPerformance() {
                   value={
                     <StatusBadge
                       risk={leverRiskAssessment.level}
-                      reason={leverRiskAssessment.reason}
+                      reason={leverRiskReasonText(t, leverRiskAssessment)}
                     />
                   }
                 />
@@ -1007,7 +1008,7 @@ export function LeverDetailClientPerformance() {
               <Collapsible
                 title={t(
                   "leverDetail.jcurveTimelineTitle",
-                  "Trajectoire des gains & Timeline des actions"
+                  "Trajectoire des gains et chronologie des actions"
                 )}
               >
                 {engine.hasLeverImpacts(lever) && <ImpactTrajectoryChart lever={lever} />}

@@ -28,6 +28,10 @@ import { appendAuditEntries } from "@/lib/firestore/levers";
 import {
   approveMilestoneGate as approveMilestoneGateLogic,
   computeIndicatorStatus,
+  projetAutoFlagsResolver,
+  projetProgressResolver,
+  type ProjetAutoFlagsLookup,
+  type ProjetProgressLookup,
   rejectMilestoneApproval as rejectMilestoneApprovalLogic,
   requestMilestoneApproval as requestMilestoneApprovalLogic,
   resolveStrategicOwnershipScope,
@@ -36,6 +40,8 @@ import {
 } from "@/lib/axisLogic";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { isAnyAdmin } from "@/lib/roleProfiles";
+import { todayISO } from "@/lib/dateUtils";
+import { normalizePeriod } from "@/lib/indicatorPeriod";
 import {
   applyMeasurementEdit,
   findPeriodCollision,
@@ -87,7 +93,18 @@ function logAudit(companyId: string | null | undefined, entries: AuditEntry[]): 
  */
 
 function nowDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
+}
+
+/** Retire les clés valant `undefined` (en place) : un appelant EFFACE un champ optionnel en le
+ *  passant explicitement à `undefined` dans son patch — les `save*` font un `setDoc` SANS merge
+ *  (écrasement intégral), la clé absente disparaît donc réellement du document, et Firestore
+ *  rejetterait sinon toute l'écriture ("Unsupported field value: undefined"). */
+function stripUndefined<T extends object>(entity: T): T {
+  for (const key of Object.keys(entity) as (keyof T)[]) {
+    if (entity[key] === undefined) delete entity[key];
+  }
+  return entity;
 }
 
 export type StrategicData = {
@@ -128,6 +145,23 @@ export type StrategicData = {
    *  `chantierActions`. Consommé par `ProgramRoadmap.tsx`/`AxisChantierProjetAccordion.tsx`/
    *  `ProjetMilestoneBoard.tsx`. */
   clickableActionIds: Set<string> | "all";
+  /** Avancement COMPLET (0-100) d'un projet, items automatiques compris (`projetProgressPct`,
+   *  lib/axisLogic.ts), résolu sur TOUT le programme actif (pas seulement la partie visible) —
+   *  seul chiffre à afficher pour un projet, et à passer en `progressOf` aux agrégats
+   *  (`chantierDeclaredProgress`, `canStartAction`, …) pour que board, panneau, Gantt, feuille de
+   *  route et tableau de bord affichent le MÊME pourcentage. */
+  projetProgress: ProjetProgressLookup;
+  /** Valeurs live des items automatiques du jalon courant d'un projet (même base que
+   *  `projetProgress`) — à passer à `milestoneTransitionState` / `currentMilestoneFillPct`. */
+  projetAutoFlags: ProjetAutoFlagsLookup;
+  /** Ids de TOUS les axes du programme actif, avant filtrage de visibilité — à passer en
+   *  `attributionAxes` de `rollupBudgets` (lib/budgetRollup.ts) pour que l'axe d'attribution d'un
+   *  chantier ne dépende pas de ce que voit le lecteur. */
+  programAxisIds: string[];
+  /** `true` si l'utilisateur voit TOUS les chantiers du programme (aucun filtre de confidentialité
+   *  ni de périmètre n'en masque) — seule condition pour comparer un total au budget prévisionnel
+   *  du programme (`Program.budget`), qui porte sur le programme entier. */
+  fullScope: boolean;
 
   // ── Mutations ──────────────────────────────────────────────────────────────────────────────
   createAxis: (
@@ -419,6 +453,16 @@ export function useStrategicData(
     return "all";
   }, [ownershipScope]);
 
+  const projetAutoFlags = useMemo(
+    () => projetAutoFlagsResolver(programScopedChantiers, programScopedActionsForScope),
+    [programScopedChantiers, programScopedActionsForScope]
+  );
+  const projetProgress = useMemo(
+    () =>
+      projetProgressResolver(programScopedChantiers, programScopedActionsForScope, projetAutoFlags),
+    [programScopedChantiers, programScopedActionsForScope, projetAutoFlags]
+  );
+
   // ── Projections scopées au programme actif ────────────────────────────────────────────────
   // Le masquage de confidentialité ET le périmètre par propriétaire nommé (tous deux actifs
   // seulement quand `filterActive`) s'appliquent ICI, une seule fois pour tous les écrans
@@ -474,6 +518,8 @@ export function useStrategicData(
   // Actions et mesures ne portent pas de `programId` (elles le tiennent de leur parent) : on les
   // rattache via l'ensemble des chantiers/indicateurs du programme, déjà scopés (confidentialité +
   // ownership) ci-dessus — aucun filtre supplémentaire nécessaire ici.
+  const programAxisIds = useMemo(() => programScopedAxes.map((a) => a.id), [programScopedAxes]);
+  const fullScope = chantiers.length === programScopedChantiers.length;
   const chantierActions = useMemo(() => {
     const ids = new Set(chantiers.map((c) => c.id));
     return allActions.filter((a) => ids.has(a.chantierId));
@@ -534,7 +580,12 @@ export function useStrategicData(
     async (id, patch) => {
       const existing = axesRef.current.find((a) => a.id === id);
       if (!existing) return;
-      const after: StrategicAxis = { ...existing, ...patch, id, lastUpdate: nowDate() };
+      const after: StrategicAxis = stripUndefined({
+        ...existing,
+        ...patch,
+        id,
+        lastUpdate: nowDate(),
+      });
       await saveStrategicAxis(after);
       logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
     },
@@ -577,7 +628,7 @@ export function useStrategicData(
     async (id, patch) => {
       const existing = chantiersRef.current.find((c) => c.id === id);
       if (!existing) return;
-      const after: Chantier = { ...existing, ...patch, id, lastUpdate: nowDate() };
+      const after: Chantier = stripUndefined({ ...existing, ...patch, id, lastUpdate: nowDate() });
       await saveChantier(after);
       logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
     },
@@ -610,7 +661,7 @@ export function useStrategicData(
     async (id, patch) => {
       const existing = actionsRef.current.find((a) => a.id === id);
       if (!existing) return;
-      const after: ChantierAction = { ...existing, ...patch, id };
+      const after: ChantierAction = stripUndefined({ ...existing, ...patch, id });
       // Round "projet weighting" : un appelant qui veut effacer un champ optionnel (ex.
       // `chantierWeightPct`, voir `ProjetWeightsEditor.tsx`'s "Non pondéré") passe explicitement
       // `undefined` dans `patch` — sans ce nettoyage, la clé resterait présente avec la valeur
@@ -619,9 +670,6 @@ export function useStrategicData(
       // field value: undefined") — le même piège documenté ailleurs dans ce fichier pour
       // `ChantierStaffing.note`. Ne change RIEN pour les appelants historiques, qui omettent déjà la
       // clé plutôt que d'y mettre `undefined` (voir `ChantierActionForm.tsx`, "Clés OMISES").
-      for (const key of Object.keys(after) as (keyof ChantierAction)[]) {
-        if (after[key] === undefined) delete after[key];
-      }
       await saveChantierAction(after);
       logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
     },
@@ -672,7 +720,13 @@ export function useStrategicData(
         throw new Error("Utilisateur non identifié : impossible d'approuver cette demande");
       const existing = actionsRef.current.find((a) => a.id === actionId);
       if (!existing) throw new Error(`Projet "${actionId}" introuvable`);
-      const patch = approveMilestoneGateLogic(existing, user, chantiersRef.current);
+      const patch = approveMilestoneGateLogic(
+        existing,
+        user,
+        chantiersRef.current,
+        actionsRef.current,
+        axesRef.current
+      );
       await updateChantierAction(actionId, patch);
     },
     [user, updateChantierAction]
@@ -683,7 +737,12 @@ export function useStrategicData(
       if (!user) throw new Error("Utilisateur non identifié : impossible de rejeter cette demande");
       const existing = actionsRef.current.find((a) => a.id === actionId);
       if (!existing) throw new Error(`Projet "${actionId}" introuvable`);
-      const patch = rejectMilestoneApprovalLogic(existing, user, chantiersRef.current);
+      const patch = rejectMilestoneApprovalLogic(
+        existing,
+        user,
+        chantiersRef.current,
+        axesRef.current
+      );
       await updateChantierAction(actionId, patch);
     },
     [user, updateChantierAction]
@@ -717,7 +776,7 @@ export function useStrategicData(
     async (id, patch) => {
       const existing = indicatorsRef.current.find((i) => i.id === id);
       if (!existing) return;
-      const next: Indicator = { ...existing, ...patch, id, lastUpdate: nowDate() };
+      const next: Indicator = stripUndefined({ ...existing, ...patch, id, lastUpdate: nowDate() });
       // Modifier l'objectif/le sens/la nature change mécaniquement le verdict sur la dernière
       // mesure — on recalcule ici pour ne pas laisser un statut périmé en base.
       next.status = computeIndicatorStatus(next, measurementsRef.current);
@@ -743,8 +802,16 @@ export function useStrategicData(
   const addMeasurement = useCallback<StrategicData["addMeasurement"]>(
     async (input) => {
       if (!companyId) throw new Error("addMeasurement: companyId manquant");
+      // Période normalisée au format canonique quand elle est reconnue ("2026-3" → "2026-03").
+      const period = normalizePeriod(input.period) ?? input.period.trim();
+      // Garde-fou : jamais deux mesures pour la même période d'un indicateur (une seconde valeur
+      // était ignorée partout sauf sur le graphique). L'UI propose le REMPLACEMENT (correction de
+      // la mesure existante, `updateMeasurement`) avant d'arriver ici.
+      const taken = findPeriodCollision(measurementsRef.current, input.indicatorId, period);
+      if (taken) throw new MeasurementPeriodCollisionError(period, taken.id);
       const measurement: IndicatorMeasurement = {
         ...input,
+        period,
         id: newId("IM"),
         companyId,
         reportedAt: new Date().toISOString(),
@@ -790,6 +857,9 @@ export function useStrategicData(
         findPeriodCollision(measurementsRef.current, existing.indicatorId, patch.period, id)
       ) {
         throw new MeasurementPeriodCollisionError(patch.period.trim());
+      }
+      if (patch.period !== undefined) {
+        patch = { ...patch, period: normalizePeriod(patch.period) ?? patch.period.trim() };
       }
       const next = applyMeasurementEdit(
         existing,
@@ -862,6 +932,10 @@ export function useStrategicData(
     strategicRole,
     ownershipScope,
     clickableActionIds,
+    projetProgress,
+    projetAutoFlags,
+    programAxisIds,
+    fullScope,
     createAxis,
     updateAxis,
     removeAxis,

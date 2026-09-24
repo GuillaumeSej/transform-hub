@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyMovementAction,
   classifyMovementExecution,
+  executionByDimension,
   movementProgressByDimension,
   movementStatusByType,
   movementStatusGroups,
@@ -103,6 +104,22 @@ describe("execution aggregations", () => {
       rows[0].dueSoon.volume +
       rows[0].later.volume;
     expect(chartTotal).toBeCloseTo((-80000 + 50000) / 1_000_000);
+  });
+
+  it("computes a signed net distinct from the volume in FTE mode (m8)", () => {
+    const rows = executionByDimension(
+      [
+        movement({ id: "M1", type: "Départ forcé", fte: 2, plannedDate: "2026-06-01" }),
+        movement({ id: "M2", type: "Recrutement", fte: 1, plannedDate: "2026-06-05" }),
+        movement({ id: "M3", type: "Transfert entrant", fte: 4, plannedDate: "2026-06-06" }),
+      ],
+      "function",
+      programs,
+      "fte",
+      "2026-06-22"
+    );
+    expect(rows[0].overdue.volume).toBe(7);
+    expect(rows[0].overdue.net).toBe(-2 + 1 + 0);
   });
 
   it("retains the movements behind each dimension/status cell for drill-down", () => {

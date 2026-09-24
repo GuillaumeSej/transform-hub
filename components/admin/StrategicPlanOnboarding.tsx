@@ -8,18 +8,13 @@ import {
   StrategicImportButton,
   downloadStrategicImportTemplate,
 } from "@/components/strategic/StrategicImportButton";
-import type { StrategicImportPreview } from "@/lib/strategicExcelImport";
+import type { StrategicImportWrites } from "@/lib/strategicExcelImport";
 import { saveProgram } from "@/lib/firestore/admin";
 import {
   DEFAULT_MATURITY_STAGES,
   ensureDefaultMaturityStages,
 } from "@/lib/firestore/maturityStageConfigs";
-import { saveChantierAction } from "@/lib/firestore/chantierActions";
-import { saveChantier } from "@/lib/firestore/chantiers";
-import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
-import { saveIndicator } from "@/lib/firestore/indicators";
-import { saveIndicatorMeasurement } from "@/lib/firestore/indicatorMeasurements";
-import { saveStrategicAxis } from "@/lib/firestore/strategicAxes";
+import { writeStrategicImport } from "@/lib/firestore/strategicImportWrite";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
@@ -60,6 +55,13 @@ export function StrategicPlanOnboarding({
     t("strategicOnboarding.defaultProgramName", "Plan stratégique")
   );
   const [imported, setImported] = useState(false);
+  // Paramètres du programme créé à la confirmation (auparavant codés en dur 2026-01/2026-12/€M) :
+  // valeurs par défaut = année civile en cours, "€M".
+  const [fyStart, setFyStart] = useState(() => `${new Date().getFullYear()}-01`);
+  const [fyEnd, setFyEnd] = useState(() => `${new Date().getFullYear()}-12`);
+  const [currency, setCurrency] = useState("€M");
+  const periodInvalid =
+    !/^\d{4}-\d{2}$/.test(fyStart) || !/^\d{4}-\d{2}$/.test(fyEnd) || fyStart > fyEnd;
 
   // Étapes par défaut que recevra le programme à sa création — l'aperçu résout les colonnes
   // "Étape de maturité" contre ce même référentiel.
@@ -68,29 +70,30 @@ export function StrategicPlanOnboarding({
     [programId, companyId]
   );
 
-  const handleImport = async (toCreate: StrategicImportPreview["toCreate"]) => {
+  const handleImport = async (writes: StrategicImportWrites) => {
+    if (periodInvalid) {
+      throw new Error(
+        t(
+          "strategicOnboarding.periodInvalid",
+          "Période du programme invalide : le début doit précéder ou égaler la fin (AAAA-MM)."
+        )
+      );
+    }
     await saveProgram({
       id: programId,
       companyId,
       name: programName.trim() || t("strategicOnboarding.defaultProgramName", "Plan stratégique"),
-      currency: "€M",
-      fyStart: "2026-01",
-      fyEnd: "2026-12",
+      currency: currency.trim() || "€M",
+      fyStart,
+      fyEnd,
       baselineEBIT: 0,
       revenue: 0,
       createdAt: new Date().toISOString().slice(0, 10),
       type: "strategic",
     });
     await ensureDefaultMaturityStages(companyId, programId);
-    // Même écriture que `StrategicAxesView.handleImport` (ids déjà alloués par l'importeur).
-    await Promise.all([
-      ...toCreate.axes.map((axis) => saveStrategicAxis(axis)),
-      ...toCreate.chantiers.map((chantier) => saveChantier(chantier)),
-      ...toCreate.actions.map((action) => saveChantierAction(action)),
-      ...toCreate.indicators.map((indicator) => saveIndicator(indicator)),
-      ...toCreate.measurements.map((measurement) => saveIndicatorMeasurement(measurement)),
-      ...toCreate.staffing.map((entry) => saveChantierStaffing(entry)),
-    ]);
+    // Même écriture que `StrategicAxesView.handleImport` (writeBatch, atomique jusqu'à 450 écritures).
+    await writeStrategicImport(writes);
     setImported(true);
   };
 
@@ -144,6 +147,43 @@ export function StrategicPlanOnboarding({
                 className="mt-1 w-full rounded-md border border-border bg-white px-2.5 py-1.5 text-sm text-text-primary"
               />
             </label>
+
+            <div className="flex flex-wrap gap-3">
+              <label className="block text-xs font-medium text-text-secondary">
+                {t("strategicOnboarding.fyStartLabel", "Début de période")}
+                <input
+                  type="month"
+                  value={fyStart}
+                  onChange={(e) => setFyStart(e.target.value)}
+                  className="mt-1 block rounded-md border border-border bg-white px-2.5 py-1.5 text-sm text-text-primary"
+                />
+              </label>
+              <label className="block text-xs font-medium text-text-secondary">
+                {t("strategicOnboarding.fyEndLabel", "Fin de période")}
+                <input
+                  type="month"
+                  value={fyEnd}
+                  onChange={(e) => setFyEnd(e.target.value)}
+                  className="mt-1 block rounded-md border border-border bg-white px-2.5 py-1.5 text-sm text-text-primary"
+                />
+              </label>
+              <label className="block text-xs font-medium text-text-secondary">
+                {t("strategicOnboarding.currencyLabel", "Unité monétaire")}
+                <input
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="mt-1 block w-24 rounded-md border border-border bg-white px-2.5 py-1.5 text-sm text-text-primary"
+                />
+              </label>
+            </div>
+            {periodInvalid && (
+              <p className="text-xs text-rag-red">
+                {t(
+                  "strategicOnboarding.periodInvalid",
+                  "Période du programme invalide : le début doit précéder ou égaler la fin (AAAA-MM)."
+                )}
+              </p>
+            )}
           </>
         )}
 
@@ -160,7 +200,7 @@ export function StrategicPlanOnboarding({
             showTemplateButton={false}
             uploadVariant="primary"
             uploadLabel={t("strategicOnboarding.importButton", "Importer mon plan depuis Excel")}
-            disabled={imported}
+            disabled={imported || periodInvalid}
           />
           <Button variant="outline" onClick={onManual}>
             <PencilLine size={13} /> {t("strategicOnboarding.manualButton", "Saisir manuellement")}

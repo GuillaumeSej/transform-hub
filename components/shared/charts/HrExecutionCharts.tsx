@@ -14,6 +14,7 @@ import type { ExecutionImpactRow, MovementExecutionStatus } from "@/lib/hrExecut
 import { executionLabel } from "@/lib/hrMovementLabels";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { WorkforceMovement } from "@/types";
+import { formatMillions, formatNumber, intlTag } from "@/lib/format";
 
 /** Couleurs de statut d'exécution (charte BP) — réutilisées par `MovementProgressByDimensionChart`. */
 export const STATUS_COLORS: Record<MovementExecutionStatus, string> = {
@@ -67,8 +68,8 @@ export function ExecutionStatusChart({
   const fteUnit = t("etp.column.fte", "ETP");
   const formatValue = (value: number) =>
     mode === "fte"
-      ? `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} ${fteUnit}`
-      : `${value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} M€`;
+      ? `${value.toLocaleString(intlTag(), { maximumFractionDigits: 1 })} ${fteUnit}`
+      : formatMillions(value, 2);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -88,7 +89,7 @@ export function ExecutionStatusChart({
           axisLine={false}
           tickLine={false}
           tickFormatter={(value) =>
-            mode === "fte" ? String(value) : `${Number(value).toFixed(1)} M€`
+            mode === "fte" ? formatNumber(Number(value)) : formatMillions(Number(value), 1)
           }
         />
         <Tooltip
@@ -111,7 +112,7 @@ export function ExecutionStatusChart({
                         String(row[status].count)
                       )}
                       {mode === "fte"
-                        ? ` · ${t("shared.executionStatusChart.net", "net")} ${row[status].net > 0 ? "+" : ""}${row[status].net.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}`
+                        ? ` · ${t("shared.executionStatusChart.net", "net")} ${row[status].net > 0 ? "+" : ""}${row[status].net.toLocaleString(intlTag(), { maximumFractionDigits: 1 })}`
                         : ""}
                     </span>
                   </div>

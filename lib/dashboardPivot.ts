@@ -29,6 +29,7 @@ import type {
 } from "@/types";
 import {
   displayedReforecastNet,
+  displayedReforecastSnapshot,
   leverProgressPct,
   realizedSavings,
   type Marimekko2DColumn,
@@ -64,10 +65,14 @@ export const METRIC_REGISTRY: MetricDef[] = [
     getValue: (l) => displayedReforecastNet(l).value,
   },
   {
+    // Chaîne cohérente avec « Économies nettes réactualisées » (audit : le pivot mélangeait brut/OPEX
+    // courants et net réactualisé) — brut, CAPEX et OPEX lus sur le MÊME snapshot réactualisé
+    // (`displayedReforecastSnapshot` : impacts, sinon reforecast, sinon plan figé), pour que
+    // brut − OPEX récurrent = net affiché.
     key: "grossSavings",
     label: "Économies brutes",
     aggregation: "sum",
-    getValue: (l) => l.grossSavings,
+    getValue: (l) => displayedReforecastSnapshot(l).grossSavings,
   },
   {
     key: "realizedSavings",
@@ -91,19 +96,19 @@ export const METRIC_REGISTRY: MetricDef[] = [
     key: "capex",
     label: "CAPEX",
     aggregation: "sum",
-    getValue: (l) => l.capex,
+    getValue: (l) => displayedReforecastSnapshot(l).capex,
   },
   {
     key: "opexOneOff",
     label: "OPEX ponctuel",
     aggregation: "sum",
-    getValue: (l) => l.opexOneOff,
+    getValue: (l) => displayedReforecastSnapshot(l).opexOneOff,
   },
   {
     key: "opexRec",
     label: "OPEX récurrent",
     aggregation: "sum",
-    getValue: (l) => l.opexRec,
+    getValue: (l) => displayedReforecastSnapshot(l).opexRec,
   },
   {
     key: "leverCount",

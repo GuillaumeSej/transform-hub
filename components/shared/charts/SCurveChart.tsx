@@ -13,35 +13,39 @@ import {
   YAxis,
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { formatMillions } from "@/lib/format";
 
 export type SCurvePoint = {
   month: string;
   planned: number;
   actual: number | null;
   reforecast: number;
-  /** Écart réactualisé − réalisé cumulé (voir `engine.savingsSeries`) : total = retards + autre ;
-   *  `cancelled` est un mémo (plan des leviers annulés échus, déjà retirés du réactualisé). */
+  /** Écart cumulé RÉALISÉ − PLANIFIÉ INITIAL (voir `engine.savingsSeries`, `gap.total`) — même
+   *  définition que le badge (`currentGapMarks`) et le détail au clic (`gapEntriesAt`) ; `cancelled`
+   *  est un mémo (plan des leviers annulés échus). */
   gap?: { total: number; late: number; cancelled: number; other: number };
 };
 
-const fmtM = (v: number) => `€${(Math.round(v * 10) / 10).toFixed(1)}M`;
+const fmtM = (v: number) => formatMillions(v);
 
-/** Repère de l'écart réactualisé − réalisé sur la période courante (segment + badge). Partagé avec
- *  le bridge pour que les deux vues affichent exactement le même écart. À appeler comme enfant
- *  direct du graphe Recharts (`{currentGapMarks(...)}`). */
+/** Repère de l'écart sur la période courante (segment + badge) : RÉALISÉ − PLANIFIÉ INITIAL, signé
+ *  (+ = mieux que prévu, − = en deçà) — EXACTEMENT la valeur `gap.total` de `engine.savingsSeries`
+ *  que détaille la pop-up ouverte au clic (`gapEntriesAt`). Avant, le badge montrait réactualisé −
+ *  réalisé alors que le détail montrait réalisé − planifié : deux chiffres pour un même « écart ».
+ *  À appeler comme enfant direct du graphe Recharts (`{currentGapMarks(...)}`). */
 export function currentGapMarks(
-  cur: { month: string; actual: number | null; reforecast: number } | null,
+  cur: { month: string; actual: number | null; planned: number } | null,
   label: string
 ) {
   if (!cur || cur.actual === null) return null;
-  const gap = Math.round((cur.reforecast - cur.actual) * 10) / 10;
+  const gap = Math.round((cur.actual - cur.planned) * 10) / 10;
   if (gap === 0) return null;
   return (
     <>
       <ReferenceLine
         segment={[
           { x: cur.month, y: cur.actual },
-          { x: cur.month, y: cur.reforecast },
+          { x: cur.month, y: cur.planned },
         ]}
         stroke="#FF3C47"
         strokeWidth={3}
@@ -49,11 +53,11 @@ export function currentGapMarks(
       />
       <ReferenceDot
         x={cur.month}
-        y={cur.reforecast}
+        y={Math.max(cur.planned, cur.actual)}
         r={0}
         ifOverflow="extendDomain"
         label={{
-          value: `${label} ${gap > 0 ? "−" : "+"}${fmtM(Math.abs(gap))}`,
+          value: `${label} ${gap > 0 ? "+" : "−"}${fmtM(Math.abs(gap))}`,
           position: "top",
           fontSize: 11,
           fontWeight: 700,
@@ -110,7 +114,7 @@ export function currentPointIndex(data: SCurvePoint[]): number {
 /** S-Curve à 3 courbes — Plan initial (figé à L3), Réalisé à date, Réactualisé (prévision à jour,
  * éditable à partir de L4). Porté/étendu depuis le chart Chart.js `ch-scurve` du prototype legacy.
  * Clic sur le graphe -> `onPointClick` (l'appelant ouvre le détail de la trajectoire).
- * L'écart réactualisé − réalisé n'est affiché que sur la période courante (badge permanent).
+ * L'écart réalisé − planifié initial n'est affiché que sur la période courante (badge permanent).
  *
  * Les labels des courbes sont passables en props pour la traduction (i18n). */
 export function SCurveChart({
@@ -152,7 +156,7 @@ export function SCurveChart({
             tick={{ fontSize: 12 }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={(v) => `€${v}M`}
+            tickFormatter={(v) => formatMillions(Number(v))}
           />
           <Legend
             verticalAlign="top"
@@ -160,7 +164,7 @@ export function SCurveChart({
             iconType="line"
             wrapperStyle={{ fontSize: 11, paddingBottom: 8 }}
           />
-          {/* Écart réactualisé ↔ réalisé : uniquement sur la période courante, avec badge visible. */}
+          {/* Écart réalisé ↔ planifié initial : uniquement sur la période courante, badge visible. */}
           {currentGapMarks(cur, t("chart.scurve.gapBadge", "Écart"))}
           <Line
             type="monotone"

@@ -17,10 +17,12 @@ import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { StageBadge } from "@/components/shared/StageBadge";
 import type { AuthUser } from "@/types";
+import { intlTag } from "@/lib/format";
+import { onActivateKey } from "@/lib/a11y";
 
 function formatTimestamp(ts: string): string {
   try {
-    return new Date(ts).toLocaleDateString("fr-FR", {
+    return new Date(ts).toLocaleDateString(intlTag(), {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -78,7 +80,9 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
               <tr
                 key={lever.id}
                 className="cursor-pointer border-b border-border last:border-0 hover:bg-neutral-50"
+                tabIndex={0}
                 onClick={() => router.push(`/levers/detail?id=${lever.id}`)}
+                onKeyDown={onActivateKey(() => router.push(`/levers/detail?id=${lever.id}`))}
               >
                 <td className="px-4 py-3">
                   <div className="font-mono text-[10px] text-tertiary">{lever.code}</div>
@@ -217,7 +221,11 @@ function StrategicValidationTable({
               <tr
                 key={action.id}
                 className="cursor-pointer border-b border-border last:border-0 hover:bg-neutral-50"
+                tabIndex={0}
                 onClick={() => router.push(`/levers?chantier=${chantier.id}&action=${action.id}`)}
+                onKeyDown={onActivateKey(() =>
+                  router.push(`/levers?chantier=${chantier.id}&action=${action.id}`)
+                )}
               >
                 <td className="px-4 py-3 font-semibold text-primary">{action.name}</td>
                 <td className="px-4 py-3 text-secondary">{chantier.name}</td>

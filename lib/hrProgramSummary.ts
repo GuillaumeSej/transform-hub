@@ -3,8 +3,8 @@ import { isActiveMovement } from "@/lib/workforceLogic";
 
 /**
  * Synthèse RH programme — équivalent RH du `programSummary` du dashboard exécutif.
- * Retourne les 4 KPI du bandeau supérieur du Dashboard RH (Impact ETP, Économies salariales
- * annuelles, Coûts sociaux consommés, Économies nettes), chacun en trois vues :
+ * Retourne les 4 KPI du bandeau supérieur du Dashboard RH (Impact ETP, Économies nettes de masse
+ * salariale, Coûts sociaux consommés, Économies nettes), chacun en trois vues :
  *   - `realized` : agrégation sur les mouvements dont `status === "Réalisé"` (valeurs constatées).
  *   - `target` : agrégation "cible bottom-up" — utilise `lockedPlan` si présent, sinon les
  *     valeurs brutes du mouvement.
@@ -12,6 +12,18 @@ import { isActiveMovement } from "@/lib/workforceLogic";
  *     sinon repli sur `lockedPlan`, sinon repli sur les valeurs brutes.
  *
  * La progressPct est calculée : realized / target (borné à 100). Une target à 0 → 0%.
+ *
+ * ── Règle UNIQUE de l'ETP d'un mouvement (M10) ───────────────────────────────────────────────
+ *   - Vues PLAN / CIBLE (KPI cible, rythme des mouvements, ventilation « mouvements prévus »,
+ *     bilans nets des infobulles et drill-downs, positions cibles) : `planMovementFte` =
+ *     `lockedPlan.fte ?? fte`.
+ *   - Vues RÉALISÉ / ACTUEL (KPI réalisé, effectif actuel, réalisé par dimension) :
+ *     `actualMovementFte` = `fte` (valeur constatée, tenue à jour après la validation).
+ *
+ * ── Définition UNIQUE des économies de masse salariale (M7) ──────────────────────────────────
+ *   `movementSalarySavings` = −salaryImpact : économies NETTES des recrutements (un recrutement
+ *   compte négativement). Utilisée à la fois par le KPI « Économies nettes de masse salariale » et
+ *   par le graphique « Économies par période et cumul » (lib/hrTimeSeries.ts).
  *
  * Fonction pure — les mouvements sont pré-filtrés par l'appelant (filtres transverses de la
  * page RH).
@@ -28,7 +40,8 @@ export type HrKpi = {
 export type HrProgramSummary = {
   /** Impact ETP — signé, réductions négatives. */
   fte: HrKpi;
-  /** € économies salariales annualisées — positives. */
+  /** € économies nettes de masse salariale annualisées (−salaryImpact) — nettes des recrutements
+   *  (un recrutement les réduit), voir `movementSalarySavings`. */
   salarySavings: HrKpi;
   /** € coûts sociaux one-off (ENR) — positives. */
   socialCost: HrKpi;
@@ -76,6 +89,35 @@ function reforecastValue(
   return targetValue(m, field);
 }
 
+/** ETP d'un mouvement pour les vues PLAN / CIBLE (voir la règle M10 en tête de fichier). */
+export function planMovementFte(m: WorkforceMovement): number {
+  return m.lockedPlan?.fte ?? m.fte;
+}
+
+/** ETP d'un mouvement pour les vues RÉALISÉ / ACTUEL (voir la règle M10 en tête de fichier). */
+export function actualMovementFte(m: WorkforceMovement): number {
+  return m.fte;
+}
+
+export type MovementValueView = "actual" | "target" | "reforecast";
+
+/** Économie annuelle de masse salariale d'un mouvement, NETTE des recrutements : −salaryImpact
+ *  (positive pour une sortie, négative pour un recrutement). Définition unique partagée par le
+ *  KPI et les séries temporelles (M7). `view` choisit la valeur brute, le plan figé ou le
+ *  reforecast. */
+export function movementSalarySavings(
+  m: WorkforceMovement,
+  view: MovementValueView = "actual"
+): number {
+  const impact =
+    view === "target"
+      ? targetValue(m, "salaryImpact")
+      : view === "reforecast"
+        ? reforecastValue(m, "salaryImpact")
+        : m.salaryImpact;
+  return -(Number.isFinite(impact) ? impact : 0);
+}
+
 /** Signe d'un mouvement pour l'ETP (idem `fteEffect` mais avec une valeur FTE arbitraire au lieu
  *  de `m.fte`) — utilisé pour appliquer le signe aux valeurs de `lockedPlan.fte` / `reforecast.fte`. */
 function fteSign(m: WorkforceMovement): number {
@@ -88,6 +130,9 @@ function fteSign(m: WorkforceMovement): number {
     case "Transfert entrant":
     case "Transfert sortant":
       return 0;
+    default:
+      // Type legacy inconnu : neutre (même filet défensif que `hrEngine.fteEffect`).
+      return 0;
   }
 }
 
@@ -96,7 +141,7 @@ function fteSign(m: WorkforceMovement): number {
  * l'effectif total. Les abandonnés sont exclus de la cible. */
 export function targetMovementFteImpact(movement: WorkforceMovement): number {
   if (!isActiveMovement(movement)) return 0;
-  return fteSign(movement) * targetValue(movement, "fte");
+  return fteSign(movement) * planMovementFte(movement);
 }
 
 export function hrProgramSummary(movements: WorkforceMovement[]): HrProgramSummary {
@@ -118,14 +163,15 @@ export function hrProgramSummary(movements: WorkforceMovement[]): HrProgramSumma
     const isRealized = m.status === "Réalisé";
 
     // Impact ETP
-    if (isRealized) fteRealized += sign * m.fte;
+    if (isRealized) fteRealized += sign * actualMovementFte(m);
     fteTarget += targetMovementFteImpact(m);
     fteReforecast += sign * reforecastValue(m, "fte");
 
-    // Économies salariales — on prend `savings` (déjà ≥ 0 par construction, voir hrFinancials).
-    if (isRealized) salarySavingsRealized += m.savings;
-    salarySavingsTarget += targetValue(m, "savings");
-    salarySavingsReforecast += reforecastValue(m, "savings");
+    // Économies nettes de masse salariale — définition unique −salaryImpact (M7) : un
+    // recrutement les réduit, au lieu d'un `savings` à 0 qui l'ignorait.
+    if (isRealized) salarySavingsRealized += movementSalarySavings(m, "actual");
+    salarySavingsTarget += movementSalarySavings(m, "target");
+    salarySavingsReforecast += movementSalarySavings(m, "reforecast");
 
     // ENR — `cost` (≥ 0).
     if (isRealized) socialCostRealized += m.cost;

@@ -9,6 +9,7 @@ import * as engine from "@/lib/engine";
 import { buildInvestVsSavingsCalc } from "@/lib/investVsSavingsCalc";
 import type { FinanceGranularity, InvestVsSavingsPoint } from "@/lib/financeCosts";
 import type { BeTrackData } from "@/types";
+import { onActivateKey } from "@/lib/a11y";
 
 type CalcLine = {
   key: string;
@@ -271,7 +272,11 @@ export function InvestVsSavingsCalcModal({
                       <tr
                         key={r.leverId}
                         className="cursor-pointer border-b border-border/50 hover:bg-neutral-50"
+                        tabIndex={0}
                         onClick={() => router.push(`/levers/detail?id=${r.leverId}`)}
+                        onKeyDown={onActivateKey(() =>
+                          router.push(`/levers/detail?id=${r.leverId}`)
+                        )}
                         title={t("finance.calc.openLever", "Ouvrir la fiche levier")}
                       >
                         <td className="px-2 py-1.5 text-secondary underline-offset-2 hover:underline">

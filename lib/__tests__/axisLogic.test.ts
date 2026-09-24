@@ -28,6 +28,7 @@ import {
   formatIndicatorProgress,
   countOnTrackAtRisk,
   isChantierLate,
+  isProjetDone,
   isProjetLate,
   isStrategicLeadOf,
   latestMeasurement,
@@ -63,7 +64,6 @@ import type {
   Deliverable,
   Indicator,
   IndicatorMeasurement,
-  MaturityStageConfig,
   MilestoneChecklistItem,
   StrategicAxis,
 } from "@/types";
@@ -208,13 +208,13 @@ describe("resolveIndicatorStatus", () => {
     expect(resolveIndicatorStatus(makeIndicator({ status: "at_risk" }))).toBe("at_risk");
   });
 
-  it("lets the manual override win over the computed status, in both directions", () => {
+  it("ignores the dead statusOverride field (no UI can set it) — computed status only", () => {
     expect(
       resolveIndicatorStatus(makeIndicator({ status: "on_track", statusOverride: "at_risk" }))
-    ).toBe("at_risk");
+    ).toBe("on_track");
     expect(
       resolveIndicatorStatus(makeIndicator({ status: "at_risk", statusOverride: "on_track" }))
-    ).toBe("on_track");
+    ).toBe("at_risk");
   });
 });
 
@@ -242,13 +242,40 @@ describe("sumLatestQuantitativeValues", () => {
 });
 
 describe("countOnTrackAtRisk", () => {
-  it("counts on the EFFECTIVE status (manual override included)", () => {
+  it("counts on the stored status when no measurements are given (compat)", () => {
     const indicators = [
       makeIndicator({ id: "IND001", status: "on_track" }),
       makeIndicator({ id: "IND002", status: "at_risk" }),
       makeIndicator({ id: "IND003", status: "at_risk", statusOverride: "on_track" }),
     ];
-    expect(countOnTrackAtRisk(indicators)).toEqual({ total: 3, onTrack: 2, atRisk: 1 });
+    expect(countOnTrackAtRisk(indicators)).toEqual({
+      total: 3,
+      onTrack: 1,
+      atRisk: 2,
+      noData: 0,
+    });
+  });
+
+  it("counts unmeasured / qualitative KPIs separately as 'no data', never as on track", () => {
+    const indicators = [
+      makeIndicator({ id: "IND001" }), // mesuré, au-dessus de la cible (80)
+      makeIndicator({ id: "IND002" }), // mesuré, sous la cible
+      makeIndicator({ id: "IND003" }), // jamais mesuré
+      makeIndicator({ id: "IND004", kind: "qualitative" }),
+      makeIndicator({ id: "IND005" }), // commentaire seul
+    ];
+    const measurements = [
+      makeMeasurement("IND001", "2026-Q1", 90),
+      makeMeasurement("IND002", "2026-Q1", 50),
+      makeMeasurement("IND004", "2026-Q1", 1),
+      { ...makeMeasurement("IND005", "2026-Q1", 0), value: undefined, note: "RAS" },
+    ];
+    expect(countOnTrackAtRisk(indicators, measurements)).toEqual({
+      total: 5,
+      onTrack: 1,
+      atRisk: 1,
+      noData: 3,
+    });
   });
 });
 
@@ -1071,23 +1098,18 @@ describe("chantierAtRiskIndicators", () => {
   it("returns an empty list when the chantier has no at-risk indicator", () => {
     const indicators = [
       makeIndicator({ id: "IND001", chantierId: "CH1", status: "on_track" }),
-      makeIndicator({
-        id: "IND002",
-        chantierId: "CH1",
-        status: "at_risk",
-        statusOverride: "on_track",
-      }),
+      makeIndicator({ id: "IND002", chantierId: "CH2", status: "at_risk" }),
     ];
     expect(chantierAtRiskIndicators("CH1", indicators, [])).toEqual([]);
   });
 
-  it("honors the manual status override, like resolveIndicatorStatus", () => {
+  it("ignores the dead statusOverride field, like resolveIndicatorStatus", () => {
     const indicators = [
       makeIndicator({
         id: "IND001",
         chantierId: "CH1",
-        status: "on_track",
-        statusOverride: "at_risk",
+        status: "at_risk",
+        statusOverride: "on_track",
       }),
     ];
     const result = chantierAtRiskIndicators("CH1", indicators, []);
@@ -1163,47 +1185,50 @@ describe("chantierHealthState", () => {
 
 // ─── Prérequis d'action, go/no-go (round 4, point 5) ───────────────────────────────────────────
 
-function makeStages(): MaturityStageConfig[] {
-  return [
-    { id: "planned", programId: "p1", companyId: "c1", order: 1, label: "Planifié" },
-    { id: "in_progress", programId: "p1", companyId: "c1", order: 2, label: "En cours" },
-    { id: "done", programId: "p1", companyId: "c1", order: 3, label: "Réalisé", isTerminal: true },
-  ];
-}
-
 describe("canStartAction", () => {
+  const E4_PASSED = {
+    currentMilestone: "E4" as const,
+    passedMilestones: ["E0", "E1", "E2", "E3", "E4"] as ("E0" | "E1" | "E2" | "E3" | "E4")[],
+    checklists: {},
+  };
+
   it("is not blocked when there are no prerequisites", () => {
-    expect(canStartAction({ prerequisites: [] }, [], makeStages())).toEqual({
+    expect(canStartAction({ prerequisites: [] }, [])).toEqual({
       blocked: false,
       reasons: [],
     });
-    expect(canStartAction({}, [], makeStages())).toEqual({ blocked: false, reasons: [] });
+    expect(canStartAction({}, [])).toEqual({ blocked: false, reasons: [] });
   });
 
-  it("is satisfied by an action-kind prerequisite once the target action reaches a terminal stage", () => {
+  it("is satisfied by an action-kind prerequisite once the target projet has passed its final milestone (M2)", () => {
     const target = makeAction("CH1", "2026-01-01", "2026-01-31", "target-action");
-    const stages = makeStages();
+    const prereq = {
+      prerequisites: [{ id: "pr1", kind: "action" as const, targetActionId: "target-action" }],
+    };
 
-    const blocked = canStartAction(
-      { prerequisites: [{ id: "pr1", kind: "action", targetActionId: "target-action" }] },
-      [{ ...target, status: "in_progress" }],
-      stages
-    );
+    // Étape de maturité "terminale" figée : n'a plus AUCUN effet (kanban de maturité supprimé).
+    const blocked = canStartAction(prereq, [{ ...target, status: "done" }]);
     expect(blocked).toEqual({ blocked: true, reasons: [expect.stringContaining("target-action")] });
 
-    const unblocked = canStartAction(
-      { prerequisites: [{ id: "pr1", kind: "action", targetActionId: "target-action" }] },
-      [{ ...target, status: "done" }],
-      stages
-    );
+    const unblocked = canStartAction(prereq, [{ ...target, milestones: E4_PASSED }]);
     expect(unblocked).toEqual({ blocked: false, reasons: [] });
+  });
+
+  it("is satisfied when the target projet's progress (resolver) reaches 100%", () => {
+    const target = makeAction("CH1", "2026-01-01", "2026-01-31", "target-action");
+    const prereq = {
+      prerequisites: [{ id: "pr1", kind: "action" as const, targetActionId: "target-action" }],
+    };
+    expect(canStartAction(prereq, [target], () => 99).blocked).toBe(true);
+    expect(canStartAction(prereq, [target], () => 100).blocked).toBe(false);
+    expect(isProjetDone({ ...target, milestones: E4_PASSED })).toBe(true);
+    expect(isProjetDone(target)).toBe(false);
   });
 
   it("never throws and reports an explicit reason when the target action was deleted", () => {
     const result = canStartAction(
       { prerequisites: [{ id: "pr1", kind: "action", targetActionId: "GHOST-DELETED" }] },
-      [], // le référentiel d'actions ne contient plus la cible
-      makeStages()
+      [] // le référentiel d'actions ne contient plus la cible
     );
     expect(result.blocked).toBe(true);
     expect(result.reasons).toHaveLength(1);
@@ -1211,15 +1236,13 @@ describe("canStartAction", () => {
   });
 
   it("treats an external prerequisite as unsatisfied when done is false, satisfied when true", () => {
-    const stages = makeStages();
     const notDone = canStartAction(
       {
         prerequisites: [
           { id: "pr1", kind: "external", label: "Recrutement du chef de projet", done: false },
         ],
       },
-      [],
-      stages
+      []
     );
     expect(notDone).toEqual({ blocked: true, reasons: ["Recrutement du chef de projet"] });
 
@@ -1229,8 +1252,7 @@ describe("canStartAction", () => {
           { id: "pr1", kind: "external", label: "Recrutement du chef de projet", done: true },
         ],
       },
-      [],
-      stages
+      []
     );
     expect(done).toEqual({ blocked: false, reasons: [] });
   });
@@ -2228,26 +2250,25 @@ describe("isChantierLate", () => {
 
 describe("programBlockedActions", () => {
   it("returns an empty result for an empty actions array", () => {
-    expect(programBlockedActions([], makeStages())).toEqual([]);
+    expect(programBlockedActions([])).toEqual([]);
   });
 
   it("keeps only the blocked actions, each with its own reasons", () => {
-    const stages = makeStages();
-    const target = {
-      ...makeAction("CH1", "2026-01-01", "2026-01-31", "target-action"),
-      status: "in_progress",
-    };
+    const target = makeAction("CH1", "2026-01-01", "2026-01-31", "target-action");
     const blockedAction = {
       ...makeAction("CH1", "2026-02-01", "2026-02-28", "A1"),
       prerequisites: [{ id: "pr1", kind: "action" as const, targetActionId: "target-action" }],
     };
     const freeAction = makeAction("CH1", "2026-01-01", "2026-01-15", "A2");
 
-    const result = programBlockedActions([target, blockedAction, freeAction], stages);
+    const result = programBlockedActions([target, blockedAction, freeAction]);
 
     expect(result).toHaveLength(1);
     expect(result[0].action.id).toBe("A1");
     expect(result[0].reasons).toEqual([expect.stringContaining("target-action")]);
+
+    // Une fois le projet cible terminé (100 %), plus rien n'est bloqué.
+    expect(programBlockedActions([target, blockedAction, freeAction], () => 100)).toEqual([]);
   });
 });
 

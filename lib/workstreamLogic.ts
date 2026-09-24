@@ -19,11 +19,19 @@ export function leverDeclaredProgress(actions: LeverAction[] | undefined): numbe
  *  pilote du workstream). Un levier sans poids déclaré reçoit un poids implicite égal aux autres
  *  leviers sans poids (répartition du poids restant, pas 0). Un levier sans aucune action déclarée
  *  (`leverDeclaredProgress` = null) est exclu du calcul (poids et tout), plutôt que de compter
- *  comme 0% d'avancement. */
-export function workstreamDeclaredProgress(levers: Lever[], workstreamId: string): number | null {
+ *  comme 0% d'avancement.
+ *
+ *  `progressOf` : mesure d'avancement d'un levier (par défaut l'avancement déclaratif de ses
+ *  actions) — `engine.workstreamProgressPct` y passe `leverProgressPct` pour appliquer les poids
+ *  déclarés à l'« Avancement » affiché (Kanban, bibliothèque de leviers). */
+export function workstreamDeclaredProgress(
+  levers: Lever[],
+  workstreamId: string,
+  progressOf: (lever: Lever) => number | null = (l) => leverDeclaredProgress(l.actions)
+): number | null {
   const wsLevers = levers.filter((l) => l.ws === workstreamId && l.status !== "cancelled");
   const withProgress = wsLevers
-    .map((l) => ({ lever: l, progress: leverDeclaredProgress(l.actions) }))
+    .map((l) => ({ lever: l, progress: progressOf(l) }))
     .filter((x): x is { lever: Lever; progress: number } => x.progress !== null);
   if (withProgress.length === 0) return null;
 

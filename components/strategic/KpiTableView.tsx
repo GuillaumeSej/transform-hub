@@ -6,9 +6,10 @@ import {
   baselineMeasurement,
   computeIndicatorDelta,
   formatIndicatorProgress,
+  indicatorReadingState,
   latestMeasurement,
+  latestNumericMeasurement,
   progressBucket,
-  resolveIndicatorStatus,
   resolveIndicatorTargetForPeriod,
   type ProgressBucket,
 } from "@/lib/axisLogic";
@@ -91,7 +92,11 @@ export function KpiTableView({
   const td = "px-3 py-2.5 text-sm text-text-primary align-top";
 
   const renderRow = (indicator: Indicator, index: number, chantierName?: string) => {
-    const latest = latestMeasurement(indicator.id, measurements);
+    // Valeur CHIFFRÉE la plus récente de la période affichée (un commentaire seul ne la masque
+    // pas) ; à défaut, la dernière saisie (commentaire).
+    const latest =
+      latestNumericMeasurement(indicator.id, measurements) ??
+      latestMeasurement(indicator.id, measurements);
     const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
     const current =
       latest?.value !== undefined
@@ -107,7 +112,9 @@ export function KpiTableView({
     const currentTarget = latest
       ? resolveIndicatorTargetForPeriod(indicator, latest.period)
       : undefined;
-    const status = resolveIndicatorStatus(indicator);
+    // Statut lu sur les MÊMES mesures que la valeur affichée (année sélectionnée) — plus de
+    // statut global à côté d'une valeur d'une autre année. "Sans donnée" = rien à comparer.
+    const readingState = indicatorReadingState(indicator, measurements);
     // Accent "dans la cible / sur la trajectoire / à risque" (round "KPI pro") : dérivé de
     // l'avancement vers la cible du PALIER courant (`progressToStepPct`, contexte du statut),
     // rebucketé par `progressBucket` — jamais une nouvelle échelle de couleur, voir doc-comment en
@@ -195,10 +202,14 @@ export function KpiTableView({
           )}
         </td>
         <td className={td}>
-          <IndicatorStatusBadge
-            status={status}
-            label={status === "on_track" ? labels.onTrack : labels.atRisk}
-          />
+          {readingState === "no_data" ? (
+            <span className="text-xs text-tertiary">{labels.noValue}</span>
+          ) : (
+            <IndicatorStatusBadge
+              status={readingState}
+              label={readingState === "on_track" ? labels.onTrack : labels.atRisk}
+            />
+          )}
         </td>
       </tr>
     );

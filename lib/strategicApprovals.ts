@@ -1,10 +1,12 @@
 import {
+  assertMilestoneStillPassable,
   axisDecisionMakers,
   computeIndicatorStatus,
   displayMilestoneId,
   isStrategicLeadOf,
   latestMeasurement,
 } from "@/lib/axisLogic";
+import { samePeriod } from "@/lib/indicatorPeriod";
 import { kpiCorrectionApprover } from "@/lib/kpiCorrectionRouting";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
@@ -462,7 +464,7 @@ export function buildDirectKpiCorrectionRecord(input: {
 export function kpiCorrectionNoticeText(
   approval: StrategicApproval,
   data: StrategicApprovalData
-): { title: string; desc: string } {
+): { title: string; desc: string; i18n: NonNullable<Alert["i18n"]> } {
   const p = approval.payload as KpiValueApprovalPayload;
   const indicator = data.indicators.find((i) => i.id === approval.targetId);
   const kpi = indicator?.name ?? approval.targetName ?? approval.targetId;
@@ -478,18 +480,39 @@ export function kpiCorrectionNoticeText(
     return {
       title: `Mesure KPI supprimée · ${kpi}`,
       desc: `Mesure KPI supprimée : ${kpi} ${period} ${old} par ${actorName}.`,
+      i18n: {
+        titleKey: "strategicApprovals.alert.kpiRemovedTitle",
+        descKey: "strategicApprovals.alert.kpiRemovedDesc",
+        vars: { kpi, period, old, actor: actorName },
+      },
     };
   }
   const periodText =
     p.previousPeriod && p.previousPeriod !== p.period
       ? `${p.previousPeriod} → ${p.period}`
       : p.period;
-  const requested = !approval.direct
-    ? ` (demandé par ${displayName(approval.requestedBy, data.users, approval.requestedByName)})`
-    : "";
+  const requesterName = !approval.direct
+    ? displayName(approval.requestedBy, data.users, approval.requestedByName)
+    : undefined;
+  const requested = requesterName ? ` (demandé par ${requesterName})` : "";
+  const value = fmt(p.value, p.note);
   return {
     title: `Valeur KPI corrigée · ${kpi}`,
-    desc: `Valeur KPI corrigée : ${kpi} ${periodText} ${old} → ${fmt(p.value, p.note)} par ${actorName}${requested}.`,
+    desc: `Valeur KPI corrigée : ${kpi} ${periodText} ${old} → ${value} par ${actorName}${requested}.`,
+    i18n: {
+      titleKey: "strategicApprovals.alert.kpiCorrectedTitle",
+      descKey: requesterName
+        ? "strategicApprovals.alert.kpiCorrectedDescRequested"
+        : "strategicApprovals.alert.kpiCorrectedDesc",
+      vars: {
+        kpi,
+        period: periodText,
+        old,
+        value,
+        actor: actorName,
+        requester: requesterName ?? "",
+      },
+    },
   };
 }
 
@@ -580,6 +603,9 @@ export function applyApprovedPayload(
           `Le projet est déjà au jalon ${displayMilestoneId(before.currentMilestone)} ou au-delà : demande périmée`
         );
       }
+      // La check-list du jalon courant a pu régresser depuis la demande : on RE-VÉRIFIE la porte
+      // (`canPassMilestone`, même fusion que la demande) au moment de l'approbation — lève sinon.
+      assertMilestoneStillPassable(action, data.chantiers, data.chantierActions);
       const passed = before.passedMilestones.includes(before.currentMilestone)
         ? before.passedMilestones
         : [...before.passedMilestones, before.currentMilestone];
@@ -608,7 +634,7 @@ export function applyApprovedPayload(
         } else {
           if (
             others.some(
-              (m) => m.indicatorId === existing.indicatorId && m.period.trim() === p.period.trim()
+              (m) => m.indicatorId === existing.indicatorId && samePeriod(m.period, p.period)
             )
           ) {
             throw new Error(`Une mesure existe déjà pour la période ${p.period} : demande périmée`);
@@ -635,16 +661,37 @@ export function applyApprovedPayload(
         }
         return effects;
       }
-      const measurement: IndicatorMeasurement = stripUndefined({
-        id: `IM-${approval.id}`,
-        companyId: approval.companyId,
-        indicatorId: indicator.id,
-        period: p.period,
-        value: p.value,
-        note: p.note,
-        reportedBy: approval.requestedBy,
-        reportedAt: approval.decidedAt ?? new Date().toISOString(),
-      });
+      // Nouvelle valeur sur une période DÉJÀ renseignée entre-temps (autre saisie approuvée ou
+      // directe) : jamais de second document pour la même période — la valeur approuvée REMPLACE
+      // la mesure existante (mise à jour de ce document, saisie d'origine conservée, correction
+      // tracée), exactement comme un remplacement proposé à la saisie.
+      const taken = all.find(
+        (m) => m.indicatorId === indicator.id && samePeriod(m.period, p.period)
+      );
+      let measurement: IndicatorMeasurement;
+      if (taken) {
+        const { value: _v, note: _n, ...rest } = taken;
+        void _v;
+        void _n;
+        measurement = stripUndefined({
+          ...rest,
+          value: p.value,
+          note: p.note,
+          updatedBy: approval.requestedBy,
+          updatedAt: decidedAt,
+        });
+      } else {
+        measurement = stripUndefined({
+          id: `IM-${approval.id}`,
+          companyId: approval.companyId,
+          indicatorId: indicator.id,
+          period: p.period,
+          value: p.value,
+          note: p.note,
+          reportedBy: approval.requestedBy,
+          reportedAt: decidedAt,
+        });
+      }
       effects.saveMeasurements.push(measurement);
       const others = (data.measurements ?? []).filter((m) => m.id !== measurement.id);
       const status = computeIndicatorStatus(indicator, [...others, measurement]);
@@ -898,6 +945,74 @@ function verbPhrase(approval: StrategicApproval, pastTense: boolean): string {
   }
 }
 
+type NestedText = { key: string; fallback: string; vars: Record<string, string | number> };
+
+/** Équivalent i18n du groupe nominal de `verbPhrase(approval, false)` : clé + gabarit français de
+ *  repli + variables, résolu à l'affichage (lib/alertText.ts) dans la langue active. */
+function nounPhraseI18n(approval: StrategicApproval): NestedText {
+  const name = approval.targetName ?? approval.targetId;
+  const k = "strategicApprovals.phrase.";
+  switch (approval.kind) {
+    case "milestone": {
+      const p = approval.payload as MilestoneApprovalPayload;
+      return {
+        key: k + "milestone",
+        fallback: "le passage du projet « {name} » au jalon {to}",
+        vars: { name, to: displayMilestoneId(p.targetMilestone) },
+      };
+    }
+    case "kpi_value": {
+      const p = approval.payload as KpiValueApprovalPayload;
+      const vars = { name, value: p.value ?? "—", period: p.period };
+      if (p.measurementId && p.remove)
+        return {
+          key: k + "kpiRemove",
+          fallback: "la suppression de la mesure {value} ({period}) de l'indicateur « {name} »",
+          vars,
+        };
+      if (p.measurementId)
+        return {
+          key: k + "kpiCorrect",
+          fallback: "la correction de la mesure en {value} ({period}) de l'indicateur « {name} »",
+          vars,
+        };
+      return {
+        key: k + "kpiValue",
+        fallback: "la valeur {value} ({period}) de l'indicateur « {name} »",
+        vars,
+      };
+    }
+    case "projet_create": {
+      const { stage } = approval.payload as ProjetCreateApprovalPayload;
+      if (stage === "chantier")
+        return {
+          key: k + "projetCreateChantier",
+          fallback: "l'ajout du projet « {name} » (validation du pilote de chantier)",
+          vars: { name },
+        };
+      if (stage === "axis")
+        return {
+          key: k + "projetCreateAxis",
+          fallback: "l'ajout du projet « {name} » (validation du responsable d'axe)",
+          vars: { name },
+        };
+      return { key: k + "projetCreate", fallback: "l'ajout du projet « {name} »", vars: { name } };
+    }
+    case "projet_delete":
+      return {
+        key: k + "projetDelete",
+        fallback: "la suppression du projet « {name} »",
+        vars: { name },
+      };
+    case "chantier_delete":
+      return {
+        key: k + "chantierDelete",
+        fallback: "la suppression du chantier « {name} »",
+        vars: { name },
+      };
+  }
+}
+
 /**
  * Entrée du journal d'audit (admin/history) pour une demande/décision, avec un texte explicite :
  * « X a supprimé le chantier Y — validé par Z ».
@@ -976,6 +1091,7 @@ export function buildApprovalAlerts(
     const requester = displayName(a.requestedBy, data.users, a.requestedByName);
     const decider = displayName(a.decidedBy, data.users, a.decidedByName);
     const label = describeApproval(a, data).subject;
+    const phrase = nounPhraseI18n(a);
     const common = {
       scope: a.targetId,
       scopeLabel: label,
@@ -1003,6 +1119,7 @@ export function buildApprovalAlerts(
           createdAt: decidedAt,
           title: notice.title,
           desc: notice.desc,
+          i18n: notice.i18n,
         });
       }
     }
@@ -1018,9 +1135,18 @@ export function buildApprovalAlerts(
           createdAt: a.requestedAt,
           title: `À valider · ${label}`,
           desc: `${requester} demande ${verbPhrase(a, false)}.`,
+          i18n: {
+            titleKey: "strategicApprovals.alert.todoTitle",
+            descKey: "strategicApprovals.alert.todoDesc",
+            vars: { label, requester },
+            nested: { phrase },
+          },
         });
       }
       if (a.requestedBy === user.username) {
+        const approver = a.approverUsername
+          ? displayName(a.approverUsername, data.users)
+          : a.approverRole;
         alerts.push({
           ...common,
           id: `strategic-approval-${a.id}-wait`,
@@ -1028,9 +1154,13 @@ export function buildApprovalAlerts(
           ts: a.requestedAt.slice(0, 10),
           createdAt: a.requestedAt,
           title: `Demande en attente · ${label}`,
-          desc: `Votre demande de ${verbPhrase(a, false)} attend la validation de ${
-            a.approverUsername ? displayName(a.approverUsername, data.users) : a.approverRole
-          }.`,
+          desc: `Votre demande de ${verbPhrase(a, false)} attend la validation de ${approver}.`,
+          i18n: {
+            titleKey: "strategicApprovals.alert.waitTitle",
+            descKey: "strategicApprovals.alert.waitDesc",
+            vars: { label, approver },
+            nested: { phrase },
+          },
         });
       }
       continue;
@@ -1038,6 +1168,7 @@ export function buildApprovalAlerts(
     const decidedAt = a.decidedAt ?? a.requestedAt;
     if (new Date(decidedAt).getTime() < cutoff) continue;
     const approved = a.status === "approved";
+    const comment = a.decisionComment ? ` — ${a.decisionComment}` : "";
     if (a.requestedBy === user.username) {
       alerts.push({
         ...common,
@@ -1046,9 +1177,17 @@ export function buildApprovalAlerts(
         ts: decidedAt.slice(0, 10),
         createdAt: decidedAt,
         title: `${approved ? "Demande validée" : "Demande refusée"} · ${label}`,
-        desc: `${decider} a ${approved ? "validé" : "refusé"} ${verbPhrase(a, false)}${
-          a.decisionComment ? ` — ${a.decisionComment}` : ""
-        }.`,
+        desc: `${decider} a ${approved ? "validé" : "refusé"} ${verbPhrase(a, false)}${comment}.`,
+        i18n: {
+          titleKey: approved
+            ? "strategicApprovals.alert.approvedTitle"
+            : "strategicApprovals.alert.rejectedTitle",
+          descKey: approved
+            ? "strategicApprovals.alert.approvedDesc"
+            : "strategicApprovals.alert.rejectedDesc",
+          vars: { label, decider, comment },
+          nested: { phrase },
+        },
       });
     } else if (a.decidedBy === user.username) {
       alerts.push({
@@ -1059,6 +1198,16 @@ export function buildApprovalAlerts(
         createdAt: decidedAt,
         title: `${approved ? "Validation enregistrée" : "Refus enregistré"} · ${label}`,
         desc: `Vous avez ${approved ? "validé" : "refusé"} ${verbPhrase(a, false)} demandé(e) par ${requester}.`,
+        i18n: {
+          titleKey: approved
+            ? "strategicApprovals.alert.decidedApprovedTitle"
+            : "strategicApprovals.alert.decidedRejectedTitle",
+          descKey: approved
+            ? "strategicApprovals.alert.decidedApprovedDesc"
+            : "strategicApprovals.alert.decidedRejectedDesc",
+          vars: { label, requester },
+          nested: { phrase },
+        },
       });
     }
   }

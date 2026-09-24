@@ -6,9 +6,9 @@ import type { LeverHealthGroup, LeverHealthStatus } from "@/lib/leverHealth";
 import { groupBlockWidth, useAdaptiveGroupColumns } from "@/lib/hooks/useAdaptiveGroupColumns";
 
 const HEALTH_STYLE: Record<LeverHealthStatus, string> = {
-  onTrack: "bg-[#3f9b62]",
-  watch: "bg-[#f59e42]",
-  critical: "bg-[#ef4444]",
+  onTrack: "bg-rag-green",
+  watch: "bg-rag-amber",
+  critical: "bg-rag-red",
   cancelled: "bg-neutral-400",
 };
 
@@ -16,9 +16,9 @@ const HEALTH_STYLE: Record<LeverHealthStatus, string> = {
  * immédiatement scannable via la bande de couleur, sans passer tout le bloc en couleur saturée
  * (ce qui rendrait le texte blanc illisible en petite taille). */
 const HEALTH_CELL_STYLE: Record<LeverHealthStatus, string> = {
-  onTrack: "border-l-[#3f9b62] bg-[#3f9b62]/10",
-  watch: "border-l-[#f59e42] bg-[#f59e42]/10",
-  critical: "border-l-[#ef4444] bg-[#ef4444]/10",
+  onTrack: "border-l-rag-green bg-rag-green/10",
+  watch: "border-l-rag-amber bg-rag-amber/10",
+  critical: "border-l-rag-red bg-rag-red/10",
   cancelled: "border-l-neutral-400 bg-neutral-400/10",
 };
 
@@ -114,7 +114,7 @@ export function InitiativeHealthMatrix({
                   {group.cells.filter((cell) => cell.health !== "cancelled").length}
                 </div>
                 <div
-                  className="mt-1.5 grid gap-1 rounded-sm border border-sky-100 bg-sky-50 p-1.5"
+                  className="mt-1.5 grid gap-1 rounded-sm border border-info-blue/40 bg-info-blue-light p-1.5"
                   style={{ gridTemplateColumns: `repeat(${groupCols}, minmax(0, 1fr))` }}
                 >
                   {cells.map(({ lever, health, computedRisk, activeAlertCount }) => (

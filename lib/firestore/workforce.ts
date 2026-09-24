@@ -131,6 +131,27 @@ export async function saveWorkforceMeta(
   await setDoc(summaryDoc(companyId), stripUndefined(meta));
 }
 
+/**
+ * Écriture groupée ATOMIQUE (un seul `writeBatch`) de tout ou partie du périmètre workforce —
+ * import Excel RH (liste employés + liste mouvements + baseline en une fois, au lieu d'une
+ * réécriture du document entier par ligne importée) et renommage de matricule (employés +
+ * mouvements repointés). Contrairement aux `save*` ci-dessus, lève si `companyId` est absent :
+ * l'appelant attend cette écriture et doit pouvoir afficher l'échec.
+ */
+export async function saveWorkforceBatch(
+  companyId: string | null | undefined,
+  payload: { employees?: Employee[]; movements?: WorkforceMovement[]; meta?: WorkforceMeta }
+): Promise<void> {
+  if (!companyId) throw new Error("Aucune entreprise active : écriture workforce impossible");
+  const batch = writeBatch(db);
+  if (payload.employees)
+    batch.set(employeesDoc(companyId), { list: stripUndefined(payload.employees) });
+  if (payload.movements)
+    batch.set(movementsDoc(companyId), { list: stripUndefined(payload.movements) });
+  if (payload.meta) batch.set(summaryDoc(companyId), stripUndefined(payload.meta));
+  await batch.commit();
+}
+
 export type WorkforceSeed = {
   employees: Employee[];
   movements: WorkforceMovement[];

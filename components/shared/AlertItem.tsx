@@ -6,6 +6,7 @@ import { Tooltip } from "@/components/shared/Tooltip";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { alertDesc, alertTitle } from "@/lib/alertText";
 import type { Alert } from "@/types";
+import { formatCompactCurrency } from "@/lib/format";
 
 const ICONS = { red: CircleAlert, amber: TriangleAlert, green: CircleCheck, blue: CircleUser };
 const ICON_STYLE = {
@@ -16,10 +17,7 @@ const ICON_STYLE = {
 };
 
 function fmtImpact(v: number): string {
-  const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `${v > 0 ? "+" : ""}€${(v / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${v > 0 ? "+" : ""}€${Math.round(v / 1_000)}K`;
-  return `${v > 0 ? "+" : ""}€${v}`;
+  return `${v > 0 ? "+" : ""}${formatCompactCurrency(v)}`;
 }
 
 /** Ligne d'alerte enrichie — impact €, owner, checkbox résolu, badge auto.

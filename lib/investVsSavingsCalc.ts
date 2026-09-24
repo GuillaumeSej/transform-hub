@@ -33,7 +33,8 @@ export type InvestVsSavingsCalc = {
   netResult: number;
   /** Cumul net à la fin de la période (vue Total : cumul final de l'horizon). */
   cumulative: number;
-  /** ROI (%) = netResult / investCost × 100 — `null` si aucun investissement. */
+  /** ROI (%) = netResult / investCost × 100 — `null` si aucun investissement. Même assiette que les
+   *  barres (gains et OPEX récurrents en run-rate sur la période/l'horizon, ETP compris). */
   roiPct: number | null;
   /** Première période où le cumul net repasse ≥ 0 après avoir été négatif (breakeven). */
   paybackLabel: string | null;
@@ -106,9 +107,8 @@ export function buildInvestVsSavingsCalc(
   let cumulative: number;
   if (periodKey === null) {
     scoped = points;
-    rows = mergeLeverRows(
-      points.flatMap((p) => investVsSavingsRowsForPeriod(data, granularity, p.sortKey))
-    );
+    // Horizon complet : mêmes flux que les barres (run-rate compris), agrégés par levier en une passe.
+    rows = mergeLeverRows(investVsSavingsRowsForPeriod(data, granularity, null));
     const first = points[0].period;
     const last = points[points.length - 1].period;
     periodLabel = first === last ? first : `${first} → ${last}`;

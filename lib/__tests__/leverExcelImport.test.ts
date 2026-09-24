@@ -193,8 +193,12 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     expect(lever.companyId).toBe("c1");
     expect(lever.actions).toHaveLength(2);
 
-    const allImpacts = (lever.actions ?? []).flatMap((a) => a.impacts ?? []);
+    // Impacts portés par le LEVIER (modèle actuel), plus par les actions.
+    const allImpacts = lever.impacts ?? [];
     expect(allImpacts).toHaveLength(3);
+    expect(allImpacts.map((i) => i.label)).toContain(
+      "Digitaliser le processus achats — Coût (CAPEX)"
+    );
 
     const capexImpact = allImpacts.find((i) => i.nature === "capex")!;
     expect(capexImpact.capexDeploymentDate).toBe("2026-03-15");
@@ -355,7 +359,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     // Le levier reste importable (aucune erreur autre que la ligne d'impact orpheline) même si
     // l'impact fantôme est écarté silencieusement de l'action correspondante.
     expect(preview.toUpsert).toHaveLength(1);
-    expect(preview.toUpsert[0].actions?.[0].impacts).toEqual([]);
+    expect(preview.toUpsert[0].impacts ?? []).toEqual([]);
   });
 
   it("handles empty optional fields correctly across all 3 sheets", () => {
@@ -395,7 +399,7 @@ describe("leverExcelImport — validateLeverImportRows", () => {
     const action = (lever.actions ?? [])[0];
     expect(action.owner).toBeUndefined();
 
-    const impact = (action.impacts ?? [])[0];
+    const impact = (lever.impacts ?? [])[0];
     expect(impact.savingType).toBeUndefined();
     expect(impact.pnlMap).toBeUndefined();
     expect(impact.costCenter).toBeUndefined();

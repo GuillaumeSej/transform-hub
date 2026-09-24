@@ -7,6 +7,10 @@ import { useRef, type KeyboardEvent } from "react";
  * `rounded-sm`, segments joints, actif = plein noir, anneau de focus coral), même navigation
  * clavier (flèches / Début / Fin, focus itinérant façon `radiogroup`). Pour les choix courts à
  * valeur unique (granularité Mois / Trimestre / Semestre / Année, etc.).
+ *
+ * Contrôle segmenté UNIQUE de l'app (actif = plein noir) : toutes les bascules locales
+ * (granularité, dimension, vue, échelle de timeline, type d'impact…) le réutilisent plutôt que de
+ * redéfinir leur propre style. `size="xs"` pour les bascules intégrées à une ligne de tableau.
  */
 export function SegmentedControl<T extends string | number>({
   label,
@@ -15,14 +19,18 @@ export function SegmentedControl<T extends string | number>({
   onChange,
   showLabel = true,
   className,
+  size = "sm",
+  disabled = false,
 }: {
   /** Libellé du groupe (visuel à gauche si `showLabel`, toujours en `aria-label`). */
   label: string;
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; title?: string }[];
   value: T;
   onChange: (value: T) => void;
   showLabel?: boolean;
   className?: string;
+  size?: "sm" | "xs";
+  disabled?: boolean;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const activeIndex = Math.max(
@@ -31,6 +39,7 @@ export function SegmentedControl<T extends string | number>({
   );
 
   const select = (index: number) => {
+    if (disabled) return;
     const i = (index + options.length) % options.length;
     onChange(options[i].value);
     refs.current[i]?.focus();
@@ -84,9 +93,13 @@ export function SegmentedControl<T extends string | number>({
                 role="radio"
                 aria-checked={active}
                 tabIndex={index === activeIndex ? 0 : -1}
+                title={option.title}
+                disabled={disabled}
                 onClick={() => onChange(option.value)}
                 onKeyDown={(e) => onKeyDown(e, index)}
-                className={`shrink-0 cursor-pointer whitespace-nowrap px-2.5 py-1 text-[11px] font-semibold tabular-nums transition-colors focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bp-coral ${
+                className={`shrink-0 cursor-pointer whitespace-nowrap font-semibold tabular-nums transition-colors focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bp-coral disabled:cursor-not-allowed disabled:opacity-60 ${
+                  size === "xs" ? "px-1.5 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]"
+                } ${
                   active
                     ? "bg-black text-white"
                     : "bg-white text-text-secondary hover:bg-bg-surface hover:text-text-primary"

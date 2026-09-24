@@ -14,3 +14,13 @@ export const LOCALE_LABELS: Record<Locale, string> = {
 };
 
 export const DEFAULT_LOCALE: Locale = "fr";
+
+/** Balise BCP 47 utilisée pour le formatage `Intl` (nombres, dates, devises) de chaque langue —
+ * source unique, lue via `intlTag()` (lib/format.ts). `en-US` plutôt que `en-GB` pour les
+ * montants compacts (`€7.7M` et non `€7.7m`). */
+export const INTL_LOCALE_TAGS: Record<Locale, string> = {
+  fr: "fr-FR",
+  en: "en-US",
+  de: "de-DE",
+  es: "es-ES",
+};

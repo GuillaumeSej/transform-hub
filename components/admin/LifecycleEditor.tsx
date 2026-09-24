@@ -119,8 +119,8 @@ export function LifecycleEditor({
                     }
                     className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                       stage.validationRequired
-                        ? "bg-green-100 text-green-700 hover:bg-green-200"
-                        : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        ? "bg-rag-green-light text-rag-green-dark hover:bg-rag-green-light"
+                        : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"
                     }`}
                   >
                     {stage.validationRequired
@@ -130,6 +130,9 @@ export function LifecycleEditor({
                 </td>
                 <td className="px-4 py-2.5 text-center">
                   <button
+                    type="button"
+                    aria-label={t("common.moveUp", "Monter")}
+                    title={t("common.moveUp", "Monter")}
                     onClick={() => moveStage(stage.key, "up")}
                     disabled={idx === 0}
                     className="mr-1 text-text-secondary hover:text-bp-coral disabled:opacity-30"
@@ -137,6 +140,9 @@ export function LifecycleEditor({
                     <ChevronUp size={14} />
                   </button>
                   <button
+                    type="button"
+                    aria-label={t("common.moveDown", "Descendre")}
+                    title={t("common.moveDown", "Descendre")}
                     onClick={() => moveStage(stage.key, "down")}
                     disabled={idx === stages.length - 1}
                     className="text-text-secondary hover:text-bp-coral disabled:opacity-30"
@@ -170,8 +176,8 @@ export function LifecycleEditor({
                 }
                 className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                   stage.validationRequired
-                    ? "bg-green-100 text-green-700 hover:bg-green-200"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                    ? "bg-rag-green-light text-rag-green-dark hover:bg-rag-green-light"
+                    : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"
                 }`}
               >
                 {t("adminLifecycleEditor.validationPrefix", "Validation :")}{" "}
@@ -181,6 +187,9 @@ export function LifecycleEditor({
               </button>
               <div>
                 <button
+                  type="button"
+                  aria-label={t("common.moveUp", "Monter")}
+                  title={t("common.moveUp", "Monter")}
                   onClick={() => moveStage(stage.key, "up")}
                   disabled={idx === 0}
                   className="mr-1 text-text-secondary hover:text-bp-coral disabled:opacity-30"
@@ -188,6 +197,9 @@ export function LifecycleEditor({
                   <ChevronUp size={16} />
                 </button>
                 <button
+                  type="button"
+                  aria-label={t("common.moveDown", "Descendre")}
+                  title={t("common.moveDown", "Descendre")}
                   onClick={() => moveStage(stage.key, "down")}
                   disabled={idx === stages.length - 1}
                   className="text-text-secondary hover:text-bp-coral disabled:opacity-30"

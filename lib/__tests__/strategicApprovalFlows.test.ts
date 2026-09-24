@@ -311,6 +311,17 @@ describe("milestone flow", () => {
   it("demande milestone : marqueur en attente posé, refus le retire", () => {
     const { gate } = gateFor(owner);
     void gate;
+    // Check-list E0 complète : l'approbation RE-VÉRIFIE la porte (E0-A1 auto = 100, pas d'alerte).
+    const ready = {
+      ...projet,
+      milestones: {
+        currentMilestone: "E0",
+        passedMilestones: [],
+        checklists: {
+          E0: ["E0-A2", "E0-B1", "E0-B2", "E0-C1"].map((itemId) => ({ itemId, progressPct: 100 })),
+        },
+      },
+    } as ChantierAction;
     const a = buildApproval({
       kind: "milestone",
       target: { type: "projet", id: "CA1", name: "Projet" },

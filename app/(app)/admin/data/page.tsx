@@ -37,7 +37,7 @@ function tallyUserRoles(users: AuthUser[]): Record<string, number> {
 function StatusDot({ filled }: { filled: boolean }) {
   return (
     <span
-      className={`inline-block h-2 w-2 rounded-full ${filled ? "bg-green-500" : "bg-gray-300"}`}
+      className={`inline-block h-2 w-2 rounded-full ${filled ? "bg-rag-green" : "bg-neutral-300"}`}
     />
   );
 }

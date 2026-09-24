@@ -17,13 +17,22 @@ import {
 } from "@/components/strategic/IndicatorStatusSummary";
 import {
   computeIndicatorDelta,
+  indicatorReadingState,
   latestMeasurement,
+  latestNumericMeasurement,
   numberIndicators,
   resolveIndicatorOwner,
-  resolveIndicatorStatus,
   resolveUserFullName,
 } from "@/lib/axisLogic";
-import { canFillIndicatorValue, currentPeriod, parseNumber } from "@/lib/kpiHistory";
+import {
+  canFillIndicatorValue,
+  currentPeriod,
+  defaultYearForMeasurements,
+  findPeriodCollision,
+  MeasurementPeriodCollisionError,
+  parseNumber,
+} from "@/lib/kpiHistory";
+import { comparePeriods, parsePeriodForFrequency, periodFormatHint } from "@/lib/indicatorPeriod";
 import { IndicatorMetaLine } from "@/components/strategic/IndicatorMetaLine";
 import {
   YearSegmentedControl,
@@ -128,7 +137,9 @@ function IndicatorCard({
 
   const canFill = canFillIndicatorValue(indicator, user);
   const quantitative = indicator.kind === "quantitative";
-  const latest = latestMeasurement(indicator.id, measurements);
+  // Dernière mesure NUMÉRIQUE : statut/avancement ne doivent pas être masqués par un commentaire
+  // seul saisi ensuite (voir `latestNumericMeasurement`).
+  const latestNumeric = latestNumericMeasurement(indicator.id, measurements);
   // Correction / suppression d'une mesure déjà publiée — même droit que la saisie.
   const correction = useMeasurementCorrection({
     indicator,
@@ -151,13 +162,18 @@ function IndicatorCard({
     options: yearOptions,
     visible: showYearPicker,
     filtered: yearMeasurements,
-  } = useYearSelection(measurements, () => new Date().getFullYear());
+  } = useYearSelection(measurements, () => defaultYearForMeasurements(measurements));
+  // « Dernière valeur » lue sur l'année AFFICHÉE (comme le graphique et l'historique juste à côté) —
+  // chiffre de préférence, sinon la dernière saisie (commentaire seul).
+  const latest =
+    latestNumericMeasurement(indicator.id, yearMeasurements) ??
+    latestMeasurement(indicator.id, yearMeasurements);
   // Écart signé + progression vers la cible (round 6, point 6) : `undefined` sans objectif chiffré
   // ou sans mesure numérique exploitable — même garde-fou que `BusinessKpiCard`, rien à afficher
   // plutôt qu'un écart inventé.
   // Avancement mesuré depuis la valeur initiale (baseline = 1re mesure de TOUT l'historique de
   // l'indicateur, jamais la sélection d'année) — voir `computeIndicatorDelta`.
-  const delta = computeIndicatorDelta(indicator, latest, measurements);
+  const delta = computeIndicatorDelta(indicator, latestNumeric, measurements);
 
   // ── Brouillon de mesure ────────────────────────────────────────────────────────────────────
   const [period, setPeriod] = useState(() => currentPeriod(indicator.frequency));
@@ -200,9 +216,22 @@ function IndicatorCard({
 
   const submitMeasurement = async () => {
     if (!user) return;
-    const trimmedPeriod = period.trim();
-    if (!trimmedPeriod) {
+    if (!period.trim()) {
       showToast(t("kpi.periodRequired"), "", "error");
+      return;
+    }
+    // Période STRICTE pour la fréquence de l'indicateur, normalisée au format canonique (tri et
+    // comparaisons fiables, voir lib/indicatorPeriod.ts).
+    const trimmedPeriod = parsePeriodForFrequency(period, indicator.frequency);
+    if (!trimmedPeriod) {
+      showToast(
+        t("kpi.periodInvalid", "Période invalide — format attendu : {format}").replace(
+          "{format}",
+          periodFormatHint(indicator.frequency)
+        ),
+        "",
+        "error"
+      );
       return;
     }
     const parsedValue = quantitative ? parseNumber(value) : undefined;
@@ -213,6 +242,28 @@ function IndicatorCard({
     const trimmedNote = note.trim();
     if (parsedValue === undefined && trimmedNote === "") {
       showToast(t("kpi.valueRequired"), "", "error");
+      return;
+    }
+    // Période déjà renseignée : jamais de second document. On propose de REMPLACER la valeur
+    // existante (= correction de cette mesure, mêmes règles de routage) ou on refuse clairement.
+    const taken = findPeriodCollision(measurements, indicator.id, trimmedPeriod);
+    if (taken) {
+      const existing = measurements.find((m) => m.id === taken.id);
+      if (existing && correction.canCorrect) {
+        correction.startReplace(existing, {
+          ...(parsedValue !== undefined ? { value: parsedValue } : {}),
+          ...(trimmedNote ? { note: trimmedNote } : {}),
+        });
+      } else {
+        showToast(
+          t(
+            "kpi.measurement.periodTakenNoRight",
+            "Une valeur existe déjà pour la période {period} et vous n'êtes pas habilité à la remplacer."
+          ).replace("{period}", trimmedPeriod),
+          indicator.name,
+          "error"
+        );
+      }
       return;
     }
     setSavingMeasurement(true);
@@ -229,7 +280,8 @@ function IndicatorCard({
           value: parsedValue,
           note: trimmedNote,
         },
-        addMeasurement
+        addMeasurement,
+        measurements
       );
       setValue("");
       setNote("");
@@ -243,8 +295,17 @@ function IndicatorCard({
       } else {
         showToast(t("kpi.measurementSaved"), indicator.name, "success");
       }
-    } catch {
-      showToast(t("kpi.saveError"), indicator.name, "error");
+    } catch (err) {
+      showToast(
+        err instanceof MeasurementPeriodCollisionError
+          ? t(
+              "kpi.measurement.periodCollision",
+              "Une mesure existe déjà pour la période {period}."
+            ).replace("{period}", err.period)
+          : t("kpi.saveError"),
+        indicator.name,
+        "error"
+      );
     } finally {
       setSavingMeasurement(false);
     }
@@ -294,32 +355,49 @@ function IndicatorCard({
     }
     // Paliers valides uniquement (période ET valeur numérique renseignées) — un palier
     // partiellement saisi (période seule, ou valeur seule) est silencieusement ignoré plutôt que
-    // de bloquer la soumission : l'utilisateur peut avoir ajouté une ligne vide par erreur.
-    const parsedSchedule: { period: string; value: number }[] =
-      quantitative && targetMode === "progressive"
-        ? targetSteps.reduce<{ period: string; value: number }[]>((acc, step) => {
-            const trimmedPeriod = step.period.trim();
-            const parsedValue = parseNumber(step.value);
-            if (trimmedPeriod && parsedValue !== undefined && parsedValue !== null) {
-              acc.push({ period: trimmedPeriod, value: parsedValue });
-            }
-            return acc;
-          }, [])
-        : [];
+    // de bloquer la soumission : l'utilisateur peut avoir ajouté une ligne vide par erreur. Une
+    // période de palier SAISIE mais invalide bloque en revanche (format attendu affiché). Le grain
+    // du palier peut différer de celui du KPI (palier trimestriel sur un KPI mensuel) : toute
+    // période reconnue est acceptée, normalisée au format canonique.
+    const parsedSchedule: { period: string; value: number }[] = [];
+    if (quantitative && targetMode === "progressive") {
+      for (const step of targetSteps) {
+        const rawPeriod = step.period.trim();
+        const parsedValue = parseNumber(step.value);
+        if (!rawPeriod || parsedValue === undefined || parsedValue === null) continue;
+        const stepPeriod =
+          parsePeriodForFrequency(rawPeriod, indicator.frequency) ??
+          (["monthly", "quarterly", "semiannual", "annual"] as const)
+            .map((f) => parsePeriodForFrequency(rawPeriod, f))
+            .find((p) => p !== undefined);
+        if (!stepPeriod) {
+          showToast(
+            t("kpi.periodInvalid", "Période invalide — format attendu : {format}").replace(
+              "{format}",
+              periodFormatHint(indicator.frequency)
+            ),
+            rawPeriod,
+            "error"
+          );
+          return;
+        }
+        parsedSchedule.push({ period: stepPeriod, value: parsedValue });
+      }
+      parsedSchedule.sort((a, b) => comparePeriods(a.period, b.period));
+    }
     setSavingObjective(true);
     try {
-      // Même contrainte Firestore que ci-dessus : une cible chiffrée laissée vide n'est pas
-      // effacée (elle ne peut pas l'être depuis ici), elle est simplement laissée telle quelle —
-      // la suppression d'une cible relève de l'écran Admin des indicateurs. Même convention pour
-      // `targetSchedule` : omis (jamais écrit vide) dès que le mode n'est pas progressif ou
-      // qu'aucun palier valide n'a été saisi — revenir en mode "fixe" depuis ce formulaire ne
-      // supprime donc pas une trajectoire déjà enregistrée (même garde-fou que pour `objectiveValue`).
+      // `undefined` explicite = champ EFFACÉ (le hook retire la clé avant `setDoc`). Cible fixe :
+      // la trajectoire est SUPPRIMÉE (sinon impossible de revenir d'une cible évolutive). Le sens
+      // (`direction`) est enregistré même sans cible finale chiffrée (une trajectoire de paliers
+      // en a tout autant besoin).
       await updateIndicator(indicator.id, {
         objective: trimmedObjective,
-        ...(quantitative && parsedTarget !== undefined
-          ? { objectiveValue: parsedTarget, direction: directionDraft }
+        ...(quantitative ? { direction: directionDraft } : {}),
+        ...(quantitative && parsedTarget !== undefined ? { objectiveValue: parsedTarget } : {}),
+        ...(quantitative
+          ? { targetSchedule: parsedSchedule.length > 0 ? parsedSchedule : undefined }
           : {}),
-        ...(parsedSchedule.length > 0 ? { targetSchedule: parsedSchedule } : {}),
       });
       setEditingObjective(false);
       showToast(t("kpi.objectiveSaved"), indicator.name, "success");
@@ -564,7 +642,7 @@ function IndicatorCard({
                                   onChange={(e) =>
                                     updateTargetStep(index, { period: e.target.value })
                                   }
-                                  placeholder={t("kpi.objective.stepPeriod")}
+                                  placeholder={`${t("kpi.objective.stepPeriod")} (${periodFormatHint(indicator.frequency)})`}
                                   aria-label={t("kpi.objective.stepPeriod")}
                                   className={`${FIELD_CLASS} flex-1`}
                                 />
@@ -637,7 +715,7 @@ function IndicatorCard({
                         <p className="text-xs text-text-secondary">
                           {t("kpi.objective.targetModeProgressive")} :{" "}
                           {[...indicator.targetSchedule]
-                            .sort((a, b) => a.period.localeCompare(b.period))
+                            .sort((a, b) => comparePeriods(a.period, b.period))
                             .map(
                               (step) =>
                                 `${step.period} → ${step.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
@@ -665,7 +743,7 @@ function IndicatorCard({
                         <input
                           value={period}
                           onChange={(e) => setPeriod(e.target.value)}
-                          placeholder={currentPeriod(indicator.frequency)}
+                          placeholder={periodFormatHint(indicator.frequency)}
                           className={`mt-1 ${FIELD_CLASS}`}
                         />
                       </label>
@@ -959,11 +1037,15 @@ export function KpiPageClient() {
           )
         )
           return false;
-        if (selectedStatus && resolveIndicatorStatus(i) !== selectedStatus) return false;
+        // Même lecture que la synthèse : un KPI « sans donnée » n'est ni sur la trajectoire ni à
+        // risque (`indicatorReadingState`).
+        if (selectedStatus && indicatorReadingState(i, measurements) !== selectedStatus)
+          return false;
         return true;
       }),
     [
       indicators,
+      measurements,
       axes,
       chantiers,
       t,

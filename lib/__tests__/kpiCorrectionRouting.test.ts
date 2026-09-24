@@ -21,7 +21,9 @@ import {
   editKpiValueFlow,
   type ApprovalGate,
 } from "@/lib/strategicApprovalFlows";
-import type { AuthUser, Chantier, ChantierAction, Indicator, StrategicAxis } from "@/types";
+import type { Alert, AuthUser, Chantier, ChantierAction, Indicator, StrategicAxis } from "@/types";
+import { alertDesc } from "@/lib/alertText";
+import { translate } from "@/lib/i18n/useTranslation";
 
 function user(username: string, role?: string, programId?: string, extra: Partial<AuthUser> = {}) {
   return {
@@ -365,10 +367,17 @@ describe("enregistrement d'information (correction directe)", () => {
         previousValue: 5,
       },
     };
-    expect(kpiCorrectionNoticeText(a, data())).toEqual({
+    const notice = kpiCorrectionNoticeText(a, data());
+    expect(notice).toMatchObject({
       title: "Mesure KPI supprimée · KPI",
       desc: "Mesure KPI supprimée : KPI 2026-03 5 % par BOB.",
     });
+    // Réaffiché dans la langue active via les clés i18n (lib/alertText.ts).
+    const alert = { ...notice, i18n: notice.i18n } as unknown as Alert;
+    const tEn = (key: string, fallback?: string) => translate("en", key, fallback);
+    expect(alertDesc(tEn, alert)).toBe("KPI measurement deleted: KPI 2026-03 5 % by BOB.");
+    const tFr = (key: string, fallback?: string) => translate("fr", key, fallback);
+    expect(alertDesc(tFr, alert)).toBe(notice.desc);
   });
 });
 

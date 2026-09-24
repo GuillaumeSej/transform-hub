@@ -3,6 +3,7 @@
 import { Ban, CalendarDays, Check, Clock, TriangleAlert, type LucideIcon } from "lucide-react";
 import type { MovementExecutionStatus, MovementStatusGroup } from "@/lib/hrExecution";
 import { executionLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
+import { actualMovementFte, planMovementFte } from "@/lib/hrProgramSummary";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { groupBlockWidth, useAdaptiveGroupColumns } from "@/lib/hooks/useAdaptiveGroupColumns";
 
@@ -14,7 +15,7 @@ const STYLE: Record<MovementExecutionStatus, string> = {
   abandoned: "bg-[#806659]",
 };
 /** Icône affichée DANS chaque tuile pour que le statut se lise sans survol : un triangle
- * d'alerte pour le retard, une horloge pour l'échéance proche (< 90 j) vs un calendrier pour
+ * d'alerte pour le retard, une horloge pour l'échéance proche (≤ 90 j) vs un calendrier pour
  * l'échéance lointaine (> 90 j) — deux pictos volontairement distincts bien que les deux statuts
  * soient tous deux « à venir » — un check pour le réalisé, un interdit pour l'abandonné.
  * Volontairement petite et fine (9px, trait 1.5) plutôt qu'un gros picto centré façon badge —
@@ -90,7 +91,7 @@ export function MovementStatusMatrix({
                 style={{ width: Math.max(MIN_BLOCK_WIDTH, groupBlockWidth(groupCols, GRID)) }}
               >
                 <div
-                  className="flex items-end justify-center rounded-sm border border-sky-100 bg-sky-50 p-1.5"
+                  className="flex items-end justify-center rounded-sm border border-info-blue/40 bg-info-blue-light p-1.5"
                   style={{
                     minHeight: `${maxRows * (CELL_HEIGHT + GRID.cellGap) - GRID.cellGap + 12 + 2}px`,
                   }}
@@ -107,7 +108,7 @@ export function MovementStatusMatrix({
                           type="button"
                           onClick={() => onMovementClick(movement.id)}
                           className={`flex h-[21px] items-center justify-center rounded-[2px] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-black ${STYLE[execution]}`}
-                          title={`${movement.label} · ${movementTypeLabel(t, movement.type)}\n${executionLabel(t, execution)} · ${movement.fte} ${t("etp.column.fte", "ETP")}\n${t("shared.movementStatusMatrix.initiativeLabel", "Initiative")} : ${getInitiativeLabel?.(movement.leverId) ?? movement.leverId}\n${t("etp.filter.hrOwnerMovement", "Responsable RH")} : ${movement.hrOwner}\n${t("etp.column.plannedDate", "Date prévue")} : ${movement.plannedDate}`}
+                          title={`${movement.label} · ${movementTypeLabel(t, movement.type)}\n${executionLabel(t, execution)} · ${execution === "realized" ? actualMovementFte(movement) : planMovementFte(movement)} ${t("etp.column.fte", "ETP")}\n${t("shared.movementStatusMatrix.initiativeLabel", "Initiative")} : ${getInitiativeLabel?.(movement.leverId) ?? movement.leverId}\n${t("etp.filter.hrOwnerMovement", "Responsable RH")} : ${movement.hrOwner}\n${t("etp.column.plannedDate", "Date prévue")} : ${movement.plannedDate}`}
                           aria-label={`${movement.label} ${executionLabel(t, execution)}`}
                         >
                           <StatusIcon

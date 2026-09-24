@@ -58,6 +58,7 @@ describe("hrExcel movement social scheme", () => {
         Statut: "Planifié",
         Département: "Finance",
         Pays: "France",
+        "Date planifiée": "2026-09-30",
       },
       data,
       2
@@ -75,6 +76,9 @@ describe("hrExcel movement social scheme", () => {
         Type: "Départ forcé",
         PSE: "Oui",
         Statut: "Planifié",
+        // Date planifiée obligatoire à la création (audit 24/09/2026 : plus de repli silencieux
+        // sur la date du jour).
+        "Date planifiée": "30/09/2026",
       },
       data,
       2

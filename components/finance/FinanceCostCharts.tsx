@@ -29,6 +29,7 @@ import {
   type FinanceGranularity,
 } from "@/lib/financeCosts";
 import type { BeTrackData } from "@/types";
+import { formatMillions } from "@/lib/format";
 
 /** 4 graphiques de suivi des coûts du module Finance — TOUTES les données proviennent de
  *  `data.levers[].actions[].impacts[]` via `lib/financeCosts.ts` (aucune donnée en dur). CAPEX +
@@ -81,9 +82,9 @@ export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
                 tick={{ fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v) => `€${v}M`}
+                tickFormatter={(v) => formatMillions(Number(v))}
               />
-              <Tooltip formatter={(value) => `€${value}M`} />
+              <Tooltip formatter={(value) => formatMillions(Number(value))} />
               <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11 }} />
               <Bar
                 dataKey="delta"
@@ -200,13 +201,13 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
                 tick={{ fontSize: 12 }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v) => `€${v}M`}
+                tickFormatter={(v) => formatMillions(Number(v))}
               />
               <ReferenceLine y={0} stroke="rgba(0,0,0,0.2)" />
               <Tooltip content={<InvestVsSavingsTooltip />} />
               <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11 }} />
               <Bar dataKey="grossSavings" name={gainsLabel} stackId="s" fill={COLOR_POSITIVE} />
-              <Bar dataKey="negOpex" name={opexLabel} stackId="s" fill="#B08A75" />
+              <Bar dataKey="negOpex" name={opexLabel} stackId="s" fill="#A99E9A" />
               <Bar dataKey="negInvest" name={investLabel} stackId="s" fill={COLOR_NEGATIVE} />
               <Line
                 type="monotone"

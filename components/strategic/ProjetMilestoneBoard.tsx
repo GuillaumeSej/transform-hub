@@ -3,14 +3,17 @@
 import { TriangleAlert } from "lucide-react";
 import { MilestoneTransitionBadge } from "@/components/strategic/MilestoneTransitionBadge";
 import {
+  currentMilestoneFillPct,
   displayMilestoneId,
   isProjetLate,
   milestoneProgressPct,
   milestoneTransitionState,
   progressBucket,
   type ProgressBucket,
+  type ProjetAutoFlagsLookup,
+  type ProjetProgressLookup,
 } from "@/lib/axisLogic";
-import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { AuthUser, Chantier, ChantierAction, MilestoneId } from "@/types";
 
@@ -95,6 +98,8 @@ export function ProjetCard({
   onProjetClick,
   clickable = true,
   users,
+  progressOf,
+  autoFlagsOf,
 }: ProjetBoardCard & {
   onProjetClick: (chantierId: string, focusActionId?: string) => void;
   /** Round 25 (RBAC `chantier_contributor`) — le projet reste rendu (couleur, avancement, statut
@@ -104,15 +109,18 @@ export function ProjetCard({
   /** Utilisateurs (nom affiché du demandeur d'un passage de jalon en attente). Optionnel : repli
    *  sur le username. */
   users?: Pick<AuthUser, "username" | "name">[];
+  /** Avancement complet du projet (`useStrategicData().projetProgress`, items auto compris) —
+   *  même chiffre que la fiche chantier. Omis = mode dégradé (items auto à 0). */
+  progressOf?: ProjetProgressLookup;
+  /** Items auto live du jalon courant (`useStrategicData().projetAutoFlags`) — permet l'état
+   *  "prêt" de transition. Omis = seul l'état "en attente" est fiable. */
+  autoFlagsOf?: ProjetAutoFlagsLookup;
 }) {
   const { t } = useTranslation();
   // Round 19, point 3 : avancement PROPRE de ce levier (jalons pondérés `milestoneProgressPct`,
-  // lib/axisLogic.ts) — jusqu'ici seule la moyenne PAR COLONNE était visible sur ce widget
-  // (`avgPct`, plus bas), jamais le pourcentage individuel d'une carte précise. Mode dégradé
-  // assumé, comme `currentMilestoneAverage` ci-dessous : ce composant n'a pas `allChantiers`/
-  // `allActions` sous la main, donc pas d'`autoValues` — les items auto du jalon courant comptent
-  // pour 0 tant qu'ils n'ont pas de valeur manuelle déclarée (jamais une survalorisation).
-  const progressPct = milestoneProgressPct(action);
+  // lib/axisLogic.ts) — MÊME chiffre que la fiche chantier quand l'appelant fournit `progressOf`
+  // (items auto compris) ; sans lui, mode dégradé (items auto à 0, jamais une survalorisation).
+  const progressPct = progressOf ? progressOf(action) : milestoneProgressPct(action);
   const progressPillClass = CARD_PROGRESS_PILL_CLASS[progressBucket(progressPct)];
   const displayedStage = displayMilestoneId(action.milestones?.currentMilestone ?? "E0");
   // Round 20, point 4 : la bande décorative du bas utilise désormais la MÊME valeur que la
@@ -127,7 +135,7 @@ export function ProjetCard({
   // Round "passage de jalon explicite" : demande de passage en attente de confirmation du pilote
   // du chantier — pastille corail-rose (qui/quand en infobulle). Seul l'état "pending" est rendu
   // ici (pas "ready" : sans `autoFlags`, ce composant ne peut pas l'établir de façon fiable).
-  const transition = milestoneTransitionState(action);
+  const transition = milestoneTransitionState(action, autoFlagsOf?.(action));
   return (
     <button
       type="button"
@@ -197,24 +205,14 @@ export function ProjetCard({
  * à ce calcul) et enfiler ces collections en props jusqu'ici pour ce seul usage serait
  * disproportionné.
  */
-function currentMilestoneAverage(action: ChantierAction, milestoneId: MilestoneId): number {
-  const defs = MILESTONE_CHECKLISTS[milestoneId];
-  if (defs.length === 0) return 0;
-  const stored = action.milestones?.checklists?.[milestoneId] ?? [];
-  let sum = 0;
-  for (const def of defs) {
-    const storedItem = stored.find((i) => i.itemId === def.itemId);
-    sum += storedItem?.progressPct ?? 0;
-  }
-  return sum / defs.length;
-}
-
 export function ProjetMilestoneBoard({
   groups,
   labels,
   onProjetClick,
   clickableActionIds = "all",
   users,
+  progressOf,
+  autoFlagsOf,
 }: {
   groups: ProjetBoardGroup[];
   /** `emptyColumn` : placeholder discret d'une colonne de jalon sans levier — un texte plutôt que
@@ -226,6 +224,10 @@ export function ProjetMilestoneBoard({
   clickableActionIds?: Set<string> | "all";
   /** Nom affiché du demandeur d'un passage de jalon en attente (voir `ProjetCard.users`). */
   users?: Pick<AuthUser, "username" | "name">[];
+  /** Voir `ProjetCard.progressOf`. */
+  progressOf?: ProjetProgressLookup;
+  /** Voir `ProjetCard.autoFlagsOf` — sert aussi à la moyenne de remplissage par colonne. */
+  autoFlagsOf?: ProjetAutoFlagsLookup;
 }) {
   const { t } = useTranslation();
   const isActionClickable = (actionId: string) =>
@@ -252,8 +254,8 @@ export function ProjetMilestoneBoard({
             {MILESTONE_ORDER.map((milestoneId) => {
               const cards = group.milestones[milestoneId] ?? [];
               // Round 12 : moyenne des `progressPct` déclarés du jalon COURANT, affichée à côté du
-              // compte de leviers — voir `currentMilestoneAverage` ci-dessus pour la simplification
-              // (items auto comptés à 0, pas de `resolveMilestoneAutoFlags` ici). Round 14 : une
+              // compte de leviers — `currentMilestoneFillPct` (même liste que la porte de
+              // validation, items auto live si `autoFlagsOf` est fourni). Round 14 : une
               // pastille `progressBucket(avgPct)` accompagne ce texte (même convention que
               // `MilestoneChecklistPanel.tsx`) — seulement rendue quand `avgPct` est défini, donc
               // jamais pour une colonne vide (voir juste au-dessus, `cards.length > 0`).
@@ -261,7 +263,8 @@ export function ProjetMilestoneBoard({
                 cards.length > 0
                   ? Math.round(
                       cards.reduce(
-                        (sum, card) => sum + currentMilestoneAverage(card.action, milestoneId),
+                        (sum, card) =>
+                          sum + currentMilestoneFillPct(card.action, autoFlagsOf?.(card.action)),
                         0
                       ) / cards.length
                     )
@@ -307,6 +310,8 @@ export function ProjetMilestoneBoard({
                         onProjetClick={onProjetClick}
                         clickable={isActionClickable(card.action.id)}
                         users={users}
+                        progressOf={progressOf}
+                        autoFlagsOf={autoFlagsOf}
                       />
                     ))
                   )}

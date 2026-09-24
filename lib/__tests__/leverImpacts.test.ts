@@ -337,7 +337,10 @@ describe("cancelled levers are excluded from every aggregate", () => {
     expect(engine.byGeo(d)).toEqual({ EU: 0 });
     expect(engine.realizedSavings(bad)).toBe(0);
     expect(engine.realizedFte(bad)).toBe(0);
-    expect(engine.pnlImpactDetailed(d).reduce((s2, p) => s2 + p.plan, 0)).toBe(5);
+    // P&L aligné sur les totaux leviers (audit M5) : plan = planifié initial (abandonnés compris,
+    // comme `plannedInitialNet`), réactualisé = leviers actifs seulement.
+    expect(engine.pnlImpactDetailed(d).reduce((s2, p) => s2 + p.plan, 0)).toBe(55);
+    expect(engine.pnlImpactDetailed(d).reduce((s2, p) => s2 + p.reforecast, 0)).toBe(5);
   });
   it("series, bridge, marimekko (seul le planifié initial inclut les abandonnés)", () => {
     const series = engine.savingsSeries(d, "month", new Date("2026-12-31"));
@@ -470,7 +473,7 @@ describe("savingsSeries: single source for S-curve and bridge", () => {
     const lastShown = s[7];
     expect(lastShown.actual).toBe(engine.programSummary(d).realized);
     expect(engine.sCurve3(d, "month")[0]).toEqual({
-      month: "Jan",
+      month: "Jan 2026",
       planned: 0,
       reforecast: 0,
       actual: expect.anything(),

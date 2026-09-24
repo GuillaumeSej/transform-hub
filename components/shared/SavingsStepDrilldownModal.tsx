@@ -17,10 +17,12 @@ import {
   type OpexSegment,
 } from "@/lib/savingsDrilldown";
 import type { HierarchyLevelDef, HierarchyNode, Lever, Workstream } from "@/types";
+import { formatMillions } from "@/lib/format";
+import { onActivateKey } from "@/lib/a11y";
 
 const GREEN = "#2E9E6B";
 const RED = "#D64545";
-const fmt = (v: number) => `€${Math.round(v * 10) / 10}M`;
+const fmt = (v: number) => formatMillions(v);
 const signed = (v: number) => (v === 0 ? fmt(0) : `${v > 0 ? "+" : "−"}${fmt(Math.abs(v))}`);
 
 function Signed({ v }: { v: number }) {
@@ -158,7 +160,10 @@ export function SavingsStepDrilldownModal({
       <Fragment key={g.id}>
         <tr
           className="cursor-pointer border-t border-border hover:bg-neutral-50"
+          tabIndex={0}
+          aria-expanded={open}
           onClick={() => toggle(g.id)}
+          onKeyDown={onActivateKey(() => toggle(g.id))}
         >
           <td className="py-2 pr-2">
             <span className="inline-flex items-center gap-1 font-medium text-primary">
@@ -238,67 +243,71 @@ export function SavingsStepDrilldownModal({
           {t("chart.waterfall.drill.empty", "Aucun élément pour cette étape.")}
         </p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-tertiary">
-              <th className="pb-2 font-medium">{dimLabel}</th>
-              {showBeforeAfter && (
-                <th className="px-2 text-right font-medium">
-                  {t("chart.waterfall.drill.before", "Avant (initial)")}
-                </th>
-              )}
-              {showBeforeAfter && (
-                <th className="px-2 text-right font-medium">
-                  {t("chart.waterfall.drill.after", "Après (réactualisé)")}
-                </th>
-              )}
-              {showRealized && (
-                <th className="px-2 text-right font-medium">
-                  {t("chart.waterfall.realized", "Réalisé")}
-                </th>
-              )}
-              {showRealized && (
-                <th className="px-2 text-right font-medium">
-                  {t("chart.waterfall.remaining", "Reste à faire")}
-                </th>
-              )}
-              {isOpex && (
-                <th className="px-2 font-medium">{t("chart.waterfall.drill.nature", "Nature")}</th>
-              )}
-              <th className="pl-2 text-right font-medium">
-                {showBeforeAfter
-                  ? t("chart.waterfall.drill.delta", "Écart")
-                  : t("chart.waterfall.drill.amount", "Montant annualisé")}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((g) => renderRow(g))}
-            <tr className="border-t-2 border-border font-semibold">
-              <td className="py-2">{t("chart.waterfall.drill.total", "Total")}</td>
-              {showBeforeAfter && (
-                <td className="px-2 text-right tabular-nums">{fmt(totals.before)}</td>
-              )}
-              {showBeforeAfter && (
-                <td className="px-2 text-right tabular-nums">{fmt(totals.after)}</td>
-              )}
-              {showRealized && (
-                <td className="px-2 text-right tabular-nums">{fmt(totals.realized)}</td>
-              )}
-              {showRealized && (
-                <td className="px-2 text-right tabular-nums">{fmt(totals.remaining)}</td>
-              )}
-              {isOpex && <td />}
-              <td className="pl-2 text-right tabular-nums">
-                {step === "gross" || step === "initial" || step === "target" ? (
-                  fmt(totals.value)
-                ) : (
-                  <Signed v={totals.value} />
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-tertiary">
+                <th className="pb-2 font-medium">{dimLabel}</th>
+                {showBeforeAfter && (
+                  <th className="px-2 text-right font-medium">
+                    {t("chart.waterfall.drill.before", "Avant (initial)")}
+                  </th>
                 )}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                {showBeforeAfter && (
+                  <th className="px-2 text-right font-medium">
+                    {t("chart.waterfall.drill.after", "Après (réactualisé)")}
+                  </th>
+                )}
+                {showRealized && (
+                  <th className="px-2 text-right font-medium">
+                    {t("chart.waterfall.realized", "Réalisé")}
+                  </th>
+                )}
+                {showRealized && (
+                  <th className="px-2 text-right font-medium">
+                    {t("chart.waterfall.remaining", "Reste à faire")}
+                  </th>
+                )}
+                {isOpex && (
+                  <th className="px-2 font-medium">
+                    {t("chart.waterfall.drill.nature", "Nature")}
+                  </th>
+                )}
+                <th className="pl-2 text-right font-medium">
+                  {showBeforeAfter
+                    ? t("chart.waterfall.drill.delta", "Écart")
+                    : t("chart.waterfall.drill.amount", "Montant annualisé")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((g) => renderRow(g))}
+              <tr className="border-t-2 border-border font-semibold">
+                <td className="py-2">{t("chart.waterfall.drill.total", "Total")}</td>
+                {showBeforeAfter && (
+                  <td className="px-2 text-right tabular-nums">{fmt(totals.before)}</td>
+                )}
+                {showBeforeAfter && (
+                  <td className="px-2 text-right tabular-nums">{fmt(totals.after)}</td>
+                )}
+                {showRealized && (
+                  <td className="px-2 text-right tabular-nums">{fmt(totals.realized)}</td>
+                )}
+                {showRealized && (
+                  <td className="px-2 text-right tabular-nums">{fmt(totals.remaining)}</td>
+                )}
+                {isOpex && <td />}
+                <td className="pl-2 text-right tabular-nums">
+                  {step === "gross" || step === "initial" || step === "target" ? (
+                    fmt(totals.value)
+                  ) : (
+                    <Signed v={totals.value} />
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       )}
     </Modal>
   );

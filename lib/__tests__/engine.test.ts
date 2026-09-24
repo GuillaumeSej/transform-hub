@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import {
   realizedSavings,
   displayedLockedPlanNet,
@@ -39,6 +39,7 @@ import type {
   Program,
   LeverStatus,
 } from "@/types";
+import { setFormatCurrency, setFormatLocale } from "@/lib/format";
 
 /** Action "done" avec un unique impact "saving" de `netAmount` — fixture pour les tests de
  *  `realizedSavings`/agrégations dérivées, depuis que le "Réalisé" est calculé uniquement à
@@ -634,12 +635,30 @@ describe("engine — recomputeLeverProgress", () => {
 });
 
 describe("engine — fmt helpers", () => {
-  it("fmtCurr shows M for >= 1", () => {
+  const norm = (s: string) => s.replace(/[\u00a0\u202f]/g, " ");
+  afterEach(() => {
+    setFormatLocale("fr");
+    setFormatCurrency("EUR");
+  });
+
+  it("fmtCurr shows M for >= 1 (active locale)", () => {
+    setFormatLocale("en");
     expect(fmtCurr(5.2)).toBe("€5.2M");
+    setFormatLocale("fr");
+    expect(norm(fmtCurr(5.2))).toBe("5,2 M €");
   });
 
   it("fmtCurr shows K for < 1", () => {
+    setFormatLocale("en");
     expect(fmtCurr(0.5)).toBe("€500K");
+  });
+
+  it("fmtCurr follows the program currency", () => {
+    setFormatLocale("en");
+    setFormatCurrency("USD");
+    expect(fmtCurr(5.2)).toBe("$5.2M");
+    setFormatCurrency("€M");
+    expect(fmtCurr(5.2)).toBe("€5.2M");
   });
 
   it("fmtCurr shows — for null", () => {
@@ -709,7 +728,7 @@ describe("engine — sCurve3 granularity", () => {
     const data = makeData({ levers: [baseLever] });
     const points = sCurve3(data, "quarter");
     expect(points).toHaveLength(4);
-    expect(points.map((p) => p.month)).toEqual(["Q1", "Q2", "Q3", "Q4"]);
+    expect(points.map((p) => p.month)).toEqual(["Q1 2026", "Q2 2026", "Q3 2026", "Q4 2026"]);
   });
 
   it("quarterly points match the monthly end-of-quarter values", () => {
@@ -919,7 +938,7 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
     expect(s.reforecastTarget).toBe(8 + 5 + 3);
   });
 
-  it("plannedCosts uses lockedPlan capex+opexOneOff, engagedCosts scales with progress", () => {
+  it("plannedCosts uses lockedPlan capex+opexOneOff, engagedCosts scales with the DISPLAYED progress (not the stored field)", () => {
     const data = makeData({
       levers: [
         {
@@ -927,14 +946,71 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
           id: "L001",
           capex: 3,
           opexOneOff: 1,
-          progress: 50,
+          // Champ stocké périmé : ignoré (audit M8) — seul l'avancement du plan d'action compte.
+          progress: 90,
+          actions: [
+            { id: "A1", name: "a", start: "2026-01-01", end: "2026-02-01", status: "done" },
+            { id: "A2", name: "b", start: "2026-01-01", end: "2027-02-01", status: "todo" },
+          ],
           lockedPlan: { grossSavings: 10, netSavings: 8, opexOneOff: 2, opexRec: 0.5, capex: 4 },
         },
       ],
     });
     const s = programSummary(data);
     expect(s.plannedCosts).toBe(6); // lockedPlan: 4 + 2
-    expect(s.engagedCosts).toBe(2); // courant (3+1) × 50%
+    expect(s.engagedCosts).toBe(2); // courant (3+1) × 50 % (avancement affiché)
+  });
+
+  it("engagedCosts is DATE-based for detailed cost lines (same rule as the Finance donut)", () => {
+    const today = new Date();
+    const past = `${today.getFullYear() - 1}-01-15`;
+    const future = `${today.getFullYear() + 1}-01-15`;
+    const data = makeData({
+      levers: [
+        {
+          ...baseLever,
+          id: "L001",
+          status: "validated" as LeverStatus,
+          progress: 0,
+          impacts: [
+            {
+              id: "c1",
+              label: "Capex passé",
+              type: "cost",
+              nature: "capex",
+              amount: 2,
+              capexDeploymentDate: past,
+            },
+            {
+              id: "c2",
+              label: "Capex futur",
+              type: "cost",
+              nature: "capex",
+              amount: 5,
+              capexDeploymentDate: future,
+            },
+            {
+              id: "o1",
+              label: "One-off passé",
+              type: "cost",
+              nature: "oneoff",
+              amount: 1,
+              capexDeploymentDate: past,
+            },
+            {
+              id: "r1",
+              label: "OPEX récurrent",
+              type: "cost",
+              nature: "opex_rec",
+              amount: 9,
+              capexDeploymentDate: past,
+            },
+          ],
+        },
+      ],
+    });
+    // 2 (CAPEX passé) + 1 (one-off passé) ; ni le CAPEX futur, ni l'OPEX récurrent.
+    expect(programSummary(data).engagedCosts).toBe(3);
   });
 
   it("engagedCosts counts 100% for delivered levers regardless of progress", () => {
@@ -1119,14 +1195,15 @@ describe("engine — pnlImpactDetailed from action impacts", () => {
       ],
     });
 
+    // Audit M5 : le P&L suit la règle « net = brut − OPEX récurrent » des totaux leviers — un coût
+    // one-off (consulting) n'y entre plus ; le plan du levier (8, plan initial) est porté par sa
+    // seule ligne nette (le gain de productivité, daté fin mars).
     const feb = pnlImpactDetailed(data, { year: "2026", quarter: "Q1", month: "Feb" });
-    expect(feb).toEqual([
-      { accountId: "GA", accountName: "General & Admin", plan: -0.2, realized: -0.2 },
-    ]);
+    expect(feb).toEqual([]);
 
     const march = pnlImpactDetailed(data, { year: "2026", quarter: "Q1", month: "Mar" });
     expect(march).toEqual([
-      { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 1, realized: 0 },
+      { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 8, reforecast: 8, realized: 0 },
     ]);
   });
 });
@@ -1187,8 +1264,9 @@ describe("engine — pnlImpactDetailed driven by the financial hierarchy", () =>
 
     expect(result).toEqual(
       expect.arrayContaining([
-        { accountId: "GA", accountName: "General & Admin", plan: 3, realized: 3 },
-        { accountId: "REV", accountName: "Revenue", plan: 0, realized: 0 },
+        // Réalisé = impacts réalisés (`realizedSavings`) : 0 pour un levier sans impact (audit M5).
+        { accountId: "GA", accountName: "General & Admin", plan: 3, reforecast: 3, realized: 0 },
+        { accountId: "REV", accountName: "Revenue", plan: 0, reforecast: 0, realized: 0 },
       ])
     );
     expect(result).toHaveLength(2);
@@ -1214,9 +1292,15 @@ describe("engine — pnlImpactDetailed driven by the financial hierarchy", () =>
 
     expect(result).toEqual(
       expect.arrayContaining([
-        { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 5, realized: 5 },
-        { accountId: "GA", accountName: "General & Admin", plan: 0, realized: 0 },
-        { accountId: "REV", accountName: "Revenue", plan: 0, realized: 0 },
+        {
+          accountId: "COGS",
+          accountName: "Cost of Goods Sold",
+          plan: 5,
+          reforecast: 5,
+          realized: 0,
+        },
+        { accountId: "GA", accountName: "General & Admin", plan: 0, reforecast: 0, realized: 0 },
+        { accountId: "REV", accountName: "Revenue", plan: 0, reforecast: 0, realized: 0 },
       ])
     );
     expect(result).toHaveLength(3);
@@ -1241,7 +1325,7 @@ describe("engine — pnlImpactDetailed driven by the financial hierarchy", () =>
     const withoutHierarchy = pnlImpactDetailed(data);
     const withEmptyHierarchy = pnlImpactDetailed(data, undefined, [], []);
     const expected = [
-      { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 5, realized: 5 },
+      { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 5, reforecast: 5, realized: 0 },
     ];
 
     expect(withoutHierarchy).toEqual(expected);
@@ -1298,5 +1382,25 @@ describe("engine — avancement unique levier / chantier (audit C1)", () => {
     const a = { ...baseLever, id: "L1", ws: "WS-A", netSavings: 0, actions: [act("a", "done")] };
     const b = { ...baseLever, id: "L2", ws: "WS-A", netSavings: 0, actions: [act("b", "todo")] };
     expect(workstreamProgressPct([a, b], "WS-A")).toBe(50);
+  });
+
+  it("chantier avec poids déclarés : ils priment sur la valeur (poids implicite pour le reste)", () => {
+    const big = {
+      ...baseLever,
+      id: "L1",
+      ws: "WS-A",
+      netSavings: 3,
+      workstreamWeightPct: 20,
+      actions: [act("a", "done")],
+    };
+    const small = {
+      ...baseLever,
+      id: "L2",
+      ws: "WS-A",
+      netSavings: 1,
+      actions: [act("b", "todo")],
+    };
+    // big 20 % × 100 + small (poids implicite 80 %) × 0 = 20
+    expect(workstreamProgressPct([big, small], "WS-A")).toBe(20);
   });
 });

@@ -6,7 +6,7 @@ import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter, serializeFilterValues, toggleInSelection } from "@/lib/filterUtils";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
-import { type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/filterTypes";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import {
   Banknote,
@@ -42,8 +42,8 @@ import {
   pivotByDimensions,
   type PivotRow,
 } from "@/lib/dashboardPivot";
-import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
-import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
+import { filterAggregateVisibleLevers } from "@/lib/leversLogic";
+import { isReadOnlyUser } from "@/lib/roleProfiles";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
@@ -97,6 +97,9 @@ import {
   type DashboardWidgetInstance,
   type DashboardWidgetType,
 } from "@/lib/dashboardWidgets";
+import { formatMillions } from "@/lib/format";
+import { SegmentedControl } from "@/components/shared/SegmentedControl";
+import { onActivateKey } from "@/lib/a11y";
 
 /** Libellé lisible d'une vue construite (builder générique) — `label` explicite si fourni par
  * l'utilisateur, sinon généré à partir des libellés de la métrique et des dimensions choisies
@@ -186,17 +189,10 @@ export function DashboardPagePerformance() {
     return unsub;
   }, [user?.companyId]);
 
-  const clearance = resolveConfidentialityClearance(
-    user,
-    company?.roleClearance,
-    "performance",
-    company?.confidentialityLevels
-  );
+  // Règle de visibilité PARTAGÉE avec la page Finance et la page Workstreams
+  // (`filterAggregateVisibleLevers`), pour que leurs totaux se recoupent (audit M2).
   const visibleLevers = useMemo(
-    () =>
-      data.levers.filter(
-        (l) => isAnyAdmin(user) || isLeverVisibleForClearance(l.confidentialityLevel, clearance)
-      ),
+    () => filterAggregateVisibleLevers(data.levers, user, company),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       data.levers,
@@ -403,7 +399,7 @@ export function DashboardPagePerformance() {
     [data.workstreams, lifecycle, geographyFilterDefs, t]
   );
 
-  // Round <n> : hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts) — remplace
+  // Round <n> : hook partagé `useMultiFilterBarState` (lib/hooks/useMultiFilterBarState.ts) — remplace
   // l'ancien `useGlobalFilters()` (Context à forme FIXE, 6 clés seulement), qui avait un bug
   // silencieux : les dimensions dynamiques `geo_*`/`hierarchy_*` (arborescences géographie/finance
   // configurées par l'entreprise, voir `geographyFilterDefs`/`hierarchyFilterDefs` ci-dessus)
@@ -427,12 +423,17 @@ export function DashboardPagePerformance() {
     );
   }, [programScopedLevers, activeFilters, filterDefs]);
 
+  // `program.fyStart` = exercice du programme AFFICHÉ (`effectiveFyStart`), pas le vestige
+  // mono-programme `data.program.fyStart` (vide → courbe en S / pont entièrement à 0, audit M1) :
+  // tous les consommateurs de `filteredData` (courbe en S, pont, détail de l'écart, séries par
+  // chantier) lisent ainsi le bon exercice sans paramètre supplémentaire.
   const filteredData = useMemo(() => {
     return {
       ...visibleData,
+      program: { ...visibleData.program, fyStart: effectiveFyStart || visibleData.program.fyStart },
       levers: filteredLevers,
     };
-  }, [visibleData, filteredLevers]);
+  }, [visibleData, filteredLevers, effectiveFyStart]);
 
   const summary = engine.programSummary(filteredData);
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
@@ -757,14 +758,18 @@ export function DashboardPagePerformance() {
   const countryBars = dimensionBars((l) => l.country);
   const functionBars = dimensionBars((l) => l.function);
 
-  const programMap = engine.byProgram(visibleData, programs);
+  // Barres « par programme » : MÊME périmètre que le reste du dashboard (programme(s) affiché(s) +
+  // filtres de la barre, `filteredData`) — avant, elles portaient sur TOUS les programmes de
+  // l'entreprise, sans les filtres actifs. Seuls les programmes présents dans ce périmètre sont listés.
+  const programMap = engine.byProgram(filteredData, programs);
+  const scopedProgramIds = new Set(filteredData.levers.map((l) => l.programId).filter(Boolean));
   // Program.target a été retiré (cible saisie à la main, jamais alignée avec la cible bottom-up —
   // voir le commentaire plus bas sur l'ambition programme) : la cible affichée ici est recalculée
   // par programme sur le même principe que engine.programSummary — somme des netSavings des
   // leviers actifs rattachés au programme.
   const programTargetById = new Map<string, number>();
   const programPlannedById = new Map<string, number>();
-  visibleData.levers.forEach((l) => {
+  filteredData.levers.forEach((l) => {
     if (!l.programId) return;
     // Planifié initial : abandonnés compris (`plannedInitialNet`) ; cible réactualisée : actifs.
     programPlannedById.set(
@@ -778,12 +783,14 @@ export function DashboardPagePerformance() {
     );
   });
   const programBars = [
-    ...programs.map((p) => ({
-      label: p.name,
-      realized: programMap[p.name] ?? 0,
-      target: Math.round((programTargetById.get(p.id) ?? 0) * 10) / 10,
-      planned: Math.round((programPlannedById.get(p.id) ?? 0) * 10) / 10,
-    })),
+    ...programs
+      .filter((p) => scopedProgramIds.has(p.id))
+      .map((p) => ({
+        label: p.name,
+        realized: programMap[p.name] ?? 0,
+        target: Math.round((programTargetById.get(p.id) ?? 0) * 10) / 10,
+        planned: Math.round((programPlannedById.get(p.id) ?? 0) * 10) / 10,
+      })),
     ...(programMap["Non assigné"]
       ? [
           {
@@ -1173,6 +1180,9 @@ export function DashboardPagePerformance() {
                       {alertPageCount > 1 && (
                         <div className="flex items-center justify-center gap-3 pt-3 mt-2 border-t border-border">
                           <button
+                            type="button"
+                            aria-label={t("common.previousPage", "Page précédente")}
+                            title={t("common.previousPage", "Page précédente")}
                             onClick={() => setAlertPage((p) => Math.max(0, p - 1))}
                             disabled={alertPageClamped === 0}
                             className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
@@ -1185,6 +1195,9 @@ export function DashboardPagePerformance() {
                               .replace("{total}", String(alertPageCount))}
                           </span>
                           <button
+                            type="button"
+                            aria-label={t("common.nextPage", "Page suivante")}
+                            title={t("common.nextPage", "Page suivante")}
                             onClick={() => setAlertPage((p) => Math.min(alertPageCount - 1, p + 1))}
                             disabled={alertPageClamped >= alertPageCount - 1}
                             className="flex h-6 w-6 items-center justify-center rounded-sm text-secondary transition hover:bg-neutral-100 disabled:opacity-30"
@@ -1240,9 +1253,14 @@ export function DashboardPagePerformance() {
                             return (
                               <div
                                 key={`${a.sourceId}-${a.targetId}-${i}`}
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => {
                                   router.push(`/levers/detail?id=${a.sourceId}`);
                                 }}
+                                onKeyDown={onActivateKey(() =>
+                                  router.push(`/levers/detail?id=${a.sourceId}`)
+                                )}
                                 className="cursor-pointer rounded-lg border border-border p-3 transition hover:border-bp-coral/40 hover:shadow-sm"
                               >
                                 <div className="mb-2 flex items-start justify-between gap-2">
@@ -1593,7 +1611,10 @@ export function DashboardPagePerformance() {
               maxWidth="560px"
             >
               {workstreamDetail && (
-                <WorkstreamBarDetail point={workstreamDetail.point} fmt={(v) => `€${v}M`} />
+                <WorkstreamBarDetail
+                  point={workstreamDetail.point}
+                  fmt={(v) => formatMillions(Number(v))}
+                />
               )}
             </Modal>
           </Card>
@@ -1721,28 +1742,28 @@ export function DashboardPagePerformance() {
                       // (valeur courante du champ `Lever.capex`/`opexOneOff`), jamais réalisés — audit
                       // #7 : l'ancien libellé "CAPEX"/"OPEX one-off" sans qualificatif laissait croire
                       // à un réalisé, alors que le KPI héros "CAPEX & coûts one-off" au-dessus AFFICHE
-                      // bien un réalisé. On calcule donc ici un "réalisé" par workstream avec la MÊME
-                      // formule que `engine.programSummary.engagedCosts` (capex/opex one-off × 100%
-                      // si levier livré, sinon × progress%), pour rester cohérent avec ce KPI plutôt
-                      // que de se contenter de renommer la colonne.
+                      // bien un réalisé. On calcule donc ici un "réalisé" (engagé) par workstream
+                      // avec la MÊME règle DATÉE que `engine.programSummary.engagedCosts` et le donut
+                      // Finance (`engine.leverEngagedInvestCostByNature`, audit M8 — avant : champ
+                      // stocké et périmé `lever.progress`).
                       const wsLevers = filteredData.levers.filter(
                         (l) => l.ws === ws.id && l.status !== "cancelled"
                       );
-                      const engagedFactor = (l: (typeof wsLevers)[number]) =>
-                        l.status === "delivered" ? 1 : l.progress / 100;
                       const opexOneOff = wsLevers.reduce((s, l) => s + l.opexOneOff, 0);
-                      const capexRealized = wsLevers.reduce(
-                        (s, l) => s + l.capex * engagedFactor(l),
-                        0
+                      const engagedByLever = wsLevers.map((l) =>
+                        engine.leverEngagedInvestCostByNature(l)
                       );
-                      const opexOneOffRealized = wsLevers.reduce(
-                        (s, l) => s + l.opexOneOff * engagedFactor(l),
+                      const capexRealized = engagedByLever.reduce((s, e) => s + e.capex, 0);
+                      const opexOneOffRealized = engagedByLever.reduce(
+                        (s, e) => s + e.opexOneOff,
                         0
                       );
                       return (
                         <tr
                           key={ws.id}
+                          tabIndex={0}
                           onClick={() => goToLevers({ f_ws: ws.name })}
+                          onKeyDown={onActivateKey(() => goToLevers({ f_ws: ws.name }))}
                           className="cursor-pointer border-b border-border last:border-b-0 hover:bg-neutral-50"
                         >
                           <td className="px-3 py-2.5 font-semibold text-primary">{ws.name}</td>
@@ -2293,19 +2314,16 @@ function GranularityToggle({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex rounded-md border border-border-strong p-0.5 text-[11px] font-semibold">
-      {(["month", "quarter"] as const).map((g) => (
-        <button
-          key={g}
-          onClick={() => onChange(g)}
-          className={`rounded px-2 py-1 transition ${
-            value === g ? "bg-bp-coral text-white" : "text-secondary hover:text-primary"
-          }`}
-        >
-          {g === "month" ? t("dashboard.month") : t("dashboard.quarter")}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl<engine.TimeGranularity>
+      label={t("common.segmented.granularity", "Granularité")}
+      showLabel={false}
+      options={[
+        { value: "month", label: t("dashboard.month") },
+        { value: "quarter", label: t("dashboard.quarter") },
+      ]}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 
@@ -2319,20 +2337,15 @@ function DimensionToggle<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <div className="flex rounded-md border border-border-strong p-0.5 text-[11px] font-semibold">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          className={`rounded px-2 py-1 transition ${
-            value === o.value ? "bg-bp-coral text-white" : "text-secondary hover:text-primary"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl<T>
+      label={t("common.segmented.view", "Affichage")}
+      showLabel={false}
+      options={options}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 

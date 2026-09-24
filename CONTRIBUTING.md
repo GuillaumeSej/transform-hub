@@ -46,3 +46,14 @@ npm run format     # prettier --write
 ```
 
 Un hook pre-commit (husky + lint-staged) formate et lint automatiquement les fichiers stagés.
+
+## Tests
+
+- `npm test` (Vitest) — tests unitaires de `lib/**` et des composants (`**/__tests__`).
+- **Pas de tests end-to-end pour l'instant.** L'ancienne suite Playwright (`e2e/smoke.spec.ts`,
+  `playwright.config.ts`, scripts `test:e2e`) a été supprimée : elle simulait la connexion en
+  injectant une session dans localStorage, ce qui ne fonctionne plus avec l'authentification et
+  les données Firebase. Elle est à réécrire
+  contre l'**émulateur Firebase** (`firebase emulators:start` avec Auth + Firestore, données de
+  démo seedées, app lancée avec les variables d'environnement pointant vers l'émulateur) avant
+  d'être réintégrée au workflow. La dépendance `@playwright/test` est conservée pour cette réécriture.

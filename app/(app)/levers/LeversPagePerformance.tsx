@@ -32,7 +32,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { Kanban } from "@/components/shared/Kanban";
 import { LeverLibraryTree } from "@/components/shared/LeverLibraryTree";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
-import { type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/filterTypes";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { FilterToggleButton, useFilterBarExpanded } from "@/components/shared/CollapsibleFilterBar";
 import { ColumnVisibilityMenu } from "@/components/shared/ColumnVisibilityMenu";
@@ -43,6 +43,7 @@ import { matchesFilter } from "@/lib/filterUtils";
 import { matchesLeverSearch } from "@/lib/leverSearch";
 import { leversPageTitleKey } from "@/lib/nav-config";
 import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
+import { leverRiskReasonText } from "@/lib/leverRiskText";
 
 type LeverRow = Lever & {
   realized: number;
@@ -508,7 +509,7 @@ export function LeversPagePerformance() {
     ]
   );
 
-  // Round <n> : passe par le hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts) —
+  // Round <n> : passe par le hook partagé `useMultiFilterBarState` (lib/hooks/useMultiFilterBarState.ts) —
   // remplace une implémentation ad hoc qui avait un bug (le premier clic sur un bouton de filtre
   // ne produisait aucun effet visible, voir le commentaire du hook pour le détail).
   const { activeFilters, setFilters } = useMultiFilterBarState(filterDefs);
@@ -547,7 +548,7 @@ export function LeversPagePerformance() {
     return {
       ...l,
       risk: riskAssessment.level,
-      riskReason: riskAssessment.reason,
+      riskReason: leverRiskReasonText(t, riskAssessment),
       realized: engine.realizedSavings(l),
       reforecastNet: engine.displayedReforecastNet(l).value,
       progressPct: engine.leverProgressPct(l),
@@ -790,7 +791,14 @@ export function LeversPagePerformance() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Export/import Excel : outils de bureau, sans objet sur téléphone. */}
           <span className="hidden items-center gap-2 sm:inline-flex">
-            <ExportButton data={data} programs={programs} levers={leversToExport} />
+            <ExportButton
+              data={data}
+              programs={programs}
+              levers={leversToExport}
+              riskThresholds={riskThresholds}
+              lifecycleStages={lifecycle.stages}
+              selectedProgramId={selectedProgramId}
+            />
             {!readOnly && (
               <LeverImportButton
                 data={data}

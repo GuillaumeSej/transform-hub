@@ -102,16 +102,95 @@ describe("hrTimeSeries — salarySavingsSeries", () => {
     expect(mar.plan).toBeCloseTo(0.1 / 12, 3);
   });
 
-  it("excludes abandoned movements from actual+forecast but preserves them in the initial plan", () => {
+  it("excludes abandoned movements from actual+forecast AND from the plan (M8, like the KPI)", () => {
+    const range = { from: "2026-01-01", to: "2026-12-31" };
+    const movements = [
+      makeMovement({ id: "A", status: "Abandonné", salaryImpact: -120000 }),
+      makeMovement({
+        id: "B",
+        status: "Planifié",
+        plannedDate: "2026-01-01",
+        salaryImpact: -12000,
+      }),
+    ];
+    const buckets = salarySavingsSeries(movements, "month", range, "2026-01-01");
+    const lastPlanCumul = buckets[buckets.length - 1].cumulPlan;
+    // Seul B compte : 12 000 €/an sur 12 mois = 0,012 M€ — l'abandonné A n'entre plus au plan.
+    expect(lastPlanCumul).toBeCloseTo(0.012, 3);
+    expect(hrProgramSummary(movements).salarySavings.target).toBe(12000);
+    const enr = socialCostSeries(
+      [makeMovement({ status: "Abandonné", plannedDate: "2026-02-01", cost: 30000 })],
+      "month",
+      range
+    );
+    expect(enr.every((bucket) => bucket.plan === 0 && bucket.actualForecast === 0)).toBe(true);
+  });
+
+  it("splits realized (by status) from forecast and never books unrealized savings in the past (M9)", () => {
     const range = { from: "2026-01-01", to: "2026-12-31" };
     const buckets = salarySavingsSeries(
-      [makeMovement({ status: "Abandonné", salaryImpact: -120000 })],
+      [
+        // Réalisé en février.
+        makeMovement({
+          id: "R",
+          status: "Réalisé",
+          plannedDate: "2026-02-01",
+          actualDate: "2026-02-01",
+          salaryImpact: -120000,
+        }),
+        // En retard : prévu en mars mais pas réalisé au 22 juin → prévision à partir de juin.
+        makeMovement({
+          id: "L",
+          status: "Planifié",
+          plannedDate: "2026-03-01",
+          salaryImpact: -240000,
+        }),
+      ],
       "month",
       range,
       "2026-06-22"
     );
-    expect(buckets.every((bucket) => bucket.actualPlusForecast === 0)).toBe(true);
-    expect(buckets.some((bucket) => bucket.plan > 0)).toBe(true);
+    const byKey = new Map(buckets.map((b) => [b.key, b]));
+    expect(byKey.get("2026-03")!.realized).toBeCloseTo(0.01, 3);
+    expect(byKey.get("2026-03")!.forecast).toBe(0);
+    expect(byKey.get("2026-05")!.forecast).toBe(0);
+    expect(byKey.get("2026-06")!.forecast).toBeCloseTo(0.02, 3);
+    expect(byKey.get("2026-06")!.realized).toBeCloseTo(0.01, 3);
+    // Barre = réalisé + prévision.
+    expect(byKey.get("2026-06")!.actualPlusForecast).toBeCloseTo(0.03, 3);
+    // Le plan, lui, reste à la date prévue (mars).
+    expect(byKey.get("2026-03")!.plan).toBeCloseTo(0.03, 3);
+  });
+
+  it("counts hires negatively (same −salaryImpact definition as the KPI, M7)", () => {
+    const range = { from: "2026-01-01", to: "2026-12-31" };
+    const movements = [
+      makeMovement({
+        id: "H",
+        type: "Recrutement",
+        status: "Réalisé",
+        plannedDate: "2026-01-01",
+        actualDate: "2026-01-01",
+        salaryImpact: 120000,
+        savings: 0,
+      }),
+    ];
+    const buckets = salarySavingsSeries(movements, "month", range, "2026-06-22");
+    expect(buckets[buckets.length - 1].cumulActualForecast).toBeCloseTo(-0.12, 3);
+    expect(hrProgramSummary(movements).salarySavings.realized).toBe(-120000);
+  });
+
+  it("exposes stable keys and localized labels", () => {
+    const range = { from: "2026-01-01", to: "2026-12-31" };
+    const fr = salarySavingsSeries([], "month", range, "2026-06-22");
+    const en = salarySavingsSeries([], "month", range, "2026-06-22", { locale: "en-GB" });
+    expect(fr[1].key).toBe("2026-02");
+    expect(en[1].key).toBe("2026-02");
+    expect(fr[1].label).toBe("févr. 2026");
+    expect(en[1].label).toBe("Feb 2026");
+    const q = movementRhythmSeries([], "quarter", range, { locale: "en-GB" });
+    expect(q.map((b) => b.key)).toEqual(["2026-Q1", "2026-Q2", "2026-Q3", "2026-Q4"]);
+    expect(q[0].label).toBe("Q1 2026");
   });
 });
 
@@ -161,7 +240,8 @@ describe("hrTimeSeries — netEconomySeries", () => {
     const buckets = netEconomySeries(
       [makeMovement({ id: "M1", plannedDate: "2026-02-01", salaryImpact: -120000, cost: 30000 })],
       "month",
-      range
+      range,
+      "2026-01-01"
     );
     const feb = buckets.find((b) => b.label.startsWith("févr."))!;
     const mar = buckets.find((b) => b.label.startsWith("mars"))!;
@@ -175,7 +255,8 @@ describe("hrTimeSeries — netEconomySeries", () => {
     const buckets = netEconomySeries(
       [makeMovement({ plannedDate: "2026-02-01", salaryImpact: -120000, cost: 30000 })],
       "month",
-      range
+      range,
+      "2026-01-01"
     );
     const feb = buckets.find((b) => b.label.startsWith("févr."))!;
     expect(feb.actualForecast).toBeCloseTo(-0.02, 3);
@@ -195,7 +276,7 @@ describe("hrTimeSeries — netEconomySeries", () => {
     ];
     const savings = salarySavingsSeries(movements, "month", range, "2026-06-22");
     const enr = socialCostSeries(movements, "month", range);
-    const net = netEconomySeries(movements, "month", range);
+    const net = netEconomySeries(movements, "month", range, "2026-06-22");
     net.forEach((bucket, index) => {
       expect(bucket.actualForecast).toBeCloseTo(
         savings[index].actualPlusForecast - enr[index].actualForecast,
@@ -303,6 +384,7 @@ describe("hrTimeSeries — movementRhythmAxisDomains", () => {
   it("uses stacked positive/negative totals rather than individual series", () => {
     const domains = movementRhythmAxisDomains([
       {
+        key: "2026-Q1",
         label: "T1 2026",
         startISO: "2026-01-01",
         endISO: "2026-03-31",
@@ -325,6 +407,7 @@ describe("hrTimeSeries — movementRhythmAxisDomains", () => {
   it("adds headroom and rounds cumulative values to readable bounds", () => {
     const domains = movementRhythmAxisDomains([
       {
+        key: "2028-Q4",
         label: "T4 2028",
         startISO: "2028-10-01",
         endISO: "2028-12-31",

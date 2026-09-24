@@ -719,7 +719,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             <div>
               <label className="text-xs font-medium text-text-secondary">
                 {t("adminUsers.fieldUsername", "Identifiant")}{" "}
-                <span className="text-red-500">*</span>
+                <span className="text-rag-red">*</span>
               </label>
               <input
                 value={form.username}
@@ -754,7 +754,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             <div>
               <label className="text-xs font-medium text-text-secondary">
                 {t("adminUsers.fieldDisplayName", "Nom affiché")}{" "}
-                <span className="text-red-500">*</span>
+                <span className="text-rag-red">*</span>
               </label>
               <input
                 value={form.name}
@@ -766,7 +766,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             </div>
             <div className="col-span-2 -mt-2">
               <p className="text-xs text-text-secondary">
-                <span className="text-red-500">*</span>{" "}
+                <span className="text-rag-red">*</span>{" "}
                 {t(
                   "adminUsers.displayNameHint",
                   "Nom affiché requis, sauf si Prénom et Nom sont tous les deux renseignés."
@@ -776,7 +776,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             <div>
               <label className="text-xs font-medium text-text-secondary">
                 {t("adminUsers.fieldPassword", "Mot de passe")}{" "}
-                <span className="text-red-500">*</span>
+                <span className="text-rag-red">*</span>
               </label>
               <input
                 value={form.password}
@@ -785,13 +785,13 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                   setPasswordTouched(true);
                 }}
                 className={`mt-1 w-full rounded-lg border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral ${
-                  passwordError ? "border-red-500" : "border-border"
+                  passwordError ? "border-rag-red" : "border-border"
                 }`}
                 placeholder="test"
                 required
                 aria-invalid={passwordError !== null}
               />
-              {passwordError && <p className="mt-1 text-xs text-red-500">{passwordError}</p>}
+              {passwordError && <p className="mt-1 text-xs text-rag-red">{passwordError}</p>}
             </div>
             <div>
               <label className="text-xs font-medium text-text-secondary">
@@ -814,7 +814,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               <div>
                 <label className="text-xs font-medium text-text-secondary">
                   {t("adminUsers.fieldCompany", "Entreprise")}{" "}
-                  <span className="text-red-500">*</span>
+                  <span className="text-rag-red">*</span>
                 </label>
                 <select
                   value={form.companyId}
@@ -966,7 +966,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                           profiles: f.profiles.filter((_, i) => i !== idx),
                         }))
                       }
-                      className="text-text-secondary hover:text-red-500"
+                      className="text-text-secondary hover:text-rag-red"
                       aria-label={t("adminUsers.removeProfile", "Retirer ce profil")}
                     >
                       <Trash2 size={14} />
@@ -1191,7 +1191,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                       </button>
                       <button
                         onClick={() => remove(u.username, u.companyId ?? null)}
-                        className="text-text-secondary hover:text-red-500"
+                        className="text-text-secondary hover:text-rag-red"
                         aria-label={t("common.delete", "Supprimer")}
                       >
                         <Trash2 size={14} />
@@ -1220,7 +1220,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           </Button>
         }
       >
-        <ul className="list-disc space-y-1 pl-4 text-sm text-red-600">
+        <ul className="list-disc space-y-1 pl-4 text-sm text-rag-red">
           {errorDialog?.messages.map((message) => (
             <li key={message}>{message}</li>
           ))}

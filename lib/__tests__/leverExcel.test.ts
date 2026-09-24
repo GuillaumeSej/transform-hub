@@ -181,7 +181,9 @@ describe("leverExcel — leverToExcelRow (Statut)", () => {
       );
 
       expect(preview.errors).toEqual([]);
-      expect(preview.toUpsert[0].status).toBe(status);
+      // Ré-import sans modification : levier « inchangé » (M2), rien n'est réécrit.
+      expect(preview.toUpsert).toEqual([]);
+      expect(preview.unchangedCodes).toEqual([lever.code]);
     }
   );
 
@@ -239,7 +241,7 @@ describe("leverExcel — leverToExcelRow (Statut)", () => {
     );
 
     expect(preview.errors).toEqual([]);
-    expect(preview.toUpsert[0].status).toBe("in_progress");
+    expect(preview.unchangedCodes).toEqual([lever.code]);
   });
 });
 

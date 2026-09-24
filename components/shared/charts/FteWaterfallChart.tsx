@@ -14,6 +14,8 @@ import {
 } from "recharts";
 import type { FteBridgeBucket } from "@/lib/hrEngine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { intlTag } from "@/lib/format";
+import { onActivateKey } from "@/lib/a11y";
 
 // Polarité validée (dataviz) : réductions en corail, ajouts en bleu — ΔE CVD 81.6.
 const COLOR_DOWN = "#FF3C47";
@@ -68,7 +70,10 @@ export function FteWaterfallChart({
   }
 
   const fmt = (v: number) =>
-    v.toLocaleString("fr-FR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    v.toLocaleString(intlTag(), {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
 
   let running = baseline;
   const raw = buckets.map((b) => {
@@ -128,7 +133,11 @@ export function FteWaterfallChart({
     const cy = y - bubbleHeight / 2 - 4;
     return (
       <g
+        role={onBarClick ? "button" : undefined}
+        tabIndex={onBarClick ? 0 : undefined}
+        aria-label={onBarClick ? d.label : undefined}
         onClick={() => onBarClick?.(d.label)}
+        onKeyDown={onBarClick ? onActivateKey(() => onBarClick(d.label)) : undefined}
         style={{ cursor: onBarClick ? "pointer" : undefined }}
       >
         <rect

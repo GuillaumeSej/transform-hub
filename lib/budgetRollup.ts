@@ -24,6 +24,12 @@ import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
  * axe n'est connu reste compté dans le total programme, dans `unattributed`.
  *
  * Un projet dont le chantier n'est pas dans `chantiers` (orphelin, ou autre programme) est ignoré.
+ *
+ * `attributionAxes` (optionnel) : liste COMPLÈTE des axes du programme, utilisée pour DÉTERMINER
+ * l'axe primaire d'un chantier indépendamment de ce que le lecteur voit — sans elle, un utilisateur
+ * ne voyant pas l'axe primaire d'un chantier multi-axe l'aurait vu attribué à un autre axe (montant
+ * différent selon le lecteur). `axes` reste la liste AFFICHÉE : un chantier attribué à un axe non
+ * affiché compte dans le total programme mais dans aucun axe affiché (ni dans `unattributed`).
  */
 export type BudgetFigures = { allocated: number; consumed: number };
 
@@ -59,9 +65,10 @@ function add(target: BudgetFigures, source: BudgetFigures): void {
 export function rollupBudgets(
   axes: Pick<StrategicAxis, "id">[],
   chantiers: Pick<Chantier, "id" | "axisIds">[],
-  actions: Pick<ChantierAction, "id" | "chantierId" | "budget" | "consumedBudget">[]
+  actions: Pick<ChantierAction, "id" | "chantierId" | "budget" | "consumedBudget">[],
+  attributionAxes?: Pick<StrategicAxis, "id">[]
 ): BudgetRollup {
-  const knownAxisIds = new Set(axes.map((a) => a.id));
+  const knownAxisIds = new Set([...axes, ...(attributionAxes ?? [])].map((a) => a.id));
   const projets = new Map<string, BudgetFigures>();
   const chantierTotals = new Map<string, BudgetFigures>();
   const axisTotals = new Map<string, BudgetFigures>();
@@ -84,7 +91,12 @@ export function rollupBudgets(
     add(chantierTotal, figures);
     add(programme, figures);
     const axisId = chantierAxisId.get(action.chantierId);
-    add(axisId ? axisTotals.get(axisId)! : unattributed, figures);
+    if (!axisId) add(unattributed, figures);
+    else {
+      // Axe d'attribution non affiché (hors `axes`) : compté au programme seulement.
+      const axisTotal = axisTotals.get(axisId);
+      if (axisTotal) add(axisTotal, figures);
+    }
   }
 
   return {

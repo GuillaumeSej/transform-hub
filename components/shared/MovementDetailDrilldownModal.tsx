@@ -14,6 +14,7 @@ import { etpMovementDeepLink } from "@/lib/hrMovementLink";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { movementTypeLabel } from "@/lib/hrMovementLabels";
 import type { WorkforceMovement } from "@/types";
+import { onActivateKey } from "@/lib/a11y";
 
 /**
  * Variante DÉTAILLÉE ("qui a fait quoi") de `MovementDrilldownModal` pour le widget
@@ -115,7 +116,9 @@ export function MovementDetailDrilldownModal({
                   return (
                     <tr
                       key={m.id}
+                      tabIndex={0}
                       onClick={() => goToEtp([m.id])}
+                      onKeyDown={onActivateKey(() => goToEtp([m.id]))}
                       className="cursor-pointer border-t border-border transition hover:bg-neutral-50"
                       title={t("hr.movementProgress.openInEtp", "Ouvrir dans la Base ETP")}
                     >

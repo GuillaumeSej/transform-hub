@@ -766,7 +766,7 @@ export function LeverForm({
 
       <SectionTitle>{t("leverForm.sectionImpact", "Impact")}</SectionTitle>
       {isLocked && (
-        <p className="mb-3 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+        <p className="mb-3 rounded-sm border border-rag-amber/40 bg-rag-amber-light px-2.5 py-2 text-[11px] text-rag-amber">
           {t(
             "leverForm.impactReforecastNotice",
             "Le plan initial est figé : les modifications alimentent le réactualisé."

@@ -1,5 +1,4 @@
 import type { BeTrackData, HierarchyNode } from "@/types";
-import type { LegacySubLever } from "@/lib/mockActionMigration";
 
 /**
  * Seed initial — copié fidèlement depuis `const DB` du prototype HTML historique de Guillaume
@@ -245,12 +244,6 @@ export const mockData: BeTrackData = {
   audit: [],
   comments: {},
 };
-
-/** Ancien référentiel "sous-leviers" (voir LegacySubLever dans lib/mockActionMigration.ts) —
- * conservé uniquement comme donnée d'entrée pour la migration ponctuelle du seed de démo vers
- * le modèle actuel Levier -> Action enrichie (voir useStorage.ts lockedSeed()). Ne fait plus
- * partie du modèle de données live (BeTrackData n'a plus de champ subLevers). */
-export const legacySubLevers: LegacySubLever[] = [];
 
 /** Arborescences de démo, seedées par `ensureAdminSeeded` (lib/firestore/admin.ts) aux côtés des
  * entreprises de test créées sur une base Firestore vierge : géographique (continent -> pays) et

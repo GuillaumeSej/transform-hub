@@ -210,8 +210,11 @@ export default function AdminCompaniesPage() {
                     <Pencil size={14} />
                   </button>
                   <button
+                    type="button"
+                    aria-label={t("common.delete", "Supprimer")}
+                    title={t("common.delete", "Supprimer")}
                     onClick={() => remove(c.id)}
-                    className="text-text-secondary hover:text-red-500"
+                    className="text-text-secondary hover:text-rag-red"
                   >
                     <Trash2 size={14} />
                   </button>

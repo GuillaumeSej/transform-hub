@@ -18,6 +18,14 @@
  * arborescence financière configurée, lib/hierarchyLogic.ts::derivePnlAccounts remplace la liste
  * générique par les comptes réels de l'arborescence — voir le bug corrigé le 2026-09-18.
  *
+ * Statut des leviers (audit 2026-09-24, B3) : l'import refuse de créer un levier au-delà du stade
+ * « Identifié » (les stades suivants passent par les portes de validation, voir
+ * lib/leverExcelImport.ts::importStatusTransitionError). Le fichier leviers_agroverde.xlsx écrit donc
+ * TOUS les leviers au stade « Identifié » (sauf les leviers abandonnés, « Levier abandonné »,
+ * autorisé à la création), avec des actions cohérentes (« À faire »), pour s'importer sans erreur sur
+ * une entreprise vide. La maturité cible de chaque levier (`status` dans LEVER_DEFS) reste utilisée
+ * pour la base ETP et se déroule ensuite dans l'app via les demandes de validation.
+ *
  * Usage : node scripts/generate-agro-demo-excel.js [dossier de sortie]
  */
 const path = require("path");
@@ -671,6 +679,12 @@ function spreadDates(start, end, n) {
 
 /** Statut d'une action selon le statut du levier et sa position (phase précoce vs tardive) — voir
  *  ACTION_STATUS_LABEL dans lib/leverExcelImport.ts pour le vocabulaire accepté. */
+/** Stade écrit dans la colonne "Statut" du fichier d'import : seuls « Identifié » et « abandonné »
+ *  sont acceptés pour un NOUVEAU levier (voir en-tête du fichier). */
+function importStatusFor(leverStatus) {
+  return leverStatus === "cancelled" ? "cancelled" : "idea";
+}
+
 function actionStatusFor(leverStatus, index, count) {
   if (leverStatus === "delivered") return "Terminé";
   if (leverStatus === "in_progress") return index < Math.ceil(count / 2) ? "Terminé" : "En cours";
@@ -736,9 +750,9 @@ for (const def of LEVER_DEFS) {
         case "Date de fin estimée":
           return def.end;
         case "Statut":
-          return STATUS_LABEL[def.status];
+          return STATUS_LABEL[importStatusFor(def.status)];
         case "Progression (%)":
-          return def.progress;
+          return 0;
         case "Impact estimé brut (€M)":
           return def.gross;
         case "Impact estimé net (€M)":
@@ -776,7 +790,7 @@ for (const def of LEVER_DEFS) {
       owner.name,
       toFr(bounds[i]),
       toFr(bounds[i + 1]),
-      actionStatusFor(def.status, i, n),
+      actionStatusFor(importStatusFor(def.status), i, n),
     ]);
   }
 

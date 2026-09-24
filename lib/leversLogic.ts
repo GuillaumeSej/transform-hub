@@ -2,7 +2,7 @@ import * as engine from "@/lib/engine";
 import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
 import { migrateLeverImpacts } from "@/lib/leverImpactMigration";
 import type { CascadeShift } from "@/lib/engine";
-import { GATE_BY_STATUS, STATUS_ORDER } from "@/lib/status-config";
+import { STATUS_ORDER, gatedStatusesFor, nextGateFor } from "@/lib/status-config";
 import type {
   AuditEntry,
   AuthUser,
@@ -14,6 +14,7 @@ import type {
   LeverAction,
   LeverApproval,
   LeverApprovalGate,
+  LifecycleStage,
   Role,
   Workstream,
 } from "@/types";
@@ -240,6 +241,50 @@ export function leverAccessDenialReason(
     : "confidentiality";
 }
 
+/** Leviers visibles sur les vues d'AGRÉGATION du Plan Performance (dashboard exécutif, page
+ *  Finance, page Workstreams) — règle UNIQUE pour que leurs totaux se recoupent (audit M2 : la page
+ *  Finance chargeait tous les leviers de l'entreprise) : admin → tout ; sinon, habilitation de
+ *  confidentialité (`resolveConfidentialityClearance` + `isLeverVisibleForClearance`). */
+export function filterAggregateVisibleLevers<T extends Pick<Lever, "confidentialityLevel">>(
+  levers: T[],
+  user:
+    | Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin" | "confidentialityClearance">
+    | null
+    | undefined,
+  company:
+    | { roleClearance?: Partial<Record<Role, string | string[]>>; confidentialityLevels?: string[] }
+    | null
+    | undefined
+): T[] {
+  if (isAnyAdmin(user)) return levers;
+  const clearance = resolveConfidentialityClearance(
+    user,
+    company?.roleClearance,
+    "performance",
+    company?.confidentialityLevels
+  );
+  return levers.filter((l) => isLeverVisibleForClearance(l.confidentialityLevel, clearance));
+}
+
+/** Leviers du périmètre programme affiché — même règle que le dashboard exécutif : vue consolidée
+ *  → leviers de tous les programmes consolidés ; sinon leviers du programme sélectionné
+ *  (`programId` strictement égal ; aucun programme sélectionné → aucun levier). */
+export function filterProgramScopedLevers<T extends Pick<Lever, "programId">>(
+  levers: T[],
+  scope: {
+    programId: string | null | undefined;
+    isConsolidatedView?: boolean;
+    consolidatedProgramIds?: string[];
+  }
+): T[] {
+  if (scope.isConsolidatedView) {
+    const ids = new Set(scope.consolidatedProgramIds ?? []);
+    return levers.filter((l) => !!l.programId && ids.has(l.programId));
+  }
+  if (!scope.programId) return [];
+  return levers.filter((l) => l.programId === scope.programId);
+}
+
 type PlanLockable = Pick<
   Lever,
   | "status"
@@ -366,23 +411,31 @@ export function enforceDeliveredRule(lever: Pick<Lever, "actions" | "status">): 
 
 /** Recalcule le levier parent depuis son plan d'action : avancement (pondéré, actions uniquement),
  *  `lastUpdate`, passage automatique à "delivered" à 100 %. Retourne TOUJOURS le levier à
- *  persister (avec `lastUpdate` rafraîchi). */
+ *  persister (avec `lastUpdate` rafraîchi).
+ *
+ *  Passage automatique à « Réalisé » (audit B1) : UNIQUEMENT depuis « Exécuté » (`in_progress`,
+ *  M4) — la seule transition du cycle qui n'est pas une porte de validation. Avant, un levier
+ *  « Identifié »/« Validé »/« Planifié » dont les actions atteignaient 100 % sautait directement
+ *  à « Réalisé », court-circuitant les portes sponsor/CTO (`approveLeverGate`) sans jamais figer
+ *  son plan initial. Tout changement de statut repasse par `applyPlanLock` (plan figé +
+ *  réactualisation initialisée si le palier est atteint). */
 function recomputeLeverProgress(lever: Lever): Lever {
   const base = withImpactTotals(lever);
   const newProgress = engine.recomputeLeverProgress(base);
-  let nextStatus =
-    newProgress >= 100 && base.status !== "cancelled" && (base.actions?.length ?? 0) > 0
+  let nextStatus: LeverStatus =
+    newProgress >= 100 && base.status === "in_progress" && (base.actions?.length ?? 0) > 0
       ? "delivered"
       : base.status;
   // Règle : « Réalisé » (delivered) exige TOUTES les actions faites ; sinon retombe à « Exécuté ».
   if (nextStatus === "delivered" && !allActionsDone(base)) nextStatus = "in_progress";
-  return {
+  const next: Lever = {
     ...base,
     progress: newProgress,
     status: nextStatus,
     lastUpdate: nowDate(),
     ...(nextStatus === "delivered" && !base.deliveredDate ? { deliveredDate: nowDate() } : {}),
   };
+  return nextStatus !== base.status ? applyPlanLock(next) : next;
 }
 
 /** Règle avancement → statut d'une action (pur). `pct` est borné à 0-100. 100 → "done"
@@ -475,11 +528,19 @@ export function createLever(
   };
 }
 
+export type LeverWorkflowOptions = {
+  /** Référentiel de cycle de vie du programme du levier : seules les étapes dont l'admin a coché
+   *  « validation requise » sont des portes (voir `gatedStatusesFor`). Omis = les 3 portes
+   *  historiques (qualified/validated/in_progress). */
+  lifecycleStages?: LifecycleStage[];
+};
+
 export function updateLever(
   levers: Lever[],
   id: string,
   patch: Partial<Lever>,
-  user: string
+  user: string,
+  options: LeverWorkflowOptions = {}
 ): LeverMutationResult {
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
@@ -496,15 +557,24 @@ export function updateLever(
   // usages légitimes du même appel (ex. modifier `progress` en même temps). Les autres
   // transitions de statut (idea, delivered, cancelled) ne sont pas concernées par cette garde et
   // restent librement modifiables par cette voie, comme avant.
-  const GATED_STATUSES: readonly LeverApprovalGate[] = ["qualified", "validated", "in_progress"];
+  // Portes effectives : case « validation requise » du référentiel de cycle de vie (admin), sinon
+  // les 3 portes historiques quand l'appelant ne fournit pas de référentiel.
+  const GATED_STATUSES: readonly LeverApprovalGate[] = gatedStatusesFor(options.lifecycleStages);
   const bypassesApprovalCascade = "approval" in patch;
   let guardedPatch: Partial<Lever> = patch;
-  if (
-    patch.status &&
+  // Une porte est franchie si elle se situe entre le statut de départ (exclu) et la cible
+  // (incluse) : viser une étape au-delà d'une porte (ex. « Identifié » → « Planifié » quand seule
+  // « Validé » exige une validation, ou « Planifié » → « Réalisé ») ne la contourne pas.
+  const crossesGate =
+    !!patch.status &&
     patch.status !== before.status &&
-    (GATED_STATUSES as readonly string[]).includes(patch.status) &&
-    !bypassesApprovalCascade
-  ) {
+    patch.status !== "cancelled" &&
+    GATED_STATUSES.some(
+      (gate) =>
+        STATUS_ORDER[gate] > STATUS_ORDER[before.status] &&
+        STATUS_ORDER[gate] <= STATUS_ORDER[patch.status as LeverStatus]
+    );
+  if (crossesGate && !bypassesApprovalCascade) {
     guardedPatch = { ...patch };
     delete guardedPatch.status;
   }
@@ -524,6 +594,13 @@ export function updateLever(
     guardedPatch.status !== "cancelled" &&
     STATUS_ORDER[guardedPatch.status] < STATUS_ORDER[before.status]
   ) {
+    if (guardedPatch === patch) guardedPatch = { ...patch };
+    delete guardedPatch.status;
+  }
+
+  // Un levier ABANDONNÉ ne peut pas passer directement à « Réalisé » : il doit d'abord être
+  // réactivé dans le cycle (sinon il serait compté réalisé sans avoir jamais été exécuté).
+  if (guardedPatch.status === "delivered" && before.status === "cancelled") {
     if (guardedPatch === patch) guardedPatch = { ...patch };
     delete guardedPatch.status;
   }
@@ -569,6 +646,13 @@ export function updateLever(
     after = { ...after, progress: progressed.progress, status: progressed.status };
     if (progressed.deliveredDate) after.deliveredDate = progressed.deliveredDate;
   }
+  // Passage à « Réalisé » (direct ou via le plan d'action) : date de réalisation posée si absente
+  // (le P&L et la courbe en S datent le réalisé à `deliveredDate`).
+  if (after.status === "delivered" && before.status !== "delivered" && !after.deliveredDate) {
+    after = { ...after, deliveredDate: nowDate() };
+  }
+  // Tout changement de statut (y compris celui produit par le plan d'action) repasse par le gel.
+  if (after.status !== before.status) after = applyPlanLock(after);
   const nextLevers = [...levers];
   nextLevers[idx] = after;
 
@@ -591,14 +675,107 @@ export function updateLever(
   return { levers: nextLevers, lever: after, auditEntries };
 }
 
+/** Clé de rapprochement d'un Code levier (import/upsert) : insensible à la casse et aux espaces de
+ *  bord — même règle que l'aperçu d'import (audit M1 : l'aperçu matchait "proc-001" sur
+ *  "PROC-001" mais l'écriture, sensible à la casse, créait un doublon). */
+export function normalizeLeverCode(code: string | undefined | null): string {
+  return (code ?? "").trim().toLowerCase();
+}
+
+function isEmptyish(v: unknown): boolean {
+  return v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+}
+
+/** Égalité profonde « métier » pour l'import : `undefined`/`null`/`""`/`[]` équivalents, nombres à
+ *  1e-9 près, propriétés `undefined` ignorées. Sert à ne pas réécrire un levier inchangé (M2). */
+export function importValueEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (isEmptyish(a) && isEmptyish(b)) return true;
+  if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) < 1e-9;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((x, i) => importValueEqual(x, b[i]));
+  }
+  const ao = a as Record<string, unknown>;
+  const bo = b as Record<string, unknown>;
+  const keys = Object.keys(ao).concat(Object.keys(bo).filter((k) => !(k in ao)));
+  for (const k of keys) if (!importValueEqual(ao[k], bo[k])) return false;
+  return true;
+}
+
+/** Champs jamais modifiés par un import : identité/rattachement (`companyId` — M12 : un admin
+ *  global sans entreprise active écrasait sinon le rattachement par `null`) et champs pilotés par
+ *  les workflows (validation, plan figé, réactualisation, habilitation, arborescences). L'aperçu
+ *  d'import recopie ces champs depuis le levier existant ; les ignorer ici évite de réécrire une
+ *  valeur périmée si le levier a changé entre l'aperçu et la confirmation. */
+const IMPORT_IGNORED_KEYS: ReadonlySet<string> = new Set([
+  "id",
+  "createdAt",
+  "lastUpdate",
+  "companyId",
+  "approval",
+  "lockedPlan",
+  "reforecast",
+  "cancelledAtStage",
+  "deliveredDate",
+  "confidentialityLevel",
+  "hierarchyLeafId",
+  "geographyLeafId",
+  "workstreamWeightPct",
+  "sponsorUsername",
+]);
+
+/** Patch réellement nécessaire pour amener `existing` vers `input` (import Excel) : seuls les
+ *  champs qui DIFFÈRENT sont retenus (hors `IMPORT_IGNORED_KEYS`) ; `code` n'est pas réécrit s'il
+ *  ne diffère que par la casse. Patch vide = levier inchangé. */
+export function leverImportPatch(
+  existing: Lever,
+  input: Partial<Omit<Lever, "id" | "createdAt" | "lastUpdate">>
+): Partial<Lever> {
+  const patch: Partial<Lever> = {};
+  for (const key of Object.keys(input) as (keyof Lever)[]) {
+    if (IMPORT_IGNORED_KEYS.has(key)) continue;
+    if (key === "code" && normalizeLeverCode(input.code) === normalizeLeverCode(existing.code)) {
+      continue;
+    }
+    if (!importValueEqual(input[key as keyof typeof input], existing[key])) {
+      (patch as Record<string, unknown>)[key] = input[key as keyof typeof input];
+    }
+  }
+  return patch;
+}
+
 export function upsertLeverByCode(
   levers: Lever[],
   input: Omit<Lever, "id" | "createdAt" | "lastUpdate">,
   user: string
-): LeverMutationResult & { created: boolean } {
-  const existing = levers.find((l) => l.code === input.code);
+): LeverMutationResult & { created: boolean; unchanged?: boolean } {
+  const key = normalizeLeverCode(input.code);
+  const existing = levers.find((l) => normalizeLeverCode(l.code) === key);
   if (existing) {
-    return { ...updateLever(levers, existing.id, input, user), created: false };
+    const patch = leverImportPatch(existing, input);
+    // M2 : ré-import sans changement = aucune écriture, aucune entrée d'audit.
+    if (Object.keys(patch).length === 0) {
+      return { levers, lever: existing, auditEntries: [], created: false, unchanged: true };
+    }
+    const result = updateLever(levers, existing.id, patch, user);
+    // M2 : `updateLever` réaligne la réactualisation dès que `actions` est dans le patch ; à
+    // l'import, on ne la rafraîchit que si les IMPACTS ont réellement changé.
+    if (
+      !("impacts" in patch) &&
+      existing.reforecast &&
+      result.lever.reforecast !== existing.reforecast
+    ) {
+      const lever = { ...result.lever, reforecast: existing.reforecast };
+      return {
+        ...result,
+        levers: result.levers.map((l) => (l.id === lever.id ? lever : l)),
+        lever,
+        created: false,
+      };
+    }
+    return { ...result, created: false };
   }
   return { ...createLever(levers, input, user), created: true };
 }
@@ -624,7 +801,8 @@ export function upsertLeverByCode(
 export function requestLeverApproval(
   levers: Lever[],
   id: string,
-  user: Pick<AuthUser, "name" | "username" | "isGlobalAdmin" | "isCompanyAdmin">
+  user: Pick<AuthUser, "name" | "username" | "isGlobalAdmin" | "isCompanyAdmin">,
+  options: LeverWorkflowOptions = {}
 ): LeverMutationResult {
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
@@ -634,7 +812,7 @@ export function requestLeverApproval(
       `Seul le porteur du levier "${id}" (ou un admin) peut soumettre une demande de validation`
     );
   }
-  const targetStatus = GATE_BY_STATUS[before.status];
+  const targetStatus = nextGateFor(before.status, options.lifecycleStages);
   if (!targetStatus) {
     throw new Error(
       `Le levier "${id}" ne peut pas être soumis à validation depuis le statut "${before.status}"`
@@ -780,6 +958,8 @@ export type BulkLeverImportResult = {
   auditEntries: AuditEntry[];
   createdCount: number;
   updatedCount: number;
+  /** Leviers existants strictement identiques au fichier : ni écrits, ni audités (M2). */
+  unchangedCount: number;
 };
 
 /**
@@ -801,6 +981,7 @@ export function bulkUpsertLeversByCode(
   const auditEntries: AuditEntry[] = [];
   let createdCount = 0;
   let updatedCount = 0;
+  let unchangedCount = 0;
 
   for (const input of inputs) {
     // Le fichier d'import référence les dépendances par Code (colonne "Dépendances"), pas par id
@@ -809,19 +990,33 @@ export function bulkUpsertLeversByCode(
     // vers un levier qui n'apparaît que PLUS LOIN dans le même fichier reste non résolue (son id
     // n'est alloué qu'à son tour) : limitation documentée dans lib/leverExcelImport.ts.
     const resolvedDependencies = (input.dependencies ?? []).map((d) => {
-      const target = curLevers.find((l) => l.code.toLowerCase() === d.targetId.toLowerCase());
+      const target = curLevers.find(
+        (l) => normalizeLeverCode(l.code) === normalizeLeverCode(d.targetId)
+      );
       return target ? { ...d, targetId: target.id } : d;
     });
+    const before = curLevers.find(
+      (l) => normalizeLeverCode(l.code) === normalizeLeverCode(input.code)
+    );
     const upsert = upsertLeverByCode(
       curLevers,
       { ...input, dependencies: resolvedDependencies },
       user
     );
+    if (upsert.unchanged) {
+      unchangedCount++;
+      continue;
+    }
     curLevers = upsert.levers;
     auditEntries.push(...upsert.auditEntries);
     if (upsert.created) createdCount++;
     else updatedCount++;
 
+    // Plan d'action inchangé : `updateLever` a déjà tout recalculé, pas de réécriture des actions.
+    if (before && importValueEqual(input.actions ?? [], before.actions ?? [])) {
+      changedLevers.push(upsert.lever);
+      continue;
+    }
     const { levers: afterActions, changedLever } = writeActions(
       curLevers,
       { leverId: upsert.lever.id },
@@ -831,7 +1026,14 @@ export function bulkUpsertLeversByCode(
     changedLevers.push(changedLever ?? upsert.lever);
   }
 
-  return { levers: curLevers, changedLevers, auditEntries, createdCount, updatedCount };
+  return {
+    levers: curLevers,
+    changedLevers,
+    auditEntries,
+    createdCount,
+    updatedCount,
+    unchangedCount,
+  };
 }
 
 export type ActionScope = { leverId: string };

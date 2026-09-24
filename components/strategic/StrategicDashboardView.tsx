@@ -21,7 +21,6 @@ import {
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
-import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   chantierDependencyAlerts,
@@ -29,7 +28,6 @@ import {
   isProjetLate,
   numberIndicators,
   programBlockedActions,
-  programRoadmap,
   resolveChantierOwner,
   resolveIndicatorStatus,
   resolveUserFullName,
@@ -78,6 +76,7 @@ import { ProgramRoadmap } from "@/components/strategic/ProgramRoadmap";
 import { readKpi } from "@/lib/chantierKpis";
 import { formatCompactCurrency, formatPercent } from "@/lib/formatCompactAmount";
 import type { Indicator, StrategicAxis } from "@/types";
+import { formatCurrency, normalizeCurrency } from "@/lib/format";
 
 /**
  * Dashboard du PLAN STRATÉGIQUE — pendant de `DashboardPagePerformance.tsx` pour un programme de
@@ -351,12 +350,17 @@ export function StrategicDashboardView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const strategic = useStrategicData(user?.companyId ?? null, activeProgramId, user);
-  // Référentiel d'étapes de maturité du programme actif — nécessaire à `programBlockedActions`
-  // (round 9, alimente la sous-section "Prérequis en attente" ci-dessous), même appel que
-  // `StrategicAxesView.tsx`.
-  const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
-  const { axes, chantiers, chantierActions, indicators, measurements } = strategic;
+  const {
+    axes,
+    chantiers,
+    chantierActions,
+    indicators,
+    measurements,
+    projetProgress,
+    programAxisIds,
+    fullScope,
+  } = strategic;
 
   /** Round 25 (RBAC) : `axis_sponsor` perd le clic-vers-KPI sur les puces "#N indicateur" de la
    *  feuille de route (voir `renderAxisRoadmapHeader` ci-dessous et le `ChipPopover` "indicateurs"
@@ -409,7 +413,10 @@ export function StrategicDashboardView() {
   const openAxis = (axisId: string) => router.push(`/levers/detail?id=${axisId}`);
 
   // ─── Agrégats (toute la logique de calcul vient de lib/axisLogic.ts) ──────────────────────
-  const counts = useMemo(() => countOnTrackAtRisk(indicators), [indicators]);
+  const counts = useMemo(
+    () => countOnTrackAtRisk(indicators, measurements),
+    [indicators, measurements]
+  );
 
   /** Budgets alloué/consommé bottom-up (`rollupBudgets`, lib/budgetRollup.ts) — SEULE source de
    *  tous les montants budgétaires de ce dashboard : puce "Budget alloué" (= total programme =
@@ -417,8 +424,16 @@ export function StrategicDashboardView() {
    *  feuille de route et donut par chantier. Un chantier multi-axe n'est attribué qu'à son axe
    *  primaire, la somme des axes vaut donc le total programme. */
   const budgetRollup = useMemo(
-    () => rollupBudgets(axes, chantiers, chantierActions),
-    [axes, chantiers, chantierActions]
+    // Axe d'attribution d'un chantier multi-axe résolu sur TOUS les axes du programme
+    // (`programAxisIds`), jamais sur les seuls axes visibles du lecteur.
+    () =>
+      rollupBudgets(
+        axes,
+        chantiers,
+        chantierActions,
+        programAxisIds.map((id) => ({ id }))
+      ),
+    [axes, chantiers, chantierActions, programAxisIds]
   );
   const allocatedBudgetTotal = budgetRollup.programme.allocated;
 
@@ -428,8 +443,11 @@ export function StrategicDashboardView() {
    *  budget prévisionnel n'est déclaré. */
   const programBudgetCheck = useMemo(() => {
     const forecast = activeProgram?.budget;
-    if (!activeProgram || forecast === undefined) return undefined;
-    const fmt = (value: number) => formatCompactCurrency(value, activeProgram.currency, locale, 2);
+    // Le prévisionnel porte sur le programme ENTIER : un lecteur dont le périmètre est restreint
+    // (confidentialité, ownership) n'a qu'un total partiel — aucune comparaison dans ce cas.
+    if (!activeProgram || forecast === undefined || !fullScope) return undefined;
+    const fmt = (value: number) =>
+      formatCompactCurrency(value, normalizeCurrency(activeProgram.currency), locale, 2);
     const over = allocatedBudgetTotal > forecast;
     const diff = allocatedBudgetTotal - forecast;
     const text = (
@@ -452,7 +470,7 @@ export function StrategicDashboardView() {
         forecast > 0 ? `+${formatPercent(diff / forecast, locale, 1)}` : "—"
       );
     return { over, lines: [{ text, over }] };
-  }, [activeProgram, allocatedBudgetTotal, locale, t]);
+  }, [activeProgram, allocatedBudgetTotal, locale, t, fullScope]);
 
   /** Numérotation globale 3-5-15 des indicateurs (`numberIndicators`, lib/axisLogic.ts) — alimente
    *  UNIQUEMENT la liste de la puce "indicateurs" du bandeau d'en-tête (round 12) : chaque ligne
@@ -487,8 +505,8 @@ export function StrategicDashboardView() {
    *  `dependencyAlerts` ci-dessus, alimente la deuxième sous-section du widget
    *  "chantier-dependency-alerts". */
   const blockedActions = useMemo(
-    () => programBlockedActions(chantierActions, stages),
-    [chantierActions, stages]
+    () => programBlockedActions(chantierActions, projetProgress),
+    [chantierActions, projetProgress]
   );
 
   /** Nom de chantier par id — la sous-section "Prérequis en attente" doit afficher le CHANTIER
@@ -501,17 +519,14 @@ export function StrategicDashboardView() {
 
   /** Round 20, point 3 : leviers en retard (`isProjetLate`, lib/axisLogic.ts) — alimente la 3e
    *  sous-section du widget "chantier-dependency-alerts", même parti pris purement informatif que
-   *  `dependencyAlerts`/`blockedActions` ci-dessus. Passe par `programRoadmap` plutôt que
-   *  `milestoneProgressPct(action)` nu : c'est la MÊME fonction (avec les mêmes `autoValues`
-   *  résolus via `resolveMilestoneAutoFlags`) qui alimente déjà `ProgramRoadmap` juste après —
-   *  sans ça, un levier pouvait apparaître "en retard" ici alors que la feuille de route affichait
-   *  déjà 100% pour ce même levier (deux calculs divergents du même pourcentage). */
+   *  `dependencyAlerts`/`blockedActions` ci-dessus. */
   const lateLeviers = useMemo(
-    () =>
-      programRoadmap(axes, chantiers, chantierActions)
-        .filter((row) => isProjetLate(row.action, row.progressPct))
-        .map((row) => row.action),
-    [axes, chantiers, chantierActions]
+    // Une entrée par PROJET (pas par ligne de feuille de route : un chantier multi-axe y produit
+    // une ligne par axe, d'où des doublons) et TOUS les projets visibles, y compris ceux d'un
+    // chantier sans axe connu (absents de la feuille de route). Même avancement que partout
+    // ailleurs (`projetProgress`, items automatiques compris).
+    () => chantierActions.filter((action) => isProjetLate(action, projetProgress(action))),
+    [chantierActions, projetProgress]
   );
 
   // ─── Feuille de route programme (round 17, permutation) — porté verbatim depuis
@@ -922,18 +937,18 @@ export function StrategicDashboardView() {
                   onClick={() => setBudgetDonutAxisId(axis.id)}
                   className="shrink-0 font-semibold text-secondary underline-offset-2 hover:text-primary hover:underline"
                 >
-                  {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
+                  {formatCurrency(axisBudget, { currency: activeProgram?.currency })}
                 </button>
               ) : (
                 <span className="shrink-0 font-semibold text-secondary">
-                  {axisBudget.toLocaleString()} {activeProgram?.currency ?? ""}
+                  {formatCurrency(axisBudget, { currency: activeProgram?.currency })}
                 </span>
               )}
             </div>
             <BudgetVsActualBar
               planned={axisBudget}
               consumed={axisConsumed}
-              formatValue={(value) => `${value.toLocaleString()} ${activeProgram?.currency ?? ""}`}
+              formatValue={(value) => formatCurrency(value, { currency: activeProgram?.currency })}
             />
           </div>
         )}
@@ -1279,7 +1294,9 @@ export function StrategicDashboardView() {
                 chip={
                   <DashboardStatChip
                     icon={Wallet}
-                    value={`${allocatedBudgetTotal.toLocaleString()} ${activeProgram.currency}`}
+                    value={formatCurrency(allocatedBudgetTotal, {
+                      currency: activeProgram.currency,
+                    })}
                     label={t("strategicDashboard.allocatedBudget")}
                     accent="orange"
                     size="lg"
@@ -1304,7 +1321,7 @@ export function StrategicDashboardView() {
                     <span className="flex w-full items-center justify-between gap-2">
                       <span className="truncate">{axis.name}</span>
                       <span className="shrink-0 whitespace-nowrap font-semibold text-primary">
-                        {total.toLocaleString()} {activeProgram.currency}
+                        {formatCurrency(total, { currency: activeProgram.currency })}
                       </span>
                     </span>
                   ),
@@ -1457,6 +1474,8 @@ export function StrategicDashboardView() {
                 chantiers={roadmapChantiers}
                 allChantiers={chantiers}
                 actions={roadmapActions}
+                allActions={chantierActions}
+                progressOf={projetProgress}
                 onProjetClick={openChantierPanel}
                 onChantierClick={(chantierId) => openChantierPanel(chantierId)}
                 renderAxisHeader={(axis) => renderAxisRoadmapHeader(axis)}
@@ -1608,7 +1627,7 @@ export function StrategicDashboardView() {
         {budgetDonutAxisId && budgetDonutSlices && budgetDonutSlices.length > 0 && (
           <BudgetDonutChart
             data={budgetDonutSlices}
-            formatValue={(value) => `${value.toLocaleString()} ${activeProgram?.currency ?? ""}`}
+            formatValue={(value) => formatCurrency(value, { currency: activeProgram?.currency })}
             onSliceClick={(name) => {
               const chantierId = resolveChantierIdByName(budgetDonutAxisId, name);
               setBudgetDonutAxisId(null);

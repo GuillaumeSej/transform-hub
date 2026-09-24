@@ -13,8 +13,6 @@ const de: Record<string, string> = {
   "common.edit": "Bearbeiten",
   "common.validate": "Bestätigen",
   "common.close": "Schließen",
-  "common.search": "Suchen",
-  "common.choose": "Auswählen…",
   "common.optional": "(optional)",
 
   // ─── nav ──────────────────────────────────────────────────────────────────
@@ -33,10 +31,8 @@ const de: Record<string, string> = {
   "nav.axes": "Roadmap",
   "nav.kpi": "KPIs",
   "nav.effectifs": "Budget & eingesetztes Personal",
-  "nav.indicators": "Indikatoren",
   "nav.companies": "Unternehmen",
   "nav.users": "Benutzer",
-  "nav.lifecycle": "Lebenszyklus",
   "nav.hierarchy": "Finanzstruktur",
   "nav.data": "Daten",
   "nav.history": "Verlauf",
@@ -154,37 +150,24 @@ const de: Record<string, string> = {
   // ─── dashboard ────────────────────────────────────────────────────────────
   "dashboard.title": "Gesamtsteuerung",
   "dashboard.program": "Programm",
-  "dashboard.leversActive": "aktive Hebel",
   "dashboard.customize": "Anpassen",
   "dashboard.done": "Fertig",
   "dashboard.addWidget": "Widget hinzufügen",
-  "dashboard.allWidgetsAdded": "Alle Widgets sind bereits angezeigt",
   "dashboard.reset": "Zurücksetzen",
   "dashboard.editModeTitle": "Dashboard-Bearbeitungsmodus",
   "dashboard.editModeHint":
     "Widgets hinzufügen, verschieben, in der Größe ändern oder entfernen — Änderungen werden automatisch gespeichert.",
   "dashboard.alreadyOnBoard": "Bereits angezeigt",
-  "dashboard.duplicateWidgetTitle": "Weiteren Block hinzufügen?",
-  "dashboard.duplicateWidgetHint":
-    "Dieses Diagramm wird bereits angezeigt und bietet einen Umschalter zwischen seinen Ansichten — ein Duplikat ist nur nötig, wenn Sie zwei Ansichten nebeneinander vergleichen möchten.",
-  "dashboard.keepSingleBlock": "Nein, ein Block genügt",
-  "dashboard.addNewBlock": "Ja, neuen Block hinzufügen",
   "dashboard.widgetView.functionCountry": "Funktion × Land",
   "dashboard.widgetView.workstreamLever": "Arbeitspaket × Hebel",
-  "dimension.lever": "Hebel",
   "dashboard.kpi.savingsRealized": "Realisierte Einsparungen",
   "dashboard.kpi.leversDelivered": "Abgeschlossene Hebel",
   "dashboard.kpi.leversAtRisk": "Gefährdete Hebel",
-  "dashboard.kpi.capexEngaged": "Gebundenes CAPEX",
   "dashboard.kpi.implementationCosts": "CAPEX & Einmalkosten",
   "dashboard.kpi.fteImpacted": "Betroffene VZÄ",
   "dashboard.kpi.target": "Ursprünglicher Plan",
   "dashboard.kpi.reforecast": "Neuprognose",
   "dashboard.kpi.plan": "Plan",
-  "dashboard.kpi.riskDelay": "Verzögerungen",
-  "dashboard.kpi.riskCost": "Kostenüberschreitungen",
-  "dashboard.kpi.riskSavings": "reduzierte Einsparungen",
-  "dashboard.kpi.suppressions": "abgebaute Stellen",
   "dashboard.kpi.leversAtRiskTooltip":
     "Die Summe zählt jeden Hebel nur einmal (1 ausgelöste Kategorie = gefährdet, 2+ = kritisch). Die 3 Kategorien unten schließen sich nicht gegenseitig aus: Ein Hebel kann in mehreren gleichzeitig gezählt werden (z. B. verspätet UND Mehrkosten), daher ist ihre Summe normalerweise höher als die angezeigte Gesamtzahl.",
   "dashboard.kpi.fteImpactedTooltip":
@@ -194,13 +177,8 @@ const de: Record<string, string> = {
   "chart.scurve.actual": "Realisiert",
   "chart.scurve.planned": "Ursprungsplan",
   "chart.scurve.reforecast": "Neuprognose",
-  "chart.bridge.monthSavings": "Monatliche Einsparungen",
-  "chart.bridge.quarterSavings": "Vierteljährliche Einsparungen",
-  "chart.bridge.cumulative": "Kumuliert",
-  "chart.bridge.planned": "Ursprungsplan",
   "chart.bar.target": "Ziel",
   "chart.bar.realized": "Realisiert",
-  "chart.bar.reforecast": "Neuprognose",
   "dashboard.widgets.viewSCurve": "S-Kurve",
   "dashboard.widgets.viewBridge": "Quartalsansicht",
   "dashboard.widgets.dateFrom": "Von",
@@ -220,7 +198,6 @@ const de: Record<string, string> = {
   "alerts.showAll": "Alle",
   "alerts.markAllResolved": "Alle erledigen",
   "alerts.auto": "Auto",
-  "alerts.impact": "Auswirkung",
   "alerts.page": "Seite {current} / {total}",
   "alerts.count": "{n} Benachrichtigung(en)",
   "alerts.tooltip.red": "Kritische Warnungen — sofortiges Handeln erforderlich",
@@ -296,16 +273,12 @@ const de: Record<string, string> = {
   "dashboard.tab.portfolio": "Portfolio",
   "dashboard.month": "Monat",
   "dashboard.quarter": "Quartal",
-  "dashboard.filters": "Filter",
   "dashboard.workstream": "Arbeitspaket",
   "dashboard.country": "Land",
   "dashboard.function": "Funktion",
   "dashboard.leverDepartment": "Abteilung",
   "dashboard.geography": "Geografie",
   "dashboard.tableHeader.leverCount": "Hebel",
-  "dashboard.tableHeader.realizedTarget": "Realisiert / Ziel",
-  "dashboard.tableHeader.progress": "Fortschritt",
-  "dashboard.tableHeader.risk": "Risiko",
   "dashboard.dependency.planningRule": "Planungsregel",
   "dashboard.dependency.rule.fs": "Das Ziel muss enden, bevor die Quelle beginnen kann",
   "dashboard.dependency.rule.sf": "Das Ziel muss beginnen, bevor die Quelle endet",
@@ -345,8 +318,6 @@ const de: Record<string, string> = {
   "hr.plannedEnd": "geplantes Ende",
 
   // ─── levers ───────────────────────────────────────────────────────────────
-  "levers.title.library": "Hebel-Bibliothek",
-  "levers.title.mine": "Meine Hebel",
   "levers.newLever": "Neuer Hebel",
   "levers.newLeverModalTitle": "Neuer Hebel",
   "levers.createLever": "Hebel erstellen",
@@ -354,7 +325,6 @@ const de: Record<string, string> = {
   "levers.kanban": "Kanban",
   "levers.searchPlaceholder": "Suchen (Name, Code, Verantwortlicher...)",
   "levers.count": "Hebel",
-  "levers.netSavingsShown": "Angezeigte Nettoeinsparungen",
   "levers.realized": "Realisierte Einsparungen (€M)",
   "levers.columnName": "Hebel",
   "levers.columnStatus": "Stufe",
@@ -364,14 +334,11 @@ const de: Record<string, string> = {
   "levers.filter.endQuarter": "Endquartal",
   "levers.filter.hasAlert": "Mit Warnung",
   "levers.filter.noAlert": "Ohne Warnung",
-  "levers.notProvided": "Nicht angegeben",
 
   "leverForm.sectionIdentification": "Identifikation",
   "leverForm.sectionOwnership": "Verantwortlichkeit",
   "leverForm.sectionLocation": "Standort & Zuordnung",
   "leverForm.sectionStatus": "Status & Fortschritt",
-  "leverForm.sectionFinancial": "Finanzielle Auswirkung (Mio. €)",
-  "leverForm.sectionHr": "HR-Auswirkung",
   "leverForm.sectionDescription": "Beschreibung",
   "leverForm.code": "Hebel-Code",
   "leverForm.type": "Hebel-Typ",
@@ -392,43 +359,22 @@ const de: Record<string, string> = {
   "pnl.allMonths": "Alle Monate",
   "chart.pnl.plan": "Plan",
   "chart.pnl.realized": "Realisiert",
+  "chart.pnl.reforecast": "Neuprognose",
   "levers.columnMaturity": "Reife",
-  "lever.jcurve": "Wirkungsverlauf",
   "lever.payback": "Amortisationsdauer",
-  "lever.grossGain": "Bruttogewinn",
-  "lever.totalCost": "Gesamtkosten",
-  "lever.netGain": "Nettogewinn",
   "lever.actionTimeline": "Zeitleiste der Aktionen",
-  "lever.noActions": "Keine Aktionen definiert",
   "action.impacts": "Auswirkungen",
-  "action.addImpact": "Hinzufügen",
-  "action.cost": "Kosten",
-  "action.saving": "Einsparung",
   "leverForm.country": "Land",
   "leverForm.entity": "Einheit",
   "leverForm.function": "Funktion",
-  "leverForm.financialMesh": "Finanzielle Feinheit (Kostenstelle)",
-  "leverForm.costCenter": "Kostenstelle",
   "leverForm.selectPlaceholder": "Auswählen…",
   "leverForm.pnlAccount": "Betroffenes P&L-Konto",
   "leverForm.startDate": "Startdatum",
   "leverForm.endDate": "Geschätztes Enddatum",
   "leverForm.status": "Reife",
-  "leverForm.progress": "Fortschritt (%)",
   "leverForm.risk": "Risiko",
-  "leverForm.lockedPlanNotice": "Ursprungsplan gesperrt seit Übergang zu «",
-  "leverForm.lockedPlanNoticeEnd":
-    "» — nur Lesezugriff. Nutzen Sie die Neuprognose (Tab „Impact“ des Hebels), um die Projektion anzupassen.",
-  "leverForm.sectionInitialImpact": "Anfänglicher Impact (Business Case)",
-  "leverForm.initialImpactSupersededNotice":
-    "Dieser Hebel hat jetzt einen bezifferten Aktionsplan: Der anfängliche Impact wird beiseitegelegt, die obigen Beträge (und VZÄ) werden aus den Auswirkungen der Aktionen neu berechnet. Auswirkungen im Reiter „Aktionen“ des Hebels hinzufügen/bearbeiten.",
-  "leverForm.grossSavings": "Geschätzte Bruttowirkung (€M)",
-  "leverForm.netSavings": "Geschätzte Nettowirkung (€M)",
   "leverForm.capex": "CAPEX",
-  "leverForm.opexOneOff": "OPEX einmalig (€M)",
-  "leverForm.opexRec": "OPEX wiederkehrend (€M/Jahr)",
   "leverForm.fteImpact": "Geschätzte Auswirkung (VZÄ)",
-  "leverForm.popImpacted": "Betroffene Population",
   "leverForm.updated": "Hebel aktualisiert",
   "leverForm.created": "Hebel erstellt",
   "leverForm.createdOutOfScope":
@@ -505,8 +451,6 @@ const de: Record<string, string> = {
   "leverDetail.ofWhichGross": "davon {amount} Bruttoeinsparungen",
   "leverDetail.lockedPlan": "Ursprungsplan (fixiert bei „{stage}“)",
   "leverDetail.lockedPlanNet": "Ursprungsplan (netto, fixiert bei „{stage}“)",
-  "leverDetail.plannedReforecast": "Geplant (neu prognostiziert)",
-  "leverDetail.netSavingsTarget": "Angestrebte Nettoeinsparungen",
   "leverDetail.descriptionTitle": "Beschreibung",
   "leverDetail.identityTitle": "Identität",
   "leverDetail.codeLabel": "Code",
@@ -540,31 +484,15 @@ const de: Record<string, string> = {
     "Realisiert bis heute (netto) = realisierte Bruttogewinne − realisierte wiederkehrende OPEX",
   "leverDetail.reforecastNet": "Neu prognostiziert (netto)",
   "leverDetail.opexRecYear": "Wiederkehrende OPEX /Jahr",
-  "leverDetail.impactsByActionTitle": "Auswirkungen nach Maßnahme",
   "leverDetail.hrImpactTitle": "HR-Auswirkung",
   "leverDetail.realizedToDateFte": "Realisiert bis heute (VZÄ)",
   "leverDetail.noComments": "Noch keine Kommentare",
   "leverDetail.addCommentPlaceholder": "Kommentar hinzufügen...",
   "leverDetail.commentAdded": "Kommentar hinzugefügt",
   "leverDetail.send": "Senden",
-  "leverDetail.impactTable.recurrent": "Wiederkehrend",
-  "leverDetail.impactTable.opexRec": "Wiederkehrende OPEX",
-  "leverDetail.impactTable.nature": "Art",
-  "leverDetail.impactTable.pnlAccount": "GuV-Konto",
-  "leverDetail.impactTable.entityPnl": "Einheit (GuV)",
-  "leverDetail.impactTable.amount": "Betrag Mio. €",
 
   // ─── finance (Finanzmodul) ──────────────────────────────────────────────────
-  "finance.notProvided": "Nicht angegeben",
-  "finance.capexSaved": "CAPEX-Budget gespeichert",
-  "finance.pnlConfiguredTitle": "Konfigurierte GuV",
-  "finance.pnlConfiguredHint":
-    "Die folgenden Zeilen stammen direkt aus der vom globalen Administrator definierten Finanzhierarchie. Die Auswirkungen der Hebel werden automatisch konsolidiert.",
-  "finance.pnlLine": "GuV-Zeile",
   "finance.baseline": "Ausgangswert",
-  "finance.pnlRealizedNet": "Realisiert (netto)",
-  "finance.notAllocatable": "Nicht zuordenbar",
-  "finance.unallocatedHint": "Finanzielle Zuordnung noch zu präzisieren",
 
   // ─── operations (Betriebsmodul, STRETCH-Platzhalter) ───────────────────────
   "operations.placeholderDescription":
@@ -595,22 +523,11 @@ const de: Record<string, string> = {
   "hr.alertsModal.summary.leverMismatch": "{n} nicht synchron",
   "hr.alertsModal.summary.toValidate": "{n} zu validieren",
   "hr.alertsModal.summary.due": "{n} bald fällig",
-  "hr.alertsModal.col.programLever": "Programm / Hebel",
-  "hr.alertsModal.col.daysLate": "Verzug",
-  "hr.alertsModal.col.daysLeft": "Verbleibende Tage",
   "hr.alertsModal.col.lever": "Hebel",
-  "hr.alertsModal.col.issue": "Abweichung",
   "hr.alertsModal.col.movementValue": "Bewegung",
   "hr.alertsModal.col.leverValue": "Hebel",
-  "hr.alertsModal.daysLate": "{n} T",
-  "hr.alertsModal.daysLeft": "{n} T",
   "hr.alertsModal.today": "Heute",
-  "hr.alertsModal.issue.leverCancelled": "Hebel storniert: Bewegung noch aktiv, neu zuzuordnen",
-  "hr.alertsModal.issue.afterLeverEnd": "Geplantes Datum nach Hebelende (nicht geliefert)",
-  "hr.alertsModal.issue.signMismatch": "VZÄ-Richtung entgegen der Zielwirkung des Hebels",
   "hr.alertsModal.value.cancelled": "Storniert",
-  "hr.alertsModal.value.planned": "Geplant am {d}",
-  "hr.alertsModal.value.leverEnd": "Ende am {d}",
   "hr.alertsModal.pill.late": "{n} T überfällig",
   "hr.alertsModal.pill.in": "In {n} T",
   "hr.alertsModal.date.planned": "geplant am {d}",
@@ -722,7 +639,6 @@ const de: Record<string, string> = {
   "hr.kpi.netSavings": "Nettoeinsparungen",
   "hr.kpi.subPattern": "Ziel {target} · Neuprognose {reforecast} · {pct}%",
   "hr.alertsCount": "{n} Bewegungswarnung(en)",
-  "hr.seeMoreAlerts": "Die {n} weiteren in der VZÄ-Basis ansehen →",
   "hr.customizePanelTitle": "Passen Sie Ihr HR-Dashboard an",
   "hr.customizePanelHint":
     "Widgets hinzufügen, verschieben, ändern oder entfernen — auf diesem Gerät gespeichert.",
@@ -790,10 +706,6 @@ const de: Record<string, string> = {
 
   // ─── shared (gemeinsame Komponenten: Modal, Topbar, Sidebar, ResetDemoButton…) ─
   "shared.resetDemoButton.label": "Demodaten zurücksetzen",
-  "shared.resetDemoButton.confirmTitle": "Demodaten zurücksetzen?",
-  "shared.resetDemoButton.toastBody": "Zurück zum ursprünglichen Demo-Datensatz",
-  "shared.resetDemoButton.body":
-    "Alle in dieser Sitzung vorgenommenen Änderungen (Hebel, Kommentare, gelöste Warnungen, Protokoll) gehen endgültig verloren und werden durch den ursprünglichen Demo-Datensatz ersetzt.",
   "shared.topbar.notificationsToProcess": "Zu bearbeitende Benachrichtigungen · {n}",
   "shared.topbar.noNotifications": "Keine zu bearbeitenden Benachrichtigungen.",
   "shared.topbar.sourceAuto": "Automatisch",
@@ -876,8 +788,6 @@ const de: Record<string, string> = {
   "adminHistory.empty": "Keine Einträge im Verlauf.",
 
   // ─── adminLifecycle ─────────────────────────────────────────────────────────
-  "adminLifecycle.title": "Konfiguration des Lebenszyklus",
-  "adminLifecycle.companyLabel": "Unternehmen:",
 
   // ─── adminCompanies ─────────────────────────────────────────────────────────
   "adminCompanies.title": "Unternehmensverwaltung",
@@ -970,9 +880,8 @@ const de: Record<string, string> = {
   // ─── shared (Kanban, EditableTable, HrOwnerActionTable) ────────────────────
   "shared.actionKanban.noItems": "Keine Maßnahmen",
   "shared.actionKanban.blockingDependency": "Blockierende Abhängigkeit auf diesem Hebel",
-  "shared.actionKanban.overdue": "Enddatum überschritten",
   "shared.kanban.noItems": "Keine",
-  "shared.hrOwnerActionTable.dueSoon": "Anstehend < 90 Tage",
+  "shared.hrOwnerActionTable.dueSoon": "Anstehend ≤ 90 Tage",
   "shared.hrOwnerActionTable.later": "Anstehend > 90 Tage",
   "shared.hrOwnerActionTable.realized": "Realisiert",
   "shared.hrOwnerActionTable.toValidateHr": "HR-Freigabe ausstehend",
@@ -1000,13 +909,6 @@ const de: Record<string, string> = {
   "adminCompanyFields.fyStart": "Beginn Geschäftsjahr",
   "adminCompanyFields.fyEnd": "Ende Geschäftsjahr",
   "adminCompanyFields.advancedSettings": "Erweiterte Einstellungen",
-  "adminCompanyFields.hrParameterBoxTitle": "HR-Parameter",
-  "adminCompanyFields.hrParameterBoxHint":
-    "Dieser Satz wird ausschließlich für Berechnungen im HR-Modul verwendet (Personalbewegungen — Einstellung, Austritt, Versetzung — Vollkosten-Gehalt). Er wirkt sich weder auf Performance-Pläne noch auf strategische Pläne aus. Nicht angegeben = automatischer Rückgriff auf den Standardwert von 45%.",
-  "adminCompanyFields.socialChargesLabel": "Arbeitgeber-Sozialabgabensatz (%) — optional",
-  "adminCompanyFields.socialChargesPlaceholder": "Standard: 45%",
-  "adminCompanyFields.socialChargesHint":
-    'Wird für das „Vollkosten-Gehalt" (brutto + Abgaben) bei der EUR-Berechnung von HR-Bewegungen verwendet (Bewegungsansicht). Nicht angegeben = 45% Standardwert (Größenordnung Frankreich, Richtwert) — an die tatsächliche HR-Politik des Kunden anzupassen.',
   "adminCompanyFields.riskThresholdsLabel":
     "Risikoschwellen (€K) — kumulierter Betrag offener Warnungen, ab dem ein Hebel auf diese Risikostufe wechselt",
   "adminCompanyFields.colLevel": "Stufe",
@@ -1182,6 +1084,77 @@ const de: Record<string, string> = {
   "shared.leverImportButton.willBeCreatedSingular": "wird erstellt",
   "shared.leverImportButton.workstreamsNoteOutro": "automatisch: {names}.",
   "shared.leverImportButton.lineLabel": "Zeile",
+  "shared.leverImportButton.unchangedCountLabel": "Hebel unverändert",
+  "shared.leverImportButton.impactsRemovedTitle": "{n} bestehende Impact-Zeile(n) werden gelöscht",
+  "shared.leverImportButton.impactsRemovedBody":
+    "da sie in der Registerkarte Impacts der Datei fehlen: {list}.",
+  "shared.leverImportButton.warningsTitle": "Warnungen (Import nicht blockiert)",
+  "shared.exportButton.truncatedTitle": "Beschreibungen gekürzt",
+  "shared.exportButton.truncatedBody":
+    "{n} Beschreibung(en) überschreiten die Excel-Zellengrenze ({max} Zeichen) und wurden in der Datei gekürzt: {codes}. Ein erneuter Import behält die vollständige Beschreibung.",
+  "shared.leverImport.msg.noLeversSheet":
+    "Registerkarte „Leviers“ nicht gefunden: Die Arbeitsmappe muss eine Registerkarte „Leviers“ enthalten (Excel-Vorlage herunterladen).",
+  "shared.leverImport.msg.csvNotSupported":
+    "CSV-Format wird nicht unterstützt: Der Hebel-Import erfordert eine Excel-Arbeitsmappe (.xlsx) mit den Registerkarten Leviers, Actions und Impacts.",
+  "shared.leverImport.msg.missingColumns":
+    "Pflichtspalte(n) fehlen in der Registerkarte: {columns}.",
+  "shared.leverImport.msg.missingColumnsForNew":
+    "Neuer Hebel „{code}“: Spalte(n) {columns} fehlen in der Datei (für die Anlage erforderlich).",
+  "shared.leverImport.msg.missingColumnsForNewAction":
+    "Neue Maßnahme „{name}“: Spalte(n) {columns} fehlen in der Datei (für die Anlage erforderlich).",
+  "shared.leverImport.msg.required": "„{field}“ ist erforderlich",
+  "shared.leverImport.msg.duplicateCode":
+    "Code „{code}“ ist in der Datei doppelt vorhanden (bereits in Zeile {row} verwendet)",
+  "shared.leverImport.msg.unknownStatus": "Unbekannter Status „{value}“ (erwartet: {expected})",
+  "shared.leverImport.msg.statusNewLever":
+    "Ein neuer Hebel kann nur in der Phase „{idea}“ (oder aufgegeben) importiert werden: Die Phase „{target}“ erfordert eine Freigabe. Importieren Sie ihn in der Phase „{idea}“ und beantragen Sie die Freigabe auf seiner Detailseite.",
+  "shared.leverImport.msg.statusGated":
+    "Statuswechsel „{current}“ → „{target}“ abgelehnt: Die Phase „{target}“ erfordert eine Freigabe (Antrag auf der Hebel-Detailseite). Setzen Sie den aktuellen Status in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
+  "shared.leverImport.msg.statusBackward":
+    "Statuswechsel „{current}“ → „{target}“ abgelehnt: Ein Import kann weder Phasen überspringen noch im Lebenszyklus zurückgehen. Setzen Sie den aktuellen Status in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
+  "shared.leverImport.msg.unknownPnl": "GuV-Konto „{value}“ nicht gefunden (erwartet: {expected})",
+  "shared.leverImport.msg.requiredDate":
+    "„{field}“ ist erforderlich und muss ein gültiges Datum sein (TT/MM/JJJJ oder JJJJ-MM-TT)",
+  "shared.leverImport.msg.invalidDate":
+    "„{field}“ ungültig: „{value}“ ist kein gültiges Datum (TT/MM/JJJJ oder JJJJ-MM-TT)",
+  "shared.leverImport.msg.invalidNumber":
+    "„{field}“ muss eine Zahl sein (gelesener Wert: „{value}“)",
+  "shared.leverImport.msg.unknownProgram":
+    "Programm „{value}“ nicht gefunden (erwartet: {expected})",
+  "shared.leverImport.msg.noProgram":
+    "„Programme“ ist erforderlich, aber für dieses Unternehmen existiert kein Programm — legen Sie eines unter Admin > Unternehmen > Programme an, bevor Sie Hebel importieren",
+  "shared.leverImport.msg.programRequired":
+    "„Programme“ ist erforderlich, sobald das Unternehmen mehrere Programme hat (erwartet: {expected})",
+  "shared.leverImport.msg.noActiveCompany":
+    "Kein aktives Unternehmen: Wählen Sie ein Unternehmen aus, bevor Sie Hebel per Import anlegen.",
+  "shared.leverImport.msg.invalidDependency":
+    "Ungültige Abhängigkeit „{value}“ (erwartetes Format ID:Typ, Typ aus {expected})",
+  "shared.leverImport.msg.leverNotFound":
+    "Hebel „{code}“ nicht gefunden (weder in der Registerkarte Leviers noch in der Datenbank)",
+  "shared.leverImport.msg.leverRowRejected":
+    "Zeile übersprungen: Hebel „{code}“ ist in der Registerkarte Leviers fehlerhaft (zuerst korrigieren)",
+  "shared.leverImport.msg.duplicateAction":
+    "Maßnahme „{name}“ ist für Hebel „{code}“ doppelt vorhanden (bereits in Zeile {row} angegeben; Namen werden ohne Groß-/Kleinschreibung verglichen)",
+  "shared.leverImport.msg.actionNotFound": "Maßnahme „{name}“ für Hebel „{code}“ nicht gefunden",
+  "shared.leverImport.msg.unknownImpactType": "Unbekannter Typ „{value}“ (erwartet: {expected})",
+  "shared.leverImport.msg.unknownNature": "Unbekannte Art „{value}“ (erwartet: {expected})",
+  "shared.leverImport.msg.unknownSavingType":
+    "Unbekannte Einsparungsart „{value}“ (erwartet: {expected})",
+  "shared.leverImport.msg.unknownCostAccount":
+    "Kostenposition „{value}“ nicht gefunden (erwartet: {expected})",
+  "shared.leverImport.msg.unknownMode":
+    "Unbekannter Modus „{value}“ (erwartet: Gain annuel, Gain one-off)",
+  "shared.leverImport.msg.unknownDirection":
+    "Unbekannte Richtung „{value}“ (erwartet: Recrutement, Départ)",
+  "shared.leverImport.msg.unknownImpactStatus":
+    "Unbekannter Impact-Status „{value}“ (erwartet: Planifié, Réalisé, En cours)",
+  "shared.leverImport.msg.unknownColumns": "Nicht erkannte Spalte(n), ignoriert: {columns}",
+  "shared.leverImport.msg.unknownImpactNature":
+    "Unbekannte Impact-Art „{value}“: Wert ignoriert (erwartet: {expected})",
+  "shared.leverImport.msg.unknownPopulation":
+    "Betroffene Population „{value}“ unter den Arbeitspaketen nicht gefunden: Wert ignoriert",
+  "shared.leverImport.msg.formulaNoValue":
+    "Zelle {cell}: Formel ohne berechneten Wert (Arbeitsmappe nicht neu berechnet) — öffnen und speichern Sie die Datei vor dem Import in Excel.",
 
   // ─── shared charts (components/shared/charts) ──────────────────────────────
   "shared.actionGantt.noActions": "Keine Aktionen definiert.",
@@ -1190,7 +1163,7 @@ const de: Record<string, string> = {
   "shared.forcedDepartureStatusChart.movementsTooltip": "{n} Bewegung(en)",
   "shared.forcedDepartureStatusChart.schemeTooltipLabel": "Maßnahme: {scheme}",
   "shared.forcedDepartureStatusChart.realized": "Realisiert",
-  "shared.forcedDepartureStatusChart.dueSoon": "Anstehend < 90 Tage",
+  "shared.forcedDepartureStatusChart.dueSoon": "Anstehend ≤ 90 Tage",
   "shared.forcedDepartureStatusChart.later": "Anstehend > 90 Tage",
   "shared.forcedDepartureStatusChart.abandoned": "Abgebrochen",
   "shared.fteWaterfallChart.noMovements": "Keine Bewegungen geplant.",
@@ -1203,17 +1176,12 @@ const de: Record<string, string> = {
   "shared.executionStatusChart.noData": "Keine Bewegungen anzuzeigen.",
   "shared.executionStatusChart.movementCount": "{n} Bew.",
   "shared.executionStatusChart.net": "netto",
-  "chart.movementType.netPeriod": "Netto Periode",
   "chart.movementType.recruitments": "Einstellungen",
   "chart.movementType.attrition": "Fluktuation",
   "chart.movementType.forcedDepartures": "Zwangsaustritte",
   "chart.movementType.transfersIn": "Eingehende Versetzungen",
   "chart.movementType.transfersOut": "Ausgehende Versetzungen",
   "shared.movementRealizationChart.remaining": "Verbleibend",
-  "shared.hrGooduelleCharts.actualForecastPeriod": "Ist + Prognose — Periode",
-  "shared.hrGooduelleCharts.planPeriod": "Ursprungsplan — Periode",
-  "shared.hrGooduelleCharts.cumulActualForecast": "Kumuliert Ist + Prognose",
-  "shared.hrGooduelleCharts.cumulPlan": "Kumulierter Ursprungsplan",
   "shared.hrGooduelleCharts.legendActualForecast": "Realisiert + Prognose",
   "shared.hrGooduelleCharts.legendPlan": "Ursprungsplan",
   "shared.hrGooduelleCharts.legendKey": "Balken = je Periode · Linie = kumuliert",
@@ -1231,7 +1199,6 @@ const de: Record<string, string> = {
   "shared.hrGooduelleCharts.enrCumulPlan": "Kumulierter ENR-Ursprungsplan",
   "shared.hrGooduelleCharts.netEconomyActualForecast": "Nettoeinsparung Ist + Prognose",
   "shared.hrGooduelleCharts.netCumulActualForecast": "Kumuliert netto Ist + Prognose",
-  "shared.hrGooduelleCharts.netTargetFte": "Netto Ziel-VZÄ (ohne Versetzungen)",
   "shared.hrGooduelleCharts.cumulNet": "Kumuliert netto",
   "shared.hrGooduelleCharts.etpOpening": "VZÄ Eröffnung",
   "shared.hrGooduelleCharts.etpClosing": "VZÄ nach Auswahl",
@@ -1309,21 +1276,15 @@ const de: Record<string, string> = {
   "adminHierarchy.childOf": "untergeordnet zu {name}",
   "adminHierarchy.colCode": "Code",
   "adminHierarchy.colParent": "Übergeordnet ({name})",
-  "adminHierarchy.colBaselineSign": "Ausgangswert / Vorzeichen",
   "adminHierarchy.computedSuffix": " · Berechnet",
   "adminHierarchy.codePlaceholder": "Code",
   "adminHierarchy.labelPlaceholder": "Bezeichnung",
   "adminHierarchy.baselinePlaceholder": "Ausgangswert €M",
-  "adminHierarchy.signPositive": "Positiv",
-  "adminHierarchy.signNegative": "Negativ",
-  "adminHierarchy.signPositiveMobile": "Positives Vorzeichen",
-  "adminHierarchy.signNegativeMobile": "Negatives Vorzeichen",
   "adminHierarchy.selectableDesktop": "Hebeln zuordenbar",
   "adminHierarchy.selectableMobile": "Zeile Hebeln zuordenbar",
   "adminHierarchy.noValuesForLevel": "Noch kein Wert für diese Ebene.",
   "adminHierarchy.parentPrefix": "Übergeordnet:",
   "adminHierarchy.baselinePrefix": "Ausgangswert:",
-  "adminHierarchy.signPrefix": "Vorzeichen",
   "adminHierarchy.livePreviewTitle": "Live-Vorschau der Struktur",
   "adminHierarchy.addValuesHint": "Fügen Sie Werte hinzu, um die Zweige anzuzeigen.",
   "adminHierarchy.orphansDetected": "{n} verwaiste(r) Wert(e) erkannt",
@@ -1339,48 +1300,16 @@ const de: Record<string, string> = {
 
   // ─── shared charts (MarimekkoChart/MovementStatusMatrix/PnlBarChart/QuarterlyBridgeChart) ──
   "chart.emptyLevers": "Keine Hebel darzustellen.",
-  "chart.bridge.periodSavings": "Periodische Einsparungen",
   "shared.marimekkoChart.leverSingular": "Hebel",
   "shared.movementStatusMatrix.initiativeLabel": "Initiative",
   "shared.pnlBarChart.empty": "Keine Auswirkung anzuzeigen.",
 
   // ─── shared.leverForm/actionForm/movementForm/manualAlertForm/dependencyEditor (i18n-Nacharbeit) ─
-  "leverForm.geographyMesh": "Konfigurierte geografische Gliederung",
-  "shared.actionForm.savingCostReduction": "Kostenreduzierung",
-  "shared.actionForm.savingRevenueIncrease": "Umsatzsteigerung",
-  "shared.actionForm.savingWorkingCapital": "Working-Capital-Effekt",
   "shared.actionForm.actionName": "Name der Maßnahme",
   "shared.actionForm.actionNamePlaceholder": "Bsp.: RFP starten",
   "shared.actionForm.owner": "Verantwortlicher",
   "shared.actionForm.startDate": "Startdatum",
   "shared.actionForm.endDate": "Enddatum",
-  "shared.actionForm.type": "Typ",
-  "shared.actionForm.fteColumn": "VZÄ",
-  "shared.actionForm.savingType": "Art der Einsparung",
-  "shared.actionForm.capexDate": "CAPEX — Modus & Daten",
-  "shared.actionForm.capexStartDateLabel": "Periodenbeginn",
-  "shared.actionForm.capexEndDateLabel": "Periodenende",
-  "shared.actionForm.capexDeploymentLabel": "Verpflichtungsdatum",
-  "shared.actionForm.gainDate": "Datum der Einsparung",
-  "shared.actionForm.costLine": "Kostenart",
-  "shared.actionForm.hierarchyCostCenter": "Kostenstelle (Hierarchie)",
-  "shared.actionForm.actionsColumnAria": "Aktionen",
-  "shared.actionForm.descriptionPlaceholder": "Beschreibung...",
-  "shared.actionForm.opexRecShort": "Wiederk. OPEX",
-  "shared.actionForm.oneOff": "Einmalig",
-  "shared.actionForm.oneOffCost": "OPEX einmalig",
-  "shared.actionForm.opexRecCost": "OPEX wiederkehrend",
-  "shared.actionForm.capexDeploymentTitle": "Datum, an dem das CAPEX zu 100 % gebunden ist",
-  "shared.actionForm.gainDateTitle": "Datum der tatsächlichen Realisierung der Einsparung",
-  "shared.actionForm.recognitionDefault": "Standard ({value})",
-  "shared.actionForm.oneShotLower": "einmalig",
-  "shared.actionForm.smoothedLower": "geglättet",
-  "shared.actionForm.smoothed": "Geglättet",
-  "shared.actionForm.oneShot": "Einmalig",
-  "shared.actionForm.costCenterPlaceholder": "KST...",
-  "shared.actionForm.demoUser": "Demo-Benutzer",
-  "shared.actionForm.calcMethodPlaceholder": "Berechnungsmethode, Annahmen...",
-  "shared.actionForm.deleteImpactRowAria": "Diese Auswirkungszeile löschen",
   "shared.movementForm.movementType": "Bewegungsart",
   "shared.movementForm.linkedLever": "Verknüpfter Hebel",
   "shared.movementForm.roleTitle": "Bezeichnung der zu besetzenden Stelle",
@@ -1402,7 +1331,6 @@ const de: Record<string, string> = {
   "shared.movementForm.apply": "Übernehmen",
   "shared.movementForm.annualLoadedSalary": "Jahresgehalt (vollbelastet)",
   "shared.movementForm.salaryImpactLabel": "Auswirkung auf die Lohnkosten",
-  "shared.movementForm.chargesRateAppliedPrefix": "Angewandter Arbeitgeber-Abgabensatz: ",
   "shared.movementForm.recruitmentGrossSalaryNote": " · oben eingegebenes Referenz-Bruttogehalt",
   "shared.movementForm.defaultValueNote":
     "— geschätzter Standardwert, die obigen Felder bleiben frei editierbar.",
@@ -1453,9 +1381,6 @@ const de: Record<string, string> = {
   // Die eigentlichen Stufenbezeichnungen stammen aus `MaturityStageConfig.label` (vom Admin je
   // Programm erfasst) und werden daher hier nie übersetzt.
   "axisStage.label": "Reifegrad",
-  "axisStage.terminal": "Endstufe",
-  "axisStage.unknown": "Unbekannte Stufe",
-  "axisStage.none": "Keine Stufe konfiguriert",
 
   // ─── Strategieplan — Seite „Strategische Achsen" + Achsen-Detailblatt ──────
   // Portfolio
@@ -1463,13 +1388,11 @@ const de: Record<string, string> = {
   "strategicAxes.count": "Achsen",
   "strategicAxes.chantiersCount": "Arbeitspakete",
   "strategicAxes.indicatorsCount": "Indikatoren",
-  "strategicAxes.atRiskCount": "gefährdet",
   "strategicAxes.newAxis": "Neue Achse",
   "strategicAxes.newAxisModalTitle": "Neue strategische Achse",
   "strategicAxes.createAxis": "Achse anlegen",
   "strategicAxes.axisCreated": "Achse angelegt",
   "strategicAxes.axisUpdated": "Achse aktualisiert",
-  "strategicAxes.chantiersView": "Arbeitspakete",
   // Runde 24 (Phase 4, Teil 1): Beschriftungen der beiden lokalen Tabs dieser Seite — siehe den
   // Doc-Kommentar am Anfang von `StrategicAxesView.tsx`.
   "strategicAxes.tabs.advancement": "Fortschritt",
@@ -1494,7 +1417,6 @@ const de: Record<string, string> = {
   // wenn ein aufgeklapptes Arbeitspaket noch kein Projekt hat.
   "strategicAxes.chantierNoProjet": "Kein Projekt",
   "strategicAxes.chantierAlerted": "Abhängigkeitswarnung",
-  "strategicAxes.kanbanEmptyColumn": "Keine Achse",
   // Budgetverteilungs-Donut (Runde 12) — reicher Achsen-Header der Roadmap (`ProgramRoadmap`,
   // Runde 17: jetzt auf dem strategischen Executive-Dashboard statt auf dieser Seite montiert) —
   // dieser Schlüssel bleibt unverändert nützlich, von diesem neuen Aufrufer wiederverwendet.
@@ -1506,7 +1428,6 @@ const de: Record<string, string> = {
   "strategicAxes.tree.milestonesN": "{p}/{t} Meilensteine",
   "strategicAxes.tree.open": "Details öffnen",
   "strategicAxes.tree.allChantiersTitle": "Alle Arbeitspakete",
-  "strategicAxes.tree.colAxis": "Achse",
   "strategicAxes.tree.noOwner": "Kein Verantwortlicher",
   "strategicAxes.tree.showAxes": "Achsen anzeigen",
   "strategicAxes.tree.goKpi": "Indikatoren anzeigen (KPI)",
@@ -1523,7 +1444,6 @@ const de: Record<string, string> = {
   "strategicAxes.owner": "Sponsor der Achse",
   "strategicAxes.editAxis": "Achse bearbeiten",
   "strategicAxes.editAxisModalTitle": "Achse bearbeiten",
-  "strategicAxes.stageUpdated": "Stufe aktualisiert",
   "strategicAxes.summaryTracked": "Verfolgte Indikatoren",
   "strategicAxes.dependencyAlerts": "Abhängigkeitswarnungen zwischen Arbeitspaketen",
   "strategicAxes.dependencyDelay": "Tage",
@@ -1555,11 +1475,6 @@ const de: Record<string, string> = {
   "strategicAxes.roadmap.late": "Verzögert",
   "strategicAxes.roadmap.lateCount": "{n} von {total} Projekt(e) verzögert",
   "strategicAxes.roadmap.currentMilestone": "Aktueller Meilenstein",
-  "strategicAxes.actionsCompleted": "Projekte abgeschlossen",
-  "strategicAxes.moreActionsSuffix": "weitere",
-  "strategicAxes.cardNoActions": "Kein Projekt",
-  "strategicAxes.chantierOwner": "Verantwortlich für das Arbeitspaket",
-  "strategicAxes.ownerFromActions": "abgeleitet aus den Projektverantwortlichen",
   "strategicAxes.chantierPeriod": "Zeitraum",
   "strategicAxes.newChantier": "Neues Arbeitspaket",
   "strategicAxes.newChantierModalTitle": "Neues Arbeitspaket",
@@ -1567,10 +1482,7 @@ const de: Record<string, string> = {
   "strategicAxes.chantierCreated": "Arbeitspaket angelegt",
   "strategicAxes.chantierDeleted": "Arbeitspaket gelöscht",
   "strategicAxes.deleteChantier": "Arbeitspaket löschen",
-  "strategicAxes.confirmDeleteChantier": "Löschen des Arbeitspakets und seiner Projekte bestätigen",
   // Pop-up Arbeitspaket / Maßnahmen / Liefergegenstände
-  "strategicAxes.chantierModalTitle": "Detail des Arbeitspakets",
-  "strategicAxes.dependsOn": "Hängt ab von",
   "strategicAxes.chantierActions": "Projekte des Arbeitspakets",
   "strategicAxes.noActions": "Kein Projekt in diesem Arbeitspaket.",
   "strategicAxes.newAction": "Neues Projekt",
@@ -1578,7 +1490,6 @@ const de: Record<string, string> = {
   "strategicAxes.actionCreated": "Projekt angelegt",
   "strategicAxes.actionUpdated": "Projekt aktualisiert",
   "strategicAxes.actionDeleted": "Projekt gelöscht",
-  "strategicAxes.confirmDelete": "Bestätigen",
   "strategicAxes.actionName": "Name des Projekts",
   "strategicAxes.actionOwner": "Verantwortlich",
   "strategicAxes.actionStart": "Beginn",
@@ -1604,22 +1515,13 @@ const de: Record<string, string> = {
   "strategicAxes.chartValue": "Wert",
   "strategicAxes.chartObjective": "Ziel",
   "strategicAxes.chartEmpty": "Keine Messung erfasst.",
-  "strategicAxes.freq.monthly": "Monatlich",
-  "strategicAxes.freq.quarterly": "Quartalsweise",
-  "strategicAxes.freq.semiannual": "Halbjährlich",
-  "strategicAxes.freq.annual": "Jährlich",
 
   "strategicAxes.chantierSaveErrorTitle": "Speichern fehlgeschlagen",
   "strategicAxes.chantierSaveError": "Das Arbeitspaket konnte nicht gespeichert werden.",
   "strategicAxes.actionSaveErrorTitle": "Speichern fehlgeschlagen",
   "strategicAxes.actionSaveError": "Das Projekt konnte nicht gespeichert werden.",
-  "strategicAxes.atRiskPopoverTitle": "Gefährdete Indikatoren",
   "strategicAxes.atRiskTooltip":
     "Ungünstige Abweichung zwischen dem letzten gemessenen Wert und dem Ziel des Indikators.",
-  "strategicAxes.filterDirection": "Bereich",
-  "strategicAxes.filterPerson": "Person",
-  "strategicAxes.filterSponsor": "Sponsor",
-  "strategicAxes.sponsorUnassigned": "Sponsor nicht zugewiesen",
 
   // ─── Strategieplan — eigene Vorhaben-Detailseite (Runde 4) ─────────────────
   "strategicChantierDetail.title": "Arbeitspaket-Blatt",
@@ -1740,17 +1642,11 @@ const de: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.description": "Beschreibung des Aktionsplans",
   "strategicChantierDetail.milestones.actionPlan.owner": "Verantwortlicher",
   "strategicChantierDetail.milestones.actionPlan.dueDate": "Fälligkeitsdatum",
-  "strategicChantierDetail.milestones.actionPlan.validate": "Meilenstein validieren",
   "strategicChantierDetail.milestones.actionPlan.missingHint":
     "Alle Punkte müssen bei 100 % liegen, um den Meilenstein zu validieren.",
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Automatisch berechnet.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Als erledigt markieren",
 
-  "strategicChantierDetail.milestones.approval.pendingBadge":
-    "Ausstehende Validierung durch den strategischen Leiter",
-  "strategicChantierDetail.milestones.approval.requestedMeta": "Beantragt von {user} am {date}",
-  "strategicChantierDetail.milestones.approval.approve": "Genehmigen",
-  "strategicChantierDetail.milestones.approval.reject": "Ablehnen",
   "strategicChantierDetail.milestones.transition.pending": "Wartet auf Bestätigung",
   "strategicChantierDetail.milestones.transition.requestedMeta": "Angefordert von {user} am {date}",
   "strategicChantierDetail.milestones.transition.ready": "Checkliste {milestone} vollständig",
@@ -1847,7 +1743,6 @@ const de: Record<string, string> = {
   "strategicChantierDetail.successKpis.empty": "Noch kein Erfolgs-KPI.",
 
   // ─── Strategieplan — Excel-Import (Runde 4) ─────────────────────────────────
-  "strategicImport.title": "Strategieplan importieren",
   "strategicImport.uploadButton": "Datei importieren",
   "strategicImport.templateButton": "Vorlage herunterladen",
   "strategicImport.previewTitle": "Import-Vorschau — {file}",
@@ -1863,7 +1758,7 @@ const de: Record<string, string> = {
   "strategicImport.staffingCountLabel": "Personalzeile(n) zu erstellen",
   "strategicImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "strategicImport.templateDownloadedBody":
-    'Lies-mich (Anleitung) + 5 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencodes getrennt durch ; = FK, mehrere Achsen möglich), Projekte (Arbeitspaketcode = FK, "Reifegrad" optional), Ergebnisse (Projektcode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK, "Ausgangswert" optional). Personal (optional, Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.',
+    'Lies-mich (Anleitung) + 6 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencodes getrennt durch ; = FK, mehrere Achsen möglich), Projekte (Arbeitspaketcode = FK, "Reifegrad" optional), Ergebnisse (Projektcode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK, "Ausgangswert" optional). Personal (optional, Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.',
   "strategicImport.ignoredRowsNote": "{n} Zeile(n) ignoriert",
   "strategicImport.importDoneBody":
     "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Projekt(e) · {indicators} Indikator(en) erstellt",
@@ -1877,6 +1772,92 @@ const de: Record<string, string> = {
   "strategicImport.accountStatusCreated": "angelegt",
   "strategicImport.accountStatusExisting": "bereits vorhanden (Konto beibehalten)",
   "strategicImport.accountStatusFailed": "fehlgeschlagen",
+  "strategicImport.msg.sheetMissing":
+    "Tabellenblatt „{sheet}“ fehlt in der Arbeitsmappe — keine Zeilen dieses Typs importiert",
+  "strategicImport.msg.sheetAlias": "Tabellenblatt „{found}“ als „{sheet}“ gelesen (früherer Name)",
+  "strategicImport.msg.noDataSheet":
+    "Kein bekanntes Tabellenblatt in dieser Arbeitsmappe (erwartet: Axes, Chantiers, Projets, Indicateurs) — verwenden Sie die Vorlage",
+  "strategicImport.msg.missingColumns":
+    "Pflichtspalte(n) fehlen: {columns} — Tabellenblatt ignoriert",
+  "strategicImport.msg.unknownColumns": "Unbekannte Spalte(n), ignoriert: {columns}",
+  "strategicImport.msg.required": '"{column}" ist ein Pflichtfeld',
+  "strategicImport.msg.tooLong": '"{column}" überschreitet {max} Zeichen ({length})',
+  "strategicImport.msg.duplicateCode":
+    'Code "{code}" ist in der Datei doppelt (bereits in Zeile {line} verwendet)',
+  "strategicImport.msg.unknownStage": 'Unbekannter Reifegrad "{value}" (erwartet: {expected})',
+  "strategicImport.msg.axesNotFound":
+    "Achse(n) nicht gefunden (weder im Blatt Axes noch in der Datenbank): {codes}",
+  "strategicImport.msg.axisNotFound":
+    'Achse "{code}" nicht gefunden (weder im Blatt Axes noch in der Datenbank)',
+  "strategicImport.msg.notNumber": '"{column}" muss eine Zahl sein (gelesener Wert: "{value}")',
+  "strategicImport.msg.negative":
+    '"{column}" muss null oder positiv sein (gelesener Wert: {value})',
+  "strategicImport.msg.outOfRange":
+    '"{column}" muss zwischen {min} und {max} liegen (gelesener Wert: {value})',
+  "strategicImport.msg.notPositive": '"{column}" muss eine streng positive Zahl sein',
+  "strategicImport.msg.depNotFound": "Abhängigkeit(en) nicht gefunden: {codes}",
+  "strategicImport.msg.depBadType":
+    'Unbekannter Abhängigkeitstyp "{value}" für "{code}" (erwartet: FS, SS, FF, SF)',
+  "strategicImport.msg.depSelf": 'Ein Arbeitspaket kann nicht von sich selbst abhängen ("{code}")',
+  "strategicImport.msg.depCycle": "Zirkuläre Abhängigkeiten zwischen Arbeitspaketen: {cycle}",
+  "strategicImport.msg.depDropped":
+    'Abhängigkeit zu "{code}" entfernt: dieses Arbeitspaket ist fehlerhaft',
+  "strategicImport.msg.chantierNotFound":
+    'Arbeitspaket "{code}" nicht gefunden (weder im Blatt Chantiers noch in der Datenbank)',
+  "strategicImport.msg.chantierAxisUnknown":
+    'Die Achse des Arbeitspakets "{code}" kann nicht bestimmt werden',
+  "strategicImport.msg.requiredDate":
+    '"{column}" ist ein Pflichtfeld (Datum TT/MM/JJJJ oder JJJJ-MM-TT)',
+  "strategicImport.msg.invalidDate":
+    '"{column}" muss ein gültiges Datum sein (TT/MM/JJJJ oder JJJJ-MM-TT) — gelesener Wert: "{value}"',
+  "strategicImport.msg.startAfterEnd": '"{startColumn}" ({start}) liegt nach "{endColumn}" ({end})',
+  "strategicImport.msg.projectNotInFile":
+    'Projekt "{code}" im Blatt Projets dieser Datei nicht gefunden',
+  "strategicImport.msg.projectNotFound":
+    'Projekt "{code}" nicht gefunden (weder im Blatt Projets noch in der Datenbank)',
+  "strategicImport.msg.indicatorParentMissing":
+    '"Code Axe" oder "Code Chantier" ist erforderlich (genau eines von beiden)',
+  "strategicImport.msg.indicatorParentBoth":
+    '"Code Axe" und "Code Chantier" sind beide ausgefüllt — ein Indikator kann nur einem von beiden zugeordnet werden',
+  "strategicImport.msg.unknownValue": 'Unbekannter Wert {column} "{value}" (erwartet: {expected})',
+  "strategicImport.msg.rolesRequired":
+    '"Rôles responsables" ist ein Pflichtfeld (mindestens eine Rolle)',
+  "strategicImport.msg.unknownRole": 'Unbekannte Rolle "{value}" (erwartet: {expected})',
+  "strategicImport.msg.baselineNotNumber":
+    '"Valeur initiale" ist nicht numerisch ("{value}"): keine Basiswert-Messung angelegt',
+  "strategicImport.msg.baselineIgnored":
+    '"Valeur initiale" ({value}) ignoriert: Indikator „{name}“ hat bereits eine Messhistorie (aktueller Basiswert: {current})',
+  "strategicImport.msg.personNotLinked":
+    "„{name}“ entspricht keinem Konto: als Text beibehalten, ohne Wirkung auf Sichtbarkeit und Freigaben ({count} Verweis(e))",
+  "strategicImport.msg.personAmbiguous":
+    "„{name}“ entspricht mehreren Konten ({usernames}): nicht zugeordnet — geben Sie den genauen Benutzernamen an",
+  "strategicImport.accountStatusOrphan":
+    "Anmeldekonto angelegt, aber Profil nicht gespeichert — unter Admin > Benutzer vervollständigen",
+  "strategicImport.readErrorTitle": "Datei nicht lesbar",
+  "strategicImport.readErrorBody":
+    "Die Datei konnte nicht gelesen werden: Prüfen Sie, ob es sich um eine unbeschädigte Excel-Arbeitsmappe handelt.",
+  "strategicImport.wrongFormatBody":
+    "Format nicht unterstützt: Verwenden Sie eine Excel-Arbeitsmappe (.xlsx oder .xls).",
+  "strategicImport.exportButton": "Plan exportieren",
+  "strategicImport.exportDoneTitle": "Plan exportiert",
+  "strategicImport.exportDoneBody":
+    "Gleiches Format wie die Vorlage: Datei bearbeiten und erneut importieren, um den Plan zu aktualisieren.",
+  "strategicImport.nothingWritten": "es wurde nichts geschrieben, der Plan ist unverändert.",
+  "strategicImport.partialWrite":
+    "teilweise geschrieben ({written}/{total}): {axes} Achse(n), {chantiers} Arbeitspaket(e), {actions} Projekt(e), {indicators} Indikator(en), {measurements} Messung(en), {staffing} Personalzeile(n) bereits gespeichert. Importieren Sie dieselbe Datei erneut, um den Rest zu ergänzen (bereits geschriebene Zeilen werden erkannt).",
+  "strategicImport.importDoneSummary": "{created} Element(e) angelegt · {updated} aktualisiert",
+  "strategicImport.rowAxes": "Achsen",
+  "strategicImport.rowChantiers": "Arbeitspakete",
+  "strategicImport.rowProjects": "Projekte",
+  "strategicImport.rowIndicators": "Indikatoren",
+  "strategicImport.rowMeasurements": "Basiswert-Messungen",
+  "strategicImport.rowStaffing": "Personalzeilen",
+  "strategicImport.colCreate": "Anzulegen",
+  "strategicImport.colUpdate": "Zu aktualisieren",
+  "strategicImport.colUnchanged": "Unverändert",
+  "strategicImport.warningsTitle": "{n} Warnung(en)",
+  "strategicImport.usernameCollision":
+    "Benutzername „{username}“ bereits vergeben: mit Suffix versehen",
 
   // ─── Strategieplan — KPI-Seite (Messwerterfassung, Zielbearbeitung) ────────
   "kpi.title": "Indikatoren (KPI)",
@@ -1979,7 +1960,6 @@ const de: Record<string, string> = {
   "kpi.history.comment": "Kommentar",
   "kpi.history.entered": "erfasste",
   "kpi.year.label": "Jahr",
-  "kpi.year.all": "Verlauf",
   "kpi.meta.label": "Merkmale des Indikators",
   "kpi.meta.unit": "Einheit",
   "kpi.view.label": "Ansicht",
@@ -2075,7 +2055,6 @@ const de: Record<string, string> = {
   "staffing.total": "Gesamt",
   "staffing.fteUnit": "VZÄ",
   "staffing.function": "Team",
-  "staffing.functionRequired": "Wählen Sie ein Team (VZÄ-Basis).",
   "staffing.noDepartments":
     "Kein Team in der VZÄ-Basis des Unternehmens — bitte zuerst befüllen (/hr/etp).",
   "staffing.fte": "Anzahl VZÄ",
@@ -2086,7 +2065,6 @@ const de: Record<string, string> = {
   "staffing.loading": "Personaleinsatz wird geladen…",
   "staffing.empty": "Für dieses Arbeitspaket sind keine VZÄ erfasst.",
   "staffing.hint": "Eine Zeile je beteiligtem Team. Dezimalwerte möglich (0,5 = halbtags).",
-  "staffing.fteInvalid": "Die Anzahl der VZÄ muss eine strikt positive Zahl sein.",
   "staffing.saveError": "Der Personaleinsatz konnte nicht gespeichert werden.",
   "staffing.startDate": "Beginn",
   "staffing.endDate": "Ende",
@@ -2129,8 +2107,6 @@ const de: Record<string, string> = {
   "effectifs.empty": "Für dieses Programm sind keine VZÄ erfasst.",
   "effectifs.emptyHint":
     "Öffnen Sie ein Arbeitspaket aus einer strategischen Achse und erfassen Sie VZÄ je Team.",
-  "effectifs.kpi.totalFte": "Eingesetzte VZÄ insgesamt",
-  "effectifs.kpi.totalFteSub": "Summe über das gesamte Programm, alle Zeiträume zusammen",
   "effectifs.allFunctions": "Alle Teams",
   "effectifs.filteredOn": "Gefiltert nach: {fn}",
   "effectifs.filteredOnPeriod": "Zeitraum: {period}",
@@ -2138,17 +2114,6 @@ const de: Record<string, string> = {
   "effectifs.axisUnknown": "Unbekannte Achse",
   "effectifs.chantierUnknown": "Unbekanntes Arbeitspaket",
   "effectifs.viewBaseEtp": "VZÄ-Basis ansehen",
-  "effectifs.needVsAvailable.title": "Gemeldeter Bedarf vs. verfügbar (VZÄ-Basis)",
-  "effectifs.needVsAvailable.empty":
-    "Noch kein Team zum Vergleichen — erfassen Sie VZÄ auf einem Arbeitspaket oder befüllen Sie die VZÄ-Basis.",
-  "effectifs.needVsAvailable.neededOf": "von",
-  "effectifs.needVsAvailable.overAllocated":
-    "Der gemeldete Bedarf übersteigt die tatsächliche Verfügbarkeit dieses Teams.",
-  "effectifs.needVsAvailable.periodHint":
-    "Gemeldeter Bedarf gezählt für {period} (Zeilen, deren Datumsbereich diese Periode überschneidet). Verfügbar: immer zum heutigen Tag berechnet, VZÄ-Basis in Echtzeit.",
-  "effectifs.needVsAvailable.availableToday":
-    "Verfügbar: immer zum heutigen Tag (Live-Momentaufnahme)",
-  "effectifs.needVsAvailable.needDetailTitle": "Detail der gemeldeten Bedarfszeilen — {team}",
   "effectifs.needVsAvailable.availableDetailTitle": "Verfügbare Mitarbeitende — {team}",
   "effectifs.needVsAvailable.availableDetailEmpty": "Keine Mitarbeitenden in diesem Team.",
   "effectifs.needVsAvailable.rowsCount": "{n} Mitarbeitende(r)",
@@ -2157,7 +2122,6 @@ const de: Record<string, string> = {
   "effectifs.needVsAvailable.columnTeam": "Team",
   "effectifs.moneyBudget.title": "Zugewiesenes Finanzbudget",
   "effectifs.moneyBudget.empty": "Für dieses Programm ist kein Budget zugewiesen.",
-  "effectifs.moneyBudget.centerLabel": "Gesamt",
   "effectifs.moneyBudget.byProjetEmpty":
     "Kein Projekt mit zugewiesenem Budget in diesem Arbeitspaket.",
   "effectifs.moneyBudget.levelAxis": "Achse",
@@ -2166,7 +2130,6 @@ const de: Record<string, string> = {
   "effectifs.moneyBudget.byChantierEmpty":
     "Kein Arbeitspaket mit zugewiesenem Budget auf dieser Achse.",
   "effectifs.moneyBudget.unattributedAxis": "Ohne Achse",
-  "effectifs.moneyBudget.centerLabelConsumed": "Verbraucht / zugewiesen",
   "effectifs.moneyBudget.centerOfTotal": "von {total} zugewiesen",
   "effectifs.moneyBudget.centerConsumedPct": "{pct} verbraucht",
   "effectifs.moneyBudget.consumedTooltipSuffix": "verbraucht",
@@ -2274,26 +2237,10 @@ const de: Record<string, string> = {
   "staffingPeriod.utilization": "{pct}% Auslastung",
   "staffingPeriod.byChantier": "Nach Arbeitspaket:",
   "staffingPeriod.pinnedDetail.title": "Detail — {period}",
-  "staffingPeriod.detailModal.groupTitle": "Detail — {group}",
   "staffingPeriod.detailModal.empty": "Keine VZÄ-Zeile für diese Auswahl.",
-  "effectifs.needVsAvailable.periodHintAvg":
-    "Durchschnittliche VZÄ über {period} (Zeilen mit Datumsüberschneidung, nach Dauer gewichtet). Verfügbar: aktueller Stand der VZÄ-Basis. Mobilisiert: bis heute verstrichener Anteil des Bedarfs; Deckungsgrad = mobilisiert / Bedarf.",
-  "effectifs.needVsAvailable.mobilised": "Mobilisiert",
-  "effectifs.needVsAvailable.staffingPct": "Deckungsgrad",
-  "effectifs.needVsAvailable.needed": "Gemeldeter Bedarf",
   "effectifs.needVsAvailable.available": "Verfügbar",
-  "effectifs.needVsAvailable.seriesTitle": "Verlauf pro Periode (durchschnittliche VZÄ)",
-  "effectifs.needVsAvailable.headline":
-    "Mobilisiert {mobilised} VZÄ · Bedarf {needed} · Deckungsgrad {pct}",
-  "effectifs.needVsAvailable.periodCol": "Periode",
-  "effectifs.needVsAvailable.totalRow": "Gesamt",
-  "effectifs.needVsAvailable.staffingLine": "Deckungsgrad in %",
   "staffingPeriod.periodModal.filters": "Nach Kategorie filtern",
   "staffingPeriod.periodModal.all": "Alle",
-  "staffingPeriod.periodModal.teams": "Teams / Kategorien",
-  "staffingPeriod.periodModal.teamDetail": "Detail: {group}",
-  "staffingPeriod.periodModal.clickHint":
-    "Klicken Sie auf eine Säule des Diagramms, um die Periodendetails zu öffnen.",
   "staffingPeriod.periodModal.rowsFor": "Mobilisierte Zeilen",
   "staffingPeriod.detailModal.rowsCount": "{n} VZÄ-Zeile(n)",
   "staffingPeriod.detailModal.columnAxis": "Achse(n)",
@@ -2342,7 +2289,6 @@ const de: Record<string, string> = {
   "strategicDashboard.ambitionLabel": "Ambition",
   // Runde 28: geplantes Gesamtbudget des Programms (`Program.budget`) vs. tatsächliche Summe der
   // Arbeitspaket-Budgets, unter dem Ambition-Banner.
-  "strategicDashboard.programBudgetLabel": "Geplantes Programmbudget",
   "strategicDashboard.budgetTooltip.overrunTitle": "Geplantes Budget überschritten",
   "strategicDashboard.budgetTooltip.allocatedOver":
     "Zugewiesenes Budget {amount} > geplantes Budget {forecast} ({diff}, {pct})",
@@ -2359,7 +2305,6 @@ const de: Record<string, string> = {
   "strategicDashboard.tracked": "Verfolgte Indikatoren",
   "strategicDashboard.onTrack": "Im Plan",
   "strategicDashboard.atRisk": "Gefährdet",
-  "strategicDashboard.cumulative": "Summe der Indikatoren",
   "strategicDashboard.noIndicators": "Für dieses Programm ist kein Indikator definiert",
   "strategicDashboard.noDependencyAlerts": "Keine Abhängigkeitswarnung zwischen Arbeitspaketen",
   "strategicDashboard.delayDays": "Tage Verzug",
@@ -2483,8 +2428,6 @@ const de: Record<string, string> = {
   "finance.chart.netPeriodShort": "Nettoeinsparung",
   "finance.chart.netEconomy": "Nettoeinsparung",
   "finance.chart.timelineTitle": "Kostenbindung im Zeitverlauf (Invest)",
-  "finance.chart.timelineSubtitle":
-    "CAPEX + einmaliger OPEX — siehe Diagramm Investitionskosten vs. Savings für den Vergleich mit den Gewinnen",
   "finance.chart.hierarchyTitle": "Kostenaufteilung nach Kostenstelle / GuV",
   "finance.chart.hierarchyNoConfig":
     "Für dieses Unternehmen ist keine Finanzhierarchie konfiguriert.",
@@ -2510,6 +2453,7 @@ const de: Record<string, string> = {
   "finance.drill.levelWorkstream": "Arbeitspaket",
   "finance.drill.levelLever": "Hebel",
   "finance.drill.tooltipLeaf": "Klicken, um die Details zu öffnen",
+  "finance.drill.directSlice": "{name} (direkt)",
   "finance.drill.tooltipNext": "Klicken zum Aufschlüsseln",
   "finance.calc.title": "Berechnungsdetail",
   "finance.calc.scope": "Periode",
@@ -2602,9 +2546,6 @@ const de: Record<string, string> = {
   "leverDetail.notYetLocked": "noch nicht fixiert",
   "leverDetail.notYetReforecast": "noch nicht neu prognostiziert",
   "leverDetail.weightsTitle": "Aktionsgewichtung",
-  "leverDetail.impactsTitle": "Auswirkungen des Hebels",
-  "leverDetail.popImpacted.none": "Keine HR-Bewegung mit diesem Hebel verknüpft",
-  "leverDetail.popImpacted.count": "{n} verknüpfte Bewegung(en)",
   "leverDetail.hrReconciliation.title": "VZÄ-Abgleich — verknüpfte HR-Bewegungen",
   "leverDetail.hrReconciliation.warning": "Abweichung prüfen",
   "leverDetail.hrReconciliation.summary":
@@ -2620,12 +2561,6 @@ const de: Record<string, string> = {
     "{label} ({type}, {fte} VZÄ) — Richtung passt nicht zur angestrebten Auswirkung des Hebels",
   "leverDetail.weighted": "Aktionen sind gewichtet",
   "leverDetail.unweighted": "Aktionen sind nicht gewichtet (Fortschritt = einfacher Durchschnitt)",
-  "leverDetail.versionReforecast": "Neuprognose-Version",
-  "leverDetail.versionPlanned": "Geplante Version",
-  "leverDetail.latestVersion": "Letzte Version",
-  "leverDetail.grossAnnual": "Annualisierte Bruttogewinne",
-  "leverDetail.oneOffGainsNotCounted": "Einmalige Gewinne (nicht gezählt)",
-  "leverDetail.netGains": "Nettogewinne (brutto − wiederkehrende OPEX)",
   "leverDetail.fte.created": "geschaffene Stellen",
   "leverDetail.fte.reduced": "abgebaute/reduzierte Stellen",
   "leverDetail.fte.positiveWarning": "Positive VZÄ — prüfen",
@@ -2661,11 +2596,8 @@ const de: Record<string, string> = {
   "adminImpactConfig.moveDown": "Nach unten",
   "finance.chart.engaged": "Bereits gebunden",
   "finance.chart.upcoming": "Anstehend",
-  "finance.chart.totalCost": "Gesamtkosten",
   "finance.chart.periodCost": "Periodenkosten",
   "finance.chart.cumulativeCost": "Kumulierte Kosten",
-  "finance.chart.undetailedCostsNote":
-    "{n} Hebel mit auf Hebelebene erfasstem CAPEX/OPEX, aber ohne detaillierten Aktionsplan, in diesem Diagramm (und in den anderen Finanzdiagrammen) nicht enthalten: {names}.",
   "finance.chart.opexRecRunRate": "Laufender wiederkehrender OPEX",
   "finance.chart.empty": "Keine Kosten für Hebelaktionen erfasst.",
   "finance.hierarchyTable.title": "Einsparungen nach Finanzebene (€M)",
@@ -2673,9 +2605,7 @@ const de: Record<string, string> = {
   "finance.hierarchyTable.export": "Exportieren",
   "finance.hierarchyTable.total": "Gesamt",
   "finance.hierarchyTable.totalHint":
-    "Summen werden aus ungerundeten Beträgen berechnet (gleiche Werte wie im Dashboard) — die Summe der gerundeten Zeilen kann um ±0,1 abweichen.",
-  "finance.hierarchyTable.note":
-    "Ursprünglich geplant = fixierter Plan (alle Hebel). Neuprognose und Ist schließen stornierte Hebel aus; „Storniert“ = Plan der stornierten Hebel; „Verspätet“ = verbleibender Rest verspäteter Hebel.",
+    "Summen auf Basis ungerundeter Beträge (gleiche Werte wie im Dashboard); die Zeilen werden so gerundet, dass sie genau die angezeigte Summe ergeben.",
   "finance.hierarchyTable.allYears": "Alle Jahre",
   "finance.hierarchyTable.yearsSelected": "Jahre ausgewählt",
   "finance.hierarchyTable.yearFilter": "Jahre",
@@ -2706,52 +2636,28 @@ const de: Record<string, string> = {
   "projetWeights.unweighted": "Ungewichtet (implizit gleiches Gewicht zwischen den Projekten)",
   "filters.toggle": "Filter",
   "columns.toggle": "Spalten",
-  "impactsEditor.gain": "Gewinn",
   "impactsEditor.fte": "VZÄ",
   "impactsEditor.empty": "Keine Auswirkung erfasst.",
   "impactsEditor.confirmDelete": "Diese Auswirkung löschen? Diese Aktion ist unwiderruflich.",
-  "impactsEditor.kind": "Typ",
   "impactsEditor.label": "Bezeichnung",
-  "impactsEditor.loadedSalary": "Gesamte Vollkosten-Gehälter (€M)",
   "impactsEditor.amount": "Betrag (€M)",
-  "impactsEditor.mode": "Modus",
   "impactsEditor.oneOff": "Einmalig",
-  "impactsEditor.recurring": "Wiederkehrend",
   "impactsEditor.untitled": "Impact ohne Titel",
-  "impactsEditor.perYear": " /Jahr",
-  "impactsEditor.noDate": "Datum offen",
-  "impactsEditor.statusActive": "Aktiv",
   "impactsEditor.statusPlanned": "Geplant",
   "impactsEditor.statusDone": "Realisiert",
-  "impactsEditor.statusOngoing": "Laufend",
   "impactsEditor.status": "Status",
   "impactsEditor.statusFutureWarn":
     "Realisierte / laufende Wirkung: Startdatum liegt in der Zukunft.",
-  "impactsEditor.close": "Schließen",
-  "impactsEditor.edit": "Bearbeiten",
-  "impactsEditor.view": "Details",
   "impactsEditor.requiredSuffix": "(erforderlich)",
   "impactsEditor.scrollLeft": "Nach links scrollen",
   "impactsEditor.scrollRight": "Nach rechts scrollen",
   "impactsEditor.smoothed": "Verteilt",
-  "impactsEditor.capexStart": "Periodenbeginn",
-  "impactsEditor.capexEnd": "Periodenende",
-  "impactsEditor.capexDeployment": "Bindungsdatum",
-  "impactsEditor.annual": "Jährlich",
-  "impactsEditor.gainDate": "Gewinndatum",
-  "impactsEditor.direction": "Richtung",
   "impactsEditor.hire": "Einstellung (+)",
   "impactsEditor.departure": "Abgang (−)",
   "impactsEditor.fteCount": "Anzahl VZÄ",
   "impactsEditor.nature": "Art",
   "impactsEditor.technology": "Betroffene Technologie",
   "impactsEditor.add": "Auswirkung hinzufügen",
-  "impactsEditor.grossAnnual": "Bruttogewinne gesamt (annualisiert)",
-  "impactsEditor.oneOffGains": "Einmalige Gewinne gesamt",
-  "impactsEditor.oneOffHint": "Nicht in den Einsparungen enthalten",
-  "impactsEditor.netAnnual": "Nettogewinne gesamt",
-  "impactsEditor.opexRec": "Wiederkehrender OPEX",
-  "impactsEditor.fteNet": "Netto-VZÄ",
   "impactsEditor.comments": "Kommentare",
   "impactsEditor.noComments": "Keine Kommentare.",
   "impactsEditor.addComment": "Kommentar hinzufügen…",
@@ -2793,7 +2699,6 @@ const de: Record<string, string> = {
   "levers.tree.leverOwnerEmpty": "Hebel-Verantwortlicher nicht angegeben",
   "levers.column.code": "Code",
   "levers.column.type": "Typ",
-  "levers.column.netSavings": "Nettoeinsparungen (Mio. €)",
   "levers.column.reforecastNet": "Aktualisierte Nettoeinsparungen (€M)",
   "levers.column.progress": "Fortschritt",
   "levers.column.fteImpact": "Betroffene VZÄ",
@@ -2820,8 +2725,6 @@ const de: Record<string, string> = {
   "hr.netBalance.people": "Pers.",
   "hr.netBalance.entries": "Zugänge (Einstellungen)",
   "hr.netBalance.exits": "Abgänge (Fluktuation + Zwangsaustritte)",
-  "hr.netBalance.transfers":
-    "Transfers: {in} eingehend · {out} ausgehend — neutral für die Nettobilanz",
   "hr.netBalance.abandoned": "{n} abgebrochene Bewegung(en) aus der Bilanz ausgeschlossen",
   "hr.transferBalance.title": "Versetzungsbilanz",
   "hr.transferBalance.in": "Eingehende Versetzungen",
@@ -2838,7 +2741,7 @@ const de: Record<string, string> = {
   "hr.movementStatus.abandoned": "Abgebrochen",
   "hr.execution.realized": "Umgesetzt",
   "hr.execution.overdue": "Überfällig",
-  "hr.execution.dueSoon": "Anstehend < 90 Tage",
+  "hr.execution.dueSoon": "Anstehend ≤ 90 Tage",
   "hr.execution.later": "Anstehend > 90 Tage",
   "hr.execution.abandoned": "Abgebrochen",
   "hr.execution.toValidate": "HR-Freigabe ausstehend",
@@ -2851,7 +2754,7 @@ const de: Record<string, string> = {
   "hr.alertMessage.signMismatch":
     "{label} — Richtung ({fte} VZÄ) entgegen der Zielwirkung von Hebel {code} ({leverFte} VZÄ)",
   "hr.pivot.metric.fteImpact": "VZÄ-Auswirkung (mit Vorzeichen)",
-  "hr.pivot.metric.salarySavings": "Gehaltseinsparungen (Vollkosten)",
+  "hr.pivot.metric.salarySavings": "Netto-Einsparungen Personalkosten",
   "hr.pivot.metric.socialCost": "Einmalkosten (einmalige Sozialkosten)",
   "hr.pivot.metric.netEconomy": "Nettoeinsparung (Einsparungen − Einmalkosten)",
   "hr.pivot.metric.netFirstYearImpact": "Nettoauswirkung im 1. Jahr",
@@ -2876,16 +2779,7 @@ const de: Record<string, string> = {
   "leverDetail.trajectory.month": "Monat",
   "leverDetail.trajectory.quarter": "Quartal",
   "leverDetail.trajectory.year": "Jahr",
-  "leverDetail.trajectory.gains": "Annualisierte Gewinne (zum Startdatum, dann jedes Jubiläum)",
-  "leverDetail.trajectory.oneOffGains": "Einmalige Gewinne (nicht gezählt)",
-  "leverDetail.trajectory.opexRec": "Wiederkehrender OPEX (Start, dann Jubiläen)",
-  "leverDetail.trajectory.opexOneOff": "Einmaliger OPEX",
-  "leverDetail.trajectory.capex": "CAPEX (einmalig oder verteilt)",
-  "leverDetail.trajectory.gainsPlanned": "Geplante Gewinne (Prognose)",
-  "leverDetail.trajectory.costsPlanned": "Geplante Kosten (Prognose)",
   "leverDetail.trajectory.cumNet": "Kumuliert netto (mit Einmaligem)",
-  "leverDetail.trajectory.cumNetRec": "Kumuliert netto (ohne Einmaliges)",
-  "leverDetail.trajectory.fteCum": "Kumulierte VZÄ (+ Einstellungen / − Abgänge)",
   "leverDetail.trajectory.legendGains": "Gewinne",
   "leverDetail.trajectory.legendCosts": "Kosten (OPEX + CAPEX)",
   "leverDetail.trajectory.clickHint":
@@ -2897,8 +2791,6 @@ const de: Record<string, string> = {
   "leverDetail.trajectory.detailOpexRec": "Wiederkehrende OPEX",
   "leverDetail.trajectory.detailEmpty": "Keine Auswirkung in dieser Periode.",
   "leverDetail.oneOff": "Einmalig",
-  "chart.gap.explain":
-    "Abweichung zwischen Neuprognose und Ist: Verzögerungen (verspätete Hebel), Sonstiges (laufende Arbeiten); Stornierungen sind bereits aus der Neuprognose entfernt.",
   "chart.waterfall.realized": "Ist",
   "chart.waterfall.remaining": "Verbleibend",
   "chart.waterfall.oneOff": "Einmalige Gewinne (nicht in den Summen)",
@@ -2913,8 +2805,6 @@ const de: Record<string, string> = {
   "chart.waterfall.opex.unspecified": "Art nicht angegeben",
   "chart.waterfall.opex.fte": "Einstellungen (FTE)",
   "chart.waterfall.opex.other": "Nicht aufgeschlüsselt",
-  "chart.waterfall.clickHint": "Klicken für Details",
-  "chart.waterfall.clickHintLong": "Balken anklicken, um Details zu sehen.",
   "chart.waterfall.drill.workstream": "Arbeitspaket",
   "chart.waterfall.drill.geography": "Geografie",
   "chart.waterfall.drill.level": "Ebene",
@@ -2938,28 +2828,12 @@ const de: Record<string, string> = {
     "Neuprognose netto (brutto − wiederkehrende OPEX) = realisiert + verbleibend (gleiche Zahlen wie « Einsparungsrealisierung »).",
   "chart.waterfall.drill.intro.opexRec":
     "Jährliche wiederkehrende OPEX der aktiven Hebel nach Wirkungsart, vom Brutto abgezogen, um das Netto zu erhalten.",
-  "chart.waterfall.note":
-    "Links: Ursprungsplan (eingefroren) ± Neuprognose − storniert = Neuprognose-Ziel, annualisiert netto (= realisiert + verbleibend, wie im Diagramm « Einsparungsrealisierung »). Rechts: Aufschlüsselung dieses Ziels, Bruttogewinn − wiederkehrende OPEX = Netto (CAPEX und Einmalkosten separat).",
   "chart.bar.planned": "Ursprünglich geplant",
   "chart.bar.noLeverDetail": "Keine Aufschlüsselung nach Hebel verfügbar.",
-  "chart.scurve.gapTotal": "Abweichung: Neuprognose − realisiert",
-  "chart.scurve.gapLate": "davon verspätete Hebel",
-  "chart.scurve.gapInProgress": "davon Hebel im Plan in Umsetzung",
   "chart.scurve.gapBadge": "Abweichung",
-  "chart.gap.explain2":
-    "Die Abweichung (Neuprognose − realisiert) wird nur für die aktuelle Periode angezeigt. Klicken Sie auf das Diagramm für die Aufschlüsselung nach Arbeitspaket.",
   "chart.scurveDetail.title": "Einsparungsverlauf — Details",
-  "chart.scurveDetail.byWorkstream": "Woher die Einsparungen kommen (nach Arbeitspaket)",
-  "chart.scurveDetail.modeRealized": "Realisiert in der Periode",
-  "chart.scurveDetail.modeReforecast": "Neuprognose kumuliert",
-  "chart.scurveDetail.period": "Periode",
-  "chart.scurveDetail.seeLevers": "Hebel anzeigen",
   "chart.gapDrill.title": "Ursprung der Abweichung Ursprungsplan − Realisiert",
-  "chart.gapDrill.intro":
-    "Kumulierte Abweichung in dieser Periode (Ursprungsplan − Realisiert), aufgeteilt in eine Anpassungsabweichung (Ursprungsplan − Neuprognose, Über-/Unterperformance) und eine Verzugsabweichung (Neuprognose − Realisiert), nach Arbeitspaket oder Geografie. Gleiche Regel wie die Kurve: Summe der Zeilen = angezeigte Abweichung.",
   "chart.gapDrill.empty": "Keine Abweichung in dieser Periode.",
-  "chart.gapDrill.late": "davon verspätet",
-  "chart.gapDrill.onTime": "davon im Zeitplan",
   "chart.gapDrill.plannedInitial": "Ursprungsplan",
   "chart.gapDrill.plannedInitial.tooltip":
     "Festgeschriebener Plan des Hebels (oder aktueller Wert, falls noch nicht festgeschrieben), kumuliert bis zu seinem Enddatum.",
@@ -3013,6 +2887,11 @@ const de: Record<string, string> = {
   "strategicOnboarding.importButton": "Meinen Plan aus Excel importieren",
   "strategicOnboarding.manualButton": "Manuell erfassen",
   "strategicOnboarding.templateLink": "Excel-Vorlage herunterladen",
+  "strategicOnboarding.fyStartLabel": "Periodenbeginn",
+  "strategicOnboarding.fyEndLabel": "Periodenende",
+  "strategicOnboarding.currencyLabel": "Währungseinheit",
+  "strategicOnboarding.periodInvalid":
+    "Ungültiger Programmzeitraum: Der Beginn muss vor oder gleich dem Ende liegen (JJJJ-MM).",
   "adminMaturityStages.newStageLabel": "Stufe {n}",
   "adminMaturityStages.intro":
     "Passen Sie die Reifegradstufen der Achsen und Arbeitspakete DIESES Programms an. Sie können Stufen frei hinzufügen, löschen, umbenennen und neu anordnen — ihre Anzahl ist nicht begrenzt. Eine „Endstufe“ (z. B. Erreicht / Nicht erreicht) ist ein Ausgangszustand außerhalb des linearen Zyklus.",
@@ -3039,6 +2918,199 @@ const de: Record<string, string> = {
   "dependency.alert.SS": "„{source}“ und „{target}“ liegen beim Start {days} Tage auseinander",
   "dependency.alert.FF": "„{source}“ und „{target}“ liegen am Ende {days} Tage auseinander",
   "dependency.alert.SF": "„{target}“ beginnt {days} Tage nach dem geplanten Ende von „{source}“",
+  // Notifications de validation stratégique (lib/strategicApprovals.ts, résolues par lib/alertText.ts)
+  "strategicApprovals.alert.todoTitle": "Zu genehmigen · {label}",
+  "strategicApprovals.alert.todoDesc": "{requester} beantragt {phrase}.",
+  "strategicApprovals.alert.waitTitle": "Offene Anfrage · {label}",
+  "strategicApprovals.alert.waitDesc":
+    "Ihre Anfrage ({phrase}) wartet auf die Genehmigung durch {approver}.",
+  "strategicApprovals.alert.approvedTitle": "Anfrage genehmigt · {label}",
+  "strategicApprovals.alert.rejectedTitle": "Anfrage abgelehnt · {label}",
+  "strategicApprovals.alert.approvedDesc": "{decider} hat {phrase} genehmigt{comment}.",
+  "strategicApprovals.alert.rejectedDesc": "{decider} hat {phrase} abgelehnt{comment}.",
+  "strategicApprovals.alert.decidedApprovedTitle": "Genehmigung erfasst · {label}",
+  "strategicApprovals.alert.decidedRejectedTitle": "Ablehnung erfasst · {label}",
+  "strategicApprovals.alert.decidedApprovedDesc":
+    "Sie haben {phrase} genehmigt, beantragt von {requester}.",
+  "strategicApprovals.alert.decidedRejectedDesc":
+    "Sie haben {phrase} abgelehnt, beantragt von {requester}.",
+  "strategicApprovals.alert.kpiRemovedTitle": "KPI-Messwert gelöscht · {kpi}",
+  "strategicApprovals.alert.kpiRemovedDesc":
+    "KPI-Messwert gelöscht: {kpi} {period} {old} von {actor}.",
+  "strategicApprovals.alert.kpiCorrectedTitle": "KPI-Wert korrigiert · {kpi}",
+  "strategicApprovals.alert.kpiCorrectedDesc":
+    "KPI-Wert korrigiert: {kpi} {period} {old} → {value} von {actor}.",
+  "strategicApprovals.alert.kpiCorrectedDescRequested":
+    "KPI-Wert korrigiert: {kpi} {period} {old} → {value} von {actor} (beantragt von {requester}).",
+  "strategicApprovals.phrase.milestone": "den Übergang des Projekts „{name}“ zum Meilenstein {to}",
+  "strategicApprovals.phrase.kpiRemove":
+    "das Löschen des Messwerts {value} ({period}) des Indikators „{name}“",
+  "strategicApprovals.phrase.kpiCorrect":
+    "die Korrektur des Messwerts auf {value} ({period}) des Indikators „{name}“",
+  "strategicApprovals.phrase.kpiValue": "den Wert {value} ({period}) des Indikators „{name}“",
+  "strategicApprovals.phrase.projetCreate": "das Hinzufügen des Projekts „{name}“",
+  "strategicApprovals.phrase.projetCreateChantier":
+    "das Hinzufügen des Projekts „{name}“ (Genehmigung durch die Arbeitspaketleitung)",
+  "strategicApprovals.phrase.projetCreateAxis":
+    "das Hinzufügen des Projekts „{name}“ (Genehmigung durch die Achsenverantwortung)",
+  "strategicApprovals.phrase.projetDelete": "das Löschen des Projekts „{name}“",
+  "strategicApprovals.phrase.chantierDelete": "das Löschen des Arbeitspakets „{name}“",
+  // Motif du risque levier (lib/leverRiskText.ts), retour fiche levier, badge dépassement
+  "risk.level.critical": "kritisch",
+  "risk.level.high": "hoch",
+  "risk.level.medium": "mittel",
+  "risk.level.low": "niedrig",
+  "risk.reason.none": "Kein Risikokriterium überschritten: niedriges Niveau.",
+  "risk.reason.delay":
+    "Verzug: Die älteste offene Warnung ist {days} Tage alt (Schwelle {level}: {threshold} Tage).",
+  "risk.reason.amount":
+    "Betrag im Risiko: {amount} offene Warnungen (Schwelle {level}: {threshold}).",
+  "leverDetail.back": "Zurück",
+  "shared.budgetVsActual.over": "Überschritten",
+  // Libellés ARIA des contrôles segmentés (components/shared/SegmentedControl.tsx)
+  "common.segmented.granularity": "Granularität",
+  "common.segmented.view": "Ansicht",
+  "common.segmented.scale": "Skala",
+  // Libellés ARIA des boutons icône (déplacer / retirer / pagination)
+  "common.moveUp": "Nach oben",
+  "common.moveDown": "Nach unten",
+  "common.remove": "Entfernen",
+  "common.previousPage": "Vorherige Seite",
+  "common.nextPage": "Nächste Seite",
+  // ── Excel-Importe (HR / Staffing / Hierarchie): übersetzbare Meldungen (Audit 24.09.2026) ──
+  "hrImport.issue.missingColumns": "Pflichtspalten fehlen: {columns}",
+  "hrImport.issue.unknownColumn": "Spalte „{column}“ nicht erkannt — ignoriert",
+  "hrImport.issue.missingIdOrName": "„Matricule“ und „Nom“ sind Pflicht — Zeile ignoriert",
+  "hrImport.issue.duplicateEmployeeId":
+    "Personalnummer „{id}“ kommt mehrfach in der Datei vor (Zeilen {rows}) — Zeilen ignoriert",
+  "hrImport.issue.missingLabel": "„Employé / Poste“ ist Pflicht — Zeile ignoriert",
+  "hrImport.issue.duplicateMovementId":
+    "Bewegungs-ID „{id}“ kommt mehrfach in der Datei vor (Zeilen {rows}) — Zeilen ignoriert",
+  "hrImport.issue.missingType": "„Type“ ist für eine neue Bewegung Pflicht — Zeile ignoriert",
+  "hrImport.issue.unknownType":
+    "Unbekannter Typ „{value}“ (erwartet: {expected}) — Zeile ignoriert",
+  "hrImport.issue.missingRequiredDate":
+    "„{column}“ ist für eine neue Bewegung Pflicht — Zeile ignoriert",
+  "hrImport.issue.invalidRequiredDate": "{column} „{value}“ nicht lesbar — Zeile ignoriert",
+  "hrImport.issue.unknownDepartment": "Unbekannte Abteilung „{value}“ (unverändert übernommen)",
+  "hrImport.issue.unknownEnumKept":
+    "{column} „{value}“ nicht erkannt — bestehender Wert beibehalten",
+  "hrImport.issue.unknownEnumDefault": "{column} „{value}“ nicht erkannt — „{fallback}“ verwendet",
+  "hrImport.issue.emptyDefault": "{column} leer — „{fallback}“ verwendet",
+  "hrImport.issue.invalidNumberKept":
+    "{column} „{value}“ nicht lesbar — bestehender Wert beibehalten",
+  "hrImport.issue.invalidNumberDefault": "{column} „{value}“ nicht lesbar — {fallback} verwendet",
+  "hrImport.issue.invalidDateKept":
+    "{column} „{value}“ nicht lesbar — bestehender Wert beibehalten",
+  "hrImport.issue.invalidDateEmpty": "{column} „{value}“ nicht lesbar — leer gelassen",
+  "hrImport.issue.legacyType": "Typ „{value}“ (4-Typen-Modell) in „{type}“ umgewandelt",
+  "hrImport.issue.legacyTypeRetraining":
+    "Typ „{value}“ (4-Typen-Modell) in „{type}“ mit Umschulung (umfangreiche Schulung) umgewandelt",
+  "hrImport.issue.legacyStatus": "Alter Status „{value}“ in „{status}“ umgewandelt",
+  "hrImport.issue.unknownLever": "Unbekannter Hebel „{value}“ — Hebelzuordnung unverändert",
+  "hrImport.issue.unknownProgram": "Unbekanntes Programm „{value}“ — Programm unverändert",
+  "hrImport.issue.unknownEmployee": "Personalnummer „{id}“ nicht in der FTE-Basis vorhanden",
+  "hrImport.issue.recruitmentEmpIdIgnored":
+    "Personalnummer „{id}“ ignoriert: eine Einstellung betrifft keinen bestehenden Mitarbeiter",
+  "hrImport.issue.matriculeZeroPadded":
+    "Personalnummer als Zahl gelesen ({value}) — der bestehenden Nummer „{id}“ zugeordnet (Spalte als Text formatieren, um führende Nullen zu behalten)",
+  "hrImport.issue.matriculeNumeric":
+    "Personalnummer als Zahl gelesen ({value}) — führende Nullen können verloren gegangen sein (Spalte als Text formatieren)",
+  "hrImport.issue.unknownMovementIdCreated":
+    "Unbekannte Bewegungs-ID „{id}“ — Bewegung mit dieser ID angelegt",
+  "hrImport.issue.unknownSocialScheme":
+    "Unbekanntes Sozialinstrument „{value}“ — „Autre“ verwendet",
+  "hrImport.issue.hrValidatedNotRealised": "„Validé RH“ = Ja, obwohl der Status „{status}“ ist",
+  "hrImport.issue.actualDateNotRealised": "Ist-Datum angegeben, obwohl der Status „{status}“ ist",
+  "hrImport.rowPrefix": "{sheet} · Zeile {row}:",
+  "hrImport.filePrefix": "{sheet}:",
+  "hrImport.createdUnit": "angelegt",
+  "hrImport.updatedUnit": "aktualisiert",
+  "hrImport.unchangedUnit": "unverändert",
+  "hrImport.importFailedTitle": "Import fehlgeschlagen",
+  "hrImport.importFailedBody": "Es wurden keine Daten gespeichert: {error}",
+  "hrImport.readFailedTitle": "Datei nicht lesbar",
+  "hrImport.importing": "Import läuft…",
+  "hrImport.exportFilteredSuffix": " (Filter angewendet)",
+  "etp.toast.matriculeRenamed": "Personalnummer geändert",
+  "etp.toast.matriculeRenamedBody": "{name}: {old} → {new}",
+  "etp.toast.matriculeRenameFailed": "Personalnummer nicht geändert",
+  "staffingImport.issue.missingColumns": "Pflichtspalten fehlen: {columns}",
+  "staffingImport.issue.missingChantier": "„Chantier“ ist Pflicht",
+  "staffingImport.issue.unknownChantier": "Arbeitspaket „{value}“ nicht gefunden",
+  "staffingImport.issue.unknownFunction": "Unbekanntes Team „{value}“ (erwartet: {expected})",
+  "staffingImport.issue.functionLeftBase":
+    "Team „{value}“ ist nicht mehr in der FTE-Basis — bestehende Zeile trotzdem aktualisiert",
+  "staffingImport.issue.invalidFte":
+    "„ETP“ muss eine Zahl größer 0 und höchstens {max} sein (gelesen: „{value}“)",
+  "staffingImport.issue.invalidDate":
+    "{column} „{value}“ nicht lesbar oder unmöglich (erwartet TT/MM/JJJJ oder JJJJ-MM-TT)",
+  "staffingImport.issue.startAfterEnd": "Startdatum ({start}) liegt nach dem Enddatum ({end})",
+  "staffingImport.issue.unknownAction":
+    "Hebel „{value}“ im Arbeitspaket „{chantier}“ nicht gefunden",
+  "staffingImport.issue.duplicateRow":
+    "Doppelte Zeile (gleiches Arbeitspaket, Team, Daten und Hebel wie Zeile {other})",
+  "staffingImport.issue.noDepartments": "kein Team in der FTE-Basis",
+  "staffingImport.exportButton": "Exportieren",
+  "staffingImport.exportDoneBody": "{n} Staffing-Zeile(n) exportiert",
+  "adminHierarchy.issue.missingColumns": "Pflichtspalten fehlen: {columns}",
+  "adminHierarchy.issue.mergedCells":
+    "Die Datei enthält verbundene Zellen ({ranges}) — Verbindung aufheben und den Wert in jeder Zeile wiederholen",
+  "adminHierarchy.issue.unknownLevel":
+    "Ebene „{value}“ ist für dieses Unternehmen nicht konfiguriert",
+  "adminHierarchy.issue.missingCodeOrLabel": "„Code“ und „Libellé“ sind Pflicht",
+  "adminHierarchy.issue.duplicateCode":
+    "Code „{code}“ doppelt in Ebene „{level}“ (bereits in Zeile {other} verwendet)",
+  "adminHierarchy.issue.missingParent":
+    "„Code parent“ ist Pflicht (Ebene „{level}“ hat die übergeordnete Ebene „{parentLevel}“)",
+  "adminHierarchy.issue.unknownParent":
+    "„Code parent“ „{parent}“ in Ebene „{parentLevel}“ nicht gefunden",
+  "adminHierarchy.issue.parentOnMacro":
+    "Die oberste Ebene „{level}“ darf keinen „Code parent“ haben",
+  "adminHierarchy.issue.invalidBaseline": "Baseline „{value}“ nicht lesbar",
+  "adminHierarchy.issue.invalidBoolean": "{column} „{value}“ nicht erkannt (erwartet Ja/Nein)",
+  "adminHierarchy.issue.financialIgnored":
+    "Finanzdaten ignoriert: Ebene „{level}“ ist keine GuV-Zeilen-Ebene",
+  "adminHierarchy.exportOrphansSuffix": " · {n} verwaiste(r) Wert(e) nicht exportiert",
+  "adminHierarchy.toastImportReadFailedTitle": "Datei nicht lesbar",
+  "adminHierarchy.toastImportDoneCreatedUpdated":
+    "{created} Knoten angelegt · {updated} aktualisiert",
+  "adminHierarchy.toastImportFailedTitle": "Import fehlgeschlagen",
+  "adminHierarchy.toastImportPartialBody":
+    "{written} von {total} Knoten vor dem Fehler gespeichert: {error}",
+  "adminHierarchy.nodesToUpdate": "Knoten zu aktualisieren",
+  "adminHierarchy.nodesUnchanged": "unverändert",
+  "adminHierarchy.importBlockedByErrors":
+    "Import blockiert: Fehler unten beheben und die Datei erneut importieren (nichts wurde geschrieben).",
+  // ─── Dashboard RH — correctifs d'audit (calculs RH) ───
+  "hr.baselineNotScopable":
+    "Absolute Werte ausgeblendet: Der Filter „{filters}“ gilt nur für Bewegungen, nicht für die FTE-Basis — die Verläufe zeigen Veränderungen.",
+  "hr.subtitleNoBaseline": "{count} Bewegungen · {realized} umgesetzt",
+  "hr.export.coverTitle": "BeTrack — HR-Dashboard",
+  "hr.export.dataDate": "Datenstand {date}",
+  "hr.export.filters": "Filter",
+  "hr.export.noFilters": "keine",
+  "hr.export.byDimension": "nach {dim}",
+  "hr.kpi.netSalarySavings": "Netto-Einsparungen Personalkosten",
+  "hr.kpi.netSalarySavingsTooltip":
+    "Jährliche Personalkosteneinsparungen abzüglich Neueinstellungen (− Personalkostenwirkung) — gleiche Definition wie im Diagramm „Einsparungen je Periode und kumuliert“.",
+  "hr.alertedMovementsCount": "{n} Bewegung(en) mit Warnung",
+  "hr.alertsModal.summary.totalMovements": "{n} Bewegung(en) mit Warnung",
+  "hr.widget.customPivot": "Benutzerdefinierte Ansicht (Kennzahl × Dimension)",
+  "hr.pivot.noView": "Keine Ansicht konfiguriert — über „Anpassen“ hinzufügen.",
+  "shared.movementForm.destinationRequired":
+    "Eine Versetzung erfordert eine Zielabteilung, die sich von der Herkunftsabteilung unterscheidet.",
+  // Audit Plan Stratégique (périodes KPI, remplacement de valeur, pondération, budget).
+  "effectifs.moneyBudget.otherAxes": "Andere Achsen",
+  "projetWeights.overTotalWarning":
+    "Die deklarierten Gewichte überschreiten 100 %: Sie werden bei der Berechnung normalisiert, und nicht gewichtete Projekte erhalten das durchschnittliche deklarierte Gewicht.",
+  "kpi.periodInvalid": "Ungültiger Zeitraum — erwartetes Format: {format}",
+  "kpi.measurement.periodTakenNoRight":
+    "Für den Zeitraum {period} existiert bereits ein Wert, und Sie sind nicht berechtigt, ihn zu ersetzen.",
+  "kpi.measurement.replaceConfirm": "Wert ersetzen",
+  "kpi.measurement.replaceNotice":
+    "Für den Zeitraum {period} existiert bereits ein Wert ({value}): Die neue Eingabe ersetzt ihn.",
+  "kpi.summary.noData": "Keine Daten",
 };
 
 export default de;

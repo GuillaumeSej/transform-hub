@@ -15,7 +15,7 @@ export function IndicatorHistoryTable({
   onEdit,
   onDelete,
 }: {
-  indicator: Pick<Indicator, "objectiveValue" | "direction" | "unit">;
+  indicator: Pick<Indicator, "objectiveValue" | "direction" | "unit" | "targetSchedule">;
   measurements: IndicatorMeasurement[];
   /** Actions par ligne (« Modifier » / « Supprimer ») — colonne affichée seulement si fournies
    *  (l'appelant les omet quand l'utilisateur n'a pas le droit de corriger, voir
@@ -26,8 +26,9 @@ export function IndicatorHistoryTable({
   const withActions = !!onEdit || !!onDelete;
   const { t } = useTranslation();
   const rows = useMemo(
-    () => buildHistoryRows(measurements, indicator.objectiveValue, indicator.direction),
-    [measurements, indicator.objectiveValue, indicator.direction]
+    // Écart de CHAQUE ligne vs la cible applicable à SA période (palier de trajectoire).
+    () => buildHistoryRows(measurements, indicator, indicator.direction),
+    [measurements, indicator]
   );
   const unit = indicator.unit ? ` ${indicator.unit}` : "";
   const th =

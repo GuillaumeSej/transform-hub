@@ -18,10 +18,12 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { IndicatorDeltaStat } from "@/components/strategic/IndicatorDeltaStat";
 import {
   computeIndicatorDelta,
+  dedupeMeasurementsByPeriod,
   recentMeasurementWindow,
   resolveIndicatorTargetForPeriod,
 } from "@/lib/axisLogic";
 import { currentPeriod } from "@/lib/kpiHistory";
+import { comparePeriods, samePeriod } from "@/lib/indicatorPeriod";
 import type { Indicator, IndicatorMeasurement } from "@/types";
 
 /** Couleur du marqueur "aujourd'hui" (round "KPI pro") — rouge franc, distinct de la palette de
@@ -293,7 +295,9 @@ export function IndicatorChart({
   // "stepAfter"` sur la `Line` qui la trace suffit alors à dessiner les marches sans recalcul
   // supplémentaire dans le rendu recharts lui-même.
   const hasSchedule = !compact && !!targetSchedule && targetSchedule.length > 0;
-  const dataPoints = sorted.map((m) => ({
+  // UN point par période : à période égale, la mesure la plus récemment saisie gagne — même règle
+  // que `latestMeasurement` (statut, carte, tableau), jamais deux points pour une même période.
+  const dataPoints = dedupeMeasurementsByPeriod(sorted).map((m) => ({
     period: m.period,
     value: m.value ?? null,
     target: hasSchedule
@@ -311,11 +315,11 @@ export function IndicatorChart({
   // convention de tri lexicographique que partout ailleurs dans ce fichier (`period` sert de clé
   // de tri chronologique, voir `IndicatorMeasurement.period`).
   const todayPeriod = !compact && frequency ? currentPeriod(frequency) : undefined;
-  const hasTodayPoint = !!todayPeriod && dataPoints.some((d) => d.period === todayPeriod);
+  const hasTodayPoint = !!todayPeriod && dataPoints.some((d) => samePeriod(d.period, todayPeriod));
   const data =
     todayPeriod && !hasTodayPoint
       ? [...dataPoints, { period: todayPeriod, value: null, target: null }].sort((a, b) =>
-          a.period.localeCompare(b.period)
+          comparePeriods(a.period, b.period)
         )
       : dataPoints;
   const showTodayMarker = !!todayPeriod && data.some((d) => d.period === todayPeriod);
@@ -336,7 +340,9 @@ export function IndicatorChart({
   // signé ci-dessous ET au nouveau rappel de valeur courante (voir `chartWithDelta` plus bas) :
   // aucun des deux ne doit changer selon que la fenêtre "récente" masque ou non la mesure la plus
   // récente.
-  const latestOverall = all[all.length - 1];
+  // Dernière mesure NUMÉRIQUE (ordre `compareMeasurements` : période puis saisie la plus récente)
+  // — un commentaire seul saisi ensuite ne doit pas effacer le statut de la courbe.
+  const latestOverall = [...all].reverse().find((m) => m.value !== undefined);
 
   // Statut vs la cible (round 4, point 1 ; réutilisé round 27 pour la couleur de la courbe) —
   // calculé INDÉPENDAMMENT de `hideDeltaStat` : ce flag ne masque que le badge `IndicatorDeltaStat`

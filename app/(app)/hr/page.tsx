@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
@@ -29,7 +29,7 @@ import {
   socialCostSeries,
 } from "@/lib/hrTimeSeries";
 import { hrProgramSummary, targetFteFromBaseline } from "@/lib/hrProgramSummary";
-import { etpMovementDeepLink } from "@/lib/hrMovementLink";
+import { etpMovementDeepLink, etpMovementFilterLink } from "@/lib/hrMovementLink";
 import { fmtCurr } from "@/lib/engine";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { HrKPICard } from "@/components/shared/HrKPICard";
@@ -63,7 +63,7 @@ import {
   NetEconomyChart,
   SavingsPeriodCumulChart,
 } from "@/components/shared/charts/HrGooduelleCharts";
-import { type FilterDef } from "@/components/shared/FilterBar";
+import { type FilterDef } from "@/components/shared/filterTypes";
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
@@ -73,6 +73,8 @@ import { PeriodToolbar, type PeriodPreset } from "@/components/shared/PeriodTool
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import { generateFiscalYears } from "@/lib/fiscalYear";
 import type { MovementAlertKind } from "@/lib/hrEngine";
+import { pivotWorkforceByDimension } from "@/lib/hrDashboardPivot";
+import { HrPivotBarChart } from "@/components/shared/charts/HrBreakdownCharts";
 import type {
   Company,
   HierarchyLevelDef,
@@ -98,6 +100,7 @@ import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceL
 import { forcedDeparturesBySocialScheme } from "@/lib/hrSocialPlan";
 import {
   EXECUTION_LABELS,
+  classifyMovementAction,
   movementStatusByType,
   movementProgressByDimension,
   movementStatusGroups,
@@ -126,6 +129,7 @@ import {
   moveWidget,
   removeHrWidget,
   resolveHrActiveCustomView,
+  resolveHrCustomViews,
   saveHrDashboardLayout,
   setHrWidgetSpan,
   setHrWidgetView,
@@ -134,6 +138,8 @@ import {
   type HrWidgetType,
 } from "@/lib/hrDashboardWidgets";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { formatMillions, formatNumber, intlTag } from "@/lib/format";
+import { SegmentedControl } from "@/components/shared/SegmentedControl";
 
 function alertLabels(
   t: (key: string, fallback?: string) => string
@@ -170,7 +176,11 @@ function describeHrCustomView(
  * dans la Base ETP (/hr/etp).
  */
 export default function HrDashboardPage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
+  // Locale Intl active — libellés de période (mois via Intl, "T1"/"Q1") des séries RH (m15).
+  const intlLocale = intlTag(locale);
+  // Date de référence UNIQUE des calculs RH (B1) : date locale réelle, plus de date démo figée.
+  const today = hr.hrToday();
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
@@ -264,10 +274,22 @@ export default function HrDashboardPage() {
 
   const [dateFromISO, setDateFromISO] = useState<string>(movementDateRange.from);
   const [dateToISO, setDateToISO] = useState<string>(movementDateRange.to);
+  // La plage par défaut suit les données (chargement Firestore, mouvement ajouté…) TANT QUE
+  // l'utilisateur ne l'a pas modifiée — une plage choisie à la main n'est plus écrasée (m10).
+  const userRangeRef = useRef(false);
   useEffect(() => {
+    if (userRangeRef.current) return;
     setDateFromISO(movementDateRange.from);
     setDateToISO(movementDateRange.to);
   }, [movementDateRange.from, movementDateRange.to]);
+  const setUserRange = (fromISO: string, toISO: string) => {
+    userRangeRef.current = true;
+    setDateFromISO(fromISO);
+    setDateToISO(toISO);
+  };
+  // Borne vide = plage ouverte (m10) : vider "Au" ne vide plus le dashboard.
+  const rangeFrom = dateFromISO || "0000-01-01";
+  const rangeTo = dateToISO || "9999-12-31";
   // Préréglages de la barre transverse (PeriodToolbar) — uniquement quand un programme est résolu.
   const hrPeriodPresets = useMemo<PeriodPreset[]>(() => {
     if (!activeProgram) return [];
@@ -282,13 +304,13 @@ export default function HrDashboardPage() {
         key: "toDate",
         label: t("leverDetail.realizedToDate", "Réalisé à date"),
         fromISO: activeProgram.fyStart,
-        toISO: hr.HR_TODAY,
+        toISO: today,
       },
       ...generateFiscalYears(activeProgram, movementDateRange.from, movementDateRange.to).map(
         (fy) => ({ key: `fy-${fy.label}`, label: fy.label, fromISO: fy.startISO, toISO: fy.endISO })
       ),
     ];
-  }, [activeProgram, movementDateRange.from, movementDateRange.to, t]);
+  }, [activeProgram, movementDateRange.from, movementDateRange.to, t, today]);
 
   // ─── Arborescences optionnelles (géographie prioritaire, finance en bonus) ─────────────────────
   // Même pattern défensif que `DashboardPagePerformance.tsx`/`app/(app)/levers/page.tsx` : ces
@@ -422,9 +444,8 @@ export default function HrDashboardPage() {
     ],
     [t, geographyFilterDefs, hierarchyFilterDefs]
   );
-  // Round <n> : hook partagé `useFilterBarState` (lib/hooks/useFilterBarState.ts), remplace un
-  // `useState<ActiveFilters>({})` local — même contrat pour `activeFilters`/`onChange`, mais
-  // synchronisé dans l'URL (comme les autres pages à `FilterBar`, voir ce hook pour le détail).
+  // Filtres synchronisés dans l'URL via le hook partagé `useMultiFilterBarState`
+  // (lib/hooks/useMultiFilterBarState.ts), comme les autres pages à `DropdownFilterBar`.
   const { activeFilters, setFilters: setActiveFilters } = useMultiFilterBarState(filterDefs);
 
   const wf = data.workforce;
@@ -447,7 +468,9 @@ export default function HrDashboardPage() {
     [wf.movements, selectedProgramId, isConsolidatedView]
   );
 
-  const filteredMovements = useMemo(() => {
+  // Mouvements du PÉRIMÈTRE (programme + filtres), SANS la plage de dates : base de l'ouverture
+  // des waterfalls (réalisés antérieurs à la plage, M2) et des chiffres absolus (actuel, cible).
+  const scopedMovements = useMemo(() => {
     const keys = Object.keys(activeFilters);
     return wf.movements.filter((m) => {
       if (isConsolidatedView) {
@@ -465,8 +488,6 @@ export default function HrDashboardPage() {
       ) {
         return false;
       }
-      // Range picker temporel.
-      if (m.plannedDate < dateFromISO || m.plannedDate > dateToISO) return false;
       // DropdownFilterBar (nominal).
       for (const key of keys) {
         const value = activeFilters[key];
@@ -481,33 +502,93 @@ export default function HrDashboardPage() {
     activeFilters,
     filterDefs,
     selectedProgramId,
-    dateFromISO,
-    dateToISO,
     programScopeHasMovements,
     isConsolidatedView,
     consolidatedPrograms,
   ]);
 
-  const hasActiveFilters = Object.keys(activeFilters).length > 0;
+  // Mouvements du périmètre DANS la plage (range picker temporel, bornes vides = ouvertes).
+  const filteredMovements = useMemo(
+    () => scopedMovements.filter((m) => m.plannedDate >= rangeFrom && m.plannedDate <= rangeTo),
+    [scopedMovements, rangeFrom, rangeTo]
+  );
 
-  // Workforce virtuelle filtrée — remplace `wf` dans tous les calculs pour que les graphiques
-  // réagissent aux filtres exactement comme le dashboard exécutif.
+  const hasActiveFilters = Object.keys(activeFilters).some(
+    (key) => (activeFilters[key]?.length ?? 0) > 0
+  );
+
+  // ─── Baseline scopée par les filtres (M3) ─────────────────────────────────────────────────
+  // Département / pays / chantier ont un équivalent sur la base ETP (employés ou baselines
+  // explicites) : la baseline est restreinte au même périmètre que les mouvements. Tout autre
+  // filtre (type, statut, fonction, RH, arborescences) ne porte que sur les mouvements : les
+  // chiffres ABSOLUS (actuel, cible, atterrissage, référence) sont alors masqués avec une note
+  // plutôt que de comparer des mouvements filtrés à la baseline de toute l'entreprise.
+  const nonScopableFilterLabels = useMemo(
+    () =>
+      Object.keys(activeFilters)
+        .filter((key) => (activeFilters[key]?.length ?? 0) > 0)
+        .filter((key) => !["department", "country", "workstream"].includes(key))
+        .map((key) => filterDefs.find((d) => d.key === key)?.label ?? key),
+    [activeFilters, filterDefs]
+  );
+  const scopedBaseline = useMemo(
+    () =>
+      nonScopableFilterLabels.length > 0
+        ? null
+        : hr.scopeWorkforceBaseline(wf, {
+            department: activeFilters.department,
+            country: activeFilters.country,
+            workstream: activeFilters.workstream,
+          }),
+    [wf, activeFilters, nonScopableFilterLabels.length]
+  );
+  const absoluteAvailable = scopedBaseline !== null;
+  // Workforce du périmètre : baseline scopée (0 si non scopable → vues en variation) + mouvements
+  // du périmètre sans filtre de date.
+  const scopedWf = useMemo(
+    () => ({
+      ...wf,
+      totalFTE: scopedBaseline?.totalFTE ?? 0,
+      massSalary: scopedBaseline?.massSalary ?? 0,
+      departments: scopedBaseline?.departments ?? [],
+      countryBaselines: scopedBaseline?.countryBaselines ?? [],
+      workstreamBaselines: scopedBaseline?.workstreamBaselines ?? [],
+      movements: scopedMovements,
+    }),
+    [wf, scopedBaseline, scopedMovements]
+  );
+  // Même périmètre restreint à la plage de dates — alimente les vues "de période".
   const filteredWf = useMemo(
-    () => ({ ...wf, movements: filteredMovements }),
-    [wf, filteredMovements]
+    () => ({ ...scopedWf, movements: filteredMovements }),
+    [scopedWf, filteredMovements]
+  );
+  const seriesOptions = useMemo(() => ({ locale: intlLocale }), [intlLocale]);
+  const bridgeRange = useMemo(
+    () => ({ from: dateFromISO || null, to: dateToISO || null }),
+    [dateFromISO, dateToISO]
   );
 
   const alerts = useMemo(
-    () => hr.movementAlerts(filteredWf, data.levers),
-    [filteredWf, data.levers]
+    () => hr.movementAlerts(filteredWf, data.levers, today),
+    [filteredWf, data.levers, today]
   );
+  // Waterfalls : ouverture = baseline + réalisés antérieurs à la plage (M2) — d'où `scopedWf`
+  // (mouvements NON filtrés par date), la plage étant appliquée par `fteBridge` lui-même.
   const bridge = useMemo(
-    () => hr.fteBridge(filteredWf, granularity, { from: dateFromISO, to: dateToISO }),
-    [filteredWf, granularity, dateFromISO, dateToISO]
+    () => hr.fteBridge(scopedWf, granularity, bridgeRange, seriesOptions),
+    [scopedWf, granularity, bridgeRange, seriesOptions]
+  );
+  const bridgeOpening = useMemo(
+    () => hr.fteOpening(scopedWf, bridgeRange),
+    [scopedWf, bridgeRange]
   );
   const salary = useMemo(
-    () => hr.salaryBridge(filteredWf, granularity, { from: dateFromISO, to: dateToISO }),
-    [filteredWf, granularity, dateFromISO, dateToISO]
+    () => hr.salaryBridge(scopedWf, granularity, bridgeRange, seriesOptions),
+    [scopedWf, granularity, bridgeRange, seriesOptions]
+  );
+  const salaryOpening = useMemo(
+    () => hr.salaryOpening(scopedWf, bridgeRange),
+    [scopedWf, bridgeRange]
   );
   const forcedDepartureSocialRows = useMemo(
     () => forcedDeparturesBySocialScheme(filteredMovements),
@@ -516,23 +597,30 @@ export default function HrDashboardPage() {
 
   // ─── Gooduelle series (Août 2026) ────────────────────────────────────────────
   // Plage de dates pilotée par le range picker + presets FY côté page (voir dateFromISO/ToISO).
-  const dateRange = useMemo(() => ({ from: dateFromISO, to: dateToISO }), [dateFromISO, dateToISO]);
+  // Bornes vides = plage ouverte (m10) : les séries retombent alors sur les dates des mouvements.
+  const dateRange = useMemo(
+    () => ({
+      from: dateFromISO || movementDateRange.from,
+      to: dateToISO || movementDateRange.to,
+    }),
+    [dateFromISO, dateToISO, movementDateRange.from, movementDateRange.to]
+  );
 
   const savingsSeries = useMemo(
-    () => salarySavingsSeries(filteredMovements, granularity, dateRange, hr.HR_TODAY),
-    [filteredMovements, granularity, dateRange]
+    () => salarySavingsSeries(filteredMovements, granularity, dateRange, today, seriesOptions),
+    [filteredMovements, granularity, dateRange, today, seriesOptions]
   );
   const enrSeries = useMemo(
-    () => socialCostSeries(filteredMovements, granularity, dateRange),
-    [filteredMovements, granularity, dateRange]
+    () => socialCostSeries(filteredMovements, granularity, dateRange, seriesOptions),
+    [filteredMovements, granularity, dateRange, seriesOptions]
   );
   const netEcoSeries = useMemo(
-    () => netEconomySeries(filteredMovements, granularity, dateRange),
-    [filteredMovements, granularity, dateRange]
+    () => netEconomySeries(filteredMovements, granularity, dateRange, today, seriesOptions),
+    [filteredMovements, granularity, dateRange, today, seriesOptions]
   );
   const rhythmSeries = useMemo(
-    () => movementRhythmSeries(filteredMovements, granularity, dateRange),
-    [filteredMovements, granularity, dateRange]
+    () => movementRhythmSeries(filteredMovements, granularity, dateRange, seriesOptions),
+    [filteredMovements, granularity, dateRange, seriesOptions]
   );
   const summary = useMemo(() => hrProgramSummary(filteredMovements), [filteredMovements]);
   const movementTableRows = useMemo(
@@ -650,6 +738,9 @@ export default function HrDashboardPage() {
     },
   ];
 
+  // Statut planifié d'un mouvement avant sa bascule en « Réalisé » par saisie de la date
+  // effective — restauré si la date est ensuite effacée (m11).
+  const previousStatusRef = useRef(new Map<string, MovementStatus>());
   const handleMovementTableUpdate = (
     rowId: string,
     field: keyof HrMovementTableRow,
@@ -667,10 +758,29 @@ export default function HrDashboardPage() {
     }
     if (field === "actualDate") {
       const actualDate = String(value) || null;
+      const movement = row.movement;
+      // Un mouvement abandonné garde son statut : seule la date est mise à jour (m11).
+      if (movement.status === "Abandonné") {
+        data.updateWorkforceMovement(rowId, { actualDate });
+        return;
+      }
+      if (actualDate) {
+        // Mémorise le statut planifié d'origine pour le restaurer si la date est effacée.
+        if (movement.status !== "Réalisé") previousStatusRef.current.set(rowId, movement.status);
+        data.updateWorkforceMovement(rowId, { actualDate, status: "Réalisé" });
+        return;
+      }
+      // Date effacée : retour au statut planifié précédent (« Planifié » par défaut), plus de
+      // bascule forcée sur « À faire ».
+      const restored =
+        movement.status === "Réalisé"
+          ? (previousStatusRef.current.get(rowId) ?? "Planifié")
+          : movement.status;
+      previousStatusRef.current.delete(rowId);
       data.updateWorkforceMovement(rowId, {
-        actualDate,
-        status: actualDate ? "Réalisé" : "À faire",
-        ...(actualDate ? {} : { hrValidated: false }),
+        actualDate: null,
+        status: restored,
+        hrValidated: false,
       });
       return;
     }
@@ -687,19 +797,24 @@ export default function HrDashboardPage() {
       );
     }
   };
-  const current = hr.currentFTE(filteredWf);
-  // Cible ETP bottom-up : baseline + réductions/créations prévues dans les mouvements.
-  // L'ancienne cible reposait sur les fteTarget départementaux figés (2 600 ETP), sans lien
-  // avec la cible du KPI Impact ETP calculée depuis les lockedPlan des mouvements filtrés.
-  const target = targetFteFromBaseline(wf.totalFTE, summary.fte.target);
-  const landing = hr.plannedFTE(filteredWf);
-  const reductionGoal = wf.totalFTE - target;
-  const reductionDone = wf.totalFTE - current;
+  // Chiffres absolus du périmètre (baseline scopée + TOUS les mouvements du périmètre, quelle que
+  // soit la plage) : "Effectif cible" = `hr.targetFTE`, définition unique partagée avec la Base
+  // ETP (m3). Masqués si la baseline n'est pas scopable (M3, voir `absoluteAvailable`).
+  const baselineFte = scopedWf.totalFTE;
+  const current = hr.currentFTE(scopedWf);
+  const target = hr.targetFTE(scopedWf);
+  const landing = hr.plannedFTE(scopedWf);
+  const reductionGoal = baselineFte - target;
+  const reductionDone = baselineFte - current;
   const goalPct = reductionGoal > 0 ? Math.round((reductionDone / reductionGoal) * 100) : 100;
+  // Cible de la waterfall de la PÉRIODE : ouverture + impact cible des mouvements de la plage.
+  const waterfallTarget = targetFteFromBaseline(bridgeOpening, summary.fte.target);
 
   const ALERT_LABELS = alertLabels(t);
+  // Compteurs en MOUVEMENTS distincts (un mouvement peut porter plusieurs alertes), M4.
+  const alertedMovementCount = hr.alertedMovementIds(alerts).length;
   const alertCounts = (Object.keys(ALERT_LABELS) as MovementAlertKind[])
-    .map((kind) => ({ kind, count: alerts.filter((a) => a.kind === kind).length }))
+    .map((kind) => ({ kind, count: hr.alertedMovementIds(alerts, kind).length }))
     .filter((a) => a.count > 0);
 
   const drill = useMemo(() => {
@@ -708,7 +823,7 @@ export default function HrDashboardPage() {
     // `hr.salaryBridge`, sans le détail des mouvements) — mais `bridge` et `salary` partagent
     // exactement les mêmes labels de bucket (même granularité/plage), donc on retrouve toujours
     // les mouvements via `bridge`. Seule la grandeur affichée par levier change avec `drillKind`.
-    const bucket = bridge.find((b) => b.label === drillBucket);
+    const bucket = bridge.find((b) => b.key === drillBucket);
     if (!bucket) return [];
     return drillKind === "salary"
       ? hr.bucketByLever(
@@ -724,15 +839,39 @@ export default function HrDashboardPage() {
   // `etpMovementDeepLink` que la matrice de statut et `MovementDrilldownModal`).
   const drillBucketMovements = useMemo(() => {
     if (!drillBucket) return [];
-    return bridge.find((b) => b.label === drillBucket)?.movements ?? [];
+    return bridge.find((b) => b.key === drillBucket)?.movements ?? [];
   }, [drillBucket, bridge]);
 
   const realizedMovements = filteredMovements.filter((m) => m.status === "Réalisé").length;
 
-  const goToEtp = (params: Record<string, string>) => {
-    const qs = new URLSearchParams(params).toString();
-    router.push(`/hr/etp${qs ? `?${qs}` : ""}`);
-  };
+  // ─── Contexte de l'export PowerPoint (m15) : programme, période, filtres actifs ──────────────
+  const fmtIsoDate = (iso: string) =>
+    iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(intlLocale) : "…";
+  const exportContextLines: string[] = [
+    `${t("dashboard.program", "Programme")} : ${
+      isConsolidatedView
+        ? t("topbar.consolidatedViewShort", "Vue consolidée")
+        : (activeProgram?.name ?? "—")
+    }`,
+    `${t("hr.period", "Période")} : ${fmtIsoDate(dateFromISO)} → ${fmtIsoDate(dateToISO)}`,
+    `${t("hr.export.filters", "Filtres")} : ${
+      Object.entries(activeFilters)
+        .filter(([, values]) => (values?.length ?? 0) > 0)
+        .map(([key, values]) => {
+          const def = filterDefs.find((d) => d.key === key);
+          const shown = values.map((v) => (def?.formatValue ? def.formatValue(v) : v));
+          return `${def?.label ?? key} = ${shown.join(", ")}`;
+        })
+        .join(" · ") || t("hr.export.noFilters", "aucun")
+    }`,
+  ];
+
+  // Libellé localisé du bucket en cours de drill (la sélection se fait par clé stable).
+  const drillBucketLabel = drillBucket
+    ? (bridge.find((b) => b.key === drillBucket)?.label ?? drillBucket)
+    : "";
+  // Label de bucket cliqué (affiché par le graphique) → clé stable.
+  const bucketKeyFromLabel = (label: string) => bridge.find((b) => b.label === label)?.key ?? label;
   // ─── Layout du Dashboard RH (widgets) ───────────────────────────────────────────────────────
   // Personnalisation d'affichage purement locale (localStorage, par navigateur, clé DISTINCTE du
   // dashboard exécutif) — voir lib/hrDashboardWidgets.ts.
@@ -830,7 +969,75 @@ export default function HrDashboardPage() {
     setDragOverInstanceId(null);
   };
 
-  const renderWidgetShell = (instance: HrWidgetInstance, children: ReactNode) => {
+  // Note affichée à la place des chiffres absolus quand la baseline n'est pas scopable (M3).
+  const baselineNote = t(
+    "hr.baselineNotScopable",
+    "Chiffres absolus masqués : le filtre « {filters} » ne porte que sur les mouvements, pas sur la base ETP — les trajectoires affichent des variations."
+  ).replace("{filters}", nonScopableFilterLabels.join(", "));
+  const baselineNoteBlock = !absoluteAvailable ? (
+    <p className="mb-2 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-secondary">
+      {baselineNote}
+    </p>
+  ) : null;
+  const dimensionName = (dimension: string): string =>
+    dimension === "country"
+      ? t("dashboard.country", "Pays")
+      : dimension === "program"
+        ? t("dashboard.program", "Programme")
+        : dimension === "function"
+          ? t("dashboard.function", "Fonction")
+          : dimension === "workstream"
+            ? t("dashboard.workstream", "Chantier")
+            : t("hr.department", "Département");
+
+  /** Titre du slide PowerPoint d'un widget : libellé + vue choisie (dimension, indicateur,
+   *  filtres du widget) pour que chaque slide soit autoporteur (m15). */
+  const widgetExportTitle = (instance: HrWidgetInstance, base: string): string => {
+    const byDim = (dim: string) =>
+      `${base} — ${t("hr.export.byDimension", "par {dim}").replace("{dim}", dimensionName(dim).toLowerCase())}`;
+    switch (instance.type) {
+      case "fte-execution-status":
+      case "salary-execution-status":
+        return byDim(
+          instance.view === "country" || instance.view === "program" ? instance.view : "function"
+        );
+      case "department-breakdown":
+        return byDim(
+          instance.view === "country" || instance.view === "program" ? instance.view : "department"
+        );
+      case "department-table":
+        return byDim(
+          instance.view === "country" || instance.view === "workstream"
+            ? instance.view
+            : "department"
+        );
+      case "movement-progress":
+        return byDim(
+          instance.view === "department" || instance.view === "country" ? instance.view : "program"
+        );
+      case "movement-status-by-type": {
+        const [rawDepartments = "", rawCountries = ""] = (instance.view ?? "|").split("|");
+        const parts = [
+          ...(rawDepartments === "all" ? [] : parseFilterValues(rawDepartments)),
+          ...(rawCountries === "all" ? [] : parseFilterValues(rawCountries)),
+        ];
+        return parts.length > 0 ? `${base} — ${parts.join(", ")}` : base;
+      }
+      case "hr-pivot": {
+        const active = resolveHrActiveCustomView(instance);
+        return active ? describeHrCustomView(active, t) : base;
+      }
+      default:
+        return base;
+    }
+  };
+
+  /** `exportTitle` : titre de slide explicite (sinon `widgetExportTitle`). */
+  const renderWidgetShell = (
+    instance: HrWidgetInstance,
+    children: ReactNode,
+    exportTitle?: string
+  ) => {
     const def = getHrWidgetDef(instance.type);
     if (!def) return null;
     const isDragOver = editMode && dragOverInstanceId === instance.instanceId;
@@ -838,7 +1045,10 @@ export default function HrDashboardPage() {
       <div
         key={instance.instanceId}
         data-widget-id={instance.instanceId}
-        data-widget-title={t(HR_WIDGET_LABEL_KEYS[instance.type], def.label)}
+        data-widget-title={
+          exportTitle ??
+          widgetExportTitle(instance, t(HR_WIDGET_LABEL_KEYS[instance.type], def.label))
+        }
         className={`relative h-full self-stretch ${SPAN_COL_CLASS[instance.span]} ${
           isDragOver ? "outline outline-2 outline-offset-2 outline-bp-coral" : ""
         }`}
@@ -952,13 +1162,16 @@ export default function HrDashboardPage() {
               actions={timeControls}
             />
             <CardBody>
+              {baselineNoteBlock}
+              {/* Ouverture = baseline + réalisés antérieurs à la plage (M2) ; cible = ouverture +
+                  impact cible des mouvements de la plage. */}
               <FteWaterfallChart
                 buckets={bridge}
-                baseline={wf.totalFTE}
-                target={target}
+                baseline={bridgeOpening}
+                target={waterfallTarget}
                 onBarClick={(label) => {
                   setDrillKind("fte");
-                  setDrillBucket(label);
+                  setDrillBucket(bucketKeyFromLabel(label));
                 }}
               />
               <FteWaterfallLegend />
@@ -1013,16 +1226,17 @@ export default function HrDashboardPage() {
               actions={timeControls}
             />
             <CardBody>
+              {baselineNoteBlock}
               <FteWaterfallChart
                 buckets={salary}
-                baseline={wf.massSalary}
-                target={wf.massSalary + salary.reduce((s, b) => s + b.delta, 0)}
+                baseline={salaryOpening}
+                target={salaryOpening + salary.reduce((s, b) => s + b.delta, 0)}
                 unit="€M"
                 decimals={1}
                 targetLabel={t("hr.landingPlan", "Atterrissage plan")}
                 onBarClick={(label) => {
                   setDrillKind("salary");
-                  setDrillBucket(label);
+                  setDrillBucket(bucketKeyFromLabel(label));
                 }}
               />
               <FteWaterfallLegend
@@ -1082,11 +1296,28 @@ export default function HrDashboardPage() {
             <CardBody flush>
               <HrOwnerActionTable
                 rows={rows}
-                onCellClick={(owner, status) =>
+                onCellClick={(owner, status) => {
+                  // « À valider » n'est pas un état d'exécution : lien par ids exacts (même
+                  // périmètre que la cellule). Les autres cellules ouvrent la Base ETP filtrée
+                  // (préfixe `mov_` de la barre de filtres des mouvements, M5).
+                  if (status === "toValidate") {
+                    const ids = filteredMovements
+                      .filter(
+                        (m) =>
+                          (m.hrOwner || "Non renseigné") === owner &&
+                          classifyMovementAction(m, today) === "toValidate"
+                      )
+                      .map((m) => m.id);
+                    router.push(etpMovementDeepLink(ids));
+                    return;
+                  }
                   router.push(
-                    `/hr/etp?tab=mouvements&f_hrOwner=${encodeURIComponent(owner)}&f_execution=${encodeURIComponent(EXECUTION_LABELS[status])}`
-                  )
-                }
+                    etpMovementFilterLink({
+                      f_hrOwner: [owner],
+                      f_execution: [EXECUTION_LABELS[status]],
+                    })
+                  );
+                }}
               />
             </CardBody>
           </Card>
@@ -1332,7 +1563,11 @@ export default function HrDashboardPage() {
             : instance.view === "workstream"
               ? "workstream"
               : "department";
-        const positionRows = hr.ftePositionsByDimension(filteredWf, dimension);
+        // Baselines par dimension restreintes au périmètre + tous les mouvements du périmètre
+        // (actuel / cible indépendants de la plage). Non scopable → note à la place (M3).
+        const positionRows = absoluteAvailable
+          ? hr.ftePositionsByDimension(scopedWf, dimension)
+          : [];
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
@@ -1356,6 +1591,9 @@ export default function HrDashboardPage() {
               }
             />
             <CardBody flush>
+              {!absoluteAvailable && (
+                <p className="px-3 py-3 text-[11.5px] text-tertiary">{baselineNote}</p>
+              )}
               <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full border-collapse text-[12.5px]">
                   <thead>
@@ -1365,7 +1603,7 @@ export default function HrDashboardPage() {
                           ? t("hr.department", "Département")
                           : dimension === "country"
                             ? t("dashboard.country", "Pays")
-                            : "Chantier",
+                            : t("hr.pivot.dim.workstream", "Chantier"),
                         t("hr.column.baselineFte", "ETP de référence"),
                         t("hr.current", "Actuel"),
                         t("hr.target", "Cible"),
@@ -1391,19 +1629,19 @@ export default function HrDashboardPage() {
                         >
                           <td className="px-3 py-2.5 font-semibold text-primary">{d.label}</td>
                           <td className="px-3 py-2.5 tabular-nums">
-                            {d.baseline.toLocaleString("fr-FR")}
+                            {d.baseline.toLocaleString(intlTag())}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
-                            {d.current.toLocaleString("fr-FR")}
+                            {d.current.toLocaleString(intlTag())}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
-                            {d.target.toLocaleString("fr-FR")}
+                            {d.target.toLocaleString(intlTag())}
                           </td>
                           <td
                             className={`px-3 py-2.5 font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
                           >
                             {d.gapToTarget > 0 ? "+" : ""}
-                            {d.gapToTarget.toLocaleString("fr-FR")}
+                            {d.gapToTarget.toLocaleString(intlTag())}
                           </td>
                           <td className="w-[180px] px-3 py-2.5">
                             <ProgressBar pct={Math.max(0, Math.min(100, pct))} />
@@ -1426,7 +1664,7 @@ export default function HrDashboardPage() {
                           className={`text-[12px] font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
                         >
                           {d.gapToTarget > 0 ? "+" : ""}
-                          {d.gapToTarget.toLocaleString("fr-FR")} {t("hr.vsTarget", "vs cible")}
+                          {d.gapToTarget.toLocaleString(intlTag())} {t("hr.vsTarget", "vs cible")}
                         </span>
                       </div>
                       <dl className="mb-2 grid grid-cols-3 gap-x-3 gap-y-1.5">
@@ -1440,7 +1678,7 @@ export default function HrDashboardPage() {
                               {item.label}
                             </dt>
                             <dd className="text-[12px] tabular-nums text-primary">
-                              {item.value.toLocaleString("fr-FR")}
+                              {item.value.toLocaleString(intlTag())}
                             </dd>
                           </div>
                         ))}
@@ -1466,7 +1704,7 @@ export default function HrDashboardPage() {
                 onCellUpdate={handleMovementTableUpdate}
                 onRowClick={(row) => {
                   const lever = data.levers.find((item) => item.id === row.movement.leverId);
-                  goToEtp(lever ? { f_lever: lever.code } : {});
+                  router.push(etpMovementFilterLink(lever ? { f_lever: [lever.code] } : {}));
                 }}
                 searchPlaceholder={t(
                   "hr.movementsSearchPlaceholder",
@@ -1588,6 +1826,77 @@ export default function HrDashboardPage() {
           </Card>
         );
       }
+      case "hr-pivot": {
+        // Vue construite (builder générique indicateur × dimension, lib/hrDashboardPivot.ts) —
+        // rend enfin atteignable le flux "Configurer le widget" / "Ajouter une vue" (m6).
+        const views = resolveHrCustomViews(instance);
+        const active = resolveHrActiveCustomView(instance);
+        const metric = active ? getHrMetricDef(active.metric) : undefined;
+        const rows = active
+          ? pivotWorkforceByDimension(filteredMovements, active.metric, active.dimension, {
+              locale: intlLocale,
+            })
+          : [];
+        const formatPivotValue = (value: number) =>
+          !metric || metric.aggregation === "count"
+            ? value.toLocaleString(intlLocale)
+            : metric.key === "fteImpact"
+              ? `${value.toLocaleString(intlLocale, { maximumFractionDigits: 1 })} ${t("etp.column.fte", "ETP")}`
+              : fmtCurr(value / 1_000_000);
+        return renderWidgetShell(
+          instance,
+          <Card className="mb-0 h-full">
+            <CardHeader
+              title={
+                active
+                  ? describeHrCustomView(active, t)
+                  : t("hr.widget.customPivot", "Vue personnalisée (indicateur × dimension)")
+              }
+              actions={
+                views.length > 1 ? (
+                  <ViewToggle
+                    options={views.map((v) => ({ value: v.id, label: describeHrCustomView(v, t) }))}
+                    value={active?.id ?? ""}
+                    onChange={(next) =>
+                      updateLayout(setHrWidgetView(layout, instance.instanceId, next))
+                    }
+                  />
+                ) : undefined
+              }
+            />
+            <CardBody>
+              {!active ? (
+                <p className="py-10 text-center text-sm text-tertiary">
+                  {t(
+                    "hr.pivot.noView",
+                    "Aucune vue configurée — ajoutez-en une via « Personnaliser »."
+                  )}
+                </p>
+              ) : (
+                <HrPivotBarChart
+                  data={rows.map((row) => ({ label: row.label, value: row.value }))}
+                  formatValue={formatPivotValue}
+                  onBarClick={(label) => {
+                    const dim = getHrDimensionDef(active.dimension);
+                    const row = rows.find((r) => r.label === label);
+                    if (!dim || !row) return;
+                    setDrilldownModal({
+                      title: t("hr.drilldown.dimensionTitle", "Mouvements — {label}").replace(
+                        "{label}",
+                        label
+                      ),
+                      movements: filteredMovements.filter((m) => {
+                        const raw = dim.getValue(m);
+                        return (raw && raw.trim() !== "" ? raw : "Non renseigné") === row.key;
+                      }),
+                    });
+                  }}
+                />
+              )}
+            </CardBody>
+          </Card>
+        );
+      }
       default:
         return null;
     }
@@ -1607,12 +1916,15 @@ export default function HrDashboardPage() {
             </span>
           </div>
           <div className="mt-2.5 text-[13px] text-secondary">
-            {t(
-              "hr.subtitle",
-              "Trajectoire effectifs {from} → {to} ETP · {count} mouvements · {realized} réalisés"
+            {(absoluteAvailable
+              ? t(
+                  "hr.subtitle",
+                  "Trajectoire effectifs {from} → {to} ETP · {count} mouvements · {realized} réalisés"
+                )
+              : t("hr.subtitleNoBaseline", "{count} mouvements · {realized} réalisés")
             )
-              .replace("{from}", wf.totalFTE.toLocaleString("fr-FR"))
-              .replace("{to}", target.toLocaleString("fr-FR"))
+              .replace("{from}", baselineFte.toLocaleString(intlTag()))
+              .replace("{to}", target.toLocaleString(intlTag()))
               .replace("{count}", String(filteredMovements.length))
               .replace("{realized}", String(realizedMovements))}
             {hasActiveFilters && (
@@ -1629,8 +1941,13 @@ export default function HrDashboardPage() {
             <DashboardExportButton
               layout={layout}
               gridSelector="[data-hr-dashboard-widget-grid]"
-              coverTitle="BeTrack — Dashboard RH"
+              coverTitle={t("hr.export.coverTitle", "BeTrack — Dashboard RH")}
               fileNamePrefix="betrack_hr_dashboard"
+              coverDate={t("hr.export.dataDate", "Données au {date}").replace(
+                "{date}",
+                new Date(`${today}T00:00:00`).toLocaleDateString(intlLocale)
+              )}
+              contextLines={exportContextLines}
             />
           )}
           <Button
@@ -1683,20 +2000,24 @@ export default function HrDashboardPage() {
               {t("hr.movementsRealizedLabel", "mouvements réalisés")}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-[12px] tabular-nums text-secondary">
-            <span>
-              <strong className="text-primary">{current.toLocaleString("fr-FR")}</strong>{" "}
-              {t("hr.etpActuels", "ETP actuels")}
-            </span>
-            <span className="text-tertiary">→</span>
-            <span>
-              {t("hr.targetLower", "cible")}{" "}
-              <strong className="text-primary">{target.toLocaleString("fr-FR")}</strong>
-            </span>
-            <span className="rounded-sm bg-neutral-100 px-1.5 py-0.5 text-[11px] font-bold text-primary">
-              {goalPct}%
-            </span>
-          </div>
+          {absoluteAvailable ? (
+            <div className="flex items-center gap-3 text-[12px] tabular-nums text-secondary">
+              <span>
+                <strong className="text-primary">{current.toLocaleString(intlTag())}</strong>{" "}
+                {t("hr.etpActuels", "ETP actuels")}
+              </span>
+              <span className="text-tertiary">→</span>
+              <span>
+                {t("hr.targetLower", "cible")}{" "}
+                <strong className="text-primary">{target.toLocaleString(intlTag())}</strong>
+              </span>
+              <span className="rounded-sm bg-neutral-100 px-1.5 py-0.5 text-[11px] font-bold text-primary">
+                {goalPct}%
+              </span>
+            </div>
+          ) : (
+            <span className="max-w-[560px] text-[11.5px] text-tertiary">{baselineNote}</span>
+          )}
         </div>
         {/* Barre double : fond = total, remplissage = réalisé. Pas de rounded — charte BP. */}
         <div className="mt-2 h-2 w-full overflow-hidden bg-neutral-200">
@@ -1707,19 +2028,21 @@ export default function HrDashboardPage() {
             }}
           />
         </div>
-        <div className="mt-1 flex justify-between text-[10px] text-tertiary">
-          <span>
-            {t("hr.baselineFteLine", "Référence {n} ETP").replace(
-              "{n}",
-              wf.totalFTE.toLocaleString("fr-FR")
-            )}
-          </span>
-          <span>
-            {t("hr.landingPrefix", "Atterrissage")} {landing.toLocaleString("fr-FR")} (
-            {landing - target > 0 ? "+" : ""}
-            {(landing - target).toLocaleString("fr-FR")} {t("hr.vsTarget", "vs cible")})
-          </span>
-        </div>
+        {absoluteAvailable && (
+          <div className="mt-1 flex justify-between text-[10px] text-tertiary">
+            <span>
+              {t("hr.baselineFteLine", "Référence {n} ETP").replace(
+                "{n}",
+                baselineFte.toLocaleString(intlTag())
+              )}
+            </span>
+            <span>
+              {t("hr.landingPrefix", "Atterrissage")} {landing.toLocaleString(intlTag())} (
+              {landing - target > 0 ? "+" : ""}
+              {(landing - target).toLocaleString(intlTag())} {t("hr.vsTarget", "vs cible")})
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════════════════════
@@ -1730,10 +2053,10 @@ export default function HrDashboardPage() {
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <HrKPICard
           label={t("hr.kpi.fteImpact", "Impact ETP")}
-          value={summary.fte.realized.toLocaleString("fr-FR")}
+          value={summary.fte.realized.toLocaleString(intlTag())}
           sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
-            .replace("{target}", summary.fte.target.toLocaleString("fr-FR"))
-            .replace("{reforecast}", summary.fte.reforecast.toLocaleString("fr-FR"))
+            .replace("{target}", summary.fte.target.toLocaleString(intlTag()))
+            .replace("{reforecast}", summary.fte.reforecast.toLocaleString(intlTag()))
             .replace("{pct}", String(summary.fte.progressPct))}
           barPct={summary.fte.progressPct}
           barMarkerPct={
@@ -1748,7 +2071,7 @@ export default function HrDashboardPage() {
           )}
         />
         <HrKPICard
-          label={t("hr.kpi.annualSalarySavings", "Économies salariales annuelles")}
+          label={t("hr.kpi.netSalarySavings", "Économies nettes de masse salariale")}
           value={fmtCurr(summary.salarySavings.realized / 1_000_000)}
           sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
             .replace("{target}", fmtCurr(summary.salarySavings.target / 1_000_000))
@@ -1761,6 +2084,10 @@ export default function HrDashboardPage() {
               : undefined
           }
           accent="green"
+          infoTooltip={t(
+            "hr.kpi.netSalarySavingsTooltip",
+            "Économies annuelles de masse salariale nettes des recrutements (− impact masse salariale) — même définition que le graphique « Économies par période et cumul »."
+          )}
         />
         <HrKPICard
           label={t("hr.kpi.socialCostsConsumed", "Coûts sociaux consommés")}
@@ -1809,7 +2136,10 @@ export default function HrDashboardPage() {
               className="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
             >
               <TriangleAlert size={14} className="text-rag-amber" />{" "}
-              {t("hr.alertsCount", "{n} alerte(s) mouvement").replace("{n}", String(alerts.length))}
+              {t("hr.alertedMovementsCount", "{n} mouvement(s) en alerte").replace(
+                "{n}",
+                String(alertedMovementCount)
+              )}
             </button>
             {alertCounts.map(({ kind, count }) => (
               <button
@@ -2075,7 +2405,7 @@ export default function HrDashboardPage() {
       )}
 
       {selectedProgramId && !programScopeHasMovements && wf.movements.length > 0 && (
-        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-[12px] text-secondary">
+        <div className="mb-4 rounded-lg border border-rag-amber/40 bg-rag-amber-light p-3 text-[12px] text-secondary">
           <strong className="text-primary">
             {t("hr.programScopeMismatchTitle", "Programme sélectionné sans mouvement associé")}
           </strong>{" "}
@@ -2107,12 +2437,11 @@ export default function HrDashboardPage() {
         toISO={dateToISO}
         minISO={movementDateRange.from}
         maxISO={movementDateRange.to}
-        onRangeChange={({ fromISO, toISO }) => {
-          setDateFromISO(fromISO);
-          setDateToISO(toISO);
-        }}
+        onRangeChange={({ fromISO, toISO }) => setUserRange(fromISO, toISO)}
         presets={hrPeriodPresets}
         onReset={() => {
+          // Retour à la plage par défaut, qui suit de nouveau les données.
+          userRangeRef.current = false;
           setDateFromISO(movementDateRange.from);
           setDateToISO(movementDateRange.to);
         }}
@@ -2140,7 +2469,7 @@ export default function HrDashboardPage() {
               ? t("hr.drillPrefixMonth", "du mois de")
               : t("hr.drillPrefixOther", "du")
           )
-          .replace("{bucket}", drillBucket ?? "")}
+          .replace("{bucket}", drillBucketLabel)}
         maxWidth="640px"
       >
         {drill.length === 0 ? (
@@ -2183,7 +2512,9 @@ export default function HrDashboardPage() {
                     </button>
                     <span className={`text-sm font-bold text-primary`}>
                       {entry.value > 0 ? "+" : ""}
-                      {entry.value} {drillKind === "salary" ? "€M" : t("etp.column.fte", "ETP")}
+                      {drillKind === "salary"
+                        ? formatMillions(entry.value, 2)
+                        : `${formatNumber(entry.value)} ${t("etp.column.fte", "ETP")}`}
                     </span>
                   </div>
                   {lever && (
@@ -2291,20 +2622,15 @@ function ViewToggle({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <div className="flex rounded-md border border-border-strong p-0.5 text-[11px] font-semibold">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          className={`rounded px-2 py-1 transition ${
-            value === o.value ? "bg-bp-coral text-white" : "text-secondary hover:text-primary"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      label={t("common.segmented.view", "Affichage")}
+      showLabel={false}
+      options={options}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 

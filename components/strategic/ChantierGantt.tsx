@@ -28,6 +28,7 @@ import {
   chantierShadesForAxis,
   milestoneProgressPct,
   type ChantierDependencyAlert,
+  type ProjetProgressLookup,
 } from "@/lib/axisLogic";
 import type { Chantier, ChantierAction, MaturityStageConfig } from "@/types";
 
@@ -124,12 +125,12 @@ export function ChantierGantt({
   chantiers,
   actions,
   allActions,
-  stages,
   axisColor,
   onChantierClick,
   onActionClick,
   alerts,
   labels,
+  progressOf = (a) => milestoneProgressPct(a),
 }: {
   chantiers: Chantier[];
   /** Toutes les actions du programme — filtrées par chantier ici (les bornes d'un chantier ne
@@ -140,10 +141,9 @@ export function ChantierGantt({
    *  l'action qui la référence. Repli sur `actions` si absent (couvre le cas où l'appelant n'a que
    *  les actions de cet axe sous la main). */
   allActions?: ChantierAction[];
-  /** Référentiel d'étapes du programme, pour afficher le libellé d'étape sous le nom du chantier
-   *  et la satisfaction des prérequis (`canStartAction`). L'avancement affiché ne s'appuie plus sur
-   *  ce référentiel : il vient des jalons E0-E4 du chantier (`axisLogic.milestoneProgressPct`). */
-  stages: MaturityStageConfig[];
+  /** @deprecated Plus lu : les prérequis se résolvent sur les jalons (`progressOf`), plus sur
+   *  l'étape de maturité. Conservé optionnel pour compat des appelants. */
+  stages?: MaturityStageConfig[];
   /** Couleur de l'axe (`StrategicAxis.color`) — chaque chantier en reçoit une NUANCE
    *  (`chantierShadesForAxis`, lib/axisLogic.ts, calculée sur `chantiers`), identique à celle de
    *  l'onglet "Avancement" : en-tête, barre et projets du chantier sont teintés de cette nuance. */
@@ -157,6 +157,10 @@ export function ChantierGantt({
    *  et l'infobulle du bloc chantier détaille le(s) message(s) précis plutôt qu'un texte générique. */
   alerts?: ChantierDependencyAlert[];
   labels?: ChantierGanttLabels;
+  /** Avancement d'un projet — passer `useStrategicData().projetProgress` (items automatiques
+   *  compris) pour afficher le même chiffre que la fiche chantier et le board. Omis = mode dégradé
+   *  (`milestoneProgressPct` sans items auto). */
+  progressOf?: ProjetProgressLookup;
 }) {
   const { t, locale } = useTranslation();
   const formatTimelineDay = (iso: string) => formatTimelineDayBase(iso, locale);
@@ -289,7 +293,7 @@ export function ChantierGantt({
                 // `ChantierAction.chantierWeightPct`) — remplace l'ancienne moyenne simple
                 // `chantierMilestoneProgressPct`, même figure que celle affichée en tête de la
                 // fiche chantier (`ChantierDetailPanel.tsx`).
-                const progressPct = chantierDeclaredProgress(chantier.id, items);
+                const progressPct = chantierDeclaredProgress(chantier.id, items, progressOf);
                 const lanes = packTimelineLanes(items);
                 const trackHeight = LANES_TOP + Math.max(1, lanes.length) * ACTION_LANE_HEIGHT;
                 const blockColor = isAlerted
@@ -369,7 +373,11 @@ export function ChantierGantt({
                             const top = LANES_TOP + laneIndex * ACTION_LANE_HEIGHT;
                             // Prérequis go/no-go (round 4, point 5) — purement informatif : le
                             // badge cadenas et la raison en infobulle n'empêchent AUCUNE transition.
-                            const startInfo = canStartAction(action, effectiveAllActions, stages);
+                            const startInfo = canStartAction(
+                              action,
+                              effectiveAllActions,
+                              progressOf
+                            );
                             return (
                               <TimelineBar
                                 key={action.id}
@@ -381,7 +389,7 @@ export function ChantierGantt({
                                 variant="soft"
                                 // Jauge "chargement" : même avancement jalons E0→E4 que celui
                                 // agrégé (pondéré) dans l'en-tête du chantier.
-                                progressPct={milestoneProgressPct(action)}
+                                progressPct={progressOf(action)}
                                 roundedClassName="rounded-sm"
                                 // Sous ~14 % de la piste, un nom écrit dans la barre serait réduit
                                 // à « D… » : on le rabat alors juste à droite de la barre.

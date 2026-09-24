@@ -17,6 +17,7 @@ import { IndicatorStatusSummary } from "@/components/strategic/IndicatorStatusSu
 import {
   chantierDependencyAlerts,
   latestMeasurement,
+  latestNumericMeasurement,
   resolveIndicatorStatus,
   resolveUserFullName,
 } from "@/lib/axisLogic";
@@ -302,6 +303,7 @@ export function AxisDetailClient() {
             actions={axisActions}
             allActions={data.chantierActions}
             stages={stages}
+            progressOf={data.projetProgress}
             axisColor={axis.color}
             alerts={alerts}
             onChantierClick={(c) => openChantier(c.id)}
@@ -441,7 +443,9 @@ function AxisIndicatorCard({
 }) {
   const { t } = useTranslation();
   const router = useRouter();
-  const latest = latestMeasurement(indicator.id, measures);
+  // Valeur chiffrée d'abord : un commentaire seul saisi ensuite ne masque pas le dernier chiffre.
+  const latest =
+    latestNumericMeasurement(indicator.id, measures) ?? latestMeasurement(indicator.id, measures);
   const { year, setYear, options, visible, filtered } = useYearSelection(measures, "all");
   const status = resolveIndicatorStatus(indicator);
   return (
@@ -490,7 +494,7 @@ function AxisIndicatorCard({
       </div>
 
       {/* Zone interactive (sélecteur d'année + graphique) : ne déclenche pas la navigation. */}
-      <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-2 space-y-2" role="presentation" onClick={(e) => e.stopPropagation()}>
         {visible && <YearSegmentedControl years={options} value={year} onChange={setYear} />}
         <IndicatorChart
           measurements={filtered}

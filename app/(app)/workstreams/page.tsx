@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
@@ -15,7 +15,12 @@ import { Avatar } from "@/components/shared/Avatar";
 import { EditableTable, type ColumnDef } from "@/components/shared/EditableTable";
 import type { Company, Lever } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
-import { canUserViewLever } from "@/lib/leversLogic";
+import {
+  canUserViewLever,
+  filterAggregateVisibleLevers,
+  filterProgramScopedLevers,
+} from "@/lib/leversLogic";
+import { generateAlerts } from "@/lib/alertEngine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type Row = Lever & {
@@ -60,43 +65,45 @@ export default function WorkstreamsPage() {
       ),
     [user?.companyId]
   );
-  // Scope au programme Performance sélectionné (voir usePerformanceProgramSelector plus haut) —
-  // même principe que le dashboard exécutif et LeversPagePerformance : cette page affiche UN
-  // programme à la fois, pas l'ensemble de l'entreprise.
-  //
-  // IMPORTANT (voir le même commentaire dans LeversPagePerformance.tsx) : `programId` est
-  // optionnel sur `Lever` — un filtre `===` strict faisait disparaître tout levier importé/créé
-  // sans rattachement à un programme, ou rattaché à un programme depuis supprimé. Ces leviers
-  // restent donc TOUJOURS visibles, quel que soit le programme sélectionné.
-  const performanceProgramIds = new Set(performancePrograms.map((p) => p.id));
-  const visibleLevers = data.levers.filter(
-    (lever) =>
-      (!lever.programId ||
-        lever.programId === selectedProgramId ||
-        !performanceProgramIds.has(lever.programId)) &&
-      canUserViewLever(
-        user,
-        lever,
-        company?.roleClearance,
-        data.workstreams,
-        company?.confidentialityLevels
-      )
+  // Périmètre = MÊME périmètre que le dashboard exécutif (programme sélectionné, `programId`
+  // strict, + règle de visibilité des vues agrégées), pour que KPI et totaux se recoupent — puis
+  // restreint au périmètre du RÔLE (porteur : ses leviers ; sponsor : ses chantiers), raison d'être
+  // de cette page (`canUserViewLever`). Avant, les leviers sans programme (ou d'un programme
+  // supprimé) y étaient ajoutés, ce qui la faisait diverger du dashboard.
+  const visibleLevers = filterProgramScopedLevers(
+    filterAggregateVisibleLevers(data.levers, user, company),
+    { programId: selectedProgramId }
+  ).filter((lever) =>
+    canUserViewLever(
+      user,
+      lever,
+      company?.roleClearance,
+      data.workstreams,
+      company?.confidentialityLevels
+    )
   );
   const summary = engine.programSummary({ ...data, levers: visibleLevers });
 
-  const reforecastPct =
-    summary.reforecastTarget > 0
-      ? Math.max(0, Math.round((summary.realized / summary.reforecastTarget) * 100))
-      : 0;
+  // Même définition que partout (`engine.realizationPct` : cible ≤ 0 ou réalisé négatif → 0 %).
+  const reforecastPct = engine.realizationPct(summary.realized, summary.reforecastTarget);
 
-  const rows: Row[] = visibleLevers.map((l) => ({
-    ...l,
-    realized: engine.realizedSavings(l),
-    reforecastNet: engine.displayedReforecastNet(l).value,
-    progressPct: engine.leverProgressPct(l),
-    wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
-    statusLabel: lifecycle.label(l.status),
-  }));
+  // Risque RECALCULÉ depuis les alertes (`engine.computeLeverRisk`, même source que la bibliothèque
+  // des leviers et la fiche levier) — pas le champ stocké `Lever.risk`, figé à l'import.
+  const alerts = useMemo(() => generateAlerts(data), [data]);
+
+  const rows: Row[] = visibleLevers.map((l) => {
+    const cancelled = l.status === "cancelled";
+    return {
+      ...l,
+      risk: engine.computeLeverRisk(l.id, alerts, company?.riskThresholds).level,
+      realized: cancelled ? 0 : engine.realizedSavings(l),
+      // Un levier abandonné ne porte plus aucune cible (exclu des totaux, comme les KPI).
+      reforecastNet: cancelled ? 0 : engine.displayedReforecastNet(l).value,
+      progressPct: engine.leverProgressPct(l),
+      wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
+      statusLabel: lifecycle.label(l.status),
+    };
+  });
 
   const columns: ColumnDef<Row>[] = [
     { key: "code", label: t("levers.column.code", "Code"), width: "90px" },

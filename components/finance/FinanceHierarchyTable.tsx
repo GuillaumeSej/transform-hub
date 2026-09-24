@@ -9,43 +9,14 @@ import * as engine from "@/lib/engine";
 import {
   attachChildren,
   financeTotals,
+  roundFinanceTree,
   sortFinanceRows,
+  type FinanceChildRow,
   type FinanceSortKey,
 } from "@/lib/dashboardSavings";
 import { sortedHierarchyLevels } from "@/lib/financeCosts";
-import { impactDatesOf } from "@/lib/impactKinds";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type { BeTrackData, HierarchyLevelDef, HierarchyNode, Lever } from "@/types";
-
-/** Années couvertes par un levier — dates de ses lignes d'impact (début/fin), ou à défaut la
- *  période du levier lui-même (leviers sans impact chiffré). Approximation volontaire : un levier
- *  qui déborde sur plusieurs années matche chacune d'elles (pas de répartition € par année). */
-function yearOf(d?: string): number | undefined {
-  if (!d) return undefined;
-  const y = new Date(d).getFullYear();
-  return Number.isNaN(y) ? undefined : y;
-}
-
-function addRange(years: Set<number>, from?: number, to?: number) {
-  if (from === undefined && to === undefined) return;
-  const lo = from ?? to!;
-  const hi = to ?? from!;
-  for (let y = Math.min(lo, hi); y <= Math.max(lo, hi); y++) years.add(y);
-}
-
-function leverYears(l: Lever): number[] {
-  const years = new Set<number>();
-  const imps = engine.leverImpactsOf(l);
-  if (imps.length === 0) {
-    addRange(years, yearOf(l.start), yearOf(l.end));
-    return Array.from(years);
-  }
-  for (const imp of imps) {
-    const { start, end } = impactDatesOf(imp);
-    addRange(years, yearOf(start), yearOf(end));
-  }
-  return Array.from(years);
-}
+import type { BeTrackData, HierarchyLevelDef, HierarchyNode } from "@/types";
 
 /** `labelKey`/`label` = clé i18n + fallback français, résolus au rendu via `t()`. */
 const COLUMNS: { key: Exclude<FinanceSortKey, "label">; labelKey: string; label: string }[] = [
@@ -57,8 +28,9 @@ const COLUMNS: { key: Exclude<FinanceSortKey, "label">; labelKey: string; label:
 ];
 
 /** Arrondi d'AFFICHAGE uniquement : lignes et totaux sont calculés sur des montants non arrondis
- *  (`unrounded: true` ci-dessous), le total n'est donc plus la somme de lignes déjà arrondies — il
- *  égale au dixième près les mêmes agrégats du dashboard (KPI, cascade). */
+ *  (`unrounded: true` ci-dessous) ; le total égale au dixième près les agrégats du dashboard, et les
+ *  lignes affichées sont arrondies par la méthode du plus fort reste (`roundFinanceTree`) pour
+ *  sommer EXACTEMENT au total affiché (et les enfants à leur parent) — à l'écran comme à l'export. */
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const fmt = (v: number) => r1(v).toFixed(1);
 
@@ -84,11 +56,9 @@ export function FinanceHierarchyTable({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   // Filtre années : ensemble vide = toutes les années (case décochée globalement = pas de filtre).
-  const allYears = useMemo(() => {
-    const years = new Set<number>();
-    for (const l of data.levers) leverYears(l).forEach((y) => years.add(y));
-    return Array.from(years).sort((a, b) => a - b);
-  }, [data.levers]);
+  // Années proposées : mêmes plages que le filtre (`engine.impactYearRange` — un impact récurrent
+  // court chaque année depuis son début, jusqu'à sa fin si renseignée ; audit M4).
+  const allYears = useMemo(() => engine.financeYearOptions(data.levers), [data.levers]);
   const [selectedYears, setSelectedYears] = useState<Set<number>>(new Set());
   const yearFilterActive = selectedYears.size > 0;
   const toggleYear = (y: number) =>
@@ -137,14 +107,19 @@ export function FinanceHierarchyTable({
         : [],
     [data, company, childLevel, hierarchyNodes, yearsOpt]
   );
+  const totals = useMemo(() => financeTotals(parents), [parents]);
   const tree = useMemo(() => {
-    const t0 = attachChildren(parents, children, hierarchyNodes);
+    // Arrondi AVANT le tri : tri sur les valeurs affichées ; lignes = total, enfants = parent.
+    const t0 = roundFinanceTree(attachChildren(parents, children, hierarchyNodes), totals);
     return sortFinanceRows(t0, sort.key, sort.dir).map((r) => ({
       ...r,
       children: sortFinanceRows(r.children, sort.key, sort.dir),
     }));
-  }, [parents, children, hierarchyNodes, sort]);
-  const totals = useMemo(() => financeTotals(parents), [parents]);
+  }, [parents, children, hierarchyNodes, sort, totals]);
+  const childLabel = (ch: FinanceChildRow) =>
+    ch.isDirect
+      ? t("finance.drill.directSlice", "{name} (direct)").replace("{name}", ch.label)
+      : ch.label;
 
   if (levels.length === 0) return null;
 
@@ -162,7 +137,11 @@ export function FinanceHierarchyTable({
       for (const c of COLUMNS) row[t(c.labelKey, c.label)] = r1(values[c.key]);
       return row;
     };
-    for (const r of tree) rows.push(toRow(r.label, r));
+    // Même arrondi qu'à l'écran (lignes = total), enfants inclus sous leur parent.
+    for (const r of tree) {
+      rows.push(toRow(r.label, r));
+      for (const ch of r.children) rows.push(toRow(`   ${childLabel(ch)}`, ch));
+    }
     rows.push(toRow(t("finance.hierarchyTable.total", "Total"), totals));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Finance");
@@ -341,7 +320,7 @@ export function FinanceHierarchyTable({
                           key={ch.nodeId}
                           className="border-b border-border/40 bg-neutral-50 text-secondary"
                         >
-                          <td className="py-1.5 pl-9 pr-3">{ch.label}</td>
+                          <td className="py-1.5 pl-9 pr-3">{childLabel(ch)}</td>
                           {COLUMNS.map((c) => (
                             <td key={c.key} className={`${numCell} py-1.5`}>
                               {fmt(ch[c.key])}
@@ -356,7 +335,7 @@ export function FinanceHierarchyTable({
                 className="bg-neutral-100 font-bold text-primary"
                 title={t(
                   "finance.hierarchyTable.totalHint",
-                  "Totaux calculés sur les montants non arrondis (mêmes valeurs que le dashboard) — la somme des lignes arrondies peut différer de ±0,1."
+                  "Totaux calculés sur les montants non arrondis (mêmes valeurs que le dashboard) ; les lignes sont arrondies pour sommer exactement au total affiché."
                 )}
               >
                 <td className="px-3 py-2">{t("finance.hierarchyTable.total", "Total")}</td>

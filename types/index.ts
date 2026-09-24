@@ -636,7 +636,18 @@ export type Alert = {
   /** Alertes AUTO uniquement (lib/alertEngine.ts) : clés i18n + variables pour réafficher
    *  `title`/`desc` dans la langue active (voir `lib/alertText.ts`) ; `title`/`desc` restent le
    *  texte français de repli. Absent pour les alertes manuelles (texte libre saisi). */
-  i18n?: { titleKey: string; descKey: string; vars: Record<string, string | number> };
+  i18n?: {
+    titleKey: string;
+    descKey: string;
+    vars: Record<string, string | number>;
+    /** Variables elles-mêmes traduisibles (ex. le groupe verbal d'une demande de validation,
+     *  lib/strategicApprovals.ts) : chacune est résolue via `t(key, fallback)` puis remplie avec
+     *  ses propres `vars` avant d'être injectée dans le gabarit titre/description. */
+    nested?: Record<
+      string,
+      { key: string; fallback: string; vars: Record<string, string | number> }
+    >;
+  };
   actorRole: string;
   /** Impact € sur le run-rate (négatif = perte de valeur, positif = gain). */
   impactEur?: number;

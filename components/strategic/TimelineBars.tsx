@@ -4,15 +4,10 @@ import type { ReactNode } from "react";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { hexToRgb } from "@/lib/axisLogic";
 import { parseISO } from "@/lib/dateUtils";
+import { intlTag } from "@/lib/format";
 import type { Locale } from "@/lib/i18n/locales";
-
-/** Locale BCP 47 utilisée pour formater dates/mois selon la langue active de l'interface. */
-const DATE_LOCALE: Record<Locale, string> = {
-  fr: "fr-FR",
-  en: "en-GB",
-  de: "de-DE",
-  es: "es-ES",
-};
+import { SegmentedControl } from "@/components/shared/SegmentedControl";
+import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /** Préfixes de colonne trimestre/semestre par langue (T1/S1 en français, Q1/H1 en anglais…). */
 const PERIOD_PREFIX: Record<Locale, { quarter: string; semester: string }> = {
@@ -61,7 +56,7 @@ export function timelineColumnLabel(
   scale: TimelineScale,
   locale: Locale = "fr"
 ): string {
-  if (scale === "month") return date.toLocaleDateString(DATE_LOCALE[locale], { month: "short" });
+  if (scale === "month") return date.toLocaleDateString(intlTag(locale), { month: "short" });
   if (scale === "quarter")
     return `${PERIOD_PREFIX[locale].quarter}${Math.floor(date.getMonth() / 3) + 1}`;
   if (scale === "semester")
@@ -73,7 +68,7 @@ export function timelineColumnLabel(
 export function formatTimelineDay(iso: string, locale: Locale = "fr"): string {
   const time = parseISO(iso);
   if (Number.isNaN(time)) return iso;
-  return new Date(time).toLocaleDateString(DATE_LOCALE[locale], {
+  return new Date(time).toLocaleDateString(intlTag(locale), {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -242,24 +237,15 @@ export function TimelineScaleToggle({
   onChange: (next: TimelineScale) => void;
   options: { value: TimelineScale; label: string }[];
 }) {
+  const { t } = useTranslation();
   return (
-    <div className="flex overflow-hidden rounded-md border border-border">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          aria-pressed={value === option.value}
-          onClick={() => onChange(option.value)}
-          className={`px-2.5 py-1 text-[11px] font-semibold transition ${
-            value === option.value
-              ? "bg-black text-white"
-              : "bg-white text-secondary hover:text-primary"
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      label={t("common.segmented.scale", "Échelle")}
+      showLabel={false}
+      options={options}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 

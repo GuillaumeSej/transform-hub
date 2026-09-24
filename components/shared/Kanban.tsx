@@ -213,6 +213,8 @@ export function Kanban({
         const wsLevers = levers.filter((l) => l.ws === ws.id);
         const activeWsLevers = wsLevers.filter((l) => l.status !== "cancelled");
         const cancelledWsLevers = wsLevers.filter((l) => l.status === "cancelled");
+        // Poids déclarés (`Lever.workstreamWeightPct`) si renseignés, sinon pondération par la
+        // valeur des leviers — voir engine.workstreamProgressPct.
         const declaredPct = workstreamProgressPct(progressLevers, ws.id);
         return (
           <div key={ws.id} className="overflow-hidden rounded-lg border border-border bg-white">

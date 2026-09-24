@@ -10,10 +10,12 @@ import {
   findPeriodCollision,
   isBaseline,
   MeasurementPeriodCollisionError,
+  measurementLabel,
   parseNumber,
   type IndicatorValueInput,
   type MeasurementEditPatch,
 } from "@/lib/kpiHistory";
+import { parsePeriodForFrequency, periodFormatHint } from "@/lib/indicatorPeriod";
 import { editKpiValueFlow, submitKpiValueFlow } from "@/lib/strategicApprovalFlows";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import { KpiCorrectionNotice } from "@/components/strategic/KpiCorrectionNotice";
@@ -28,6 +30,12 @@ const FIELD =
  * CORRECTION d'une mesure déjà publiée (`editing` fourni : champs pré-remplis, écriture via
  * `editKpiValueFlow`). Monter avec une `key` propre à la mesure éditée : l'état initial est lu au
  * montage.
+ *
+ * Période déjà renseignée (saisie d'une NOUVELLE valeur sur une période prise) : jamais de second
+ * document pour la même période. La modale propose de REMPLACER la valeur existante — ce qui
+ * devient une correction de cette mesure, avec les MÊMES règles de routage
+ * (`routeKpiCorrection` : directe ou demande au responsable) — ou refuse avec un message clair si
+ * l'utilisateur n'a pas le droit de corriger.
  */
 export function IndicatorValueModal({
   indicator,
@@ -39,6 +47,8 @@ export function IndicatorValueModal({
   measurements = [],
   updateMeasurement,
   correctionRoute,
+  initialDraft,
+  replacing = false,
 }: {
   indicator: Indicator;
   user: AuthUser;
@@ -52,18 +62,34 @@ export function IndicatorValueModal({
   updateMeasurement?: (id: string, patch: MeasurementEditPatch) => Promise<unknown>;
   /** Circuit de la correction (`routeKpiCorrection`) — texte explicatif + demande/directe. */
   correctionRoute?: KpiCorrectionRoute | null;
+  /** Valeur/commentaire pré-remplis (remplacement d'une mesure sur une période déjà prise). */
+  initialDraft?: { value?: number; note?: string };
+  /** `editing` est ouvert pour REMPLACER sa valeur par une nouvelle saisie (bandeau explicatif). */
+  replacing?: boolean;
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const sa = useStrategicApprovalsApi();
   const quantitative = indicator.kind === "quantitative";
   const [period, setPeriod] = useState(() => editing?.period ?? currentPeriod(indicator.frequency));
-  const [value, setValue] = useState(() =>
-    editing?.value !== undefined ? String(editing.value) : ""
-  );
-  const [note, setNote] = useState(() => editing?.note ?? "");
+  const [value, setValue] = useState(() => {
+    const v = initialDraft ? initialDraft.value : editing?.value;
+    return v !== undefined ? String(v) : "";
+  });
+  const [note, setNote] = useState(() => (initialDraft ? initialDraft.note : editing?.note) ?? "");
   const [saving, setSaving] = useState(false);
-  const editingBaseline = !!editing && isBaseline(editing, measurements);
+  /** Mesure existante sur la période saisie (saisie d'une NOUVELLE valeur) : la validation
+   *  suivante la REMPLACE (correction routée), voir l'en-tête. */
+  const [replaceTarget, setReplaceTarget] = useState<IndicatorMeasurement | null>(null);
+  const target = editing ?? replaceTarget ?? undefined;
+  const route =
+    correctionRoute !== undefined
+      ? correctionRoute
+      : sa && user
+        ? sa.kpiCorrectionRoute(indicator)
+        : null;
+  const canReplace = !!updateMeasurement && (route ? route.mode !== "forbidden" : true);
+  const editingBaseline = !!target && isBaseline(target, measurements);
 
   const collisionMessage = (p: string) =>
     t(
@@ -72,6 +98,7 @@ export function IndicatorValueModal({
     ).replace("{period}", p);
 
   const submitEdit = async (p: string, parsed: number | undefined) => {
+    const editing = target;
     if (!editing || !updateMeasurement) return;
     if (findPeriodCollision(measurements, indicator.id, p, editing.id)) {
       showToast(collisionMessage(p), indicator.name, "error");
@@ -85,7 +112,7 @@ export function IndicatorValueModal({
         editing,
         { period: p, value: parsed ?? null, note: note.trim() === "" ? null : note },
         updateMeasurement,
-        correctionRoute ?? undefined
+        route ?? undefined
       );
       showToast(
         outcome === "pending"
@@ -112,14 +139,47 @@ export function IndicatorValueModal({
   };
 
   const submit = async () => {
-    const p = period.trim();
-    if (!p) return showToast(t("kpi.periodRequired"), "", "error");
+    const raw = period.trim();
+    if (!raw) return showToast(t("kpi.periodRequired"), "", "error");
+    // Période STRICTE par fréquence (normalisée : "2026-3" → "2026-03", "T1 2026" → "2026-Q1") ;
+    // une période historique inchangée d'une mesure corrigée reste acceptée telle quelle.
+    const p =
+      parsePeriodForFrequency(raw, indicator.frequency) ??
+      (target && raw === target.period.trim() ? raw : undefined);
+    if (!p) {
+      return showToast(
+        t("kpi.periodInvalid", "Période invalide — format attendu : {format}").replace(
+          "{format}",
+          periodFormatHint(indicator.frequency)
+        ),
+        "",
+        "error"
+      );
+    }
     const parsed = quantitative ? parseNumber(value) : undefined;
     if (parsed === null) return showToast(t("kpi.valueInvalid"), "", "error");
     if (parsed === undefined && note.trim() === "")
       return showToast(t("kpi.valueRequired"), "", "error");
-    if (editing) return submitEdit(p, parsed);
+    if (target) return submitEdit(p, parsed);
     if (!addMeasurement) return;
+    const existing = findPeriodCollision(measurements, indicator.id, p);
+    if (existing) {
+      const full = measurements.find((m) => m.id === existing.id);
+      if (full && canReplace) {
+        // 1er clic : on bascule en mode « remplacer » (bandeau + bouton explicites) ; la
+        // validation suivante corrige la mesure existante (routage de correction).
+        setReplaceTarget(full);
+        return;
+      }
+      return showToast(
+        t(
+          "kpi.measurement.periodTakenNoRight",
+          "Une valeur existe déjà pour la période {period} et vous n'êtes pas habilité à la remplacer."
+        ).replace("{period}", p),
+        indicator.name,
+        "error"
+      );
+    }
     setSaving(true);
     try {
       const outcome = await submitKpiValueFlow(
@@ -132,7 +192,8 @@ export function IndicatorValueModal({
           value: parsed,
           note,
         },
-        addMeasurement
+        addMeasurement,
+        measurements
       );
       setValue("");
       setNote("");
@@ -146,19 +207,27 @@ export function IndicatorValueModal({
         showToast(t("kpi.measurementSaved"), indicator.name, "success");
       }
       onOpenChange(false);
-    } catch {
-      showToast(t("kpi.saveError"), indicator.name, "error");
+    } catch (err) {
+      showToast(
+        err instanceof MeasurementPeriodCollisionError
+          ? collisionMessage(err.period)
+          : t("kpi.saveError"),
+        indicator.name,
+        "error"
+      );
     } finally {
       setSaving(false);
     }
   };
+
+  const showReplaceNotice = replacing || !!replaceTarget;
 
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
       title={`${
-        editing
+        target
           ? t("kpi.measurement.editTitle", "Corriger la mesure")
           : t("kpi.fillValue", "Renseigner la valeur")
       } — ${indicator.name}`}
@@ -168,7 +237,9 @@ export function IndicatorValueModal({
             {t("common.cancel")}
           </Button>
           <Button variant="primary" size="sm" onClick={submit} disabled={saving}>
-            {t("common.save")}
+            {replaceTarget
+              ? t("kpi.measurement.replaceConfirm", "Remplacer la valeur")
+              : t("common.save")}
           </Button>
         </>
       }
@@ -176,7 +247,16 @@ export function IndicatorValueModal({
       <div className="space-y-3">
         <label className="block text-[11px] font-medium text-text-secondary">
           {t("kpi.period")}
-          <input value={period} onChange={(e) => setPeriod(e.target.value)} className={FIELD} />
+          <input
+            value={period}
+            onChange={(e) => {
+              setPeriod(e.target.value);
+              // Changer de période annule le remplacement proposé (la nouvelle période peut être libre).
+              setReplaceTarget(null);
+            }}
+            placeholder={periodFormatHint(indicator.frequency)}
+            className={FIELD}
+          />
         </label>
         {quantitative && (
           <label className="block text-[11px] font-medium text-text-secondary">
@@ -208,7 +288,17 @@ export function IndicatorValueModal({
             )}
           </p>
         )}
-        {editing && <KpiCorrectionNotice route={correctionRoute} action="edit" />}
+        {showReplaceNotice && target && (
+          <p className="rounded-md border border-bp-coral/40 bg-bp-coral/5 px-2.5 py-1.5 text-[11px] text-text-secondary">
+            {t(
+              "kpi.measurement.replaceNotice",
+              "Une valeur existe déjà pour la période {period} ({value}) : la nouvelle saisie la remplacera."
+            )
+              .replace("{period}", target.period)
+              .replace("{value}", measurementLabel(target, indicator.unit))}
+          </p>
+        )}
+        {target && <KpiCorrectionNotice route={route} action="edit" />}
       </div>
     </Modal>
   );

@@ -13,8 +13,6 @@ const es: Record<string, string> = {
   "common.edit": "Editar",
   "common.validate": "Validar",
   "common.close": "Cerrar",
-  "common.search": "Buscar",
-  "common.choose": "Elegir…",
   "common.optional": "(opcional)",
 
   // ─── nav ──────────────────────────────────────────────────────────────────
@@ -33,10 +31,8 @@ const es: Record<string, string> = {
   "nav.axes": "Hoja de ruta",
   "nav.kpi": "KPIs",
   "nav.effectifs": "Presupuesto y personal movilizado",
-  "nav.indicators": "Indicadores",
   "nav.companies": "Empresas",
   "nav.users": "Usuarios",
-  "nav.lifecycle": "Ciclo de vida",
   "nav.hierarchy": "Estructura financiera",
   "nav.data": "Datos",
   "nav.history": "Historial",
@@ -154,37 +150,24 @@ const es: Record<string, string> = {
   // ─── dashboard ────────────────────────────────────────────────────────────
   "dashboard.title": "Pilotaje global",
   "dashboard.program": "Programa",
-  "dashboard.leversActive": "palancas activas",
   "dashboard.customize": "Personalizar",
   "dashboard.done": "Terminar",
   "dashboard.addWidget": "Añadir un widget",
-  "dashboard.allWidgetsAdded": "Todos los widgets ya están mostrados",
   "dashboard.reset": "Restablecer",
   "dashboard.editModeTitle": "Modo de edición del panel",
   "dashboard.editModeHint":
     "Añada, redimensione, reordene o elimine widgets — los cambios se guardan automáticamente.",
   "dashboard.alreadyOnBoard": "Ya mostrado",
-  "dashboard.duplicateWidgetTitle": "¿Añadir otro bloque?",
-  "dashboard.duplicateWidgetHint":
-    "Este gráfico ya está mostrado y permite alternar entre sus vistas — solo duplique si quiere comparar dos vistas una al lado de la otra.",
-  "dashboard.keepSingleBlock": "No, un solo bloque basta",
-  "dashboard.addNewBlock": "Sí, añadir un nuevo bloque",
   "dashboard.widgetView.functionCountry": "Función × País",
   "dashboard.widgetView.workstreamLever": "Proyecto × Palanca",
-  "dimension.lever": "Palanca",
   "dashboard.kpi.savingsRealized": "Ahorros realizados",
   "dashboard.kpi.leversDelivered": "Palancas Realizadas",
   "dashboard.kpi.leversAtRisk": "Palancas en Riesgo",
-  "dashboard.kpi.capexEngaged": "CAPEX comprometido",
   "dashboard.kpi.implementationCosts": "CAPEX y costes puntuales",
   "dashboard.kpi.fteImpacted": "FTE impactados",
   "dashboard.kpi.target": "Plan inicial",
   "dashboard.kpi.reforecast": "Reprevisión",
   "dashboard.kpi.plan": "Plan",
-  "dashboard.kpi.riskDelay": "retrasos",
-  "dashboard.kpi.riskCost": "sobrecostes",
-  "dashboard.kpi.riskSavings": "ahorros reducidos",
-  "dashboard.kpi.suppressions": "puestos eliminados",
   "dashboard.kpi.leversAtRiskTooltip":
     "El total cuenta cada palanca una sola vez (1 categoría activada = en riesgo, 2+ = crítica). Las 3 categorías siguientes no son excluyentes: una misma palanca puede contarse en varias a la vez (p. ej. con retraso Y con sobrecoste), por lo que su suma suele ser superior al total mostrado.",
   "dashboard.kpi.fteImpactedTooltip":
@@ -194,13 +177,8 @@ const es: Record<string, string> = {
   "chart.scurve.actual": "Realizado",
   "chart.scurve.planned": "Plan inicial",
   "chart.scurve.reforecast": "Reactualizado",
-  "chart.bridge.monthSavings": "Ahorros del mes",
-  "chart.bridge.quarterSavings": "Ahorros del trimestre",
-  "chart.bridge.cumulative": "Acumulado",
-  "chart.bridge.planned": "Plan inicial",
   "chart.bar.target": "Objetivo",
   "chart.bar.realized": "Realizado",
-  "chart.bar.reforecast": "Reproyección",
   "dashboard.widgets.viewSCurve": "Curva S",
   "dashboard.widgets.viewBridge": "Vista trimestral",
   "dashboard.widgets.dateFrom": "Desde",
@@ -220,7 +198,6 @@ const es: Record<string, string> = {
   "alerts.showAll": "Todas",
   "alerts.markAllResolved": "Resolver todas",
   "alerts.auto": "Auto",
-  "alerts.impact": "Impacto",
   "alerts.page": "Página {current} / {total}",
   "alerts.count": "{n} alerta(s)",
   "alerts.tooltip.red": "Alertas críticas — acción inmediata requerida",
@@ -297,16 +274,12 @@ const es: Record<string, string> = {
   "dashboard.tab.portfolio": "Cartera",
   "dashboard.month": "Mes",
   "dashboard.quarter": "Trimestre",
-  "dashboard.filters": "Filtros",
   "dashboard.workstream": "Proyecto",
   "dashboard.country": "País",
   "dashboard.function": "Función",
   "dashboard.leverDepartment": "Departamento",
   "dashboard.geography": "Geografía",
   "dashboard.tableHeader.leverCount": "Palancas",
-  "dashboard.tableHeader.realizedTarget": "Realizado / Objetivo",
-  "dashboard.tableHeader.progress": "Progreso",
-  "dashboard.tableHeader.risk": "Riesgo",
   "dashboard.dependency.planningRule": "Regla de planificación",
   "dashboard.dependency.rule.fs": "El destino debe terminar antes de que el origen pueda comenzar",
   "dashboard.dependency.rule.sf": "El destino debe comenzar antes de que termine el origen",
@@ -345,8 +318,6 @@ const es: Record<string, string> = {
   "hr.plannedEnd": "fin prevista",
 
   // ─── levers ───────────────────────────────────────────────────────────────
-  "levers.title.library": "Biblioteca de Palancas",
-  "levers.title.mine": "Mis Palancas",
   "levers.newLever": "Nueva palanca",
   "levers.newLeverModalTitle": "Nueva palanca",
   "levers.createLever": "Crear palanca",
@@ -354,7 +325,6 @@ const es: Record<string, string> = {
   "levers.kanban": "Kanban",
   "levers.searchPlaceholder": "Buscar (nombre, código, responsable...)",
   "levers.count": "palancas",
-  "levers.netSavingsShown": "Ahorro neto mostrado",
   "levers.realized": "Ahorro realizado (€M)",
   "levers.columnName": "Palanca",
   "levers.columnStatus": "Nivel",
@@ -364,14 +334,11 @@ const es: Record<string, string> = {
   "levers.filter.endQuarter": "Trimestre de fin",
   "levers.filter.hasAlert": "Con alerta",
   "levers.filter.noAlert": "Sin alerta",
-  "levers.notProvided": "No indicado",
 
   "leverForm.sectionIdentification": "Identificación",
   "leverForm.sectionOwnership": "Responsabilidad",
   "leverForm.sectionLocation": "Ubicación & mapping",
   "leverForm.sectionStatus": "Estado & avance",
-  "leverForm.sectionFinancial": "Impacto financiero (€M)",
-  "leverForm.sectionHr": "Impacto RRHH",
   "leverForm.sectionDescription": "Descripción",
   "leverForm.code": "Código de la palanca",
   "leverForm.type": "Tipo de palanca",
@@ -392,43 +359,22 @@ const es: Record<string, string> = {
   "pnl.allMonths": "Todos los meses",
   "chart.pnl.plan": "Plan",
   "chart.pnl.realized": "Realizado",
+  "chart.pnl.reforecast": "Reactualizado",
   "levers.columnMaturity": "Madurez",
-  "lever.jcurve": "Trayectoria de impacto",
   "lever.payback": "Plazo de recuperación",
-  "lever.grossGain": "Ganancia bruta",
-  "lever.totalCost": "Coste total",
-  "lever.netGain": "Ganancia neta",
   "lever.actionTimeline": "Línea de tiempo",
-  "lever.noActions": "Sin acciones definidas",
   "action.impacts": "Líneas de impacto",
-  "action.addImpact": "Añadir",
-  "action.cost": "Coste",
-  "action.saving": "Ahorro",
   "leverForm.country": "País",
   "leverForm.entity": "Entidad",
   "leverForm.function": "Función",
-  "leverForm.financialMesh": "Malla financiera (Centro de coste)",
-  "leverForm.costCenter": "Centro de coste",
   "leverForm.selectPlaceholder": "Seleccionar…",
   "leverForm.pnlAccount": "Cuenta P&L impactada",
   "leverForm.startDate": "Fecha de inicio",
   "leverForm.endDate": "Fecha de fin estimada",
   "leverForm.status": "Madurez",
-  "leverForm.progress": "Progreso (%)",
   "leverForm.risk": "Riesgo",
-  "leverForm.lockedPlanNotice": "Plan inicial bloqueado al pasar a «",
-  "leverForm.lockedPlanNoticeEnd":
-    "» — solo lectura. Utilice la reactualización (pestaña Impacto de la palanca) para ajustar la proyección.",
-  "leverForm.sectionInitialImpact": "Impacto inicial (business case)",
-  "leverForm.initialImpactSupersededNotice":
-    "Esta palanca ya tiene un plan de acciones cuantificado: el impacto inicial queda en segundo plano, los importes de arriba (y ETC) se recalculan a partir de los impactos de las acciones. Añada/edite impactos desde la pestaña Acciones de la palanca.",
-  "leverForm.grossSavings": "Impacto bruto estimado (€M)",
-  "leverForm.netSavings": "Impacto neto estimado (€M)",
   "leverForm.capex": "CAPEX",
-  "leverForm.opexOneOff": "OPEX puntual (€M)",
-  "leverForm.opexRec": "OPEX recurrente (€M/año)",
   "leverForm.fteImpact": "Impacto estimado (FTE)",
-  "leverForm.popImpacted": "Población impactada",
   "leverForm.updated": "Palanca actualizada",
   "leverForm.created": "Palanca creada",
   "leverForm.createdOutOfScope":
@@ -505,8 +451,6 @@ const es: Record<string, string> = {
   "leverDetail.ofWhichGross": "de los cuales {amount} de ganancias brutas",
   "leverDetail.lockedPlan": "Plan inicial (fijado en «{stage}»)",
   "leverDetail.lockedPlanNet": "Plan inicial (neto, fijado en «{stage}»)",
-  "leverDetail.plannedReforecast": "Planificado (reactualizado)",
-  "leverDetail.netSavingsTarget": "Ahorro neto objetivo",
   "leverDetail.descriptionTitle": "Descripción",
   "leverDetail.identityTitle": "Identidad",
   "leverDetail.codeLabel": "Código",
@@ -540,31 +484,15 @@ const es: Record<string, string> = {
     "Realizado a la fecha (neto) = ganancias brutas realizadas − OPEX recurrente realizado",
   "leverDetail.reforecastNet": "Reactualizado (neto)",
   "leverDetail.opexRecYear": "OPEX recurrente /año",
-  "leverDetail.impactsByActionTitle": "Impactos por acción",
   "leverDetail.hrImpactTitle": "Impacto RRHH",
   "leverDetail.realizedToDateFte": "Realizado a la fecha (ETC)",
   "leverDetail.noComments": "Aún no hay comentarios",
   "leverDetail.addCommentPlaceholder": "Añadir un comentario...",
   "leverDetail.commentAdded": "Comentario añadido",
   "leverDetail.send": "Enviar",
-  "leverDetail.impactTable.recurrent": "Recurrente",
-  "leverDetail.impactTable.opexRec": "OPEX recurrente",
-  "leverDetail.impactTable.nature": "Naturaleza",
-  "leverDetail.impactTable.pnlAccount": "Cuenta P&L",
-  "leverDetail.impactTable.entityPnl": "Entidad (P&L)",
-  "leverDetail.impactTable.amount": "Importe €M",
 
   // ─── finance (Módulo Finanzas) ──────────────────────────────────────────────
-  "finance.notProvided": "No indicado",
-  "finance.capexSaved": "Presupuesto CAPEX guardado",
-  "finance.pnlConfiguredTitle": "Cuenta de resultados configurada",
-  "finance.pnlConfiguredHint":
-    "Las líneas siguientes provienen directamente de la jerarquía financiera definida por el administrador global. Los impactos de las palancas se consolidan automáticamente.",
-  "finance.pnlLine": "Línea P&L",
   "finance.baseline": "Línea base",
-  "finance.pnlRealizedNet": "Realizado (neto)",
-  "finance.notAllocatable": "No imputable",
-  "finance.unallocatedHint": "Imputación financiera por precisar",
 
   // ─── operations (Módulo Operaciones, placeholder STRETCH) ──────────────────
   "operations.placeholderDescription":
@@ -595,23 +523,11 @@ const es: Record<string, string> = {
   "hr.alertsModal.summary.leverMismatch": "{n} desincronizada(s)",
   "hr.alertsModal.summary.toValidate": "{n} por validar",
   "hr.alertsModal.summary.due": "{n} vencimiento(s) próximo(s)",
-  "hr.alertsModal.col.programLever": "Programa / palanca",
-  "hr.alertsModal.col.daysLate": "Retraso",
-  "hr.alertsModal.col.daysLeft": "Días restantes",
   "hr.alertsModal.col.lever": "Palanca",
-  "hr.alertsModal.col.issue": "Desviación",
   "hr.alertsModal.col.movementValue": "Movimiento",
   "hr.alertsModal.col.leverValue": "Palanca",
-  "hr.alertsModal.daysLate": "{n} d",
-  "hr.alertsModal.daysLeft": "{n} d",
   "hr.alertsModal.today": "Hoy",
-  "hr.alertsModal.issue.leverCancelled": "Palanca cancelada: movimiento aún activo, a recalificar",
-  "hr.alertsModal.issue.afterLeverEnd":
-    "Fecha prevista posterior al fin de la palanca (no entregada)",
-  "hr.alertsModal.issue.signMismatch": "Sentido FTE contrario al impacto previsto de la palanca",
   "hr.alertsModal.value.cancelled": "Cancelada",
-  "hr.alertsModal.value.planned": "Previsto el {d}",
-  "hr.alertsModal.value.leverEnd": "Fin el {d}",
   "hr.alertsModal.pill.late": "Con {n} d de retraso",
   "hr.alertsModal.pill.in": "En {n} d",
   "hr.alertsModal.date.planned": "previsto el {d}",
@@ -722,7 +638,6 @@ const es: Record<string, string> = {
   "hr.kpi.netSavings": "Ahorros netos",
   "hr.kpi.subPattern": "Objetivo {target} · Reactualización {reforecast} · {pct}%",
   "hr.alertsCount": "{n} alerta(s) de movimiento",
-  "hr.seeMoreAlerts": "Ver los {n} restantes en la Base ETC →",
   "hr.customizePanelTitle": "Personalice su panel de RRHH",
   "hr.customizePanelHint":
     "Añada, mueva, redimensione o elimine widgets — guardado en este dispositivo.",
@@ -791,10 +706,6 @@ const es: Record<string, string> = {
 
   // ─── shared (componentes compartidos: Modal, Topbar, Sidebar, ResetDemoButton…) ─
   "shared.resetDemoButton.label": "Restablecer datos de demostración",
-  "shared.resetDemoButton.confirmTitle": "¿Restablecer los datos de demostración?",
-  "shared.resetDemoButton.toastBody": "Vuelta al conjunto de datos de demostración inicial",
-  "shared.resetDemoButton.body":
-    "Todos los cambios realizados durante esta sesión (palancas, comentarios, alertas resueltas, auditoría) se perderán definitivamente y se sustituirán por el conjunto de datos de demostración inicial.",
   "shared.topbar.notificationsToProcess": "Notificaciones por tratar · {n}",
   "shared.topbar.noNotifications": "No hay notificaciones por tratar.",
   "shared.topbar.sourceAuto": "Automática",
@@ -878,8 +789,6 @@ const es: Record<string, string> = {
   "adminHistory.empty": "Sin entradas en el historial.",
 
   // ─── adminLifecycle ─────────────────────────────────────────────────────────
-  "adminLifecycle.title": "Configuración del Ciclo de Vida",
-  "adminLifecycle.companyLabel": "Empresa:",
 
   // ─── adminCompanies ─────────────────────────────────────────────────────────
   "adminCompanies.title": "Gestión de Empresas",
@@ -972,9 +881,8 @@ const es: Record<string, string> = {
   // ─── shared (Kanban, EditableTable, HrOwnerActionTable) ────────────────────
   "shared.actionKanban.noItems": "Sin acciones",
   "shared.actionKanban.blockingDependency": "Dependencia bloqueante en esta palanca",
-  "shared.actionKanban.overdue": "Fecha de fin superada",
   "shared.kanban.noItems": "Ninguno",
-  "shared.hrOwnerActionTable.dueSoon": "Próximos < 90 días",
+  "shared.hrOwnerActionTable.dueSoon": "Próximos ≤ 90 días",
   "shared.hrOwnerActionTable.later": "Próximos > 90 días",
   "shared.hrOwnerActionTable.realized": "Realizados",
   "shared.hrOwnerActionTable.toValidateHr": "Pendiente validación RRHH",
@@ -1002,13 +910,6 @@ const es: Record<string, string> = {
   "adminCompanyFields.fyStart": "Inicio del ejercicio",
   "adminCompanyFields.fyEnd": "Fin del ejercicio",
   "adminCompanyFields.advancedSettings": "Configuración avanzada",
-  "adminCompanyFields.hrParameterBoxTitle": "Parámetro de RRHH",
-  "adminCompanyFields.hrParameterBoxHint":
-    "Esta tasa solo se utiliza para los cálculos del módulo de RRHH (movimientos de personal — contratación, salida, transferencia — salario cargado). No afecta a los planes de rendimiento ni a los planes estratégicos. No indicado = se aplica automáticamente el valor predeterminado del 45%.",
-  "adminCompanyFields.socialChargesLabel": "Tasa de cargas sociales patronales (%) — opcional",
-  "adminCompanyFields.socialChargesPlaceholder": "Predeterminado: 45%",
-  "adminCompanyFields.socialChargesHint":
-    "Se utiliza para el «salario cargado» (bruto + cargas) en el cálculo en EUR de los movimientos de RRHH (Vista de movimientos). No indicado = 45% por defecto (orden de magnitud de Francia, referencial) — a ajustar según la política de RRHH real del cliente.",
   "adminCompanyFields.riskThresholdsLabel":
     "Umbrales de riesgo (€K) — importe acumulado de alertas abiertas a partir del cual una palanca pasa a este nivel de riesgo",
   "adminCompanyFields.colLevel": "Nivel",
@@ -1183,6 +1084,78 @@ const es: Record<string, string> = {
   "shared.leverImportButton.willBeCreatedSingular": "se creará",
   "shared.leverImportButton.workstreamsNoteOutro": "automáticamente: {names}.",
   "shared.leverImportButton.lineLabel": "Fila",
+  "shared.leverImportButton.unchangedCountLabel": "palanca(s) sin cambios",
+  "shared.leverImportButton.impactsRemovedTitle":
+    "Se eliminarán {n} línea(s) de impacto existente(s)",
+  "shared.leverImportButton.impactsRemovedBody":
+    "porque no figuran en la pestaña Impacts del archivo: {list}.",
+  "shared.leverImportButton.warningsTitle": "Advertencias (importación no bloqueada)",
+  "shared.exportButton.truncatedTitle": "Descripciones truncadas",
+  "shared.exportButton.truncatedBody":
+    "{n} descripción(es) superan el límite de una celda de Excel ({max} caracteres) y se han truncado en el archivo: {codes}. Una nueva importación conserva la descripción completa.",
+  "shared.leverImport.msg.noLeversSheet":
+    "Pestaña «Leviers» no encontrada: el libro debe contener una pestaña «Leviers» (descargue la plantilla Excel).",
+  "shared.leverImport.msg.csvNotSupported":
+    "Formato CSV no admitido: la importación de palancas requiere un libro Excel (.xlsx) con las pestañas Leviers, Actions e Impacts.",
+  "shared.leverImport.msg.missingColumns":
+    "Falta(n) columna(s) obligatoria(s) en la pestaña: {columns}.",
+  "shared.leverImport.msg.missingColumnsForNew":
+    "Nueva palanca «{code}»: faltan la(s) columna(s) {columns} en el archivo (obligatoria(s) para la creación).",
+  "shared.leverImport.msg.missingColumnsForNewAction":
+    "Nueva acción «{name}»: faltan la(s) columna(s) {columns} en el archivo (obligatoria(s) para la creación).",
+  "shared.leverImport.msg.required": '"{field}" es obligatorio',
+  "shared.leverImport.msg.duplicateCode":
+    'Código "{code}" duplicado en el archivo (ya usado en la fila {row})',
+  "shared.leverImport.msg.unknownStatus": 'Estado "{value}" desconocido (esperado: {expected})',
+  "shared.leverImport.msg.statusNewLever":
+    "Una palanca nueva solo puede importarse en la etapa «{idea}» (o abandonada): la etapa «{target}» requiere validación. Impórtela en la etapa «{idea}» y solicite la validación desde su ficha.",
+  "shared.leverImport.msg.statusGated":
+    "Cambio de estado «{current}» → «{target}» rechazado: la etapa «{target}» requiere validación (solicitud desde la ficha de la palanca). Vuelva a poner el estado actual en el archivo para importar los demás cambios.",
+  "shared.leverImport.msg.statusBackward":
+    "Cambio de estado «{current}» → «{target}» rechazado: una importación no puede saltar etapas ni retroceder en el ciclo de vida. Vuelva a poner el estado actual en el archivo para importar los demás cambios.",
+  "shared.leverImport.msg.unknownPnl":
+    'Cuenta de P&L "{value}" no encontrada (esperado: {expected})',
+  "shared.leverImport.msg.requiredDate":
+    '"{field}" es obligatorio y debe ser una fecha válida (DD/MM/AAAA o AAAA-MM-DD)',
+  "shared.leverImport.msg.invalidDate":
+    '"{field}" no válido: "{value}" no es una fecha válida (DD/MM/AAAA o AAAA-MM-DD)',
+  "shared.leverImport.msg.invalidNumber": '"{field}" debe ser un número (valor leído: "{value}")',
+  "shared.leverImport.msg.unknownProgram":
+    'Programa "{value}" no encontrado (esperado: {expected})',
+  "shared.leverImport.msg.noProgram":
+    '"Programme" es obligatorio, pero esta empresa no tiene ningún programa — cree uno en Admin > Empresas > Programas antes de importar palancas',
+  "shared.leverImport.msg.programRequired":
+    '"Programme" es obligatorio cuando la empresa tiene varios programas (esperado: {expected})',
+  "shared.leverImport.msg.noActiveCompany":
+    "Ninguna empresa activa: seleccione una empresa antes de crear palancas por importación.",
+  "shared.leverImport.msg.invalidDependency":
+    'Dependencia "{value}" no válida (formato esperado ID:tipo, tipo entre {expected})',
+  "shared.leverImport.msg.leverNotFound":
+    'Palanca "{code}" no encontrada (ni en la pestaña Leviers ni en la base)',
+  "shared.leverImport.msg.leverRowRejected":
+    'Fila ignorada: la palanca "{code}" tiene un error en la pestaña Leviers (corríjala primero)',
+  "shared.leverImport.msg.duplicateAction":
+    'Acción "{name}" duplicada para la palanca "{code}" (ya declarada en la fila {row}; los nombres se comparan sin distinguir mayúsculas)',
+  "shared.leverImport.msg.actionNotFound": 'Acción "{name}" no encontrada para la palanca "{code}"',
+  "shared.leverImport.msg.unknownImpactType": 'Tipo "{value}" desconocido (esperado: {expected})',
+  "shared.leverImport.msg.unknownNature": 'Naturaleza "{value}" desconocida (esperado: {expected})',
+  "shared.leverImport.msg.unknownSavingType":
+    'Tipo de ganancia "{value}" desconocido (esperado: {expected})',
+  "shared.leverImport.msg.unknownCostAccount":
+    'Partida de coste "{value}" no encontrada (esperado: {expected})',
+  "shared.leverImport.msg.unknownMode":
+    'Modo "{value}" desconocido (esperado: Gain annuel, Gain one-off)',
+  "shared.leverImport.msg.unknownDirection":
+    'Sentido "{value}" desconocido (esperado: Recrutement, Départ)',
+  "shared.leverImport.msg.unknownImpactStatus":
+    'Estado de impacto "{value}" desconocido (esperado: Planifié, Réalisé, En cours)',
+  "shared.leverImport.msg.unknownColumns": "Columna(s) no reconocida(s), ignorada(s): {columns}",
+  "shared.leverImport.msg.unknownImpactNature":
+    'Naturaleza de impacto "{value}" desconocida: valor ignorado (esperado: {expected})',
+  "shared.leverImport.msg.unknownPopulation":
+    'Población impactada "{value}" no encontrada entre los paquetes de trabajo: valor ignorado',
+  "shared.leverImport.msg.formulaNoValue":
+    "Celda {cell}: fórmula sin valor calculado (libro no recalculado) — abra y guarde el archivo en Excel antes de importar.",
 
   // ─── shared charts (components/shared/charts) ──────────────────────────────
   "shared.actionGantt.noActions": "Ninguna acción definida.",
@@ -1191,7 +1164,7 @@ const es: Record<string, string> = {
   "shared.forcedDepartureStatusChart.movementsTooltip": "{n} movimiento(s)",
   "shared.forcedDepartureStatusChart.schemeTooltipLabel": "Dispositivo: {scheme}",
   "shared.forcedDepartureStatusChart.realized": "Realizados",
-  "shared.forcedDepartureStatusChart.dueSoon": "Próximos < 90 días",
+  "shared.forcedDepartureStatusChart.dueSoon": "Próximos ≤ 90 días",
   "shared.forcedDepartureStatusChart.later": "Próximos > 90 días",
   "shared.forcedDepartureStatusChart.abandoned": "Abandonados",
   "shared.fteWaterfallChart.noMovements": "No hay movimientos planificados.",
@@ -1204,17 +1177,12 @@ const es: Record<string, string> = {
   "shared.executionStatusChart.noData": "No hay movimientos que mostrar.",
   "shared.executionStatusChart.movementCount": "{n} mov.",
   "shared.executionStatusChart.net": "neto",
-  "chart.movementType.netPeriod": "Neto periodo",
   "chart.movementType.recruitments": "Contrataciones",
   "chart.movementType.attrition": "Bajas naturales",
   "chart.movementType.forcedDepartures": "Salidas forzadas",
   "chart.movementType.transfersIn": "Transferencias entrantes",
   "chart.movementType.transfersOut": "Transferencias salientes",
   "shared.movementRealizationChart.remaining": "Pendiente",
-  "shared.hrGooduelleCharts.actualForecastPeriod": "Real + previsión — periodo",
-  "shared.hrGooduelleCharts.planPeriod": "Plan inicial — periodo",
-  "shared.hrGooduelleCharts.cumulActualForecast": "Acumulado real + previsión",
-  "shared.hrGooduelleCharts.cumulPlan": "Acumulado plan inicial",
   "shared.hrGooduelleCharts.legendActualForecast": "Realizado + previsión",
   "shared.hrGooduelleCharts.legendPlan": "Plan inicial",
   "shared.hrGooduelleCharts.legendKey": "Barra = por periodo · Curva = acumulado",
@@ -1231,7 +1199,6 @@ const es: Record<string, string> = {
   "shared.hrGooduelleCharts.enrCumulPlan": "Acumulado ENR plan inicial",
   "shared.hrGooduelleCharts.netEconomyActualForecast": "Ahorro neto real + previsión",
   "shared.hrGooduelleCharts.netCumulActualForecast": "Acumulado neto real + previsión",
-  "shared.hrGooduelleCharts.netTargetFte": "ETC neto objetivo (excl. transferencias)",
   "shared.hrGooduelleCharts.cumulNet": "Acumulado neto",
   "shared.hrGooduelleCharts.etpOpening": "ETC apertura",
   "shared.hrGooduelleCharts.etpClosing": "ETC tras selección",
@@ -1309,21 +1276,15 @@ const es: Record<string, string> = {
   "adminHierarchy.childOf": "hijo de {name}",
   "adminHierarchy.colCode": "Código",
   "adminHierarchy.colParent": "Padre ({name})",
-  "adminHierarchy.colBaselineSign": "Línea base / signo",
   "adminHierarchy.computedSuffix": " · Calculada",
   "adminHierarchy.codePlaceholder": "Código",
   "adminHierarchy.labelPlaceholder": "Etiqueta",
   "adminHierarchy.baselinePlaceholder": "Línea base €M",
-  "adminHierarchy.signPositive": "Positivo",
-  "adminHierarchy.signNegative": "Negativo",
-  "adminHierarchy.signPositiveMobile": "Signo positivo",
-  "adminHierarchy.signNegativeMobile": "Signo negativo",
   "adminHierarchy.selectableDesktop": "Imputable a las palancas",
   "adminHierarchy.selectableMobile": "Línea imputable a las palancas",
   "adminHierarchy.noValuesForLevel": "Ningún valor para este nivel por el momento.",
   "adminHierarchy.parentPrefix": "Padre:",
   "adminHierarchy.baselinePrefix": "Línea base:",
-  "adminHierarchy.signPrefix": "signo",
   "adminHierarchy.livePreviewTitle": "Vista previa en vivo de la estructura",
   "adminHierarchy.addValuesHint": "Añada valores para visualizar las ramas.",
   "adminHierarchy.orphansDetected": "{n} valor(es) huérfano(s) detectado(s)",
@@ -1339,48 +1300,16 @@ const es: Record<string, string> = {
 
   // ─── shared charts (MarimekkoChart/MovementStatusMatrix/PnlBarChart/QuarterlyBridgeChart) ──
   "chart.emptyLevers": "No hay palancas que representar.",
-  "chart.bridge.periodSavings": "Ahorros del período",
   "shared.marimekkoChart.leverSingular": "palanca",
   "shared.movementStatusMatrix.initiativeLabel": "Iniciativa",
   "shared.pnlBarChart.empty": "No hay impacto para mostrar.",
 
   // ─── shared.leverForm/actionForm/movementForm/manualAlertForm/dependencyEditor (remediación i18n) ─
-  "leverForm.geographyMesh": "Malla geográfica configurada",
-  "shared.actionForm.savingCostReduction": "Reducción de costes",
-  "shared.actionForm.savingRevenueIncrease": "Aumento de ingresos",
-  "shared.actionForm.savingWorkingCapital": "Impacto en capital circulante",
   "shared.actionForm.actionName": "Nombre de la acción",
   "shared.actionForm.actionNamePlaceholder": "Ej.: Lanzar la RFP",
   "shared.actionForm.owner": "Responsable",
   "shared.actionForm.startDate": "Fecha de inicio",
   "shared.actionForm.endDate": "Fecha de fin",
-  "shared.actionForm.type": "Tipo",
-  "shared.actionForm.fteColumn": "FTE",
-  "shared.actionForm.savingType": "Tipo de ahorro",
-  "shared.actionForm.capexDate": "CAPEX — modo y fechas",
-  "shared.actionForm.capexStartDateLabel": "Inicio periodo",
-  "shared.actionForm.capexEndDateLabel": "Fin periodo",
-  "shared.actionForm.capexDeploymentLabel": "Fecha de compromiso",
-  "shared.actionForm.gainDate": "Fecha del ahorro",
-  "shared.actionForm.costLine": "Línea de coste",
-  "shared.actionForm.hierarchyCostCenter": "Centro de coste (jerarquía)",
-  "shared.actionForm.actionsColumnAria": "Acciones",
-  "shared.actionForm.descriptionPlaceholder": "Descripción...",
-  "shared.actionForm.opexRecShort": "OPEX rec.",
-  "shared.actionForm.oneOff": "Puntual",
-  "shared.actionForm.oneOffCost": "OPEX puntual",
-  "shared.actionForm.opexRecCost": "OPEX recurrente",
-  "shared.actionForm.capexDeploymentTitle": "Fecha en la que el CAPEX queda comprometido al 100%",
-  "shared.actionForm.gainDateTitle": "Fecha de materialización real del ahorro",
-  "shared.actionForm.recognitionDefault": "Por defecto ({value})",
-  "shared.actionForm.oneShotLower": "puntual",
-  "shared.actionForm.smoothedLower": "diferido",
-  "shared.actionForm.smoothed": "Diferido",
-  "shared.actionForm.oneShot": "Puntual",
-  "shared.actionForm.costCenterPlaceholder": "CC...",
-  "shared.actionForm.demoUser": "Usuario demo",
-  "shared.actionForm.calcMethodPlaceholder": "Método de cálculo, hipótesis...",
-  "shared.actionForm.deleteImpactRowAria": "Eliminar esta línea de impacto",
   "shared.movementForm.movementType": "Tipo de movimiento",
   "shared.movementForm.linkedLever": "Palanca vinculada",
   "shared.movementForm.roleTitle": "Título del puesto a contratar",
@@ -1402,7 +1331,6 @@ const es: Record<string, string> = {
   "shared.movementForm.apply": "Aplicar",
   "shared.movementForm.annualLoadedSalary": "Salario anual cargado",
   "shared.movementForm.salaryImpactLabel": "Impacto en masa salarial",
-  "shared.movementForm.chargesRateAppliedPrefix": "Tasa de cargas sociales aplicada: ",
   "shared.movementForm.recruitmentGrossSalaryNote":
     " · salario bruto de referencia introducido arriba",
   "shared.movementForm.defaultValueNote":
@@ -1452,9 +1380,6 @@ const es: Record<string, string> = {
   // Las etiquetas reales de cada etapa provienen de `MaturityStageConfig.label` (introducidas por
   // el administrador, por programa) y por tanto nunca se traducen aquí.
   "axisStage.label": "Etapa de madurez",
-  "axisStage.terminal": "Etapa terminal",
-  "axisStage.unknown": "Etapa desconocida",
-  "axisStage.none": "Ninguna etapa configurada",
 
   // ─── Plan Estratégico — página Ejes + ficha de detalle de un eje ──────────
   // Cartera
@@ -1462,13 +1387,11 @@ const es: Record<string, string> = {
   "strategicAxes.count": "ejes",
   "strategicAxes.chantiersCount": "proyectos",
   "strategicAxes.indicatorsCount": "indicadores",
-  "strategicAxes.atRiskCount": "en riesgo",
   "strategicAxes.newAxis": "Nuevo eje",
   "strategicAxes.newAxisModalTitle": "Nuevo eje estratégico",
   "strategicAxes.createAxis": "Crear el eje",
   "strategicAxes.axisCreated": "Eje creado",
   "strategicAxes.axisUpdated": "Eje actualizado",
-  "strategicAxes.chantiersView": "Proyectos",
   // Ronda 24 (Fase 4, Parte 1): etiquetas de las dos pestañas locales de esta página — ver el
   // comentario de cabecera de `StrategicAxesView.tsx`.
   "strategicAxes.tabs.advancement": "Avance",
@@ -1492,7 +1415,6 @@ const es: Record<string, string> = {
   // cuando un proyecto (chantier) desplegado aún no tiene ninguna iniciativa.
   "strategicAxes.chantierNoProjet": "Ninguna iniciativa",
   "strategicAxes.chantierAlerted": "Alerta de dependencia",
-  "strategicAxes.kanbanEmptyColumn": "Ningún eje",
   // Donut de reparto presupuestario (ronda 12) — encabezado de eje enriquecido de la hoja de ruta
   // (`ProgramRoadmap`, ronda 17: ahora montada en el panel ejecutivo estratégico en lugar de esta
   // página) — esta clave sigue siendo útil tal cual, reutilizada desde este nuevo llamador.
@@ -1504,7 +1426,6 @@ const es: Record<string, string> = {
   "strategicAxes.tree.milestonesN": "{p}/{t} hitos",
   "strategicAxes.tree.open": "Abrir la ficha",
   "strategicAxes.tree.allChantiersTitle": "Todos los proyectos",
-  "strategicAxes.tree.colAxis": "Eje",
   "strategicAxes.tree.noOwner": "Sin responsable",
   "strategicAxes.tree.showAxes": "Ver los ejes",
   "strategicAxes.tree.goKpi": "Ver los indicadores (KPI)",
@@ -1520,7 +1441,6 @@ const es: Record<string, string> = {
   "strategicAxes.owner": "Patrocinador del eje",
   "strategicAxes.editAxis": "Editar el eje",
   "strategicAxes.editAxisModalTitle": "Editar el eje",
-  "strategicAxes.stageUpdated": "Etapa actualizada",
   "strategicAxes.summaryTracked": "Indicadores seguidos",
   "strategicAxes.dependencyAlerts": "Alertas de dependencia entre proyectos",
   "strategicAxes.dependencyDelay": "días",
@@ -1553,11 +1473,6 @@ const es: Record<string, string> = {
   "strategicAxes.roadmap.late": "Retrasado",
   "strategicAxes.roadmap.lateCount": "{n} iniciativa(s) retrasada(s) de {total}",
   "strategicAxes.roadmap.currentMilestone": "Hito actual",
-  "strategicAxes.actionsCompleted": "iniciativas finalizadas",
-  "strategicAxes.moreActionsSuffix": "más",
-  "strategicAxes.cardNoActions": "Sin iniciativas",
-  "strategicAxes.chantierOwner": "Responsable del proyecto",
-  "strategicAxes.ownerFromActions": "según los responsables de las iniciativas",
   "strategicAxes.chantierPeriod": "Periodo",
   "strategicAxes.newChantier": "Nuevo proyecto",
   "strategicAxes.newChantierModalTitle": "Nuevo proyecto",
@@ -1565,10 +1480,7 @@ const es: Record<string, string> = {
   "strategicAxes.chantierCreated": "Proyecto creado",
   "strategicAxes.chantierDeleted": "Proyecto eliminado",
   "strategicAxes.deleteChantier": "Eliminar el proyecto",
-  "strategicAxes.confirmDeleteChantier": "Confirmar la eliminación del proyecto y sus iniciativas",
   // Ventana proyecto / acciones / entregables
-  "strategicAxes.chantierModalTitle": "Detalle del proyecto",
-  "strategicAxes.dependsOn": "Depende de",
   "strategicAxes.chantierActions": "Iniciativas del proyecto",
   "strategicAxes.noActions": "Ninguna iniciativa en este proyecto.",
   "strategicAxes.newAction": "Nueva iniciativa",
@@ -1576,7 +1488,6 @@ const es: Record<string, string> = {
   "strategicAxes.actionCreated": "Iniciativa creada",
   "strategicAxes.actionUpdated": "Iniciativa actualizada",
   "strategicAxes.actionDeleted": "Iniciativa eliminada",
-  "strategicAxes.confirmDelete": "Confirmar",
   "strategicAxes.actionName": "Nombre de la iniciativa",
   "strategicAxes.actionOwner": "Responsable",
   "strategicAxes.actionStart": "Inicio",
@@ -1602,22 +1513,13 @@ const es: Record<string, string> = {
   "strategicAxes.chartValue": "Valor",
   "strategicAxes.chartObjective": "Objetivo",
   "strategicAxes.chartEmpty": "Ninguna medida registrada.",
-  "strategicAxes.freq.monthly": "Mensual",
-  "strategicAxes.freq.quarterly": "Trimestral",
-  "strategicAxes.freq.semiannual": "Semestral",
-  "strategicAxes.freq.annual": "Anual",
 
   "strategicAxes.chantierSaveErrorTitle": "No se pudo guardar",
   "strategicAxes.chantierSaveError": "No se pudo guardar el proyecto.",
   "strategicAxes.actionSaveErrorTitle": "No se pudo guardar",
   "strategicAxes.actionSaveError": "No se pudo guardar la iniciativa.",
-  "strategicAxes.atRiskPopoverTitle": "Indicadores en riesgo",
   "strategicAxes.atRiskTooltip":
     "Desviación desfavorable entre el último valor medido y el objetivo del indicador.",
-  "strategicAxes.filterDirection": "Dirección",
-  "strategicAxes.filterPerson": "Persona",
-  "strategicAxes.filterSponsor": "Patrocinador",
-  "strategicAxes.sponsorUnassigned": "Patrocinador no asignado",
 
   // ─── Plan Estratégico — ficha de proyecto dedicada (ronda 4) ───────────────
   "strategicChantierDetail.title": "Ficha de proyecto",
@@ -1738,17 +1640,11 @@ const es: Record<string, string> = {
   "strategicChantierDetail.milestones.actionPlan.description": "Descripción del plan de acción",
   "strategicChantierDetail.milestones.actionPlan.owner": "Responsable",
   "strategicChantierDetail.milestones.actionPlan.dueDate": "Fecha límite",
-  "strategicChantierDetail.milestones.actionPlan.validate": "Validar el hito",
   "strategicChantierDetail.milestones.actionPlan.missingHint":
     "Todos los elementos deben estar al 100 % para validar el hito.",
   "strategicChantierDetail.milestones.actionPlan.autoResolvedHint": "Calculado automáticamente.",
   "strategicChantierDetail.milestones.actionPlan.markResolved": "Marcar como resuelto",
 
-  "strategicChantierDetail.milestones.approval.pendingBadge":
-    "Pendiente de validación por el líder estratégico",
-  "strategicChantierDetail.milestones.approval.requestedMeta": "Solicitado por {user} el {date}",
-  "strategicChantierDetail.milestones.approval.approve": "Aprobar",
-  "strategicChantierDetail.milestones.approval.reject": "Rechazar",
   "strategicChantierDetail.milestones.transition.pending": "Pendiente de confirmación",
   "strategicChantierDetail.milestones.transition.requestedMeta": "Solicitado por {user} el {date}",
   "strategicChantierDetail.milestones.transition.ready": "Checklist {milestone} completa",
@@ -1846,7 +1742,6 @@ const es: Record<string, string> = {
   "strategicChantierDetail.successKpis.empty": "Aún no hay KPI de éxito.",
 
   // ─── Plan Estratégico — importación Excel (ronda 4) ─────────────────────────
-  "strategicImport.title": "Importar un plan estratégico",
   "strategicImport.uploadButton": "Importar un archivo",
   "strategicImport.templateButton": "Descargar plantilla",
   "strategicImport.previewTitle": "Vista previa de la importación — {file}",
@@ -1862,7 +1757,7 @@ const es: Record<string, string> = {
   "strategicImport.staffingCountLabel": "línea(s) de dotación a crear",
   "strategicImport.templateDownloadedTitle": "Plantilla descargada",
   "strategicImport.templateDownloadedBody":
-    'Léame (guía) + 5 hojas: Ejes (Código = clave), Proyectos (Códigos de ejes separados por ; = FK, admite varios ejes), Iniciativas (Código de proyecto = FK, "Etapa de madurez" opcional), Entregables (Código de iniciativa = FK, opcional), Indicadores (Código de eje O Código de proyecto = FK, "Valor inicial" opcional). Dotación (opcional, Código de proyecto = FK). Elimine las filas de ejemplo antes de completar.',
+    'Léame (guía) + 6 hojas: Ejes (Código = clave), Proyectos (Códigos de ejes separados por ; = FK, admite varios ejes), Iniciativas (Código de proyecto = FK, "Etapa de madurez" opcional), Entregables (Código de iniciativa = FK, opcional), Indicadores (Código de eje O Código de proyecto = FK, "Valor inicial" opcional). Dotación (opcional, Código de proyecto = FK). Elimine las filas de ejemplo antes de completar.',
   "strategicImport.ignoredRowsNote": "{n} línea(s) ignorada(s)",
   "strategicImport.importDoneBody":
     "{axes} eje(s) · {chantiers} proyecto(s) · {actions} iniciativa(s) · {indicators} indicador(es) creado(s)",
@@ -1876,6 +1771,88 @@ const es: Record<string, string> = {
   "strategicImport.accountStatusCreated": "creada",
   "strategicImport.accountStatusExisting": "ya existe (cuenta conservada)",
   "strategicImport.accountStatusFailed": "error",
+  "strategicImport.msg.sheetMissing":
+    "Falta la hoja «{sheet}» en el libro: no se ha importado ninguna línea de este tipo",
+  "strategicImport.msg.sheetAlias": "Hoja «{found}» leída como «{sheet}» (nombre anterior)",
+  "strategicImport.msg.noDataSheet":
+    "Ninguna hoja reconocida en este libro (se esperaba: Axes, Chantiers, Projets, Indicateurs): utilice la plantilla",
+  "strategicImport.msg.missingColumns":
+    "Falta(n) columna(s) obligatoria(s): {columns} — hoja ignorada",
+  "strategicImport.msg.unknownColumns": "Columna(s) no reconocida(s), ignorada(s): {columns}",
+  "strategicImport.msg.required": '"{column}" es obligatorio',
+  "strategicImport.msg.tooLong": '"{column}" supera los {max} caracteres ({length})',
+  "strategicImport.msg.duplicateCode":
+    'Código "{code}" duplicado en el archivo (ya usado en la línea {line})',
+  "strategicImport.msg.unknownStage":
+    'Etapa de madurez "{value}" desconocida (se esperaba: {expected})',
+  "strategicImport.msg.axesNotFound":
+    "Eje(s) no encontrado(s) (ni en la hoja Axes ni en la base): {codes}",
+  "strategicImport.msg.axisNotFound":
+    'Eje "{code}" no encontrado (ni en la hoja Axes ni en la base)',
+  "strategicImport.msg.notNumber": '"{column}" debe ser un número (valor leído: "{value}")',
+  "strategicImport.msg.negative": '"{column}" debe ser positivo o cero (valor leído: {value})',
+  "strategicImport.msg.outOfRange":
+    '"{column}" debe estar entre {min} y {max} (valor leído: {value})',
+  "strategicImport.msg.notPositive": '"{column}" debe ser un número estrictamente positivo',
+  "strategicImport.msg.depNotFound": "Dependencia(s) no encontrada(s): {codes}",
+  "strategicImport.msg.depBadType":
+    'Tipo de dependencia "{value}" desconocido para "{code}" (se esperaba: FS, SS, FF, SF)',
+  "strategicImport.msg.depSelf": 'Un proyecto no puede depender de sí mismo ("{code}")',
+  "strategicImport.msg.depCycle": "Dependencias circulares entre proyectos: {cycle}",
+  "strategicImport.msg.depDropped":
+    'Dependencia hacia "{code}" eliminada: ese proyecto tiene errores',
+  "strategicImport.msg.chantierNotFound":
+    'Proyecto "{code}" no encontrado (ni en la hoja Chantiers ni en la base)',
+  "strategicImport.msg.chantierAxisUnknown": 'No se puede determinar el eje del proyecto "{code}"',
+  "strategicImport.msg.requiredDate": '"{column}" es obligatorio (fecha DD/MM/AAAA o AAAA-MM-DD)',
+  "strategicImport.msg.invalidDate":
+    '"{column}" debe ser una fecha válida (DD/MM/AAAA o AAAA-MM-DD) — valor leído: "{value}"',
+  "strategicImport.msg.startAfterEnd":
+    '"{startColumn}" ({start}) es posterior a "{endColumn}" ({end})',
+  "strategicImport.msg.projectNotInFile":
+    'Iniciativa "{code}" no encontrada en la hoja Projets de este mismo archivo',
+  "strategicImport.msg.projectNotFound":
+    'Iniciativa "{code}" no encontrada (ni en la hoja Projets ni en la base)',
+  "strategicImport.msg.indicatorParentMissing":
+    '"Code Axe" o "Code Chantier" es obligatorio (exactamente uno de los dos)',
+  "strategicImport.msg.indicatorParentBoth":
+    '"Code Axe" y "Code Chantier" están ambos completados: un indicador solo puede vincularse a uno de los dos',
+  "strategicImport.msg.unknownValue": '{column} "{value}" desconocido/a (se esperaba: {expected})',
+  "strategicImport.msg.rolesRequired": '"Rôles responsables" es obligatorio (al menos un rol)',
+  "strategicImport.msg.unknownRole": 'Rol "{value}" desconocido (se esperaba: {expected})',
+  "strategicImport.msg.baselineNotNumber":
+    '"Valeur initiale" no numérico ("{value}"): no se ha creado ninguna medición inicial',
+  "strategicImport.msg.baselineIgnored":
+    '"Valeur initiale" ({value}) ignorado: el indicador «{name}» ya tiene un historial de mediciones (referencia actual: {current})',
+  "strategicImport.msg.personNotLinked":
+    "«{name}» no corresponde a ninguna cuenta: se conserva como texto, sin efecto en la visibilidad ni en las validaciones ({count} referencia(s))",
+  "strategicImport.msg.personAmbiguous":
+    "«{name}» corresponde a varias cuentas ({usernames}): no vinculado — indique el identificador exacto",
+  "strategicImport.accountStatusOrphan":
+    "cuenta de acceso creada pero perfil no guardado — complételo en Admin > Usuarios",
+  "strategicImport.readErrorTitle": "Archivo ilegible",
+  "strategicImport.readErrorBody":
+    "No se ha podido leer el archivo: compruebe que se trata de un libro Excel no dañado.",
+  "strategicImport.wrongFormatBody": "Formato no admitido: utilice un libro Excel (.xlsx o .xls).",
+  "strategicImport.exportButton": "Exportar el plan",
+  "strategicImport.exportDoneTitle": "Plan exportado",
+  "strategicImport.exportDoneBody":
+    "Mismo formato que la plantilla: modifique el archivo y vuelva a importarlo para actualizar el plan.",
+  "strategicImport.nothingWritten": "no se ha escrito nada, el plan no ha cambiado.",
+  "strategicImport.partialWrite":
+    "escritura parcial ({written}/{total}): {axes} eje(s), {chantiers} proyecto(s), {actions} iniciativa(s), {indicators} indicador(es), {measurements} medición(es), {staffing} línea(s) de dotación ya guardados. Vuelva a importar el mismo archivo para completar (las líneas ya escritas se reconocerán).",
+  "strategicImport.importDoneSummary": "{created} elemento(s) creado(s) · {updated} actualizado(s)",
+  "strategicImport.rowAxes": "Ejes",
+  "strategicImport.rowChantiers": "Proyectos",
+  "strategicImport.rowProjects": "Iniciativas",
+  "strategicImport.rowIndicators": "Indicadores",
+  "strategicImport.rowMeasurements": "Mediciones iniciales",
+  "strategicImport.rowStaffing": "Líneas de dotación",
+  "strategicImport.colCreate": "A crear",
+  "strategicImport.colUpdate": "A actualizar",
+  "strategicImport.colUnchanged": "Sin cambios",
+  "strategicImport.warningsTitle": "{n} advertencia(s)",
+  "strategicImport.usernameCollision": "identificador «{username}» ya en uso: con sufijo",
 
   // ─── Plan Estratégico — página KPI (registro de medidas, edición de objetivo) ─
   "kpi.title": "Indicadores (KPI)",
@@ -1979,7 +1956,6 @@ const es: Record<string, string> = {
   "kpi.history.comment": "Comentario",
   "kpi.history.entered": "registró",
   "kpi.year.label": "Año",
-  "kpi.year.all": "Historial",
   "kpi.meta.label": "Características del indicador",
   "kpi.meta.unit": "Unidad",
   "kpi.view.label": "Vista",
@@ -2072,7 +2048,6 @@ const es: Record<string, string> = {
   "staffing.total": "Total",
   "staffing.fteUnit": "ETC",
   "staffing.function": "Equipo",
-  "staffing.functionRequired": "Seleccione un equipo (base de ETC).",
   "staffing.noDepartments":
     "Ningún equipo en la base de ETC de la empresa — complétela primero (/hr/etp).",
   "staffing.fte": "Número de ETC",
@@ -2083,7 +2058,6 @@ const es: Record<string, string> = {
   "staffing.loading": "Cargando la dotación…",
   "staffing.empty": "No hay ETC declarados en este proyecto.",
   "staffing.hint": "Una línea por equipo movilizado. Se aceptan decimales (0,5 = media jornada).",
-  "staffing.fteInvalid": "El número de ETC debe ser un número estrictamente positivo.",
   "staffing.saveError": "No se ha podido guardar la dotación.",
   "staffing.startDate": "Inicio",
   "staffing.endDate": "Fin",
@@ -2126,8 +2100,6 @@ const es: Record<string, string> = {
     "La página Personal movilizado solo está disponible para un programa de tipo Plan Estratégico.",
   "effectifs.empty": "No hay ETC declarados en este programa.",
   "effectifs.emptyHint": "Abra un proyecto desde un eje estratégico y añada ETC por equipo.",
-  "effectifs.kpi.totalFte": "ETC movilizados en total",
-  "effectifs.kpi.totalFteSub": "Total de todo el programa, todos los periodos combinados",
   "effectifs.allFunctions": "Todos los equipos",
   "effectifs.filteredOn": "Filtrado por: {fn}",
   "effectifs.filteredOnPeriod": "Periodo: {period}",
@@ -2135,18 +2107,6 @@ const es: Record<string, string> = {
   "effectifs.axisUnknown": "Eje desconocido",
   "effectifs.chantierUnknown": "Proyecto desconocido",
   "effectifs.viewBaseEtp": "Ver la base de ETC",
-  "effectifs.needVsAvailable.title": "Necesidad declarada vs disponible (base de ETC)",
-  "effectifs.needVsAvailable.empty":
-    "Ningún equipo que comparar todavía — declare dotación en un proyecto o complete la base de ETC.",
-  "effectifs.needVsAvailable.neededOf": "de",
-  "effectifs.needVsAvailable.overAllocated":
-    "La necesidad declarada supera la disponibilidad real de este equipo.",
-  "effectifs.needVsAvailable.periodHint":
-    "Necesidad declarada contabilizada para {period} (líneas cuyo rango de fechas se solapa con este período). Disponible: siempre calculado a día de hoy, base de ETC en vivo.",
-  "effectifs.needVsAvailable.availableToday":
-    "Disponible: siempre a día de hoy (instantánea en vivo)",
-  "effectifs.needVsAvailable.needDetailTitle":
-    "Detalle de las líneas de necesidad declarada — {team}",
   "effectifs.needVsAvailable.availableDetailTitle": "Empleados disponibles — {team}",
   "effectifs.needVsAvailable.availableDetailEmpty": "Ningún empleado en este equipo.",
   "effectifs.needVsAvailable.rowsCount": "{n} empleado(s)",
@@ -2155,7 +2115,6 @@ const es: Record<string, string> = {
   "effectifs.needVsAvailable.columnTeam": "Equipo",
   "effectifs.moneyBudget.title": "Presupuesto financiero asignado",
   "effectifs.moneyBudget.empty": "No hay presupuesto asignado en este programa.",
-  "effectifs.moneyBudget.centerLabel": "Total",
   "effectifs.moneyBudget.byChantierEmpty": "Ningún proyecto con presupuesto asignado en este eje.",
   "effectifs.moneyBudget.unattributedAxis": "Sin eje",
   "effectifs.moneyBudget.byProjetEmpty":
@@ -2163,7 +2122,6 @@ const es: Record<string, string> = {
   "effectifs.moneyBudget.levelAxis": "Eje",
   "effectifs.moneyBudget.levelChantier": "Proyecto",
   "effectifs.moneyBudget.levelProjet": "Palanca",
-  "effectifs.moneyBudget.centerLabelConsumed": "Consumido / asignado",
   "effectifs.moneyBudget.centerOfTotal": "de {total} asignados",
   "effectifs.moneyBudget.centerConsumedPct": "{pct} consumido",
   "effectifs.moneyBudget.consumedTooltipSuffix": "consumido",
@@ -2271,26 +2229,10 @@ const es: Record<string, string> = {
   "staffingPeriod.utilization": "{pct}% de utilización",
   "staffingPeriod.byChantier": "Por proyecto:",
   "staffingPeriod.pinnedDetail.title": "Detalle — {period}",
-  "staffingPeriod.detailModal.groupTitle": "Detalle — {group}",
   "staffingPeriod.detailModal.empty": "Ninguna línea de asignación para esta selección.",
-  "effectifs.needVsAvailable.periodHintAvg":
-    "ETC medios en {period} (líneas cuyas fechas se solapan con el período, ponderadas por duración). Disponible: instantánea actual de la base de ETC. Movilizado: parte de la necesidad ya transcurrida a hoy; cobertura = movilizado / necesidad.",
-  "effectifs.needVsAvailable.mobilised": "Movilizado",
-  "effectifs.needVsAvailable.staffingPct": "Cobertura",
-  "effectifs.needVsAvailable.needed": "Necesidad declarada",
   "effectifs.needVsAvailable.available": "Disponible",
-  "effectifs.needVsAvailable.seriesTitle": "Evolución por período (ETC medios)",
-  "effectifs.needVsAvailable.headline":
-    "Movilizado {mobilised} ETC · Necesidad {needed} · Cobertura {pct}",
-  "effectifs.needVsAvailable.periodCol": "Período",
-  "effectifs.needVsAvailable.totalRow": "Total",
-  "effectifs.needVsAvailable.staffingLine": "% de cobertura",
   "staffingPeriod.periodModal.filters": "Filtrar por categoría",
   "staffingPeriod.periodModal.all": "Todas",
-  "staffingPeriod.periodModal.teams": "Equipos / categorías",
-  "staffingPeriod.periodModal.teamDetail": "Detalle: {group}",
-  "staffingPeriod.periodModal.clickHint":
-    "Haga clic en una columna del gráfico para abrir el detalle del período.",
   "staffingPeriod.periodModal.rowsFor": "Líneas movilizadas",
   "staffingPeriod.detailModal.rowsCount": "{n} línea(s) de asignación",
   "staffingPeriod.detailModal.columnAxis": "Eje(s)",
@@ -2340,7 +2282,6 @@ const es: Record<string, string> = {
   "strategicDashboard.ambitionLabel": "Ambición",
   // Ronda 28: presupuesto previsional total del programa (`Program.budget`) frente a la suma real
   // de los presupuestos de los frentes, bajo el banner Ambición.
-  "strategicDashboard.programBudgetLabel": "Presupuesto previsional del programa",
   "strategicDashboard.budgetTooltip.overrunTitle": "Presupuesto previsional superado",
   "strategicDashboard.budgetTooltip.allocatedOver":
     "Presupuesto asignado {amount} > presupuesto previsional {forecast} ({diff}, {pct})",
@@ -2357,7 +2298,6 @@ const es: Record<string, string> = {
   "strategicDashboard.tracked": "Indicadores seguidos",
   "strategicDashboard.onTrack": "En trayectoria",
   "strategicDashboard.atRisk": "En riesgo",
-  "strategicDashboard.cumulative": "Acumulado de indicadores",
   "strategicDashboard.noIndicators": "Ningún indicador definido para este programa",
   "strategicDashboard.noDependencyAlerts": "Ninguna alerta de dependencia entre frentes de trabajo",
   "strategicDashboard.delayDays": "días de desfase",
@@ -2479,8 +2419,6 @@ const es: Record<string, string> = {
   "finance.chart.netPeriodShort": "Ahorro neto",
   "finance.chart.netEconomy": "Ahorro neto",
   "finance.chart.timelineTitle": "Compromiso de costes en el tiempo (Invest)",
-  "finance.chart.timelineSubtitle":
-    "CAPEX + OPEX puntual — ver el gráfico Coste de inversión vs Savings para la comparación con las ganancias",
   "finance.chart.hierarchyTitle": "Desglose de costes por centro de coste / P&L",
   "finance.chart.hierarchyNoConfig":
     "No hay ninguna jerarquía financiera configurada para esta empresa.",
@@ -2506,6 +2444,7 @@ const es: Record<string, string> = {
   "finance.drill.levelWorkstream": "Proyecto",
   "finance.drill.levelLever": "Palanca",
   "finance.drill.tooltipLeaf": "Haga clic para abrir el detalle",
+  "finance.drill.directSlice": "{name} (directo)",
   "finance.drill.tooltipNext": "Haga clic para desglosar",
   "finance.calc.title": "Detalle del cálculo",
   "finance.calc.scope": "Periodo",
@@ -2597,9 +2536,6 @@ const es: Record<string, string> = {
   "leverDetail.notYetLocked": "aún no congelado",
   "leverDetail.notYetReforecast": "aún no reproyectado",
   "leverDetail.weightsTitle": "Ponderación de acciones",
-  "leverDetail.impactsTitle": "Impactos de la palanca",
-  "leverDetail.popImpacted.none": "Ningún movimiento de RR. HH. asociado a esta palanca",
-  "leverDetail.popImpacted.count": "{n} movimiento(s) asociado(s)",
   "leverDetail.hrReconciliation.title": "Conciliación FTE — movimientos de RR. HH. asociados",
   "leverDetail.hrReconciliation.warning": "Desviación por verificar",
   "leverDetail.hrReconciliation.summary":
@@ -2615,12 +2551,6 @@ const es: Record<string, string> = {
     "{label} ({type}, {fte} FTE) — sentido incoherente con el impacto objetivo de la palanca",
   "leverDetail.weighted": "Las acciones están ponderadas",
   "leverDetail.unweighted": "Las acciones no están ponderadas (avance = media simple)",
-  "leverDetail.versionReforecast": "Versión reproyectada",
-  "leverDetail.versionPlanned": "Versión planificada",
-  "leverDetail.latestVersion": "Última versión",
-  "leverDetail.grossAnnual": "Ganancias brutas anualizadas",
-  "leverDetail.oneOffGainsNotCounted": "Ganancias puntuales (no contabilizadas)",
-  "leverDetail.netGains": "Ganancias netas (brutas − OPEX recurrente)",
   "leverDetail.fte.created": "puestos creados",
   "leverDetail.fte.reduced": "puestos suprimidos/reducidos",
   "leverDetail.fte.positiveWarning": "FTE positivo — por verificar",
@@ -2656,11 +2586,8 @@ const es: Record<string, string> = {
   "adminImpactConfig.moveDown": "Bajar",
   "finance.chart.engaged": "Ya comprometido",
   "finance.chart.upcoming": "Próximo",
-  "finance.chart.totalCost": "Coste total",
   "finance.chart.periodCost": "Coste del período",
   "finance.chart.cumulativeCost": "Coste acumulado",
-  "finance.chart.undetailedCostsNote":
-    "{n} palanca(s) con CAPEX/OPEX introducido a nivel de palanca pero sin plan de acción detallado, no incluida(s) en este gráfico (ni en los demás gráficos de Finanzas): {names}.",
   "finance.chart.opexRecRunRate": "OPEX recurrente iniciado",
   "finance.chart.empty": "Ningún coste introducido en las acciones de las palancas.",
   "finance.hierarchyTable.title": "Ahorros por nivel financiero (€M)",
@@ -2668,9 +2595,7 @@ const es: Record<string, string> = {
   "finance.hierarchyTable.export": "Exportar",
   "finance.hierarchyTable.total": "Total",
   "finance.hierarchyTable.totalHint":
-    "Los totales se calculan con importes sin redondear (mismas cifras que el panel) — la suma de las filas redondeadas puede diferir en ±0,1.",
-  "finance.hierarchyTable.note":
-    "Planificado inicial = plan congelado (todas las palancas). Reproyectado y realizado excluyen las palancas canceladas; «Cancelado» = plan de las palancas canceladas; «Retrasado» = resto por realizar de las palancas retrasadas.",
+    "Totales calculados sobre importes sin redondear (mismos valores que el dashboard); las filas se redondean para sumar exactamente el total mostrado.",
   "finance.hierarchyTable.allYears": "Todos los años",
   "finance.hierarchyTable.yearsSelected": "años seleccionados",
   "finance.hierarchyTable.yearFilter": "Años",
@@ -2700,51 +2625,27 @@ const es: Record<string, string> = {
   "projetWeights.unweighted": "Sin ponderar (peso implícito igual entre las iniciativas)",
   "filters.toggle": "Filtros",
   "columns.toggle": "Columnas",
-  "impactsEditor.gain": "Ganancia",
   "impactsEditor.fte": "FTE",
   "impactsEditor.empty": "Ningún impacto introducido.",
   "impactsEditor.confirmDelete": "¿Eliminar este impacto? Esta acción es irreversible.",
-  "impactsEditor.kind": "Tipo",
   "impactsEditor.label": "Etiqueta",
-  "impactsEditor.loadedSalary": "Salario cargado total (€M)",
   "impactsEditor.amount": "Importe (€M)",
-  "impactsEditor.mode": "Modo",
   "impactsEditor.oneOff": "Puntual",
-  "impactsEditor.recurring": "Recurrente",
   "impactsEditor.untitled": "Impacto sin título",
-  "impactsEditor.perYear": " /año",
-  "impactsEditor.noDate": "Fecha por definir",
-  "impactsEditor.statusActive": "Activo",
   "impactsEditor.statusPlanned": "Planificado",
   "impactsEditor.statusDone": "Realizado",
-  "impactsEditor.statusOngoing": "En curso",
   "impactsEditor.status": "Estado",
   "impactsEditor.statusFutureWarn": "Impacto realizado / en curso: la fecha de inicio es futura.",
-  "impactsEditor.close": "Cerrar",
-  "impactsEditor.edit": "Editar",
-  "impactsEditor.view": "Detalle",
   "impactsEditor.requiredSuffix": "(obligatorio)",
   "impactsEditor.scrollLeft": "Desplazar a la izquierda",
   "impactsEditor.scrollRight": "Desplazar a la derecha",
   "impactsEditor.smoothed": "Distribuido",
-  "impactsEditor.capexStart": "Inicio del período",
-  "impactsEditor.capexEnd": "Fin del período",
-  "impactsEditor.capexDeployment": "Fecha de compromiso",
-  "impactsEditor.annual": "Anual",
-  "impactsEditor.gainDate": "Fecha de la ganancia",
-  "impactsEditor.direction": "Sentido",
   "impactsEditor.hire": "Contratación (+)",
   "impactsEditor.departure": "Salida (−)",
   "impactsEditor.fteCount": "Número de FTE",
   "impactsEditor.nature": "Naturaleza",
   "impactsEditor.technology": "Tecnología impactada",
   "impactsEditor.add": "Añadir un impacto",
-  "impactsEditor.grossAnnual": "Total ganancias brutas (anualizadas)",
-  "impactsEditor.oneOffGains": "Total ganancias puntuales",
-  "impactsEditor.oneOffHint": "No contabilizadas en los ahorros",
-  "impactsEditor.netAnnual": "Total ganancias netas",
-  "impactsEditor.opexRec": "OPEX recurrente",
-  "impactsEditor.fteNet": "FTE neto",
   "impactsEditor.comments": "Comentarios",
   "impactsEditor.noComments": "Ningún comentario.",
   "impactsEditor.addComment": "Añadir un comentario…",
@@ -2786,7 +2687,6 @@ const es: Record<string, string> = {
   "levers.tree.leverOwnerEmpty": "Responsable de palanca no indicado",
   "levers.column.code": "Código",
   "levers.column.type": "Tipo",
-  "levers.column.netSavings": "Ahorro neto (M€)",
   "levers.column.reforecastNet": "Ahorros netos reestimados (€M)",
   "levers.column.progress": "Avance",
   "levers.column.fteImpact": "ETC afectados",
@@ -2813,8 +2713,6 @@ const es: Record<string, string> = {
   "hr.netBalance.people": "pers.",
   "hr.netBalance.entries": "Entradas (contrataciones)",
   "hr.netBalance.exits": "Salidas (bajas naturales + salidas forzadas)",
-  "hr.netBalance.transfers":
-    "Transferencias: {in} entrante(s) · {out} saliente(s), neutras en el neto",
   "hr.netBalance.abandoned": "{n} movimiento(s) abandonado(s) excluido(s) del balance",
   "hr.transferBalance.title": "Balance de transferencias",
   "hr.transferBalance.in": "Transferencias entrantes",
@@ -2831,7 +2729,7 @@ const es: Record<string, string> = {
   "hr.movementStatus.abandoned": "Abandonado",
   "hr.execution.realized": "Realizado",
   "hr.execution.overdue": "Retrasado",
-  "hr.execution.dueSoon": "Próximos < 90 días",
+  "hr.execution.dueSoon": "Próximos ≤ 90 días",
   "hr.execution.later": "Próximos > 90 días",
   "hr.execution.abandoned": "Abandonado",
   "hr.execution.toValidate": "Pendiente validación RRHH",
@@ -2845,7 +2743,7 @@ const es: Record<string, string> = {
   "hr.alertMessage.signMismatch":
     "{label}: sentido ({fte} ETC) contrario al impacto objetivo de la palanca {code} ({leverFte} ETC)",
   "hr.pivot.metric.fteImpact": "Impacto en ETC (con signo)",
-  "hr.pivot.metric.salarySavings": "Ahorro salarial (salario con cargas)",
+  "hr.pivot.metric.salarySavings": "Ahorro neto de masa salarial",
   "hr.pivot.metric.socialCost": "Costes no recurrentes (coste social puntual)",
   "hr.pivot.metric.netEconomy": "Ahorro neto (ahorros − costes no recurrentes)",
   "hr.pivot.metric.netFirstYearImpact": "Impacto neto del 1.er año",
@@ -2869,17 +2767,7 @@ const es: Record<string, string> = {
   "leverDetail.trajectory.month": "Mes",
   "leverDetail.trajectory.quarter": "Trimestre",
   "leverDetail.trajectory.year": "Año",
-  "leverDetail.trajectory.gains":
-    "Ganancias anualizadas (en la fecha de inicio, luego cada aniversario)",
-  "leverDetail.trajectory.oneOffGains": "Ganancias puntuales (no contabilizadas)",
-  "leverDetail.trajectory.opexRec": "OPEX recurrente (inicio y aniversarios)",
-  "leverDetail.trajectory.opexOneOff": "OPEX puntual",
-  "leverDetail.trajectory.capex": "CAPEX (puntual o distribuido)",
-  "leverDetail.trajectory.gainsPlanned": "Ganancias planificadas (previsión)",
-  "leverDetail.trajectory.costsPlanned": "Costes planificados (previsión)",
   "leverDetail.trajectory.cumNet": "Neto acumulado (con puntuales)",
-  "leverDetail.trajectory.cumNetRec": "Neto acumulado (sin puntuales)",
-  "leverDetail.trajectory.fteCum": "FTE acumulados (+ contrataciones / − salidas)",
   "leverDetail.trajectory.legendGains": "Ganancias",
   "leverDetail.trajectory.legendCosts": "Costes (OPEX + CAPEX)",
   "leverDetail.trajectory.clickHint":
@@ -2891,8 +2779,6 @@ const es: Record<string, string> = {
   "leverDetail.trajectory.detailOpexRec": "OPEX recurrente",
   "leverDetail.trajectory.detailEmpty": "Ningún impacto en este periodo.",
   "leverDetail.oneOff": "Puntual",
-  "chart.gap.explain":
-    "Desviación entre el reproyectado y el realizado: retrasos (palancas retrasadas), otros (avance en curso); las cancelaciones ya se han retirado del reproyectado.",
   "chart.waterfall.realized": "Realizado",
   "chart.waterfall.remaining": "Pendiente",
   "chart.waterfall.oneOff": "Ganancias puntuales (fuera de los totales)",
@@ -2907,8 +2793,6 @@ const es: Record<string, string> = {
   "chart.waterfall.opex.unspecified": "Naturaleza sin especificar",
   "chart.waterfall.opex.fte": "Contrataciones (FTE)",
   "chart.waterfall.opex.other": "Sin detallar",
-  "chart.waterfall.clickHint": "Clic para ver el detalle",
-  "chart.waterfall.clickHintLong": "Haga clic en una barra para ver el detalle.",
   "chart.waterfall.drill.workstream": "Proyecto",
   "chart.waterfall.drill.geography": "Geografía",
   "chart.waterfall.drill.level": "Nivel",
@@ -2932,28 +2816,12 @@ const es: Record<string, string> = {
     "Neto reprevisto (bruto − OPEX recurrente) = realizado + pendiente (mismas cifras que « Realización de ahorros »).",
   "chart.waterfall.drill.intro.opexRec":
     "OPEX recurrente anual de las palancas activas por naturaleza de impacto, deducido del bruto para obtener el neto.",
-  "chart.waterfall.note":
-    "Izquierda: plan inicial (congelado) ± reprevisto − cancelado = objetivo reprevisto, neto anualizado (= realizado + pendiente, igual que el gráfico « Realización de ahorros »). Derecha: desglose de ese objetivo, ganancia bruta − OPEX recurrente = neto (CAPEX y costes puntuales aparte).",
   "chart.bar.planned": "Planificado inicial",
   "chart.bar.noLeverDetail": "No hay detalle por palanca disponible.",
-  "chart.scurve.gapTotal": "Desviación: reactualizado − realizado",
-  "chart.scurve.gapLate": "de los cuales palancas retrasadas",
-  "chart.scurve.gapInProgress": "de los cuales palancas en curso en plazo",
   "chart.scurve.gapBadge": "Desviación",
-  "chart.gap.explain2":
-    "La desviación (reactualizado − realizado) solo se muestra en el periodo actual. Haga clic en el gráfico para ver el detalle por proyecto.",
   "chart.scurveDetail.title": "Trayectoria de ahorros — detalle",
-  "chart.scurveDetail.byWorkstream": "De dónde vienen los ahorros (por proyecto)",
-  "chart.scurveDetail.modeRealized": "Realizado del periodo",
-  "chart.scurveDetail.modeReforecast": "Reactualizado acumulado",
-  "chart.scurveDetail.period": "Periodo",
-  "chart.scurveDetail.seeLevers": "Ver las palancas",
   "chart.gapDrill.title": "Origen de la desviación plan inicial − realizado",
-  "chart.gapDrill.intro":
-    "Desviación acumulada en este periodo (plan inicial − realizado), descompuesta en desviación de reajuste (plan inicial − reprevisto, sobre/bajo rendimiento) y desviación de retraso (reprevisto − realizado), por frente de trabajo o geografía. Misma regla que la curva: la suma de las filas = la desviación mostrada.",
   "chart.gapDrill.empty": "Sin desviación en este periodo.",
-  "chart.gapDrill.late": "de los cuales retrasados",
-  "chart.gapDrill.onTime": "de los cuales en plazo",
   "chart.gapDrill.plannedInitial": "Plan inicial",
   "chart.gapDrill.plannedInitial.tooltip":
     "Plan fijado de la palanca (o valor actual si aún no está fijado), acumulado a su fecha de fin.",
@@ -3007,6 +2875,11 @@ const es: Record<string, string> = {
   "strategicOnboarding.importButton": "Importar mi plan desde Excel",
   "strategicOnboarding.manualButton": "Introducir manualmente",
   "strategicOnboarding.templateLink": "Descargar la plantilla Excel",
+  "strategicOnboarding.fyStartLabel": "Inicio del periodo",
+  "strategicOnboarding.fyEndLabel": "Fin del periodo",
+  "strategicOnboarding.currencyLabel": "Unidad monetaria",
+  "strategicOnboarding.periodInvalid":
+    "Periodo del programa no válido: el inicio debe ser anterior o igual al fin (AAAA-MM).",
   "adminMaturityStages.newStageLabel": "Etapa {n}",
   "adminMaturityStages.intro":
     "Personalice las etapas de madurez de los ejes y proyectos de ESTE programa. Puede añadir, eliminar, renombrar y reordenar libremente las etapas; su número no está limitado. Una etapa «terminal» (p. ej., Alcanzado / No alcanzado) es un estado de salida, fuera del ciclo lineal.",
@@ -3033,6 +2906,195 @@ const es: Record<string, string> = {
   "dependency.alert.SS": "«{source}» y «{target}» tienen {days} días de desfase al inicio",
   "dependency.alert.FF": "«{source}» y «{target}» tienen {days} días de desfase al final",
   "dependency.alert.SF": "«{target}» empieza {days} días después del fin previsto de «{source}»",
+  // Notifications de validation stratégique (lib/strategicApprovals.ts, résolues par lib/alertText.ts)
+  "strategicApprovals.alert.todoTitle": "Por validar · {label}",
+  "strategicApprovals.alert.todoDesc": "{requester} solicita {phrase}.",
+  "strategicApprovals.alert.waitTitle": "Solicitud pendiente · {label}",
+  "strategicApprovals.alert.waitDesc":
+    "Su solicitud de {phrase} espera la validación de {approver}.",
+  "strategicApprovals.alert.approvedTitle": "Solicitud validada · {label}",
+  "strategicApprovals.alert.rejectedTitle": "Solicitud rechazada · {label}",
+  "strategicApprovals.alert.approvedDesc": "{decider} ha validado {phrase}{comment}.",
+  "strategicApprovals.alert.rejectedDesc": "{decider} ha rechazado {phrase}{comment}.",
+  "strategicApprovals.alert.decidedApprovedTitle": "Validación registrada · {label}",
+  "strategicApprovals.alert.decidedRejectedTitle": "Rechazo registrado · {label}",
+  "strategicApprovals.alert.decidedApprovedDesc":
+    "Ha validado {phrase} solicitado(a) por {requester}.",
+  "strategicApprovals.alert.decidedRejectedDesc":
+    "Ha rechazado {phrase} solicitado(a) por {requester}.",
+  "strategicApprovals.alert.kpiRemovedTitle": "Medición KPI eliminada · {kpi}",
+  "strategicApprovals.alert.kpiRemovedDesc":
+    "Medición KPI eliminada: {kpi} {period} {old} por {actor}.",
+  "strategicApprovals.alert.kpiCorrectedTitle": "Valor KPI corregido · {kpi}",
+  "strategicApprovals.alert.kpiCorrectedDesc":
+    "Valor KPI corregido: {kpi} {period} {old} → {value} por {actor}.",
+  "strategicApprovals.alert.kpiCorrectedDescRequested":
+    "Valor KPI corregido: {kpi} {period} {old} → {value} por {actor} (solicitado por {requester}).",
+  "strategicApprovals.phrase.milestone": "el paso de la iniciativa «{name}» al hito {to}",
+  "strategicApprovals.phrase.kpiRemove":
+    "la eliminación de la medición {value} ({period}) del indicador «{name}»",
+  "strategicApprovals.phrase.kpiCorrect":
+    "la corrección de la medición a {value} ({period}) del indicador «{name}»",
+  "strategicApprovals.phrase.kpiValue": "el valor {value} ({period}) del indicador «{name}»",
+  "strategicApprovals.phrase.projetCreate": "la incorporación de la iniciativa «{name}»",
+  "strategicApprovals.phrase.projetCreateChantier":
+    "la incorporación de la iniciativa «{name}» (validación del responsable del proyecto)",
+  "strategicApprovals.phrase.projetCreateAxis":
+    "la incorporación de la iniciativa «{name}» (validación del responsable del eje)",
+  "strategicApprovals.phrase.projetDelete": "la eliminación de la iniciativa «{name}»",
+  "strategicApprovals.phrase.chantierDelete": "la eliminación del proyecto «{name}»",
+  // Motif du risque levier (lib/leverRiskText.ts), retour fiche levier, badge dépassement
+  "risk.level.critical": "crítico",
+  "risk.level.high": "alto",
+  "risk.level.medium": "medio",
+  "risk.level.low": "bajo",
+  "risk.reason.none": "Ningún criterio de riesgo superado: nivel bajo.",
+  "risk.reason.delay":
+    "Retraso: la alerta abierta más antigua tiene {days} días (umbral {level}: {threshold} días).",
+  "risk.reason.amount":
+    "Importe en riesgo: {amount} de alertas abiertas (umbral {level}: {threshold}).",
+  "leverDetail.back": "Volver",
+  "shared.budgetVsActual.over": "Superado",
+  // Libellés ARIA des contrôles segmentés (components/shared/SegmentedControl.tsx)
+  "common.segmented.granularity": "Granularidad",
+  "common.segmented.view": "Vista",
+  "common.segmented.scale": "Escala",
+  // Libellés ARIA des boutons icône (déplacer / retirer / pagination)
+  "common.moveUp": "Subir",
+  "common.moveDown": "Bajar",
+  "common.remove": "Quitar",
+  "common.previousPage": "Página anterior",
+  "common.nextPage": "Página siguiente",
+  // ── Importaciones Excel (RR. HH. / staffing / jerarquía): avisos traducibles (auditoría 24/09/2026) ──
+  "hrImport.issue.missingColumns": "Faltan columnas obligatorias: {columns}",
+  "hrImport.issue.unknownColumn": "Columna «{column}» no reconocida — ignorada",
+  "hrImport.issue.missingIdOrName": "«Matricule» y «Nom» son obligatorios — fila ignorada",
+  "hrImport.issue.duplicateEmployeeId":
+    "La matrícula «{id}» aparece varias veces en el archivo (filas {rows}) — filas ignoradas",
+  "hrImport.issue.missingLabel": "«Employé / Poste» es obligatorio — fila ignorada",
+  "hrImport.issue.duplicateMovementId":
+    "El ID de movimiento «{id}» aparece varias veces en el archivo (filas {rows}) — filas ignoradas",
+  "hrImport.issue.missingType": "«Type» es obligatorio para crear un movimiento — fila ignorada",
+  "hrImport.issue.unknownType": "Tipo «{value}» desconocido (esperado: {expected}) — fila ignorada",
+  "hrImport.issue.missingRequiredDate":
+    "«{column}» es obligatorio para crear un movimiento — fila ignorada",
+  "hrImport.issue.invalidRequiredDate": "{column} «{value}» ilegible — fila ignorada",
+  "hrImport.issue.unknownDepartment": "Departamento «{value}» desconocido (aceptado tal cual)",
+  "hrImport.issue.unknownEnumKept":
+    "{column} «{value}» no reconocido — se conserva el valor existente",
+  "hrImport.issue.unknownEnumDefault": "{column} «{value}» no reconocido — se usa «{fallback}»",
+  "hrImport.issue.emptyDefault": "{column} vacío — se usa «{fallback}»",
+  "hrImport.issue.invalidNumberKept":
+    "{column} «{value}» ilegible — se conserva el valor existente",
+  "hrImport.issue.invalidNumberDefault": "{column} «{value}» ilegible — se usa {fallback}",
+  "hrImport.issue.invalidDateKept": "{column} «{value}» ilegible — se conserva el valor existente",
+  "hrImport.issue.invalidDateEmpty": "{column} «{value}» ilegible — se deja vacío",
+  "hrImport.issue.legacyType": "Tipo «{value}» (modelo de 4 tipos) convertido en «{type}»",
+  "hrImport.issue.legacyTypeRetraining":
+    "Tipo «{value}» (modelo de 4 tipos) convertido en «{type}» con reconversión (formación extensa)",
+  "hrImport.issue.legacyStatus": "Estado histórico «{value}» convertido en «{status}»",
+  "hrImport.issue.unknownLever": "Palanca «{value}» desconocida — vínculo de palanca sin cambios",
+  "hrImport.issue.unknownProgram": "Programa «{value}» desconocido — programa sin cambios",
+  "hrImport.issue.unknownEmployee": "La matrícula «{id}» no existe en la base de FTE",
+  "hrImport.issue.recruitmentEmpIdIgnored":
+    "Matrícula «{id}» ignorada: una Contratación no se refiere a un empleado existente",
+  "hrImport.issue.matriculeZeroPadded":
+    "Matrícula leída como número ({value}) — vinculada a la matrícula existente «{id}» (formatee la columna como texto para conservar los ceros)",
+  "hrImport.issue.matriculeNumeric":
+    "Matrícula leída como número ({value}) — los ceros iniciales pueden haberse perdido (formatee la columna como texto)",
+  "hrImport.issue.unknownMovementIdCreated":
+    "ID de movimiento «{id}» desconocido — movimiento creado con este ID",
+  "hrImport.issue.unknownSocialScheme": "Dispositivo social «{value}» desconocido — se usa «Autre»",
+  "hrImport.issue.hrValidatedNotRealised": "«Validé RH» = Sí mientras el estado es «{status}»",
+  "hrImport.issue.actualDateNotRealised": "Fecha real informada mientras el estado es «{status}»",
+  "hrImport.rowPrefix": "{sheet} · fila {row}:",
+  "hrImport.filePrefix": "{sheet}:",
+  "hrImport.createdUnit": "creado(s)",
+  "hrImport.updatedUnit": "actualizado(s)",
+  "hrImport.unchangedUnit": "sin cambios",
+  "hrImport.importFailedTitle": "Error en la importación",
+  "hrImport.importFailedBody": "No se ha guardado ningún dato: {error}",
+  "hrImport.readFailedTitle": "Archivo ilegible",
+  "hrImport.importing": "Importando…",
+  "hrImport.exportFilteredSuffix": " (filtros aplicados)",
+  "etp.toast.matriculeRenamed": "Matrícula modificada",
+  "etp.toast.matriculeRenamedBody": "{name}: {old} → {new}",
+  "etp.toast.matriculeRenameFailed": "Matrícula no modificada",
+  "staffingImport.issue.missingColumns": "Faltan columnas obligatorias: {columns}",
+  "staffingImport.issue.missingChantier": "«Chantier» es obligatorio",
+  "staffingImport.issue.unknownChantier": "Proyecto «{value}» no encontrado",
+  "staffingImport.issue.unknownFunction": "Equipo «{value}» desconocido (esperado: {expected})",
+  "staffingImport.issue.functionLeftBase":
+    "El equipo «{value}» ya no está en la base de FTE — línea existente actualizada de todos modos",
+  "staffingImport.issue.invalidFte":
+    "«ETP» debe ser un número mayor que 0 y como máximo {max} (leído: «{value}»)",
+  "staffingImport.issue.invalidDate":
+    "{column} «{value}» ilegible o imposible (esperado DD/MM/AAAA o AAAA-MM-DD)",
+  "staffingImport.issue.startAfterEnd":
+    "La fecha de inicio ({start}) es posterior a la fecha de fin ({end})",
+  "staffingImport.issue.unknownAction":
+    "Palanca «{value}» no encontrada en el proyecto «{chantier}»",
+  "staffingImport.issue.duplicateRow":
+    "Fila duplicada (mismo proyecto, equipo, fechas y palanca que la fila {other})",
+  "staffingImport.issue.noDepartments": "ningún equipo en la base de FTE",
+  "staffingImport.exportButton": "Exportar",
+  "staffingImport.exportDoneBody": "{n} línea(s) de staffing exportada(s)",
+  "adminHierarchy.issue.missingColumns": "Faltan columnas obligatorias: {columns}",
+  "adminHierarchy.issue.mergedCells":
+    "El archivo contiene celdas combinadas ({ranges}) — sepárelas y repita el valor en cada fila",
+  "adminHierarchy.issue.unknownLevel": "Nivel «{value}» no configurado para esta empresa",
+  "adminHierarchy.issue.missingCodeOrLabel": "«Code» y «Libellé» son obligatorios",
+  "adminHierarchy.issue.duplicateCode":
+    "Código «{code}» duplicado en el nivel «{level}» (ya usado en la fila {other})",
+  "adminHierarchy.issue.missingParent":
+    "«Code parent» obligatorio (el nivel «{level}» tiene como padre «{parentLevel}»)",
+  "adminHierarchy.issue.unknownParent":
+    "«Code parent» «{parent}» no encontrado en el nivel «{parentLevel}»",
+  "adminHierarchy.issue.parentOnMacro": "El nivel superior «{level}» no debe tener «Code parent»",
+  "adminHierarchy.issue.invalidBaseline": "Baseline «{value}» ilegible",
+  "adminHierarchy.issue.invalidBoolean": "{column} «{value}» no reconocido (esperado Sí/No)",
+  "adminHierarchy.issue.financialIgnored":
+    "Datos financieros ignorados: el nivel «{level}» no es un nivel de líneas de P&L",
+  "adminHierarchy.exportOrphansSuffix": " · {n} valor(es) huérfano(s) no exportado(s)",
+  "adminHierarchy.toastImportReadFailedTitle": "Archivo ilegible",
+  "adminHierarchy.toastImportDoneCreatedUpdated":
+    "{created} nodo(s) creado(s) · {updated} actualizado(s)",
+  "adminHierarchy.toastImportFailedTitle": "Error en la importación",
+  "adminHierarchy.toastImportPartialBody":
+    "{written} de {total} nodo(s) guardado(s) antes del error: {error}",
+  "adminHierarchy.nodesToUpdate": "nodo(s) por actualizar",
+  "adminHierarchy.nodesUnchanged": "sin cambios",
+  "adminHierarchy.importBlockedByErrors":
+    "Importación bloqueada: corrija los errores siguientes y vuelva a importar el archivo (no se ha escrito nada).",
+  // ─── Dashboard RH — correctifs d'audit (calculs RH) ───
+  "hr.baselineNotScopable":
+    "Cifras absolutas ocultas: el filtro «{filters}» solo se aplica a los movimientos, no a la base de FTE — las trayectorias muestran variaciones.",
+  "hr.subtitleNoBaseline": "{count} movimientos · {realized} realizados",
+  "hr.export.coverTitle": "BeTrack — Dashboard RR. HH.",
+  "hr.export.dataDate": "Datos a {date}",
+  "hr.export.filters": "Filtros",
+  "hr.export.noFilters": "ninguno",
+  "hr.export.byDimension": "por {dim}",
+  "hr.kpi.netSalarySavings": "Ahorro neto de masa salarial",
+  "hr.kpi.netSalarySavingsTooltip":
+    "Ahorro anual de masa salarial neto de contrataciones (− impacto en masa salarial) — misma definición que el gráfico «Ahorros por periodo y acumulado».",
+  "hr.alertedMovementsCount": "{n} movimiento(s) con alerta",
+  "hr.alertsModal.summary.totalMovements": "{n} movimiento(s) con alerta",
+  "hr.widget.customPivot": "Vista personalizada (indicador × dimensión)",
+  "hr.pivot.noView": "Ninguna vista configurada — añada una desde «Personalizar».",
+  "shared.movementForm.destinationRequired":
+    "Un traslado requiere un departamento de destino distinto del de origen.",
+  // Audit Plan Stratégique (périodes KPI, remplacement de valeur, pondération, budget).
+  "effectifs.moneyBudget.otherAxes": "Otros ejes",
+  "projetWeights.overTotalWarning":
+    "Los pesos declarados superan el 100 %: se normalizan en el cálculo y los proyectos sin ponderar reciben el peso medio declarado.",
+  "kpi.periodInvalid": "Período no válido — formato esperado: {format}",
+  "kpi.measurement.periodTakenNoRight":
+    "Ya existe un valor para el período {period} y no está autorizado a reemplazarlo.",
+  "kpi.measurement.replaceConfirm": "Reemplazar el valor",
+  "kpi.measurement.replaceNotice":
+    "Ya existe un valor para el período {period} ({value}): la nueva entrada lo reemplazará.",
+  "kpi.summary.noData": "Sin datos",
 };
 
 export default es;

@@ -368,8 +368,11 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
                     </td>
                     <td className="px-3 py-2 text-right">
                       <button
+                        type="button"
+                        aria-label={t("common.delete", "Supprimer")}
+                        title={t("common.delete", "Supprimer")}
                         onClick={() => removeWorkstream(w.id)}
-                        className="text-text-secondary hover:text-red-500"
+                        className="text-text-secondary hover:text-rag-red"
                       >
                         <Trash2 size={14} />
                       </button>

@@ -208,8 +208,8 @@ export function MaturityStagesEditor({
                     onClick={() => updateStage(stage.id, { isTerminal: !stage.isTerminal })}
                     className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                       stage.isTerminal
-                        ? "bg-green-100 text-green-700 hover:bg-green-200"
-                        : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        ? "bg-rag-green-light text-rag-green-dark hover:bg-rag-green-light"
+                        : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"
                     }`}
                   >
                     {stage.isTerminal ? t("common.yes", "Oui") : t("common.no", "Non")}
@@ -235,7 +235,7 @@ export function MaturityStagesEditor({
                   <button
                     onClick={() => removeStage(stage.id)}
                     aria-label={t("adminMaturityStages.remove", "Supprimer l'étape")}
-                    className="text-text-secondary hover:text-red-500"
+                    className="text-text-secondary hover:text-rag-red"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -271,8 +271,8 @@ export function MaturityStagesEditor({
                 onClick={() => updateStage(stage.id, { isTerminal: !stage.isTerminal })}
                 className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                   stage.isTerminal
-                    ? "bg-green-100 text-green-700 hover:bg-green-200"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                    ? "bg-rag-green-light text-rag-green-dark hover:bg-rag-green-light"
+                    : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"
                 }`}
               >
                 {t("adminMaturityStages.terminalPrefix", "Terminale :")}{" "}
@@ -298,7 +298,7 @@ export function MaturityStagesEditor({
                 <button
                   onClick={() => removeStage(stage.id)}
                   aria-label={t("adminMaturityStages.remove", "Supprimer l'étape")}
-                  className="text-text-secondary hover:text-red-500"
+                  className="text-text-secondary hover:text-rag-red"
                 >
                   <Trash2 size={16} />
                 </button>

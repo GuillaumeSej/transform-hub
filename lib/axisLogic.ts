@@ -1,6 +1,7 @@
 import { rollupBudgets } from "@/lib/budgetRollup";
-import { daysBetween } from "@/lib/dateUtils";
+import { daysBetween, todayISO } from "@/lib/dateUtils";
 import { effectiveDueDate } from "@/lib/deliverableState";
+import { comparePeriods, periodIsAfter, periodStartsOnOrBefore } from "@/lib/indicatorPeriod";
 import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import {
   getStrategicProfile,
@@ -47,8 +48,26 @@ export function resolveProgramType(program: Pick<Program, "type"> | null | undef
 
 // ─── Mesures d'indicateurs ─────────────────────────────────────────────────────────────────────
 
-/** Dernière mesure connue d'un indicateur (période la plus récente au sens lexicographique — voir
- *  `IndicatorMeasurement.period`), ou `undefined` si l'indicateur n'a jamais été mesuré. */
+/**
+ * Ordre chronologique TOTAL de deux mesures (négatif si `a` avant `b`) — seul point de vérité pour
+ * départager les mesures, partagé par `latestMeasurement`, `sortMeasurementsByPeriod`, le graphique
+ * et l'historique : période d'abord (`comparePeriods`, robuste aux formats mélangés), puis, à
+ * période ÉGALE, horodatage de saisie `reportedAt` (la plus récemment saisie est la plus "tardive"
+ * — elle gagne partout, jamais la première rencontrée dans l'ordre arbitraire de Firestore).
+ */
+export function compareMeasurements(
+  a: { period: string; reportedAt?: string },
+  b: { period: string; reportedAt?: string }
+): number {
+  const byPeriod = comparePeriods(a.period, b.period);
+  if (byPeriod !== 0) return byPeriod;
+  return (a.reportedAt ?? "").localeCompare(b.reportedAt ?? "");
+}
+
+/** Dernière mesure connue d'un indicateur (période la plus récente, voir `compareMeasurements` ;
+ *  à période égale, la plus récemment saisie), ou `undefined` si jamais mesuré. Peut être une
+ *  mesure SANS valeur (commentaire seul) — pour un statut/avancement, voir
+ *  `latestNumericMeasurement`. */
 export function latestMeasurement(
   indicatorId: string,
   measurements: IndicatorMeasurement[]
@@ -56,16 +75,49 @@ export function latestMeasurement(
   let latest: IndicatorMeasurement | undefined;
   for (const m of measurements) {
     if (m.indicatorId !== indicatorId) continue;
-    if (!latest || m.period > latest.period) latest = m;
+    if (!latest || compareMeasurements(m, latest) > 0) latest = m;
   }
   return latest;
 }
 
-/** Copie triée chronologiquement des mesures (`period` est lexicographiquement ordonnée, voir
- *  `IndicatorMeasurement.period`). Ne mute jamais l'entrée : les mesures arrivent dans l'ordre
- *  arbitraire de Firestore et sont partagées entre plusieurs composants. */
-export function sortMeasurementsByPeriod<T extends { period: string }>(measurements: T[]): T[] {
-  return [...measurements].sort((a, b) => a.period.localeCompare(b.period));
+/** Dernière mesure NUMÉRIQUE d'un indicateur (même ordre que `latestMeasurement`) — un
+ *  commentaire seul saisi après une valeur ne doit pas masquer cette valeur pour le statut,
+ *  l'avancement ou la « dernière valeur » chiffrée. */
+export function latestNumericMeasurement(
+  indicatorId: string,
+  measurements: IndicatorMeasurement[]
+): IndicatorMeasurement | undefined {
+  let latest: IndicatorMeasurement | undefined;
+  for (const m of measurements) {
+    if (m.indicatorId !== indicatorId || m.value === undefined) continue;
+    if (!latest || compareMeasurements(m, latest) > 0) latest = m;
+  }
+  return latest;
+}
+
+/** Copie triée chronologiquement des mesures (`compareMeasurements` : période, puis `reportedAt`).
+ *  Ne mute jamais l'entrée : les mesures arrivent dans l'ordre arbitraire de Firestore et sont
+ *  partagées entre plusieurs composants. */
+export function sortMeasurementsByPeriod<T extends { period: string; reportedAt?: string }>(
+  measurements: T[]
+): T[] {
+  return [...measurements].sort(compareMeasurements);
+}
+
+/** Une mesure par période : à période égale, seule la plus récemment saisie est conservée (même
+ *  règle que `latestMeasurement`). Sortie triée chronologiquement. Sert aux vues qui tracent UN
+ *  point par période (graphique). */
+export function dedupeMeasurementsByPeriod<T extends { period: string; reportedAt?: string }>(
+  measurements: T[]
+): T[] {
+  const sorted = sortMeasurementsByPeriod(measurements);
+  const out: T[] = [];
+  for (const m of sorted) {
+    const last = out[out.length - 1];
+    if (last && comparePeriods(last.period, m.period) === 0) out[out.length - 1] = m;
+    else out.push(m);
+  }
+  return out;
 }
 
 /**
@@ -100,7 +152,7 @@ export const DEFAULT_RECENT_MEASUREMENT_POINTS = 12;
  * pour n'afficher le bouton d'agrandissement QUE s'il y a effectivement quelque chose de plus à
  * voir).
  */
-export function recentMeasurementWindow<T extends { period: string }>(
+export function recentMeasurementWindow<T extends { period: string; reportedAt?: string }>(
   measurements: T[],
   frequency?: Indicator["frequency"]
 ): { all: T[]; visible: T[]; hidden: number } {
@@ -110,67 +162,62 @@ export function recentMeasurementWindow<T extends { period: string }>(
   return { all, visible, hidden: all.length - visible.length };
 }
 
+/** Le résultat est-il FAVORABLE vis-à-vis de la cible, selon le sens attendu ? */
+function meetsTarget(value: number, target: number, direction: Indicator["direction"]): boolean {
+  return direction === "down" ? value <= target : value >= target;
+}
+
 /**
- * Statut de risque CALCULÉ d'un indicateur, à partir de sa dernière mesure comparée à son
- * objectif chiffré. Volontairement binaire et sans bande de tolérance : le PO veut un signal
- * simple "dans les clous / en retard", la nuance passant par la surcharge manuelle
- * (`Indicator.statusOverride`, voir `resolveIndicatorStatus`).
+ * Statut de risque CALCULÉ d'un indicateur, à partir de sa dernière mesure NUMÉRIQUE
+ * (`latestNumericMeasurement` — un commentaire seul saisi ensuite ne masque pas la valeur)
+ * comparée à la cible applicable à sa période. Volontairement binaire et sans bande de tolérance.
  *
  * Retourne "on_track" — jamais "at_risk" — dès qu'il n'y a rien à comparer :
- *   - aucune mesure enregistrée (ou mesure sans valeur numérique) ;
+ *   - aucune mesure numérique enregistrée ;
  *   - indicateur qualitatif (pas de valeur à comparer) ;
- *   - pas d'`objectiveValue` définie.
- * Un indicateur non renseigné n'est PAS un indicateur en retard : le signalement des mesures
- * manquantes relève du suivi de reporting, pas du statut de risque.
+ *   - pas de cible applicable.
+ * Un indicateur non renseigné n'est PAS un indicateur en retard. Pour DISTINGUER « rien à
+ * comparer » de « dans les clous » (compteurs de tête de page), voir `indicatorReadingState`.
  */
 export function computeIndicatorStatus(
   indicator: Pick<Indicator, "id" | "kind" | "objectiveValue" | "direction" | "targetSchedule">,
   measurements: IndicatorMeasurement[]
 ): IndicatorRiskStatus {
-  if (indicator.kind === "qualitative") return "on_track";
-  const latest = latestMeasurement(indicator.id, measurements);
-  if (!latest || latest.value === undefined) return "on_track";
-  // Round "cible évolutive" : compare à la cible APPLICABLE à la période de cette mesure (le
-  // palier courant d'une trajectoire, ou `objectiveValue` pour une cible fixe) — jamais toujours
-  // la cible finale, qui rendrait "at_risk" une mesure pourtant conforme au palier du moment.
+  return indicatorReadingState(indicator, measurements) === "at_risk" ? "at_risk" : "on_track";
+}
+
+/** État de lecture à trois valeurs d'un indicateur : `"no_data"` quand rien n'est comparable
+ *  (qualitatif, jamais mesuré numériquement, ou sans cible applicable) — à compter À PART
+ *  (« Sans donnée ») plutôt que comme « sur la trajectoire ». */
+export type IndicatorReadingState = IndicatorRiskStatus | "no_data";
+
+export function indicatorReadingState(
+  indicator: Pick<Indicator, "id" | "kind" | "objectiveValue" | "direction" | "targetSchedule">,
+  measurements: IndicatorMeasurement[]
+): IndicatorReadingState {
+  if (indicator.kind === "qualitative") return "no_data";
+  const latest = latestNumericMeasurement(indicator.id, measurements);
+  if (!latest || latest.value === undefined) return "no_data";
+  // Round "cible évolutive" : compare à la cible APPLICABLE à la période de cette mesure.
   const target = resolveIndicatorTargetForPeriod(indicator, latest.period);
-  if (target === undefined) return "on_track";
-  // "down" = plus bas vaut mieux (ex. délai, taux de rebut) ; défaut "up".
-  return indicator.direction === "down"
-    ? latest.value <= target
-      ? "on_track"
-      : "at_risk"
-    : latest.value >= target
-      ? "on_track"
-      : "at_risk";
+  if (target === undefined) return "no_data";
+  return meetsTarget(latest.value, target, indicator.direction) ? "on_track" : "at_risk";
 }
 
 /**
  * Cible APPLICABLE d'un indicateur pour une PÉRIODE donnée (round "cible évolutive") — pour un
- * indicateur à cible FIXE (`targetSchedule` absent/vide), toujours `objectiveValue`, quelle que
- * soit la période (comportement historique, inchangé). Pour un indicateur à cible ÉVOLUTIVE, le
- * dernier palier de `targetSchedule` dont `period` est <= la période demandée (ordre
- * lexicographique, même convention que `IndicatorMeasurement.period`) ; si `period` est
- * antérieure à TOUS les paliers déclarés (déclaration incomplète), ou postérieure au dernier,
- * replie sur `objectiveValue` (la cible finale) — jamais une valeur interpolée/inventée.
+ * indicateur à cible FIXE (`targetSchedule` absent/vide), toujours `objectiveValue`. Pour un
+ * indicateur à cible ÉVOLUTIVE, le dernier palier DÉJÀ EN VIGUEUR à cette période (palier qui
+ * commence au plus tard au début de la période, voir `periodStartsOnOrBefore` — robuste aux
+ * formats mélangés, ex. paliers trimestriels sur un KPI mensuel) ; au-delà du dernier palier, la
+ * cible finale `objectiveValue` — ou, à défaut de cible finale, le DERNIER palier (jamais
+ * `undefined` pour un KPI qui a une trajectoire) ; avant le premier palier, `objectiveValue`.
  */
 export function resolveIndicatorTargetForPeriod(
   indicator: Pick<Indicator, "objectiveValue" | "targetSchedule">,
   period: string
 ): number | undefined {
-  const schedule = indicator.targetSchedule;
-  if (!schedule || schedule.length === 0) return indicator.objectiveValue;
-  const sorted = [...schedule].sort((a, b) => a.period.localeCompare(b.period));
-  // Au-delà du DERNIER palier déclaré : la cible finale prend le relais (voir doc-comment) —
-  // sans ce garde-fou, le dernier palier resterait "actif" indéfiniment plutôt que de converger
-  // vers l'objectif final une fois la trajectoire intermédiaire épuisée.
-  if (period > sorted[sorted.length - 1].period) return indicator.objectiveValue;
-  let applicable: number | undefined;
-  for (const step of sorted) {
-    if (step.period <= period) applicable = step.value;
-    else break;
-  }
-  return applicable ?? indicator.objectiveValue;
+  return resolveIndicatorTargetStepForPeriod(indicator, period)?.value;
 }
 
 /** Même résolution que `resolveIndicatorTargetForPeriod`, mais renvoie aussi la PÉRIODE du palier
@@ -184,21 +231,25 @@ export function resolveIndicatorTargetStepForPeriod(
   const final =
     indicator.objectiveValue !== undefined ? { value: indicator.objectiveValue } : undefined;
   if (!schedule || schedule.length === 0) return final;
-  const sorted = [...schedule].sort((a, b) => a.period.localeCompare(b.period));
-  if (period > sorted[sorted.length - 1].period) return final;
+  const sorted = [...schedule].sort((a, b) => comparePeriods(a.period, b.period));
+  const last = sorted[sorted.length - 1];
+  if (periodIsAfter(period, last.period)) {
+    return final ?? { value: last.value, period: last.period };
+  }
   let applicable: { value: number; period: string } | undefined;
   for (const step of sorted) {
-    if (step.period <= period) applicable = { value: step.value, period: step.period };
-    else break;
+    if (periodStartsOnOrBefore(step.period, period)) {
+      applicable = { value: step.value, period: step.period };
+    } else break;
   }
   return applicable ?? final;
 }
 
-/** Mesure de BASELINE ("Valeur initiale") d'un indicateur : sa mesure NUMÉRIQUE la plus ancienne
- *  (période la plus petite au sens lexicographique ; à période égale, la plus anciennement saisie
- *  via `reportedAt`). Aucun drapeau dédié n'existe sur `IndicatorMeasurement` : l'import Excel
- *  (`lib/strategicExcelImport.ts`, colonne "Valeur initiale") crée simplement une première mesure,
- *  c'est donc la convention "première mesure = situation initiale" qui fait foi. */
+/** Mesure de BASELINE ("Valeur initiale") d'un indicateur : sa mesure NUMÉRIQUE de la période la
+ *  plus ancienne (`comparePeriods`) ; à période égale, la plus RÉCEMMENT saisie (même règle que
+ *  `latestMeasurement` : une nouvelle saisie sur une période remplace l'ancienne partout). Aucun
+ *  drapeau dédié n'existe sur `IndicatorMeasurement` : l'import Excel crée simplement une
+ *  première mesure, c'est la convention "première mesure = situation initiale" qui fait foi. */
 export function baselineMeasurement(
   indicatorId: string,
   measurements: IndicatorMeasurement[]
@@ -206,23 +257,23 @@ export function baselineMeasurement(
   let first: IndicatorMeasurement | undefined;
   for (const m of measurements) {
     if (m.indicatorId !== indicatorId || m.value === undefined) continue;
-    if (
-      !first ||
-      m.period < first.period ||
-      (m.period === first.period && m.reportedAt < first.reportedAt)
-    ) {
+    if (!first) {
       first = m;
+      continue;
     }
+    const byPeriod = comparePeriods(m.period, first.period);
+    if (byPeriod < 0 || (byPeriod === 0 && m.reportedAt > first.reportedAt)) first = m;
   }
   return first;
 }
 
-/** Statut EFFECTIF d'un indicateur : la surcharge manuelle du responsable prime toujours sur le
- *  statut calculé. Seul point de vérité pour l'affichage — ne jamais lire `indicator.status` nu. */
-export function resolveIndicatorStatus(
-  indicator: Pick<Indicator, "status" | "statusOverride">
-): IndicatorRiskStatus {
-  return indicator.statusOverride ?? indicator.status;
+/** Statut EFFECTIF d'un indicateur = son statut calculé (`Indicator.status`, maintenu par
+ *  `computeIndicatorStatus` à chaque saisie). `Indicator.statusOverride` n'est plus lu : aucun
+ *  écran ne permet de le poser (champ mort, conservé dans le type pour compat des documents
+ *  existants) — le lire aurait figé silencieusement un statut qu'aucun utilisateur ne peut voir ni
+ *  corriger. Seul point de vérité pour l'affichage — ne jamais lire `indicator.status` nu. */
+export function resolveIndicatorStatus(indicator: Pick<Indicator, "status">): IndicatorRiskStatus {
+  return indicator.status;
 }
 
 /** Écart signé d'un indicateur par rapport à sa cible, dérivé de sa dernière mesure — pendant
@@ -284,10 +335,26 @@ export type IndicatorDelta = {
 };
 
 /** Ancien ratio d'avancement (repli sans baseline) : `valeur / cible` ("up") ou `cible / valeur`
- *  ("down", cadrage inversé), gardé non borné. */
+ *  ("down", cadrage inversé), gardé non borné — cohérent avec le SIGNE de la cible (voir corps) et
+ *  toujours ≥ 100 dès que la cible est atteinte. */
 function ratioProgress(value: number, target: number, isDown: boolean): number {
-  if (isDown) return value !== 0 ? (target / value) * 100 : target === 0 ? 100 : 0;
-  return target !== 0 ? (value / target) * 100 : value >= 0 ? 100 : 0;
+  const meets = meetsTarget(value, target, isDown ? "down" : "up");
+  if (target === 0) return meets ? 100 : 0;
+  // Le ratio se calcule sur les MAGNITUDES : pour une cible négative, "up" (ex. résultat de -10
+  // vers -5) revient à RÉDUIRE la magnitude, donc au cadrage inversé `cible / valeur` — l'ancien
+  // `valeur / cible` donnait 200% pour -10 vs -5, alors que la cible n'est pas atteinte.
+  const magnitudeUp = target > 0 !== isDown;
+  const v = Math.abs(value);
+  const t = Math.abs(target);
+  let raw = magnitudeUp ? (v / t) * 100 : v !== 0 ? (t / v) * 100 : 100;
+  if (value !== 0 && Math.sign(value) !== Math.sign(target)) {
+    // Valeur du signe opposé à la cible : soit largement au-delà (cible atteinte), soit à
+    // l'opposé (aucun avancement) — jamais un ratio de magnitudes trompeur.
+    raw = meets ? Math.max(raw, 100) : 0;
+  } else if (meets) {
+    raw = Math.max(raw, 100);
+  }
+  return raw;
 }
 
 /** Avancement depuis la baseline vers `target` — voir le doc-comment de `IndicatorDelta`. */
@@ -378,26 +445,38 @@ export function sumLatestQuantitativeValues(
   let sum = 0;
   for (const indicator of indicators) {
     if (indicator.kind !== "quantitative") continue;
-    const latest = latestMeasurement(indicator.id, measurements);
+    const latest = latestNumericMeasurement(indicator.id, measurements);
     if (latest?.value !== undefined) sum += latest.value;
   }
   return sum;
 }
 
-/** Compteur global "X sur la trajectoire · Y à risque" — sur le statut EFFECTIF (surcharge
- *  manuelle comprise), pas sur le statut calculé brut. */
-export function countOnTrackAtRisk(indicators: Indicator[]): {
+/** Compteur global "X sur la trajectoire · Y à risque · Z sans donnée". Avec `measurements`, un
+ *  indicateur qualitatif, jamais mesuré numériquement ou sans cible est compté dans `noData`
+ *  (« Sans donnée ») et NON comme « sur la trajectoire » (`indicatorReadingState`) ; sans
+ *  `measurements` (compat), `noData` vaut 0 et seul le statut stocké compte. */
+export function countOnTrackAtRisk(
+  indicators: Indicator[],
+  measurements?: IndicatorMeasurement[]
+): {
   total: number;
   onTrack: number;
   atRisk: number;
+  noData: number;
 } {
   let onTrack = 0;
   let atRisk = 0;
+  let noData = 0;
   for (const indicator of indicators) {
-    if (resolveIndicatorStatus(indicator) === "at_risk") atRisk += 1;
+    if (measurements) {
+      const state = indicatorReadingState(indicator, measurements);
+      if (state === "at_risk") atRisk += 1;
+      else if (state === "no_data") noData += 1;
+      else onTrack += 1;
+    } else if (resolveIndicatorStatus(indicator) === "at_risk") atRisk += 1;
     else onTrack += 1;
   }
-  return { total: indicators.length, onTrack, atRisk };
+  return { total: indicators.length, onTrack, atRisk, noData };
 }
 
 /**
@@ -616,7 +695,7 @@ export function chantierAtRiskIndicators(
       indicator,
       delta: computeIndicatorDelta(
         indicator,
-        latestMeasurement(indicator.id, measurements),
+        latestNumericMeasurement(indicator.id, measurements),
         measurements
       ),
     }));
@@ -876,21 +955,36 @@ export function chantierProgress(
 // ─── Prérequis d'action (go/no-go) ─────────────────────────────────────────────────────────────
 
 /**
+ * Un projet est-il TERMINÉ au sens des prérequis ? Vrai s'il a VALIDÉ son dernier jalon (E4 dans
+ * `passedMilestones`) ou si son avancement déclaratif (`progressOf`, par défaut
+ * `milestoneProgressPct` — passer le résolveur complet `projetProgressResolver` pour tenir compte
+ * des items automatiques) atteint 100 %. Remplace l'ancienne lecture de l'étape de maturité
+ * (`ChantierAction.status`), figée depuis la suppression du kanban de maturité : un prérequis entre
+ * projets n'était alors JAMAIS satisfait.
+ */
+export function isProjetDone(
+  action: ChantierAction,
+  progressOf: ProjetProgressLookup = (a) => milestoneProgressPct(a)
+): boolean {
+  const lastMilestone = MILESTONE_ORDER[MILESTONE_ORDER.length - 1];
+  if (action.milestones?.passedMilestones.includes(lastMilestone)) return true;
+  return progressOf(action) >= 100;
+}
+
+/**
  * Une action peut-elle démarrer, au regard de ses prérequis (`ChantierAction.prerequisites`) ?
- * v1 PUREMENT INFORMATIVE (voir plan round 4, point 5) : rien dans l'app n'intercepte aujourd'hui
- * un changement de statut/étape, donc un prérequis non satisfait n'empêche RIEN — il s'affiche
- * seulement (badge cadenas sur le Gantt, détail sur la fiche chantier).
+ * v1 PUREMENT INFORMATIVE (voir plan round 4, point 5) : un prérequis non satisfait n'empêche
+ * RIEN — il s'affiche seulement (badge cadenas sur le Gantt, détail sur la fiche chantier).
  *
- * Un prérequis "action" est satisfait quand l'étape COURANTE de l'action cible est `isTerminal`
- * dans le référentiel `stages` du programme (même notion que `chantierProgress`/
- * `maturityStageProgressRatio`). Une cible introuvable (action supprimée depuis, ou id invalide)
- * n'est jamais satisfaite mais ne lève JAMAIS d'exception — elle produit un message explicite.
- * Un prérequis "external" est satisfait quand `done === true`.
+ * Un prérequis "action" est satisfait quand le projet cible est TERMINÉ (`isProjetDone` : dernier
+ * jalon validé ou avancement à 100 %). Une cible introuvable (action supprimée depuis, ou id
+ * invalide) n'est jamais satisfaite mais ne lève JAMAIS d'exception — elle produit un message
+ * explicite. Un prérequis "external" est satisfait quand `done === true`.
  */
 export function canStartAction(
   action: Pick<ChantierAction, "prerequisites">,
   allActions: ChantierAction[],
-  stages: MaturityStageConfig[]
+  progressOf?: ProjetProgressLookup
 ): { blocked: boolean; reasons: string[] } {
   const reasons: string[] = [];
 
@@ -901,8 +995,7 @@ export function canStartAction(
         reasons.push(`Prérequis introuvable (action supprimée ou invalide)`);
         continue;
       }
-      const isTerminal = stages.find((s) => s.id === target.status)?.isTerminal ?? false;
-      if (!isTerminal) reasons.push(`En attente de "${target.name}"`);
+      if (!isProjetDone(target, progressOf)) reasons.push(`En attente de "${target.name}"`);
     } else {
       if (!prerequisite.done) reasons.push(prerequisite.label || "Prérequis externe non satisfait");
     }
@@ -964,7 +1057,11 @@ export function resolveMilestoneAutoFlags(
   milestoneId: MilestoneId,
   action: ChantierAction,
   allChantiers: Chantier[],
-  allActions: ChantierAction[]
+  allActions: ChantierAction[],
+  /** Alertes de dépendance déjà calculées (`chantierDependencyAlerts(allChantiers, allActions)`)
+   *  — optimisation pour les appelants qui résolvent de nombreux projets d'un coup (voir
+   *  `projetProgressResolver`). Omis = calculées ici. */
+  precomputedAlerts?: ChantierDependencyAlert[]
 ): Record<string, number> {
   const flags: Record<string, number> = {};
   const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
@@ -974,7 +1071,7 @@ export function resolveMilestoneAutoFlags(
 
     switch (item.auto) {
       case "dependencyAlert": {
-        const alerts = chantierDependencyAlerts(allChantiers, allActions);
+        const alerts = precomputedAlerts ?? chantierDependencyAlerts(allChantiers, allActions);
         const isAffected = parentChantier
           ? alerts.some((a) => a.sourceId === parentChantier.id)
           : false;
@@ -1178,10 +1275,58 @@ export function requestMilestoneApproval(
  * section. Chantier parent introuvable (référence orpheline) : traité comme non habilité plutôt que
  * de lever une exception distincte, seul un admin peut alors approuver.
  */
+/**
+ * L'utilisateur peut-il DÉCIDER (confirmer/refuser) le passage de jalon d'un projet de ce chantier ?
+ * Même cascade que `resolveApprover("milestone", …)` (lib/strategicApprovals.ts) : pilote du
+ * chantier ; à défaut de pilote, le(s) responsable(s) de l'axe (`allAxes`, si fourni) ; toujours
+ * admin et `strategic_lead` du programme (escalade). Chantier introuvable : admin seulement.
+ */
+export function canDecideMilestone(
+  chantier: Pick<Chantier, "programId" | "pilote" | "axisIds"> | undefined,
+  user: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
+  allAxes: Pick<StrategicAxis, "id" | "owner">[] = []
+): boolean {
+  if (isAnyAdmin(user)) return true;
+  if (!chantier) return false;
+  if (isStrategicLeadOf(chantier, user)) return true;
+  if (chantier.pilote) return chantier.pilote === user.username;
+  return allAxes.some((a) => chantier.axisIds.includes(a.id) && a.owner === user.username);
+}
+
+/** Vérifie, AU MOMENT DE LA DÉCISION, que la check-list du jalon courant est toujours complète
+ *  (même fusion que `requestMilestoneApproval`) — elle a pu régresser depuis la demande. Lève
+ *  sinon. */
+export function assertMilestoneStillPassable(
+  action: ChantierAction,
+  allChantiers: Chantier[],
+  allActions: ChantierAction[]
+): void {
+  const current = action.milestones?.currentMilestone ?? "E0";
+  const merged = mergeMilestoneChecklistItems(
+    current,
+    action.milestones?.checklists[current] ?? [],
+    resolveMilestoneAutoFlags(current, action, allChantiers, allActions),
+    action.customMilestoneActions?.[current] ?? [],
+    action.excludedMilestoneItems?.[current] ?? []
+  );
+  const { canPass, reasons } = canPassMilestone(current, merged);
+  if (!canPass) {
+    throw new Error(
+      `Le jalon ${displayMilestoneId(current)} du projet "${action.id}" n'est plus complet : ${reasons.join(", ")}`
+    );
+  }
+}
+
 export function approveMilestoneGate(
   action: ChantierAction,
   user: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
-  allChantiers: Chantier[]
+  allChantiers: Chantier[],
+  /** Fournis : la check-list est RE-VÉRIFIÉE au moment de l'approbation
+   *  (`assertMilestoneStillPassable`). */
+  allActions?: ChantierAction[],
+  /** Fournis : un responsable d'axe peut confirmer quand le chantier n'a pas de pilote
+   *  (`canDecideMilestone`). */
+  allAxes?: Pick<StrategicAxis, "id" | "owner">[]
 ): Pick<ChantierAction, "milestones" | "milestoneApproval"> {
   const approval = action.milestoneApproval;
   if (!approval) {
@@ -1190,15 +1335,12 @@ export function approveMilestoneGate(
   const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
   // Round "passage de jalon explicite" : le responsable (pilote) du CHANTIER est l'approbateur
   // nominal d'un jalon (`resolveApprover("milestone", …)`, lib/strategicApprovals.ts) — il doit
-  // pouvoir confirmer aussi par ce chemin direct (demande posée sans `StrategicApproval`, typiquement
-  // quand il est lui-même le propriétaire du projet), pas seulement le `strategic_lead`.
-  const authorized =
-    isAnyAdmin(user) ||
-    (!!parentChantier &&
-      (isStrategicLeadOf(parentChantier, user) || parentChantier.pilote === user.username));
-  if (!authorized) {
+  // pouvoir confirmer aussi par ce chemin direct, pas seulement le `strategic_lead` ; sans pilote,
+  // le responsable d'axe (même cascade que `resolveApprover`).
+  if (!canDecideMilestone(parentChantier, user, allAxes)) {
     throw new Error(`Vous n'êtes pas habilité à approuver cette demande de validation de jalon`);
   }
+  if (allActions) assertMilestoneStillPassable(action, allChantiers, allActions);
 
   const before: ChantierMilestoneState = action.milestones ?? {
     currentMilestone: "E0",
@@ -1229,17 +1371,15 @@ export function approveMilestoneGate(
 export function rejectMilestoneApproval(
   action: ChantierAction,
   user: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
-  allChantiers: Chantier[]
+  allChantiers: Chantier[],
+  allAxes?: Pick<StrategicAxis, "id" | "owner">[]
 ): Pick<ChantierAction, "milestoneApproval"> {
   if (!action.milestoneApproval) {
     throw new Error(`Le projet "${action.id}" n'a pas de demande de validation de jalon en cours`);
   }
   const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
   const authorized =
-    isAnyAdmin(user) ||
-    action.owner === user.username ||
-    (!!parentChantier &&
-      (isStrategicLeadOf(parentChantier, user) || parentChantier.pilote === user.username));
+    action.owner === user.username || canDecideMilestone(parentChantier, user, allAxes);
   if (!authorized) {
     throw new Error(`Vous n'êtes pas habilité à rejeter cette demande de validation de jalon`);
   }
@@ -1376,8 +1516,49 @@ export const MILESTONE_WEIGHT_DELTA: Record<MilestoneId, number> = {
  *
  * Aucun `milestones` du tout : `0` (comportement inchangé depuis round 5).
  */
+type MilestoneProgressEntity = {
+  milestones?: ChantierMilestoneState;
+  customMilestoneActions?: ChantierAction["customMilestoneActions"];
+  excludedMilestoneItems?: ChantierAction["excludedMilestoneItems"];
+};
+
+/**
+ * Remplissage MOYEN (0-100, non arrondi) de la check-list du jalon COURANT — sur la MÊME liste que
+ * la porte de validation (`mergeMilestoneChecklistItems` : items exclus par ce projet retirés,
+ * actions personnalisées ajoutées). Un `progressPct` stocké prime ; sinon valeur auto live
+ * (`autoValues`) pour un item automatique ; sinon 0. Aucun item (tous exclus) : 100 — rien ne
+ * bloque la porte. Utilisé par `milestoneProgressPct` et par le stepper de la fiche chantier.
+ */
+export function currentMilestoneFillPct(
+  entity: MilestoneProgressEntity,
+  autoValues?: Record<string, number>
+): number {
+  const current = entity.milestones?.currentMilestone ?? "E0";
+  const stored = entity.milestones?.checklists[current] ?? [];
+  const items = mergeMilestoneChecklistItems(
+    current,
+    stored,
+    {},
+    entity.customMilestoneActions?.[current] ?? [],
+    entity.excludedMilestoneItems?.[current] ?? []
+  );
+  if (items.length === 0) return 100;
+  const autoIds = new Set(
+    MILESTONE_CHECKLISTS[current].filter((def) => def.auto).map((def) => def.itemId)
+  );
+  let sum = 0;
+  for (const item of items) {
+    const storedPct = stored.find((i) => i.itemId === item.itemId)?.progressPct;
+    sum +=
+      storedPct !== undefined
+        ? storedPct
+        : ((autoIds.has(item.itemId) ? autoValues?.[item.itemId] : undefined) ?? 0);
+  }
+  return sum / items.length;
+}
+
 export function milestoneProgressPct(
-  entity: { milestones?: ChantierMilestoneState },
+  entity: MilestoneProgressEntity,
   /** Valeurs 0/100 des items `auto` du jalon COURANT, typiquement le résultat de
    *  `resolveMilestoneAutoFlags(entity.milestones.currentMilestone, ...)` — voir le paragraphe
    *  "Items automatiques" ci-dessus. Omis = items auto traités comme non répondus (0). */
@@ -1389,23 +1570,89 @@ export function milestoneProgressPct(
   let total = milestones.passedMilestones.reduce((sum, m) => sum + MILESTONE_WEIGHT_DELTA[m], 0);
 
   if (!milestones.passedMilestones.includes(milestones.currentMilestone)) {
-    const defs = MILESTONE_CHECKLISTS[milestones.currentMilestone];
-    const stored = milestones.checklists[milestones.currentMilestone] ?? [];
-
-    let sum = 0;
-    for (const def of defs) {
-      const storedItem = stored.find((i) => i.itemId === def.itemId);
-      const value =
-        storedItem?.progressPct !== undefined
-          ? storedItem.progressPct
-          : ((def.auto ? autoValues?.[def.itemId] : undefined) ?? 0);
-      sum += value;
-    }
-    const average = defs.length > 0 ? sum / defs.length : 0;
+    // MÊME liste que la porte de validation (voir `currentMilestoneFillPct`) — sans quoi un jalon
+    // final complet (porte "final") pouvait plafonner à 93 % et laisser le projet "en retard"
+    // pour toujours.
+    const average = currentMilestoneFillPct(entity, autoValues);
     total += (MILESTONE_WEIGHT_DELTA[milestones.currentMilestone] * average) / 100;
   }
 
   return Math.min(100, Math.round(total));
+}
+
+/** Résolveur d'avancement d'un projet (0-100) — voir `projetProgressResolver`. */
+export type ProjetProgressLookup = (action: ChantierAction) => number;
+
+/**
+ * Avancement COMPLET d'un projet : `milestoneProgressPct` avec les valeurs LIVE de ses items
+ * automatiques (`resolveMilestoneAutoFlags`). Seul chiffre à afficher partout (tableau de bord,
+ * accordéon, Gantt, fiche chantier, feuille de route) — voir `projetProgressResolver` pour
+ * résoudre de nombreux projets à moindre coût.
+ */
+export function projetProgressPct(
+  action: ChantierAction,
+  allChantiers: Chantier[],
+  allActions: ChantierAction[],
+  precomputedAlerts?: ChantierDependencyAlert[]
+): number {
+  return milestoneProgressPct(
+    action,
+    resolveMilestoneAutoFlags(
+      action.milestones?.currentMilestone ?? "E0",
+      action,
+      allChantiers,
+      allActions,
+      precomputedAlerts
+    )
+  );
+}
+
+/**
+ * Fabrique un résolveur mémoïsé `action → avancement` (`projetProgressPct`) sur un jeu
+ * chantiers/projets donné : les alertes de dépendance sont calculées UNE fois, chaque projet au
+ * plus une fois. `allChantiers`/`allActions` doivent couvrir tout le PROGRAMME (et non la seule
+ * sélection filtrée de l'écran) pour que les items automatiques soient justes.
+ */
+export function projetProgressResolver(
+  allChantiers: Chantier[],
+  allActions: ChantierAction[],
+  flagsOf: ProjetAutoFlagsLookup = projetAutoFlagsResolver(allChantiers, allActions)
+): ProjetProgressLookup {
+  const cache = new Map<string, number>();
+  return (action) => {
+    const cached = cache.get(action.id);
+    if (cached !== undefined) return cached;
+    const pct = milestoneProgressPct(action, flagsOf(action));
+    cache.set(action.id, pct);
+    return pct;
+  };
+}
+
+/** Résolveur des valeurs LIVE des items automatiques du jalon COURANT d'un projet. */
+export type ProjetAutoFlagsLookup = (action: ChantierAction) => Record<string, number>;
+
+/** Pendant de `projetProgressResolver` pour les items automatiques eux-mêmes (état de transition
+ *  `milestoneTransitionState`, remplissage du jalon courant) — alertes calculées une fois. */
+export function projetAutoFlagsResolver(
+  allChantiers: Chantier[],
+  allActions: ChantierAction[]
+): ProjetAutoFlagsLookup {
+  let alerts: ChantierDependencyAlert[] | undefined;
+  const cache = new Map<string, Record<string, number>>();
+  return (action) => {
+    const cached = cache.get(action.id);
+    if (cached) return cached;
+    alerts ??= chantierDependencyAlerts(allChantiers, allActions);
+    const flags = resolveMilestoneAutoFlags(
+      action.milestones?.currentMilestone ?? "E0",
+      action,
+      allChantiers,
+      allActions,
+      alerts
+    );
+    cache.set(action.id, flags);
+    return flags;
+  };
 }
 
 /**
@@ -1426,11 +1673,12 @@ export function milestoneProgressPct(
  */
 export function chantierMilestoneProgressPct(
   chantier: Pick<Chantier, "id">,
-  actions: ChantierAction[]
+  actions: ChantierAction[],
+  progressOf: ProjetProgressLookup = (a) => milestoneProgressPct(a)
 ): number {
   const own = actions.filter((a) => a.chantierId === chantier.id);
   if (own.length === 0) return 0;
-  const total = own.reduce((sum, action) => sum + milestoneProgressPct(action), 0);
+  const total = own.reduce((sum, action) => sum + progressOf(action), 0);
   return Math.round(total / own.length);
 }
 
@@ -1466,28 +1714,23 @@ export function chantierMilestoneProgressPct(
  * seule la notion de POIDS (pas de progression) peut être "non déclarée" ici. 0 si le chantier n'a
  * aucun projet du tout — même parti pris que `chantierMilestoneProgressPct`.
  */
-export function chantierDeclaredProgress(chantierId: string, actions: ChantierAction[]): number {
+export function chantierDeclaredProgress(
+  chantierId: string,
+  actions: ChantierAction[],
+  /** Avancement de chaque projet — passer `projetProgressResolver(allChantiers, allActions)`
+   *  pour inclure les items automatiques (chiffre identique partout). Omis = mode dégradé. */
+  progressOf: ProjetProgressLookup = (a) => milestoneProgressPct(a)
+): number {
   const own = actions.filter((a) => a.chantierId === chantierId);
   if (own.length === 0) return 0;
 
-  const withProgress = own.map((action) => ({ action, progress: milestoneProgressPct(action) }));
-
-  const declaredWeightSum = withProgress.reduce(
-    (acc, x) =>
-      acc + (typeof x.action.chantierWeightPct === "number" ? x.action.chantierWeightPct : 0),
-    0
-  );
-  const undeclaredCount = withProgress.filter(
-    (x) => typeof x.action.chantierWeightPct !== "number"
-  ).length;
-  const remainingWeight = Math.max(0, 100 - declaredWeightSum);
-  const implicitWeight = undeclaredCount > 0 ? remainingWeight / undeclaredCount : 0;
+  const withProgress = own.map((action) => ({ action, progress: progressOf(action) }));
+  const weights = effectiveProjetWeights(own);
 
   let weightedSum = 0;
   let totalWeight = 0;
   for (const { action, progress } of withProgress) {
-    const weight =
-      typeof action.chantierWeightPct === "number" ? action.chantierWeightPct : implicitWeight;
+    const weight = weights.get(action.id) ?? 0;
     weightedSum += weight * progress;
     totalWeight += weight;
   }
@@ -1499,6 +1742,37 @@ export function chantierDeclaredProgress(chantierId: string, actions: ChantierAc
 }
 
 /**
+ * Poids EFFECTIF de chaque projet d'un chantier (même clé que `chantierDeclaredProgress`) :
+ *  - poids déclaré (`chantierWeightPct`) tel quel ;
+ *  - projets sans poids : le reste jusqu'à 100 réparti à parts égales ;
+ *  - si les poids déclarés atteignent ou DÉPASSENT 100 alors qu'il reste des projets non pondérés,
+ *    ceux-ci reçoivent la MOYENNE des poids déclarés (au lieu d'un poids nul qui les rendait
+ *    invisibles) — la division finale par le poids total normalise l'ensemble.
+ */
+export function effectiveProjetWeights(
+  own: Pick<ChantierAction, "id" | "chantierWeightPct">[]
+): Map<string, number> {
+  const declared = own.filter((a) => typeof a.chantierWeightPct === "number");
+  const declaredWeightSum = declared.reduce((acc, a) => acc + (a.chantierWeightPct ?? 0), 0);
+  const undeclaredCount = own.length - declared.length;
+  const remainingWeight = 100 - declaredWeightSum;
+  let implicitWeight = 0;
+  if (undeclaredCount > 0) {
+    implicitWeight =
+      remainingWeight > 0
+        ? remainingWeight / undeclaredCount
+        : declared.length > 0
+          ? declaredWeightSum / declared.length
+          : 0;
+  }
+  const out = new Map<string, number>();
+  for (const a of own) {
+    out.set(a.id, typeof a.chantierWeightPct === "number" ? a.chantierWeightPct : implicitWeight);
+  }
+  return out;
+}
+
+/**
  * Avancement d'un AXE (feuille de route) — moyenne simple, arrondie, des avancements de ses
  * chantiers (`chantierDeclaredProgress`, le même chiffre que la fiche chantier). Un chantier
  * multi-axe compte sous chacun de ses axes. 0 si l'axe n'a aucun chantier.
@@ -1506,11 +1780,15 @@ export function chantierDeclaredProgress(chantierId: string, actions: ChantierAc
 export function axisProgressPct(
   axisId: string,
   chantiers: Pick<Chantier, "id" | "axisIds">[],
-  actions: ChantierAction[]
+  actions: ChantierAction[],
+  progressOf?: ProjetProgressLookup
 ): number {
   const own = chantiers.filter((c) => c.axisIds.includes(axisId));
   if (own.length === 0) return 0;
-  const total = own.reduce((sum, c) => sum + chantierDeclaredProgress(c.id, actions), 0);
+  const total = own.reduce(
+    (sum, c) => sum + chantierDeclaredProgress(c.id, actions, progressOf),
+    0
+  );
   return Math.round(total / own.length);
 }
 
@@ -1548,8 +1826,8 @@ export function isProjetLate(
   progressPct: number,
   today: Date = new Date()
 ): boolean {
-  const todayISO = today.toISOString().slice(0, 10);
-  return daysBetween(action.end, todayISO) > 0 && progressPct < 100;
+  // Date LOCALE (`todayISO`), jamais `toISOString()` (UTC) : même "aujourd'hui" que les livrables.
+  return daysBetween(action.end, todayISO(today)) > 0 && progressPct < 100;
 }
 
 /** Un CHANTIER est-il en retard ? Vrai si au moins un de ses projets l'est (`isProjetLate`
@@ -1576,10 +1854,10 @@ export function isChantierLate(
  */
 export function programBlockedActions(
   actions: ChantierAction[],
-  stages: MaturityStageConfig[]
+  progressOf?: ProjetProgressLookup
 ): { action: ChantierAction; reasons: string[] }[] {
   return actions
-    .map((action) => ({ action, ...canStartAction(action, actions, stages) }))
+    .map((action) => ({ action, ...canStartAction(action, actions, progressOf) }))
     .filter((r) => r.blocked)
     .map(({ action, reasons }) => ({ action, reasons }));
 }
@@ -2114,7 +2392,11 @@ function normalizeRoadmapDeliverables(
 export function programRoadmap(
   axes: StrategicAxis[],
   chantiers: Chantier[],
-  actions: ChantierAction[]
+  actions: ChantierAction[],
+  /** Résolveur d'avancement calculé sur TOUT le programme (`useStrategicData().projetProgress`)
+   *  — à fournir dès que `chantiers`/`actions` sont une sélection filtrée, sans quoi les items
+   *  automatiques seraient résolus sur la seule sélection. Omis = résolu sur les entrées. */
+  progressOf: ProjetProgressLookup = projetProgressResolver(chantiers, actions)
 ): ProgramRoadmapRow[] {
   const rows: ProgramRoadmapRow[] = [];
 
@@ -2126,15 +2408,7 @@ export function programRoadmap(
         .sort((a, b) => a.start.localeCompare(b.start));
 
       for (const action of chantierActions) {
-        const progressPct = milestoneProgressPct(
-          action,
-          resolveMilestoneAutoFlags(
-            action.milestones?.currentMilestone ?? "E0",
-            action,
-            chantiers,
-            actions
-          )
-        );
+        const progressPct = progressOf(action);
 
         rows.push({
           axis,

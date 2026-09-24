@@ -14,6 +14,7 @@ import {
   type StrategicApprovalData,
   type StrategicApprovalKind,
 } from "@/lib/strategicApprovals";
+import { intlTag } from "@/lib/format";
 
 type Tab = "todo" | "mine" | "history";
 
@@ -28,7 +29,7 @@ const KIND_FALLBACK: Record<StrategicApprovalKind, string> = {
 function formatTimestamp(ts: string | undefined): string {
   if (!ts) return "—";
   try {
-    return new Date(ts).toLocaleDateString("fr-FR", {
+    return new Date(ts).toLocaleDateString(intlTag(), {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",

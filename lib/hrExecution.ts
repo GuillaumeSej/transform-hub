@@ -1,7 +1,8 @@
 import { matchesFilter } from "@/lib/filterUtils";
 import type { Program, WorkforceMovement } from "@/types";
 import { daysBetween } from "@/lib/dateUtils";
-import { HR_TODAY } from "@/lib/hrEngine";
+import { fteEffect, hrToday } from "@/lib/hrEngine";
+import { actualMovementFte, planMovementFte } from "@/lib/hrProgramSummary";
 
 export type MovementExecutionStatus = "realized" | "overdue" | "dueSoon" | "later" | "abandoned";
 export type MovementActionStatus = Exclude<MovementExecutionStatus, "abandoned"> | "toValidate";
@@ -11,7 +12,8 @@ export type ExecutionDimension = "function" | "country" | "program";
 export const EXECUTION_LABELS: Record<MovementExecutionStatus | "toValidate", string> = {
   realized: "Réalisé",
   overdue: "En retard",
-  dueSoon: "À venir < 90 j",
+  // "≤" : un mouvement à exactement 90 j est classé "dueSoon" (`<= dueSoonDays`, m9).
+  dueSoon: "À venir ≤ 90 j",
   later: "À venir > 90 j",
   abandoned: "Abandonné",
   toValidate: "À valider RH",
@@ -19,7 +21,7 @@ export const EXECUTION_LABELS: Record<MovementExecutionStatus | "toValidate", st
 
 export function classifyMovementExecution(
   movement: WorkforceMovement,
-  today: string = HR_TODAY,
+  today: string = hrToday(),
   dueSoonDays = 90
 ): MovementExecutionStatus {
   if (movement.status === "Abandonné") return "abandoned";
@@ -30,7 +32,7 @@ export function classifyMovementExecution(
 
 export function classifyMovementAction(
   movement: WorkforceMovement,
-  today: string = HR_TODAY,
+  today: string = hrToday(),
   dueSoonDays = 90
 ): MovementActionStatus | null {
   if (movement.status === "Abandonné") return null;
@@ -39,7 +41,10 @@ export function classifyMovementAction(
 }
 
 export type ExecutionImpactCell = {
+  /** Valeur empilée dans le graphique — ETP (toujours ≥ 0) ou impact masse salariale €M signé. */
   volume: number;
+  /** Net SIGNÉ (m8) — ETP : recrutements +, départs −, transferts 0 (effet sur l'effectif
+   *  total, `fteEffect`) ; masse salariale : somme signée des `salaryImpact` (€M). */
   net: number;
   count: number;
   /** Mouvements derrière ce statut — alimente le drill-down au clic sur une barre/segment
@@ -77,7 +82,7 @@ export function executionByDimension(
   dimension: ExecutionDimension,
   programs: Program[],
   mode: "fte" | "salary",
-  today: string = HR_TODAY
+  today: string = hrToday()
 ): ExecutionImpactRow[] {
   const rows = new Map<string, ExecutionImpactRow>();
   for (const movement of movements) {
@@ -92,14 +97,13 @@ export function executionByDimension(
       later: emptyCell(),
       abandoned: emptyCell(),
     };
-    const value =
-      mode === "fte"
-        ? status === "realized"
-          ? movement.fte
-          : (movement.reforecast?.fte ?? movement.lockedPlan?.fte ?? movement.fte)
-        : movement.salaryImpact / 1_000_000;
-    row[status].volume += value;
-    row[status].net += value;
+    // ETP : réalisé = ETP constaté, sinon ETP du plan (règle M10, lib/hrProgramSummary.ts).
+    const fte = status === "realized" ? actualMovementFte(movement) : planMovementFte(movement);
+    const volume = mode === "fte" ? fte : movement.salaryImpact / 1_000_000;
+    const sign = Math.sign(fteEffect({ ...movement, fte: 1 }));
+    const net = mode === "fte" ? sign * fte : movement.salaryImpact / 1_000_000;
+    row[status].volume += volume;
+    row[status].net += net;
     row[status].count += 1;
     row[status].movements.push(movement);
     rows.set(key, row);
@@ -112,18 +116,11 @@ export function executionByDimension(
   );
 }
 
-export const fteExecutionByDimension = (
-  movements: WorkforceMovement[],
-  dimension: ExecutionDimension,
-  programs: Program[],
-  today: string = HR_TODAY
-) => executionByDimension(movements, dimension, programs, "fte", today);
-
 export const salaryExecutionByDimension = (
   movements: WorkforceMovement[],
   dimension: ExecutionDimension,
   programs: Program[],
-  today: string = HR_TODAY
+  today: string = hrToday()
 ) => executionByDimension(movements, dimension, programs, "salary", today);
 
 export type MovementStatusCell = {
@@ -136,7 +133,7 @@ export function movementStatusGroups(
   movements: WorkforceMovement[],
   dimension: ExecutionDimension,
   programs: Program[],
-  today: string = HR_TODAY
+  today: string = hrToday()
 ): MovementStatusGroup[] {
   const groups = new Map<string, MovementStatusCell[]>();
   for (const movement of movements) {
@@ -178,7 +175,7 @@ const emptyMovementsByStatus = (): Record<MovementExecutionStatus, WorkforceMove
 export function movementStatusByType(
   movements: WorkforceMovement[],
   filters: { department?: string | string[]; country?: string | string[] } = {},
-  today: string = HR_TODAY
+  today: string = hrToday()
 ): MovementStatusByTypeRow[] {
   const rows = new Map(
     MOVEMENT_TYPE_ORDER.map((type) => [
@@ -225,7 +222,7 @@ const emptyOwnerCell = (): OwnerActionCell => ({ count: 0, fte: 0 });
 
 export function ownerActionSummary(
   movements: WorkforceMovement[],
-  today: string = HR_TODAY,
+  today: string = hrToday(),
   dueSoonDays = 90
 ): OwnerActionRow[] {
   const rows = new Map<string, OwnerActionRow>();
@@ -292,7 +289,7 @@ export function movementProgressByDimension(
   movements: WorkforceMovement[],
   dimension: MovementProgressDimension,
   programLabels: Record<string, string> = {},
-  today: string = HR_TODAY,
+  today: string = hrToday(),
   dueSoonDays = 90
 ): MovementProgressRow[] {
   const rows = new Map<string, MovementProgressRow>();

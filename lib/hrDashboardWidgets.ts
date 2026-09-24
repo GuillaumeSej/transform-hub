@@ -55,7 +55,8 @@ export type HrWidgetType =
   | "department-table"
   | "movements-table"
   | "movements-merged"
-  | "movement-progress";
+  | "movement-progress"
+  | "hr-pivot";
 
 /** Clé i18n du titre de chaque widget RH — le `label` du registre sert de fallback français
  *  (`t(HR_WIDGET_LABEL_KEYS[type], def.label)`), pour le sélecteur "Ajouter un widget" et le titre
@@ -77,6 +78,7 @@ export const HR_WIDGET_LABEL_KEYS: Record<HrWidgetType, string> = {
   "movements-table": "hr.widget.movementsTable",
   "movements-merged": "hr.widget.movementsMerged",
   "movement-progress": "hr.widget.movementProgressTitle",
+  "hr-pivot": "hr.widget.customPivot",
 };
 
 /** Une configuration de vue construite par l'utilisateur pour un widget RH du builder générique
@@ -259,15 +261,28 @@ export const HR_WIDGET_REGISTRY: HrWidgetDef[] = [
     allowedSpans: ["M", "L", "XL"],
     defaultView: "program",
   },
+  {
+    // Vue construite par l'utilisateur (builder générique indicateur × dimension, voir
+    // lib/hrDashboardPivot.ts) — seul widget `builderEnabled` : l'ajout ouvre la configuration
+    // (métrique + dimension), et un bloc existant peut recevoir des vues supplémentaires (m6).
+    // Absent du layout par défaut (une vue doit d'abord être configurée).
+    type: "hr-pivot",
+    label: "Vue personnalisée (indicateur × dimension)",
+    icon: "BarChart3",
+    defaultSpan: "M",
+    allowedSpans: ["M", "L", "XL"],
+    builderEnabled: true,
+  },
 ];
 
 export function getHrWidgetDef(type: string): HrWidgetDef | undefined {
   return HR_WIDGET_REGISTRY.find((w) => w.type === type);
 }
 
-/** Layout par défaut v4 — ordre cockpit validé en Août 2026. */
+/** Layout par défaut v4 — ordre cockpit validé en Août 2026. Les widgets du builder générique
+ *  (`builderEnabled`) n'y figurent pas : ils n'ont de sens qu'une fois une vue configurée. */
 export function buildHrDefaultLayout(): HrWidgetInstance[] {
-  return HR_WIDGET_REGISTRY.map((def) => ({
+  return HR_WIDGET_REGISTRY.filter((def) => !def.builderEnabled).map((def) => ({
     instanceId: def.type,
     type: def.type,
     span: def.defaultSpan,
@@ -591,7 +606,10 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
       return buildHrDefaultLayout();
     }
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidHrInstance)) {
+    // Un widget inconnu (type retiré/renommé) ou corrompu n'invalide plus TOUT le layout : seuls
+    // les éléments invalides sont écartés (m13). Layout vide/illisible → layout par défaut.
+    const validInstances = Array.isArray(parsed) ? parsed.filter(isValidHrInstance) : [];
+    if (validInstances.length === 0) {
       window.localStorage.setItem(HR_GOODUELLE_MIGRATION_KEY, "1");
       window.localStorage.setItem(HR_FTE_FULL_WIDTH_MIGRATION_KEY, "1");
       window.localStorage.setItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY, "1");
@@ -605,7 +623,8 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
       window.localStorage.getItem(HR_MOVEMENTS_MERGED_MIGRATION_KEY) === "1";
     const movementProgressAlreadyApplied =
       window.localStorage.getItem(HR_MOVEMENT_PROGRESS_MIGRATION_KEY) === "1";
-    const sanitized = (parsed as HrWidgetInstance[]).map(sanitizeHrInstance);
+    const droppedSome = Array.isArray(parsed) && validInstances.length !== parsed.length;
+    const sanitized = validInstances.map(sanitizeHrInstance);
     // Chaîne les migrations : ajout des widgets Gooduelle (si absents), puis passage en
     // pleine largeur de fte-waterfall/fte-execution-status (si encore à leur ancien span "M"),
     // puis ajout de movements-merged en fin de layout (si absent).
@@ -615,6 +634,7 @@ export function loadHrDashboardLayout(): HrWidgetInstance[] {
     // … puis ajout de movement-progress juste après movements-merged (si absent).
     const migrated = migrateMovementProgressWidget(mergedMigrated, movementProgressAlreadyApplied);
     if (
+      droppedSome ||
       !migrationAlreadyApplied ||
       !fteFullWidthAlreadyApplied ||
       !movementsMergedAlreadyApplied ||

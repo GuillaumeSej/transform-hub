@@ -8,6 +8,7 @@ import { movementNetBalance, type MovementNetBalance } from "@/lib/hrMovementBal
 import { etpMovementDeepLink } from "@/lib/hrMovementLink";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { movementStatusLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
+import { planMovementFte } from "@/lib/hrProgramSummary";
 import type { WorkforceMovement } from "@/types";
 
 /**
@@ -85,7 +86,8 @@ export function MovementDrilldownModal({
                   </span>
                   <span className="text-[11px] text-tertiary">
                     {m.plannedDate} · {movementStatusLabel(t, m.status)}
-                    {m.hrValidated ? " ✓RH" : ""} · {m.fte} {t("etp.column.fte", "ETP")}
+                    {m.hrValidated ? " ✓RH" : ""} · {/* Vue plan, comme le bilan net (M10). */}
+                    {planMovementFte(m)} {t("etp.column.fte", "ETP")}
                   </span>
                 </span>
                 <ArrowUpRight size={14} className="shrink-0 text-tertiary" />

@@ -106,6 +106,14 @@ export function ProjetWeightsEditor({
           </li>
         ))}
       </ul>
+      {declaredTotal > 100 && (
+        <p className="mt-2 text-[11px] font-semibold text-rag-red" role="alert">
+          {t(
+            "projetWeights.overTotalWarning",
+            "Le total déclaré dépasse 100 % : les poids sont normalisés au calcul, et les projets non pondérés reçoivent le poids moyen déclaré."
+          )}
+        </p>
+      )}
       <div className="mt-2 text-[11px] font-semibold text-secondary">
         {hasAnyDeclared
           ? `${t("projetWeights.declaredTotal", "Poids déclaré")} : ${declaredTotal} %` +

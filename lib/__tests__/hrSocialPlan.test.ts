@@ -26,12 +26,15 @@ function movement(overrides: Partial<WorkforceMovement>): WorkforceMovement {
 
 describe("forcedDeparturesBySocialScheme", () => {
   it("counts one movement per forced departure by scheme and status", () => {
-    const rows = forcedDeparturesBySocialScheme([
-      movement({ id: "M1", socialScheme: "PSE", status: "Réalisé" }),
-      movement({ id: "M2", socialScheme: "PSE", status: "À faire" }),
-      movement({ id: "M3", socialScheme: "RC", status: "Abandonné" }),
-      movement({ id: "M4", type: "Recrutement", socialScheme: undefined }),
-    ]);
+    const rows = forcedDeparturesBySocialScheme(
+      [
+        movement({ id: "M1", socialScheme: "PSE", status: "Réalisé" }),
+        movement({ id: "M2", socialScheme: "PSE", status: "À faire" }),
+        movement({ id: "M3", socialScheme: "RC", status: "Abandonné" }),
+        movement({ id: "M4", type: "Recrutement", socialScheme: undefined }),
+      ],
+      "2026-06-22"
+    );
     expect(rows.find((row) => row.scheme === "PSE")).toMatchObject({ realized: 1, dueSoon: 1 });
     expect(rows.find((row) => row.scheme === "RC")?.abandoned).toBe(1);
   });

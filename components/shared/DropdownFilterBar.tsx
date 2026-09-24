@@ -8,7 +8,7 @@ import type {
   FilterDef,
   MultiActiveFilters,
   SingleActiveFilters,
-} from "@/components/shared/FilterBar";
+} from "@/components/shared/filterTypes";
 
 /**
  * === API MULTI-SÉLECTION (à adopter par la page Leviers) ===
@@ -18,7 +18,7 @@ import type {
  * `useMultiFilterBarState(defs, { namespace? })` (lib/hooks/useMultiFilterBarState.ts, valeurs
  * sérialisées en virgules, anciennes valeurs simples relues). Filtrage : `matchesFilter(value,
  * selected)` de `lib/filterUtils.ts`. Sans `multiple`, l'ancien comportement mono-sélection
- * (`SingleActiveFilters`, `useFilterBarState`) est conservé tel quel pour compatibilité.
+ * (`SingleActiveFilters`, état géré par l'appelant) est conservé tel quel pour compatibilité.
  * Ce qui suit est l'historique du composant mono-sélection.
  *
  * Remplaçant "drop-in" de `FilterBar.tsx` (chips empilées en deux rangées, jugées peu lisibles —

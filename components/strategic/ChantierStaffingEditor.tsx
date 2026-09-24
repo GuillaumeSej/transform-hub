@@ -15,6 +15,7 @@ import {
   subscribeChantierStaffing,
 } from "@/lib/firestore/chantierStaffing";
 import { colorForDepartment } from "@/lib/axisLogic";
+import { todayISO } from "@/lib/dateUtils";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
@@ -225,7 +226,7 @@ export function ChantierStaffingEditor({
           companyId,
           programId,
           chantierId,
-          createdAt: new Date().toISOString().slice(0, 10),
+          createdAt: todayISO(),
           function: "",
           fte: 0,
         };
@@ -303,7 +304,7 @@ export function ChantierStaffingEditor({
                     editing?.id === entry.id
                       ? "bg-bp-coral/5"
                       : focusActionId && entry.actionId === focusActionId
-                        ? "bg-amber-50/70"
+                        ? "bg-rag-amber-light/70"
                         : "bg-white"
                   }`}
                 >

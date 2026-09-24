@@ -22,6 +22,7 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatCompactCurrency, formatPercent } from "@/lib/formatCompactAmount";
+import { formatCurrency, normalizeCurrency } from "@/lib/format";
 
 /**
  * Page « Effectifs mobilisés » — lecture transverse du staffing saisi chantier par chantier
@@ -98,6 +99,17 @@ function BudgetDrillBreadcrumb({ currentIndex }: { currentIndex: number }) {
   );
 }
 
+/** Rend les noms de parts UNIQUES (suffixe " (2)", " (3)"… sur les homonymes) — le donut ne
+ *  renvoie que le nom de la part cliquée, et l'utilise aussi comme clé React. */
+function uniqueSliceNames<T extends { slice: BudgetDonutSlice }>(entries: T[]): T[] {
+  const seen = new Map<string, number>();
+  return entries.map((e) => {
+    const count = (seen.get(e.slice.name) ?? 0) + 1;
+    seen.set(e.slice.name, count);
+    return count === 1 ? e : { ...e, slice: { ...e.slice, name: `${e.slice.name} (${count})` } };
+  });
+}
+
 export function EffectifsPageClient() {
   const { t, locale } = useTranslation();
   const router = useRouter();
@@ -114,6 +126,7 @@ export function EffectifsPageClient() {
     chantierActions,
     staffing,
     strategicRole,
+    programAxisIds,
     loading: dataLoading,
   } = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const {
@@ -203,34 +216,20 @@ export function EffectifsPageClient() {
   // parts par axe (+ la part "sans axe" éventuelle) est EXACTEMENT le total programme affiché au
   // centre du donut. `Chantier.allocatedBudget`/`consumedBudget` (saisies manuelles) ne sont plus
   // lus ici.
+  // Attribution d'un chantier multi-axe calculée sur TOUS les axes du programme
+  // (`programAxisIds`), pas seulement ceux visibles du lecteur — voir `rollupBudgets`.
   const budgetRollup = useMemo(
-    () => rollupBudgets(axes, chantiers, chantierActions),
-    [axes, chantiers, chantierActions]
+    () =>
+      rollupBudgets(
+        axes,
+        chantiers,
+        chantierActions,
+        programAxisIds.map((id) => ({ id }))
+      ),
+    [axes, chantiers, chantierActions, programAxisIds]
   );
   const totalAllocatedBudget = budgetRollup.programme.allocated;
   const totalConsumedBudget = budgetRollup.programme.consumed;
-
-  /** Parts du donut au niveau 1 (axes) : alloué ET consommé par axe d'attribution, plus une part
-   *  "sans axe" si des chantiers n'ont aucun axe connu (pour que la somme des parts = le total). */
-  const unifiedBudgetSlices: BudgetDonutSlice[] = useMemo(() => {
-    const slices: BudgetDonutSlice[] = axes.map((axis) => {
-      const figures = budgetRollup.axes.get(axis.id) ?? EMPTY_BUDGET;
-      return { name: axis.name, value: figures.allocated, consumed: figures.consumed };
-    });
-    const orphan = budgetRollup.unattributed;
-    if (orphan.allocated > 0 || orphan.consumed > 0) {
-      slices.push({
-        name: t("effectifs.moneyBudget.unattributedAxis", "Sans axe"),
-        value: orphan.allocated,
-        consumed: orphan.consumed,
-      });
-    }
-    return slices;
-  }, [axes, budgetRollup, t]);
-
-  /** `BudgetDonutChart.onSliceClick` ne renvoie que le NOM de la part cliquée (contrat du
-   *  composant, inchangé) — ce lookup retrouve l'axe correspondant, niveau 1 du drill-down. */
-  const axisByName = useMemo(() => new Map(axes.map((a) => [a.name, a] as const)), [axes]);
 
   /** Axe/chantier actuellement ouverts dans le drill-down EN PLACE (round 26) — dérivés de
    *  `budgetDrillPath`, `null` tant que le niveau correspondant n'est pas atteint. */
@@ -247,34 +246,95 @@ export function EffectifsPageClient() {
     [budgetDrillAxisId, chantiers, budgetRollup]
   );
 
-  /** Parts du donut pour le niveau COURANT du drill-down EN PLACE : axes, puis chantiers de l'axe
-   *  ouvert, puis projets du chantier ouvert — alloué et consommé à chaque niveau, tous issus de
-   *  `budgetRollup`. Les entités sans aucun montant (ni alloué ni consommé) sont omises. */
-  const budgetDrillSlices: BudgetDonutSlice[] = useMemo(() => {
+  /** Parts du donut pour le niveau COURANT du drill-down EN PLACE (axes, puis chantiers de l'axe
+   *  ouvert, puis projets du chantier ouvert), chacune portant l'`id` de son entité. Le composant
+   *  `BudgetDonutChart` ne renvoie au clic que le NOM de la part : les noms sont donc rendus
+   *  UNIQUES (`uniqueSliceNames`) et le clic est résolu par `id` via `budgetDrillIdByName` — deux
+   *  entités homonymes ne se confondent plus. Entités sans aucun montant omises (hors niveau 1). */
+  const budgetDrillEntries = useMemo(() => {
     const hasAmount = (f: { allocated: number; consumed: number }) =>
       f.allocated > 0 || f.consumed > 0;
+    let entries: { id: string; slice: BudgetDonutSlice }[];
     if (budgetDrillChantierId) {
-      return chantierActions
+      entries = chantierActions
         .filter((a) => a.chantierId === budgetDrillChantierId)
         .map((a) => ({ a, f: budgetRollup.projets.get(a.id) ?? EMPTY_BUDGET }))
         .filter(({ f }) => hasAmount(f))
-        .map(({ a, f }) => ({ name: a.name, value: f.allocated, consumed: f.consumed }));
-    }
-    if (budgetDrillAxisId) {
-      return drillAxisChantiers
+        .map(({ a, f }) => ({
+          id: a.id,
+          slice: { name: a.name, value: f.allocated, consumed: f.consumed },
+        }));
+    } else if (budgetDrillAxisId) {
+      entries = drillAxisChantiers
         .map((c) => ({ c, f: budgetRollup.chantiers.get(c.id) ?? EMPTY_BUDGET }))
         .filter(({ f }) => hasAmount(f))
-        .map(({ c, f }) => ({ name: c.name, value: f.allocated, consumed: f.consumed }));
+        .map(({ c, f }) => ({
+          id: c.id,
+          slice: { name: c.name, value: f.allocated, consumed: f.consumed },
+        }));
+    } else {
+      // Niveau 1 (axes) : alloué ET consommé par axe d'attribution, plus une part "sans axe" et une
+      // part "autres axes" (axe d'attribution hors du périmètre visible) pour que la somme des
+      // parts = le total programme du centre.
+      entries = axes.map((axis) => {
+        const figures = budgetRollup.axes.get(axis.id) ?? EMPTY_BUDGET;
+        return {
+          id: axis.id,
+          slice: { name: axis.name, value: figures.allocated, consumed: figures.consumed },
+        };
+      });
+      const orphan = budgetRollup.unattributed;
+      if (hasAmount(orphan)) {
+        entries.push({
+          id: "",
+          slice: {
+            name: t("effectifs.moneyBudget.unattributedAxis", "Sans axe"),
+            value: orphan.allocated,
+            consumed: orphan.consumed,
+          },
+        });
+      }
+      const shown = entries.reduce(
+        (acc, e) => ({
+          allocated: acc.allocated + e.slice.value,
+          consumed: acc.consumed + (e.slice.consumed ?? 0),
+        }),
+        { allocated: 0, consumed: 0 }
+      );
+      const hidden = {
+        allocated: budgetRollup.programme.allocated - shown.allocated,
+        consumed: budgetRollup.programme.consumed - shown.consumed,
+      };
+      if (hidden.allocated > 1e-9 || hidden.consumed > 1e-9) {
+        entries.push({
+          id: "",
+          slice: {
+            name: t("effectifs.moneyBudget.otherAxes", "Autres axes"),
+            value: Math.max(0, hidden.allocated),
+            consumed: Math.max(0, hidden.consumed),
+          },
+        });
+      }
     }
-    return unifiedBudgetSlices;
+    return uniqueSliceNames(entries);
   }, [
     budgetDrillChantierId,
     budgetDrillAxisId,
     chantierActions,
     drillAxisChantiers,
+    axes,
     budgetRollup,
-    unifiedBudgetSlices,
+    t,
   ]);
+  const budgetDrillSlices: BudgetDonutSlice[] = useMemo(
+    () => budgetDrillEntries.map((e) => e.slice),
+    [budgetDrillEntries]
+  );
+  /** Nom (rendu unique) de part → id de l'entité (vide = part non navigable). */
+  const budgetDrillIdByName = useMemo(
+    () => new Map(budgetDrillEntries.map((e) => [e.slice.name, e.id] as const)),
+    [budgetDrillEntries]
+  );
 
   /** Total alloué/consommé du niveau COURANT (centre du donut) : programme au niveau 1 (= puce
    *  "Budget alloué" du dashboard), puis axe ou chantier ouvert. */
@@ -284,30 +344,6 @@ export function EffectifsPageClient() {
       : budgetDrillAxisId !== null
         ? (budgetRollup.axes.get(budgetDrillAxisId) ?? EMPTY_BUDGET)
         : budgetRollup.programme;
-
-  /** `BudgetDonutChart.onSliceClick` du niveau CHANTIER (un axe est sélectionné, niveau projet pas
-   *  encore atteint) ne renvoie lui aussi que le NOM de la part cliquée — ce lookup, restreint aux
-   *  chantiers de l'axe ouvert, retrouve l'`id` du chantier pour pousser l'entrée suivante du
-   *  chemin de drill-down (round 14, porté round 26). */
-  const drilldownChantierByName = useMemo(() => {
-    if (!budgetDrillAxisId || budgetDrillChantierId) return new Map<string, string>();
-    return new Map(drillAxisChantiers.map((c) => [c.name, c.id] as const));
-  }, [budgetDrillAxisId, budgetDrillChantierId, drillAxisChantiers]);
-
-  /** `BudgetDonutChart.onSliceClick` du niveau PROJET (un chantier est sélectionné) — retrouve
-   *  l'id du projet (`ChantierAction`, alias « levier ») cliqué pour naviguer vers sa fiche. Round
-   *  26 : même mécanisme `?chantier=&action=` que `StrategicAxesView.openChantierPanel`/
-   *  `StrategicDashboardView.openChantierPanel` (recherché et réutilisé tel quel, cette page n'a
-   *  pas son propre panneau chantier) — déclenché ici vers `/levers`, comme le faisait déjà le
-   *  clic chantier de round 14 ci-dessous. */
-  const drilldownProjetByName = useMemo(() => {
-    if (!budgetDrillChantierId) return new Map<string, string>();
-    return new Map(
-      chantierActions
-        .filter((a) => a.chantierId === budgetDrillChantierId)
-        .map((a) => [a.name, a.id] as const)
-    );
-  }, [budgetDrillChantierId, chantierActions]);
 
   // Bouton d'import Excel + lien base ETP : rendus directement dans l'en-tête (réutilisé par
   // toutes les branches de retour ci-dessous) plutôt que dans une variable de toolbar séparée.
@@ -378,7 +414,7 @@ export function EffectifsPageClient() {
   // mais purement monétaire — rendue AVANT elle (demande PO : le lecteur voit d'abord l'argent,
   // puis le détail ETP), dans les deux branches de retour (staffing vide ou non).
   const formatAllocatedBudget = (value: number) =>
-    `${value.toLocaleString()} ${activeProgram.currency}`;
+    formatCurrency(value, { currency: activeProgram.currency });
   // Round 14 (PO) : la tuile `KPICard` "Budget total alloué" (simple somme) était redondante avec
   // le total désormais affiché au centre du donut lui-même (round 13) — retirée, le donut seul
   // porte maintenant à la fois la répartition ET le total.
@@ -434,7 +470,7 @@ export function EffectifsPageClient() {
                 // complets restent dans la légende et le tooltip.
                 size="lg"
                 formatCenterValue={(value) =>
-                  formatCompactCurrency(value, activeProgram.currency, locale)
+                  formatCompactCurrency(value, normalizeCurrency(activeProgram.currency), locale)
                 }
                 // Niveau 1 : le centre se lit "7,7 M € / sur 23,6 M € alloués / 33 % consommé" —
                 // plus de libellé "CONSOMMÉ / ALLOUÉ" en capitales, redondant avec ces lignes.
@@ -466,28 +502,21 @@ export function EffectifsPageClient() {
                 total={budgetDrillTotals.allocated}
                 consumedTotal={budgetDrillTotals.consumed}
                 onSliceClick={(name) => {
+                  // Résolution par ID (voir `budgetDrillEntries`), jamais par nom brut.
+                  const id = budgetDrillIdByName.get(name);
+                  if (!id) return;
                   // Niveau 3 (un chantier est déjà ouvert) : la part cliquée est un PROJET — navigue
                   // vers sa fiche (round 14, porté round 26) plutôt que de pousser un 4e niveau.
                   if (budgetDrillChantierId) {
-                    const actionId = drilldownProjetByName.get(name);
-                    if (actionId) {
-                      router.push(`/levers?chantier=${budgetDrillChantierId}&action=${actionId}`);
-                    }
+                    router.push(`/levers?chantier=${budgetDrillChantierId}&action=${id}`);
                     return;
                   }
-                  // Niveau 2 (un axe est déjà ouvert) : la part cliquée est un CHANTIER — descend au
-                  // niveau projet (round 13, désormais EN PLACE plutôt que dans une modale).
-                  if (budgetDrillAxisId) {
-                    const chantierId = drilldownChantierByName.get(name);
-                    if (chantierId) {
-                      setBudgetDrillPath((p) => [...p, { id: chantierId, label: name }]);
-                    }
-                    return;
-                  }
-                  // Niveau 1 (aucun axe ouvert) : la part cliquée est un AXE — descend au niveau
-                  // chantier.
-                  const axis = axisByName.get(name);
-                  if (axis) setBudgetDrillPath([{ id: axis.id, label: axis.name }]);
+                  // Niveau 2 (axe ouvert) : CHANTIER → niveau projet ; niveau 1 : AXE → chantiers.
+                  const label =
+                    (budgetDrillAxisId
+                      ? chantiers.find((c) => c.id === id)?.name
+                      : axes.find((a) => a.id === id)?.name) ?? name;
+                  setBudgetDrillPath((p) => [...(budgetDrillAxisId ? p : []), { id, label }]);
                 }}
               />
             )}

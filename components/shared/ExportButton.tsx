@@ -7,34 +7,53 @@ import { generateAlerts } from "@/lib/alertEngine";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { leverActionsToExcelRows, leverToExcelRow } from "@/lib/leverExcel";
+import {
+  EXCEL_CELL_MAX_LENGTH,
+  IMPACT_EXPORT_HEADERS,
+  leverActionsToExcelRows,
+  leverImpactsToExcelRows,
+  leverToExcelRow,
+} from "@/lib/leverExcel";
 import { ACTION_IMPORT_HEADERS } from "@/lib/leverExcelImport";
-import type { BeTrackData, Company, Lever } from "@/types";
+import type { BeTrackData, Company, Lever, LifecycleStage } from "@/types";
+
+/** Segment de nom de fichier sûr (sans accents ni caractères spéciaux). */
+function fileSlug(s: string): string {
+  return (
+    s
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "programme"
+  );
+}
 
 /**
- * Export Excel réel des leviers (via `data`), utilisé sur la page Leviers.
- * L'export PowerPoint du dashboard exécutif vit désormais dans son propre composant
- * `DashboardExportButton` (capture DOM des widgets + génération .pptx via pptxgenjs), distinct de
- * celui-ci car sa logique n'a rien à voir avec l'export Excel tabulaire.
+ * Export Excel réel des leviers (via `data`), utilisé sur la page Leviers : feuilles Leviers,
+ * Actions et Impacts, au format de l'import (un export ré-importé tel quel ne change rien).
+ * L'export PowerPoint du dashboard exécutif vit dans `DashboardExportButton`.
  */
 export function ExportButton({
   data,
   riskThresholds,
   programs = [],
   levers,
+  lifecycleStages,
+  selectedProgramId,
 }: {
   data: BeTrackData;
   /** Leviers à exporter — ceux réellement affichés à l'écran (programme, habilitation, filtres,
-   *  recherche). Sans ce prop : tous les leviers de `data` (comportement historique, qui
-   *  exportait toute l'entreprise quels que soient le rôle, la confidentialité et les filtres). */
+   *  recherche). Sans ce prop : tous les leviers de `data`. */
   levers?: Lever[];
-  /** Seuils de risque de l'entreprise courante (voir engine.computeLeverRisk) — seuils par défaut
-   *  si non fournis. */
+  /** Seuils de risque de l'entreprise courante — mêmes que l'écran (colonne "Risque"). */
   riskThresholds?: Company["riskThresholds"];
-  /** Programmes de l'entreprise, pour résoudre la colonne "Programme" de l'export — voir
-   *  `lib/leverExcel.ts`. Sans elle, la colonne serait absente et le fichier ré-exporté
-   *  deviendrait non ré-importable dès que l'entreprise a plusieurs programmes. */
+  /** Programmes de l'entreprise, pour résoudre la colonne "Programme" de l'export. */
   programs?: { id: string; name: string }[];
+  /** Cycle de vie du programme affiché : la colonne "Statut" reprend les libellés de l'écran. */
+  lifecycleStages?: LifecycleStage[];
+  /** Programme sélectionné : utilisé pour nommer le fichier. */
+  selectedProgramId?: string | null;
 }) {
   const { showToast } = useToast();
   const { t } = useTranslation();
@@ -43,7 +62,7 @@ export function ExportButton({
   const exportExcel = (d: BeTrackData) => {
     const leversToExport = levers ?? d.levers;
     const rows = leversToExport.map((l) =>
-      leverToExcelRow(l, d, alerts, riskThresholds, undefined, programs)
+      leverToExcelRow(l, d, alerts, riskThresholds, lifecycleStages, programs)
     );
     const sheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
@@ -54,10 +73,22 @@ export function ExportButton({
       header: [...ACTION_IMPORT_HEADERS],
     });
     XLSX.utils.book_append_sheet(workbook, actionsSheet, "Actions");
+    // Feuille "Impacts" (libellé compris) : le ré-import rapproche chaque ligne de l'impact
+    // existant et conserve id, commentaires et validation finance.
+    const impactsSheet = XLSX.utils.json_to_sheet(leversToExport.flatMap(leverImpactsToExcelRows), {
+      header: IMPACT_EXPORT_HEADERS,
+    });
+    XLSX.utils.book_append_sheet(workbook, impactsSheet, "Impacts");
 
+    const program = programs.find((p) => p.id === selectedProgramId);
+    const programPart = fileSlug(program?.name ?? selectedProgramId ?? "leviers");
     XLSX.writeFile(
       workbook,
-      `leviers_${d.program.id}_${new Date().toISOString().slice(0, 10)}.xlsx`
+      `leviers_${programPart}_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+
+    const truncated = leversToExport.filter(
+      (l) => (l.description ?? "").length > EXCEL_CELL_MAX_LENGTH
     );
     showToast(
       t("shared.excelIO.exportSuccessTitle", "Export Excel généré"),
@@ -67,6 +98,19 @@ export function ExportButton({
       ),
       "success"
     );
+    if (truncated.length > 0) {
+      showToast(
+        t("shared.exportButton.truncatedTitle", "Descriptions tronquées"),
+        t(
+          "shared.exportButton.truncatedBody",
+          "{n} description(s) dépassent la limite d'une cellule Excel ({max} caractères) et ont été tronquées dans le fichier : {codes}. Un ré-import conserve la description complète."
+        )
+          .replace("{n}", String(truncated.length))
+          .replace("{max}", String(EXCEL_CELL_MAX_LENGTH))
+          .replace("{codes}", truncated.map((l) => l.code).join(", ")),
+        "default"
+      );
+    }
   };
 
   return (

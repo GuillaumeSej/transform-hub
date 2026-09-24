@@ -1,5 +1,6 @@
 "use client";
 
+import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /** Sélecteur mois/trimestre/année générique — extrait du sélecteur mois/trimestre/année propre au
@@ -22,19 +23,12 @@ export function GranularityToggle<G extends "month" | "quarter" | "year">({
     year: t("hr.granularity.year", "Année"),
   };
   return (
-    <div className="flex overflow-hidden rounded-md border border-border">
-      {options.map((g) => (
-        <button
-          key={g}
-          type="button"
-          onClick={() => onChange(g)}
-          className={`px-2.5 py-1 text-[11px] font-semibold transition ${
-            value === g ? "bg-neutral-900 text-white" : "bg-white text-secondary hover:text-primary"
-          }`}
-        >
-          {labels[g]}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      label={t("common.segmented.granularity", "Granularité")}
+      showLabel={false}
+      options={options.map((g) => ({ value: g, label: labels[g] }))}
+      value={value}
+      onChange={onChange}
+    />
   );
 }

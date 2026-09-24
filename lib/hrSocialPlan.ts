@@ -1,5 +1,6 @@
 import type { SocialScheme, WorkforceMovement } from "@/types";
 import { classifyMovementExecution, type MovementExecutionStatus } from "@/lib/hrExecution";
+import { hrToday } from "@/lib/hrEngine";
 
 export type SocialSchemeKey = SocialScheme | "Non renseigné";
 
@@ -17,7 +18,8 @@ const SCHEME_ORDER: SocialSchemeKey[] = ["PSE", "RC", "RCC", "PDV", "Autre", "No
 /** Nombre de départs forcés prévus/réalisés/abandonnés par dispositif social. Une ligne mouvement
  * vaut une unité : le modèle garantit un mouvement par ETP. */
 export function forcedDeparturesBySocialScheme(
-  movements: WorkforceMovement[]
+  movements: WorkforceMovement[],
+  today: string = hrToday()
 ): ForcedDepartureStatusRow[] {
   const rows = new Map(
     SCHEME_ORDER.map((scheme) => [
@@ -30,7 +32,7 @@ export function forcedDeparturesBySocialScheme(
     const scheme: SocialSchemeKey =
       movement.socialScheme ?? (movement.inPSE ? "PSE" : "Non renseigné");
     const row = rows.get(scheme)!;
-    row[classifyMovementExecution(movement) as MovementExecutionStatus] += 1;
+    row[classifyMovementExecution(movement, today) as MovementExecutionStatus] += 1;
   }
   return SCHEME_ORDER.map((scheme) => rows.get(scheme)!)
     .filter((row) => row.realized + row.overdue + row.dueSoon + row.later + row.abandoned > 0)

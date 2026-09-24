@@ -1,4 +1,10 @@
-import { baselineMeasurement, canFillIndicator } from "@/lib/axisLogic";
+import {
+  baselineMeasurement,
+  canFillIndicator,
+  compareMeasurements,
+  resolveIndicatorTargetForPeriod,
+} from "@/lib/axisLogic";
+import { samePeriod } from "@/lib/indicatorPeriod";
 import type { AuthUser, Indicator, IndicatorFrequency, IndicatorMeasurement, Role } from "@/types";
 
 /**
@@ -59,6 +65,20 @@ export function availableYears(
 
 export type YearSelection = number | "all";
 
+/** Année par défaut d'un sélecteur d'année : la DERNIÈRE année ayant des données (et non l'année
+ *  courante, qui afficherait un indicateur vide en début d'année) — à défaut, l'année courante. */
+export function defaultYearForMeasurements(
+  measurements: Pick<IndicatorMeasurement, "period">[],
+  now: Date = new Date()
+): number {
+  let latest: number | undefined;
+  for (const m of measurements) {
+    const y = periodYear(m.period);
+    if (y !== undefined && (latest === undefined || y > latest)) latest = y;
+  }
+  return latest ?? now.getFullYear();
+}
+
 export function filterByYear<T extends Pick<IndicatorMeasurement, "period">>(
   measurements: T[],
   year: YearSelection
@@ -69,6 +89,8 @@ export function filterByYear<T extends Pick<IndicatorMeasurement, "period">>(
 
 export type HistoryRow = {
   measurement: IndicatorMeasurement;
+  /** Cible applicable à la période de CETTE ligne (palier de trajectoire, ou cible finale). */
+  target?: number;
   /** Écart signé valeur - cible ; `undefined` sans cible ou sans valeur. */
   gap?: number;
   /** true = écart dans le bon sens (selon `direction`). */
@@ -84,22 +106,27 @@ export function measurementGap(
   return Math.round((value - objectiveValue) * 1e6) / 1e6;
 }
 
-/** Lignes d'historique, plus récente d'abord (période, puis horodatage de saisie). */
+/** Lignes d'historique, plus récente d'abord (`compareMeasurements` : période, puis horodatage de
+ *  saisie). `target` : cible FIXE (nombre), ou l'indicateur lui-même — chaque ligne est alors
+ *  comparée à la cible APPLICABLE à SA période (`resolveIndicatorTargetForPeriod`, palier de
+ *  trajectoire), jamais toujours à la cible finale. */
 export function buildHistoryRows(
   measurements: IndicatorMeasurement[],
-  objectiveValue?: number,
+  target?: number | Pick<Indicator, "objectiveValue" | "targetSchedule">,
   direction: Indicator["direction"] = "up"
 ): HistoryRow[] {
+  const targetFor = (period: string): number | undefined =>
+    typeof target === "object" && target !== null
+      ? resolveIndicatorTargetForPeriod(target, period)
+      : target;
   return [...measurements]
-    .sort((a, b) =>
-      a.period === b.period
-        ? b.reportedAt.localeCompare(a.reportedAt)
-        : b.period.localeCompare(a.period)
-    )
+    .sort((a, b) => compareMeasurements(b, a))
     .map((measurement) => {
-      const gap = measurementGap(measurement.value, objectiveValue);
+      const rowTarget = targetFor(measurement.period);
+      const gap = measurementGap(measurement.value, rowTarget);
       return {
         measurement,
+        target: rowTarget,
         gap,
         favorable: gap === undefined ? undefined : direction === "down" ? gap <= 0 : gap >= 0,
       };
@@ -151,15 +178,19 @@ export function findPeriodCollision(
   period: string,
   excludeId?: string
 ): Pick<IndicatorMeasurement, "id" | "indicatorId" | "period"> | undefined {
-  const target = period.trim();
+  // `samePeriod` : "2026-3" et "2026-03" (ou "T1 2026" et "2026-Q1") désignent la même période.
   return measurements.find(
-    (m) => m.indicatorId === indicatorId && m.id !== excludeId && m.period.trim() === target
+    (m) => m.indicatorId === indicatorId && m.id !== excludeId && samePeriod(m.period, period)
   );
 }
 
 /** Erreur levée par `useStrategicData.updateMeasurement` quand la nouvelle période est déjà prise. */
 export class MeasurementPeriodCollisionError extends Error {
-  constructor(public readonly period: string) {
+  constructor(
+    public readonly period: string,
+    /** Id de la mesure qui occupe déjà la période (si connu) — cible d'un remplacement. */
+    public readonly existingId?: string
+  ) {
     super(`Une mesure existe déjà pour la période ${period}`);
     this.name = "MeasurementPeriodCollisionError";
   }

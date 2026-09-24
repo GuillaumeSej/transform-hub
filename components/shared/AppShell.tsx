@@ -25,6 +25,7 @@ import { StrategicApprovalsProvider } from "@/lib/hooks/useStrategicApprovalsCon
 import { APPROVAL_ALERT_ROUTE } from "@/lib/strategicApprovals";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Alert } from "@/types";
+import { formatCurrency } from "@/lib/format";
 
 /**
  * Coquille de l'app (sidebar + topbar) + garde d'authentification : redirige vers /login si
@@ -181,7 +182,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       );
       if (overrun !== undefined) {
         const id = `strategic-budget-overrun-${activeProgram.id}`;
-        const amountLabel = `${overrun.toLocaleString()} ${activeProgram.currency}`;
+        const amountLabel = formatCurrency(overrun, { currency: activeProgram.currency });
         alerts.push({
           id,
           type: "red",
@@ -348,6 +349,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div
             className="fixed inset-0 bg-black/50"
             aria-hidden="true"
+            role="presentation"
             onClick={() => setMobileNavOpen(false)}
           />
           <Sidebar

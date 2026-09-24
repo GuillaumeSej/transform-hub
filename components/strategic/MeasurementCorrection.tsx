@@ -22,6 +22,9 @@ export type MeasurementCorrection = {
   canCorrect: boolean;
   startEdit: (measurement: IndicatorMeasurement) => void;
   startDelete: (measurement: IndicatorMeasurement) => void;
+  /** Nouvelle saisie sur une période DÉJÀ renseignée : ouvre la correction de la mesure existante
+   *  pré-remplie avec la nouvelle valeur (remplacement = correction, même routage). */
+  startReplace: (existing: IndicatorMeasurement, draft: { value?: number; note?: string }) => void;
   /** Modales (édition + confirmation de suppression) à rendre par l'appelant. */
   dialogs: ReactNode;
 };
@@ -51,6 +54,7 @@ export function useMeasurementCorrection({
   const { showToast } = useToast();
   const sa = useStrategicApprovalsApi();
   const [editing, setEditing] = useState<IndicatorMeasurement | null>(null);
+  const [replaceDraft, setReplaceDraft] = useState<{ value?: number; note?: string } | null>(null);
   const [deleting, setDeleting] = useState<IndicatorMeasurement | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -94,14 +98,19 @@ export function useMeasurementCorrection({
     <>
       {editing && user && (
         <IndicatorValueModal
-          key={editing.id}
+          key={`${editing.id}:${replaceDraft ? "replace" : "edit"}`}
           indicator={indicator}
           user={user}
           open
           onOpenChange={(open) => {
-            if (!open) setEditing(null);
+            if (!open) {
+              setEditing(null);
+              setReplaceDraft(null);
+            }
           }}
           editing={editing}
+          initialDraft={replaceDraft ?? undefined}
+          replacing={!!replaceDraft}
           measurements={measurements}
           updateMeasurement={updateMeasurement}
           correctionRoute={route}
@@ -148,7 +157,14 @@ export function useMeasurementCorrection({
 
   return {
     canCorrect,
-    startEdit: setEditing,
+    startEdit: (measurement) => {
+      setReplaceDraft(null);
+      setEditing(measurement);
+    },
+    startReplace: (existing, draft) => {
+      setReplaceDraft(draft);
+      setEditing(existing);
+    },
     startDelete: setDeleting,
     dialogs,
   };

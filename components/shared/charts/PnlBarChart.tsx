@@ -12,8 +12,11 @@ import {
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useStableValue } from "@/lib/hooks/useStableChartData";
+import { formatMillions } from "@/lib/format";
 
-export type PnlBarPoint = { account: string; plan: number; realized: number };
+/** `plan` = planifié initial, `reforecast` = réactualisé (optionnel), `realized` = réalisé — mêmes
+ *  définitions que les totaux par levier (voir `engine.pnlImpactDetailed`). */
+export type PnlBarPoint = { account: string; plan: number; realized: number; reforecast?: number };
 
 /** Tick custom pour l'axe Y : label tronqué avec tooltip SVG natif au hover. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,19 +36,24 @@ function TruncatedYTick(props: any) {
 }
 
 /** Impact P&L par compte — barres horizontales empilées : le réalisé (coral) est superposé
- *  sur le plan (gris). La portion grise visible = ce qui reste à réaliser pour atteindre le plan. */
+ *  sur le plan (gris). La portion grise visible = ce qui reste à réaliser pour atteindre le plan.
+ *  Si les points portent un `reforecast`, une barre fine « Réactualisé » est affichée à côté. */
 export function PnlBarChart({
   data,
   labelPlan,
   labelRealized,
+  labelReforecast,
 }: {
   data: PnlBarPoint[];
   labelPlan?: string;
   labelRealized?: string;
+  labelReforecast?: string;
 }) {
   const { t } = useTranslation();
   const resolvedLabelPlan = labelPlan ?? t("chart.pnl.plan", "Plan");
   const resolvedLabelRealized = labelRealized ?? t("chart.pnl.realized", "Réalisé");
+  const resolvedLabelReforecast = labelReforecast ?? t("chart.pnl.reforecast", "Réactualisé");
+  const hasReforecast = data.some((d) => typeof d.reforecast === "number");
   // Référence stable tant que le contenu ne change pas : un tableau recréé à chaque rendu relançait
   // l'animation d'entrée des barres (Recharts 3 anime sur changement de référence de `data`).
   const chartData = useStableValue(
@@ -63,7 +71,9 @@ export function PnlBarChart({
     );
   }
 
-  const hasNegativeValues = chartData.some((d) => d.plan < 0 || d.realized < 0);
+  const hasNegativeValues = chartData.some(
+    (d) => d.plan < 0 || d.realized < 0 || (d.reforecast ?? 0) < 0
+  );
   // Largeur de l'axe Y adaptée aux libellés RÉELS (au lieu d'une largeur fixe de 140px pensée pour
   // le pire cas à 18 caractères) : la plupart des comptes P&L sont bien plus courts, ce qui
   // laissait un grand vide entre les libellés (alignés à droite, donc collés à ce vide) et le
@@ -86,7 +96,7 @@ export function PnlBarChart({
           tick={{ fontSize: 10 }}
           axisLine={false}
           tickLine={false}
-          tickFormatter={(v) => `€${v}M`}
+          tickFormatter={(v) => formatMillions(Number(v))}
         />
         <YAxis
           type="category"
@@ -96,7 +106,15 @@ export function PnlBarChart({
           tickLine={false}
           width={yAxisWidth}
         />
-        <Tooltip formatter={(value) => `€${Number(value).toFixed(1)}M`} />
+        {/* La série empilée « reste à réaliser » porte le libellé Plan : le survol affiche le PLAN
+            lui-même, pas le reste (qui laissait croire à un plan plus faible). */}
+        <Tooltip
+          formatter={(value, _name, item) =>
+            item?.dataKey === "remaining"
+              ? formatMillions(Number((item.payload as { plan?: number })?.plan ?? value))
+              : formatMillions(Number(value))
+          }
+        />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <Bar
           dataKey="realized"
@@ -112,6 +130,16 @@ export function PnlBarChart({
           fill="rgba(168,154,147,0.3)"
           radius={[0, 4, 4, 0]}
         />
+        {hasReforecast && (
+          <Bar
+            dataKey="reforecast"
+            name={resolvedLabelReforecast}
+            stackId="b"
+            fill="#320300"
+            barSize={6}
+            radius={[0, 3, 3, 0]}
+          />
+        )}
       </BarChart>
     </ResponsiveContainer>
   );

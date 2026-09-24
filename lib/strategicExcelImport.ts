@@ -1,4 +1,13 @@
 import * as XLSX from "xlsx";
+import { baselineMeasurement, computeIndicatorStatus } from "@/lib/axisLogic";
+import {
+  canonicalizeRowKeys,
+  excelRowNumber,
+  isBlankCell,
+  normalizeHeaderKey,
+  parseCellDate,
+  parseCellNumber,
+} from "@/lib/excelParse";
 import { currentPeriod } from "@/lib/kpiHistory";
 import type {
   Chantier,
@@ -19,71 +28,49 @@ import type {
 
 /**
  * Import Excel d'un plan stratégique complet (Axes → Chantiers → Projets → Livrables →
- * Indicateurs), utilisé par `StrategicImportButton` — voir plan round 4, section "Import Excel du
- * Plan Stratégique". Mirror délibéré de `lib/leverExcelImport.ts` (même technique `xlsx`, même
- * idiome `validate*Rows` -> aperçu + erreurs ligne par ligne, même `downloadTemplate` via
- * `aoa_to_sheet`/`book_append_sheet`) — quelques différences de fond documentées ci-dessous.
+ * Indicateurs → ETP), utilisé par `StrategicImportButton`. La librairie reste PURE (aucun import de
+ * `lib/firestore/*`) : elle produit un aperçu (créations / mises à jour / inchangés + erreurs et
+ * avertissements ligne par ligne) ; l'écriture a lieu dans l'appelant, après confirmation.
  *
- * Round 27 : la feuille anciennement "Actions" s'appelle désormais "Projets" à l'écran (rename
- * utilisateur du round "levier -> projet" appliqué ici à l'import) — le type interne
- * `ChantierAction` et ses champs (`chantierId`, etc.) restent inchangés, seuls le nom de feuille et
- * les libellés affichés changent. Même round : la colonne "Code Axe" de la feuille "Chantiers"
- * devient "Codes Axes (séparés par ;)" (un chantier peut désormais appartenir à PLUSIEURS axes,
- * voir `Chantier.axisIds`), et des colonnes budget/ETP optionnelles apparaissent sur "Chantiers"
- * (`allocatedBudget`/`consumedBudget`/`consumedFte`) et "Projets" (`budget`/`consumedBudget`).
+ * Format : 6 feuilles de données (+ "Lisez-moi"), une ligne par entité.
+ *  - "Axes" : `Code` = clé de liaison du fichier, désormais AUSSI conservée sur l'entité
+ *    (`importCode`, voir « Ré-import » ci-dessous).
+ *  - "Chantiers" : rattachés à un ou plusieurs axes via "Codes Axes (séparés par ;)" (ancien
+ *    en-tête "Code Axe" accepté). Dépendances "Code:type" (FS/SS/FF/SF, FS si type omis) ; type
+ *    inconnu, auto-dépendance et cycle = erreur de ligne.
+ *  - "Projets" (type interne `ChantierAction` ; ancien nom de feuille "Actions" accepté) :
+ *    rattachés via `Code Chantier`. Date début <= Date fin obligatoire.
+ *  - "Livrables" (facultative) : embarqués dans le projet (`Code Projet`) de ce même fichier.
+ *    Livrable = ÉCHÉANCE (colonne "Échéance" ; ancien "Fin" accepté, "Début" ignoré).
+ *  - "Indicateurs" : `Code` FACULTATIF (clé de ré-import), rattachés à UN axe OU UN chantier.
+ *  - "ETP" (facultative) : `ChantierStaffing`.
  *
- * Format retenu : 5 feuilles, une ligne par entité :
- *  - "Axes" : une ligne par axe. `Code` est une clé de LIAISON propre au fichier importé (pas un
- *    champ persistant de `StrategicAxis` — contrairement au `Code` des leviers, qui EST le champ
- *    métier stocké) : elle ne sert qu'à ce que les feuilles suivantes puissent référencer la bonne
- *    ligne. Elle n'apparaît nulle part dans l'entité créée.
- *  - "Chantiers" : une ligne par chantier, rattachée à un ou plusieurs axes via
- *    "Codes Axes (séparés par ;)" (même convention de séparateur que la colonne "Dépendances" de
- *    cette même feuille, voir `parseAxisCodes` ci-dessous). `Code` (propre à cette feuille) sert de
- *    clé de liaison pour "Projets" et pour la colonne "Dépendances" de cette même feuille.
- *  - "Projets" : une ligne par projet (type interne `ChantierAction`), rattachée à un chantier via
- *    `Code Chantier`. `Code` sert de clé de liaison pour "Livrables".
- *  - "Livrables" (optionnelle) : une ligne par livrable, rattachée à un projet via `Code Projet`.
- *    Livrable = ÉCHÉANCE (décision PO) : une seule date, colonne `Échéance`, statut « à faire ».
- *    Compatibilité : un ancien fichier aux colonnes `Début`/`Fin` s'importe toujours — `Fin` sert
- *    d'échéance, `Début` est ignoré. Un livrable n'est jamais un `toCreate` séparé : il est embarqué
- *    dans `ChantierAction.deliverables` de l'action résolue.
- *  - "Indicateurs" : une ligne par indicateur, rattachée à un axe (`Code Axe`) OU un chantier
- *    (`Code Chantier`) — exactement l'un des deux, jamais les deux, jamais ni l'un ni l'autre
- *    (même optionnalité que `Indicator.chantierId`). Quand seul `Code Chantier` est renseigné,
- *    `axisId` est dérivé automatiquement du PREMIER axe (`axisIds[0]`, axe "primaire" au sens
- *    interne uniquement — voir doc-comment de `Chantier.axisIds`) du chantier résolu.
+ * Ré-import (UPSERT) : chaque ligne est rapprochée d'une entité existante du programme, d'abord par
+ * son `Code` (champ `importCode` stocké à la création, ou `id` BeTrack — c'est ce que produit
+ * l'export), à défaut par NOM au sein du même parent (programme / axe / chantier) pour une entité
+ * sans `importCode` (créée à la main ou par un import antérieur). Entité trouvée → mise à jour
+ * (seulement si un champ change réellement), sinon création. Une cellule VIDE ne remplace jamais une
+ * valeur existante (upsert non destructif). Réimporter le même fichier = 0 création, 0 mise à jour.
+ * L'export (`buildStrategicPlanExportWorkbook`) produit le même format : aller-retour = 0 changement.
  *
- * Allocation d'id en deux passes (une seule passe mémoire, AUCUN aller-retour Firestore) : au
- * contraire des leviers (id métier `L###` nécessitant l'existant en base pour décider
- * création/mise à jour), `newId(prefix)` des entités stratégiques est purement une allocation
- * côté client (`${prefix}-${Date.now().toString(36)}-${random}`, voir
- * `lib/hooks/useStrategicData.ts:129-131` — non réutilisé ici tel quel, mais même esprit avec
- * `makeId` ci-dessous). On peut donc allouer un id réel à CHAQUE ligne Axe/Chantier/Action dès sa
- * lecture, construire une map `Code (du fichier) -> id réel` par type d'entité, puis résoudre
- * TOUTES les colonnes de clé étrangère (Codes Axes, Code Chantier, Code Projet, et la colonne
- * Dépendances) contre ces maps — y compris des références à des lignes créées dans le MÊME
- * fichier. C'est le cas d'usage réel : un axe et tous ses chantiers arrivent ensemble dans
- * l'import initial qui amorce un nouveau plan.
+ * Personnes (Owner d'axe, Pilote de chantier, Owner/Sponsor de projet) : la visibilité
+ * (`lib/axisLogic.ts`) et le routage des validations comparent ces champs au `username`. Chaque
+ * cellule est donc rapprochée des comptes de l'entreprise (`options.users`) par identifiant,
+ * e-mail (synthétique ou partie locale) ou nom affiché (insensible casse/accents) et REMPLACÉE par
+ * le `username` trouvé. Une valeur non rapprochée est conservée telle quelle, avec un avertissement,
+ * et — si elle ressemble à "Prénom Nom" — proposée à la création de compte (`preview.people`) ;
+ * l'appelant réécrit ensuite les entités avec `applyPeopleMapping` une fois les comptes créés.
  *
- * Résolution de repli sur l'existant : en plus de la map "même fichier", chaque FK est aussi
- * résolue contre les entités déjà en base (`existingData`, par `id` ou par `name`, insensible à la
- * casse) — utile pour un import complémentaire qui ajoute des chantiers à un axe déjà créé, sans
- * avoir à réimporter la feuille Axes à chaque fois.
+ * Mesure de référence ("Valeur initiale") : datée de la période PRÉCÉDANT la période courante
+ * (`baselinePeriod`) — jamais la période courante, pour ne pas entrer en collision avec la première
+ * vraie saisie du mois/trimestre en cours. Le statut de l'indicateur créé est calculé par
+ * `computeIndicatorStatus` à partir de cette mesure (une baseline sous la cible = « à risque »).
  *
- * Pas de mode "mise à jour" en v1 : l'import sert à démarrer un plan, pas à corriger un plan
- * existant en place — toute ligne valide devient une CRÉATION (id fraîchement alloué), même si son
- * `Nom` coïncide avec une entité déjà en base. Hors scope explicite du round 4, à revoir plus tard
- * si le besoin se confirme.
- *
- * Validation toujours faite sur les 5 feuilles ENSEMBLE avant la moindre écriture (voir
- * `validateStrategicImportRows`) : l'aperçu retourné liste les entités prêtes à créer PAR TYPE et
- * TOUTES les erreurs ligne par ligne (feuille + numéro + raison) ; l'écriture Firestore n'a lieu
- * qu'après confirmation manuelle, dans le composant appelant (cette librairie reste pure, aucun
- * import de `lib/firestore/*`).
+ * Messages : chaque erreur/avertissement porte un `code` (+ `vars`) traduit par l'UI
+ * (`strategicImport.msg.<code>`) et un `reason` déjà rendu en français (fallback, tests).
  */
 
-// ---------- En-têtes (utilisés par le bouton "Template Excel") ----------
+// ---------- En-têtes (modèle + export) ----------
 
 export const STRATEGIC_AXIS_IMPORT_HEADERS = [
   "Code",
@@ -107,8 +94,7 @@ export const STRATEGIC_CHANTIER_IMPORT_HEADERS = [
   "Dépendances (Code:type, séparées par ;)",
 ] as const;
 
-// Nom de constante inchangé (`ACTION`, type interne `ChantierAction`) bien que la feuille affichée
-// s'appelle désormais "Projets" — voir doc-comment de tête de fichier, round 27.
+// Nom de constante inchangé (`ACTION`, type interne `ChantierAction`) — feuille affichée "Projets".
 export const STRATEGIC_ACTION_IMPORT_HEADERS = [
   "Code",
   "Code Chantier",
@@ -129,6 +115,8 @@ export const STRATEGIC_ACTION_IMPORT_HEADERS = [
 export const STRATEGIC_DELIVERABLE_IMPORT_HEADERS = ["Code Projet", "Label", "Échéance"] as const;
 
 export const STRATEGIC_INDICATOR_IMPORT_HEADERS = [
+  // Facultatif : clé de ré-import (voir doc-comment de tête). Vide = rapprochement par nom.
+  "Code",
   "Code Axe",
   "Code Chantier",
   "Nom",
@@ -136,23 +124,13 @@ export const STRATEGIC_INDICATOR_IMPORT_HEADERS = [
   "Fréquence",
   "Objectif",
   "Valeur cible",
-  // Round 31 : "situation initiale" (Word source : tableau KPI axe/chantier, colonne "Situation
-  // initiale") — valeur de départ du KPI, distincte de la cible. Facultative et jamais bloquante
-  // même textuelle ("Non consolidé", "Base 100", voir `numOrUndefined` : une valeur non numérique
-  // est silencieusement ignorée, PAS une erreur de ligne) — voir la section "Valeur initiale" du
-  // corps de `validateStrategicImportRows` pour la mesure `IndicatorMeasurement` produite.
+  // Situation de départ du KPI → mesure de référence datée de la période précédente.
   "Valeur initiale",
   "Sens",
   "Unité",
   "Rôles responsables (séparés par ;)",
 ] as const;
 
-// Round 31, point 3 : feuille facultative "ETP" (mappée sur `ChantierStaffing`, types/index.ts) —
-// une entreprise sans base ETP encore saisie peut démarrer son plan stratégique sans cette feuille,
-// et l'ajouter/l'étoffer plus tard directement sur la fiche chantier (`ChantierStaffingEditor.tsx`).
-// `Fonction (équipe)` est un texte libre CENSÉ correspondre à un `Employee.department` de la base
-// ETP entreprise (voir le doc-comment de `ChantierStaffing.function`) — aucune validation stricte
-// contre cette base ici, même discipline que le champ lui-même en base.
 export const STRATEGIC_STAFFING_IMPORT_HEADERS = [
   "Code Chantier",
   "Code Projet",
@@ -162,6 +140,10 @@ export const STRATEGIC_STAFFING_IMPORT_HEADERS = [
   "Date début",
   "Date fin",
 ] as const;
+
+/** Longueurs maximales des champs texte (au-delà = erreur de ligne). */
+export const STRATEGIC_IMPORT_MAX_NAME_LENGTH = 200;
+export const STRATEGIC_IMPORT_MAX_TEXT_LENGTH = 5000;
 
 // ---------- Libellés humains <-> valeurs internes ----------
 
@@ -182,15 +164,29 @@ const DIRECTION_LABEL: Record<IndicatorDirection, string> = {
   down: "Plus bas vaut mieux",
 };
 
+/** Synonymes acceptés (comparaison insensible casse/accents/espaces) en plus du libellé et de la
+ *  valeur interne. */
+const KIND_SYNONYMS: Record<IndicatorKind, string[]> = {
+  quantitative: ["Quantitatif", "Quantitative", "Quanti", "Numérique"],
+  qualitative: ["Qualitatif", "Qualitative", "Quali"],
+};
+
+const FREQUENCY_SYNONYMS: Record<IndicatorFrequency, string[]> = {
+  monthly: ["Mensuelle", "Mensuel", "Mois", "Monthly"],
+  quarterly: ["Trimestrielle", "Trimestriel", "Trimestre", "Quarterly"],
+  semiannual: ["Semestrielle", "Semestriel", "Semestre", "Semi-annual", "Semiannual"],
+  annual: ["Annuelle", "Annuel", "Année", "Annee", "An", "Annual", "Yearly"],
+};
+
+const DIRECTION_SYNONYMS: Record<IndicatorDirection, string[]> = {
+  up: ["Plus haut vaut mieux", "Plus haut", "Hausse", "À la hausse", "Augmenter", "Up", "↑"],
+  down: ["Plus bas vaut mieux", "Plus bas", "Baisse", "À la baisse", "Diminuer", "Down", "↓"],
+};
+
 const DEPENDENCY_TYPES: ChantierDependencyType[] = ["FS", "SS", "FF", "SF"];
 
-/** Union fermée `Role` (types/index.ts) — les 12 valeurs internes (rôles métier ; admin/
- *  admin_entreprise n'en font plus partie depuis le round multi-profils, voir AuthUser) sont
- *  acceptées TELLES QUELLES dans la colonne "Rôles responsables" (pas de table de libellés dédiée
- *  à dupliquer ici, voir le doc-comment de `RESPONSIBLE_ROLES` dans
- *  `components/admin/IndicatorsEditor.tsx` : chaque écran choisit déjà son propre sous-ensemble/
- *  libellé, il n'y a pas de référentiel partagé). Un import Excel s'adresse à un profil
- *  suffisamment technique pour taper `cto;chantier_owner`. */
+/** Union fermée `Role` — valeurs internes acceptées telles quelles (insensible à la casse) dans
+ *  "Rôles responsables". */
 const ALL_ROLES: Role[] = [
   "cto",
   "sponsor",
@@ -206,213 +202,95 @@ const ALL_ROLES: Role[] = [
   "budget_control",
 ];
 
-function reverseLabelMap<T extends string>(map: Record<T, string>): Map<string, T> {
-  const m = new Map<string, T>();
-  (Object.keys(map) as T[]).forEach((key) => m.set(map[key].toLowerCase(), key));
-  return m;
-}
+const norm = (s: string) => normalizeHeaderKey(s);
 
-const KIND_BY_LABEL = reverseLabelMap(KIND_LABEL);
-const FREQUENCY_BY_LABEL = reverseLabelMap(FREQUENCY_LABEL);
-const DIRECTION_BY_LABEL = reverseLabelMap(DIRECTION_LABEL);
-
-/** Accepte le libellé humain ("Quantitatif") ou la valeur brute ("quantitative") — même tolérance
- *  que `buildStatusByLabel` côté leviers, pour ne jamais bloquer un fichier qui reprend le
- *  vocabulaire interne plutôt que l'affichage écran. */
-function resolveEnum<T extends string>(
-  raw: string,
-  byLabel: Map<string, T>,
-  validValues: readonly T[]
-): T | undefined {
-  const lower = raw.toLowerCase();
-  const byLabelMatch = byLabel.get(lower);
-  if (byLabelMatch) return byLabelMatch;
-  return validValues.find((v) => v.toLowerCase() === lower);
-}
-
-// ---------- Parsing utilitaire (mêmes conventions que lib/leverExcelImport.ts) ----------
-
-function str(v: unknown): string {
-  if (v === undefined || v === null) return "";
-  return String(v).trim();
-}
-
-/** Convertit une cellule en nombre en tolérant la saisie "à la française" d'un fichier rempli à la
- *  main ou par IA : virgule décimale ("99,5") et espaces de milliers ("150 000", y compris
- *  espaces insécables). Retourne `NaN` si non interprétable — la sémantique d'erreur reste celle
- *  de chaque appelant. */
-function toNumber(v: unknown): number {
-  if (typeof v === "number") return v;
-  const s = String(v)
-    .trim()
-    .replace(/[\s  ]/g, "");
-  if (!s) return NaN;
-  return Number(/^-?\d+,\d+$/.test(s) ? s.replace(",", ".") : s);
-}
-
-function numOrUndefined(v: unknown): number | undefined {
-  if (v === undefined || v === null || v === "") return undefined;
-  const n = toNumber(v);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-/** Nombre FACULTATIF : chaîne vide -> `{ value: undefined }` (champ non renseigné, jamais une
- *  erreur) ; chaîne non vide mais non interprétable -> `{ error }` (même convention de message que
- *  `"Montant (€M)" doit être un nombre` dans `lib/leverExcelImport.ts`, appliquée ici à des champs
- *  facultatifs plutôt qu'obligatoires — seule une valeur PRÉSENTE mais invalide bloque la ligne, un
- *  champ vide ne bloque jamais). Utilisé pour les colonnes budget/ETP des feuilles Chantiers/
- *  Projets, toutes facultatives. */
-function parseOptionalNumberField(
-  raw: string,
-  fieldLabel: string
-): { value?: number; error?: string } {
-  if (!raw) return {};
-  const n = toNumber(raw);
-  if (!Number.isFinite(n)) return { error: `"${fieldLabel}" doit être un nombre` };
-  return { value: n };
-}
-
-function isRowEmpty(row: Record<string, unknown>): boolean {
-  return Object.values(row).every((v) => str(v) === "");
-}
-
-/** Identique à `parseFlexibleDate` de `lib/leverExcelImport.ts` (dupliquée plutôt qu'importée :
- *  chaque fichier d'import reste autonome, même convention que `lib/hrExcel.ts`/
- *  `lib/hierarchyExcel.ts`). Accepte une date Excel native, une date sérielle Excel, une chaîne
- *  ISO (AAAA-MM-JJ) ou une chaîne française JJ/MM/AAAA. Retourne "" si non interprétable. */
-function parseFlexibleDate(v: unknown): string {
-  if (v === undefined || v === null || v === "") return "";
-  if (v instanceof Date) {
-    return Number.isNaN(v.getTime()) ? "" : v.toISOString().slice(0, 10);
+function resolveSynonym<T extends string>(raw: string, table: Record<T, string[]>): T | undefined {
+  const n = norm(raw);
+  for (const key of Object.keys(table) as T[]) {
+    if (norm(key) === n || table[key].some((label) => norm(label) === n)) return key;
   }
-  if (typeof v === "number" && Number.isFinite(v)) {
-    const ms = Date.UTC(1899, 11, 30) + v * 86400000;
-    const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
-  }
-  const s = String(v).trim();
-  if (!s) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const fr = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-  if (fr) {
-    const [, d, m, y] = fr;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-  const parsed = new Date(s);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+  return undefined;
 }
 
-function nowDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// ---------- Messages (codes i18n) ----------
 
-/** Horodatage complet — même format que `reportedAt` d'une mesure saisie normalement via
- *  `useStrategicData.addMeasurement` (`new Date().toISOString()`). */
-function nowIso(): string {
-  return new Date().toISOString();
-}
+/** Gabarits FRANÇAIS de chaque message (fallback de `strategicImport.msg.<code>` côté UI). */
+export const STRATEGIC_IMPORT_MESSAGES = {
+  sheetMissing: "Feuille « {sheet} » absente du classeur — aucune ligne de ce type importée",
+  sheetAlias: "Feuille « {found} » lue comme « {sheet} » (ancien nom)",
+  noDataSheet:
+    "Aucune feuille reconnue dans ce classeur (attendu : Axes, Chantiers, Projets, Indicateurs) — utilisez le modèle",
+  missingColumns: "Colonne(s) obligatoire(s) absente(s) : {columns} — feuille ignorée",
+  unknownColumns: "Colonne(s) non reconnue(s), ignorée(s) : {columns}",
+  required: '"{column}" est obligatoire',
+  tooLong: '"{column}" dépasse {max} caractères ({length})',
+  duplicateCode: 'Code "{code}" en doublon dans le fichier (déjà utilisé ligne {line})',
+  unknownStage: 'Étape de maturité "{value}" inconnue (attendu : {expected})',
+  axesNotFound: "Axe(s) introuvable(s) (ni dans la feuille Axes, ni en base) : {codes}",
+  axisNotFound: 'Axe "{code}" introuvable (ni dans la feuille Axes, ni en base)',
+  notNumber: '"{column}" doit être un nombre (valeur lue : "{value}")',
+  negative: '"{column}" doit être positif ou nul (valeur lue : {value})',
+  outOfRange: '"{column}" doit être compris entre {min} et {max} (valeur lue : {value})',
+  notPositive: '"{column}" doit être un nombre strictement positif',
+  depNotFound: "Dépendance(s) introuvable(s) : {codes}",
+  depBadType: 'Type de dépendance "{value}" inconnu pour "{code}" (attendu : FS, SS, FF, SF)',
+  depSelf: 'Un chantier ne peut pas dépendre de lui-même ("{code}")',
+  depCycle: "Dépendances circulaires entre chantiers : {cycle}",
+  depDropped: 'Dépendance vers "{code}" retirée : ce chantier est en erreur',
+  chantierNotFound: 'Chantier "{code}" introuvable (ni dans la feuille Chantiers, ni en base)',
+  chantierAxisUnknown: 'Impossible de déterminer l\'axe du chantier "{code}"',
+  requiredDate: '"{column}" est obligatoire (date JJ/MM/AAAA ou AAAA-MM-JJ)',
+  invalidDate:
+    '"{column}" doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ) — valeur lue : "{value}"',
+  startAfterEnd: '"{startColumn}" ({start}) est postérieure à "{endColumn}" ({end})',
+  projectNotInFile: 'Projet "{code}" introuvable dans la feuille Projets de ce même fichier',
+  projectNotFound: 'Projet "{code}" introuvable (ni dans la feuille Projets, ni en base)',
+  indicatorParentMissing:
+    '"Code Axe" ou "Code Chantier" est obligatoire (exactement l\'un des deux)',
+  indicatorParentBoth:
+    '"Code Axe" et "Code Chantier" sont tous les deux renseignés — un indicateur ne peut être rattaché qu\'à l\'un des deux',
+  unknownValue: '{column} "{value}" inconnu(e) (attendu : {expected})',
+  rolesRequired: '"Rôles responsables" est obligatoire (au moins un rôle)',
+  unknownRole: 'Rôle "{value}" inconnu (attendu : {expected})',
+  baselineNotNumber:
+    '"Valeur initiale" non numérique ("{value}") : aucune mesure de référence créée',
+  baselineIgnored:
+    '"Valeur initiale" ({value}) ignorée : l\'indicateur « {name} » a déjà un historique de mesures (référence actuelle : {current})',
+  personNotLinked:
+    "« {name} » ne correspond à aucun compte : conservé en texte, sans effet sur la visibilité ni sur les validations ({count} référence(s))",
+  personAmbiguous:
+    "« {name} » correspond à plusieurs comptes ({usernames}) : non rattaché — indiquez l'identifiant exact",
+} as const;
 
-/** Ids alloués pour de vrai (contrairement à `makeActionId`/`makeImpactId` côté leviers, qui
- *  génèrent des ids "de session" jetables) : ce sont ces ids qui seront écrits tels quels en base
- *  par l'appelant, via les `save*` existants. Compteur de séquence par préfixe pour garantir
- *  l'unicité même si plusieurs lignes sont traitées dans la même milliseconde. */
-let idSeq = 0;
-function makeId(prefix: string): string {
-  idSeq += 1;
-  return `${prefix}-${Date.now().toString(36)}-${idSeq}-${Math.random().toString(36).slice(2, 6)}`;
-}
+export type StrategicImportMessageCode = keyof typeof STRATEGIC_IMPORT_MESSAGES;
+export type StrategicImportMessageVars = Record<string, string | number>;
 
-/** Résout une étape de maturité par id ou par libellé (insensible à la casse) — même référentiel
- *  pour Axes/Chantiers/Actions (voir `MaturityStageConfig`, configurable par programme). */
-function resolveStage(raw: string, stages: MaturityStageConfig[]): string | undefined {
-  const lower = raw.toLowerCase();
-  const stage = stages.find((s) => s.id.toLowerCase() === lower || s.label.toLowerCase() === lower);
-  return stage?.id;
-}
-
-/** Étape de maturité FACULTATIVE (Chantiers/Projets, round 31) : contrairement à `resolveStage`
- *  utilisé tel quel pour la feuille Axes (toujours requise, sélecteur encore actif dans
- *  `AxisForm.tsx`), une cellule VIDE ne bloque plus la ligne — elle retombe silencieusement sur la
- *  première étape configurée du programme, même repli que `ChantierForm.tsx`/`ChantierActionForm`
- *  (`useState(initial?.stage ?? stages[0]?.id ?? "")`) depuis que ces deux formulaires ont retiré
- *  leur sélecteur de stage, supplanté par le suivi J0-J4. Une valeur NON VIDE mais qui ne résout à
- *  aucune étape connue reste, elle, une erreur bloquante (une faute de frappe ne doit pas être
- *  avalée silencieusement). Retourne `undefined` uniquement dans ce cas d'erreur — un retour vide
- *  faute d'étape configurée pour le programme (`stages` vide) n'est PAS une erreur ici, même
- *  tolérance que le formulaire, qui écrirait alors `stage: ""`. */
-function resolveOptionalStage(raw: string, stages: MaturityStageConfig[]): string | undefined {
-  if (!raw) return stages[0]?.id ?? "";
-  return resolveStage(raw, stages);
-}
-
-function stageNamesForError(stages: MaturityStageConfig[]): string {
-  return stages.length > 0
-    ? stages.map((s) => s.label).join(", ")
-    : "aucune étape configurée pour ce programme — créez-en dans Admin > Programmes";
-}
-
-function parseDependencies(raw: string, resolveTargetCode: (code: string) => string | undefined) {
-  if (!raw) return { dependencies: [] as ChantierDependency[], unresolved: [] as string[] };
-  const dependencies: ChantierDependency[] = [];
-  const unresolved: string[] = [];
-  raw
-    .split(";")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .forEach((entry) => {
-      const [codeRaw, typeRaw] = entry.split(":").map((s) => s.trim());
-      if (!codeRaw) return;
-      const targetId = resolveTargetCode(codeRaw);
-      if (!targetId) {
-        unresolved.push(codeRaw);
-        return;
-      }
-      const type: ChantierDependencyType = DEPENDENCY_TYPES.includes(
-        typeRaw as ChantierDependencyType
-      )
-        ? (typeRaw as ChantierDependencyType)
-        : "FS";
-      dependencies.push({ targetId, type });
-    });
-  return { dependencies, unresolved };
-}
-
-/** Résout la colonne "Codes Axes (séparés par ;)" d'une ligne Chantiers contre les axes du même
- *  fichier ou déjà en base — même convention de séparateur que `parseDependencies` ci-dessus (round
- *  27 : remplace l'ancienne colonne "Code Axe" singulière, `Chantier.axisIds` acceptant désormais
- *  plusieurs axes, voir son doc-comment dans types/index.ts). Un code dupliqué dans la même cellule
- *  n'est compté qu'une fois. */
-function parseAxisCodes(
-  raw: string,
-  resolveCode: (code: string) => string | undefined
-): { axisIds: string[]; unresolved: string[] } {
-  const axisIds: string[] = [];
-  const unresolved: string[] = [];
-  raw
-    .split(";")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .forEach((code) => {
-      const id = resolveCode(code);
-      if (!id) {
-        unresolved.push(code);
-        return;
-      }
-      if (!axisIds.includes(id)) axisIds.push(id);
-    });
-  return { axisIds, unresolved };
+/** Remplace les `{var}` d'un gabarit — même convention `{n}` que le reste de l'app. */
+export function formatStrategicImportMessage(
+  template: string,
+  vars?: StrategicImportMessageVars
+): string {
+  return template.replace(/\{(\w+)\}/g, (match, key: string) =>
+    vars && key in vars ? String(vars[key]) : match
+  );
 }
 
 // ---------- Types publics ----------
 
 export type StrategicImportSheet =
-  "Axes" | "Chantiers" | "Projets" | "Livrables" | "Indicateurs" | "ETP";
+  "Classeur" | "Axes" | "Chantiers" | "Projets" | "Livrables" | "Indicateurs" | "ETP";
 
 export type StrategicImportError = {
   sheet: StrategicImportSheet;
+  /** Numéro de ligne Excel (1 = ligne d'en-têtes : message de niveau feuille). */
   rowNumber: number;
+  code: StrategicImportMessageCode;
+  vars?: StrategicImportMessageVars;
+  /** Message rendu en français (fallback d'affichage). */
   reason: string;
 };
+
+type SheetKey = "axes" | "chantiers" | "actions" | "livrables" | "indicateurs" | "etp";
 
 export type StrategicImportRawSheets = {
   axes: Record<string, unknown>[];
@@ -420,57 +298,562 @@ export type StrategicImportRawSheets = {
   actions: Record<string, unknown>[];
   livrables: Record<string, unknown>[];
   indicateurs: Record<string, unknown>[];
-  // Facultative (round 31, point 3) — absente ou vide, elle n'affecte rien d'autre (même
-  // optionnalité que `livrables`).
   etp: Record<string, unknown>[];
+  /** Métadonnées de lecture (renseignées par `parseStrategicImportWorkbook`, absentes quand les
+   *  lignes sont construites à la main) : en-têtes réels de chaque feuille, feuilles absentes,
+   *  feuilles lues sous un ancien nom. */
+  headers?: Partial<Record<SheetKey, string[]>>;
+  missingSheets?: SheetKey[];
+  aliasedSheets?: Partial<Record<SheetKey, string>>;
 };
+
+/** Référence d'import conservée sur l'entité (non déclarée dans `types/index.ts` : champ technique
+ *  propre à l'import, ignoré par le reste de l'app). */
+export type StrategicImportRef = { importCode?: string };
 
 export type StrategicImportExistingData = {
   axes: StrategicAxis[];
   chantiers: Chantier[];
   actions: ChantierAction[];
   indicators: Indicator[];
+  /** Facultatif : sans les mesures, aucune baseline n'est ajoutée à un indicateur EXISTANT. */
+  measurements?: IndicatorMeasurement[];
+  /** Facultatif : sans le staffing existant, chaque ligne ETP est une création. */
+  staffing?: ChantierStaffing[];
 };
 
-export type StrategicImportToCreate = {
+export type StrategicImportWrites = {
   axes: StrategicAxis[];
   chantiers: Chantier[];
   actions: ChantierAction[];
   indicators: Indicator[];
-  // Round 31, point 1 : mesure de baseline (colonne "Valeur initiale" de la feuille Indicateurs),
-  // une par indicateur importé dont la valeur initiale est numérique — voir la section dédiée de
-  // `validateStrategicImportRows`.
   measurements: IndicatorMeasurement[];
-  // Round 31, point 3 : lignes de staffing de la feuille facultative "ETP".
   staffing: ChantierStaffing[];
 };
 
-export type StrategicImportPreview = {
-  toCreate: StrategicImportToCreate;
-  errors: StrategicImportError[];
+/** Alias historique : `toCreate` a toujours cette forme. */
+export type StrategicImportToCreate = StrategicImportWrites;
+
+export type StrategicImportPerson = {
+  /** Clé normalisée (casse/accents/espaces) — sert à `applyPeopleMapping`. */
+  key: string;
+  /** Texte tel que saisi (première occurrence). */
+  name: string;
+  /** Nombre de cellules qui le référencent. */
+  references: number;
+  kind: "proposable" | "ambiguous" | "not_a_person";
+  /** Proposition de compte (kind "proposable" uniquement). */
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  /** Identifiant dérivé déjà pris (compte existant ou autre personne du fichier) : `username`
+   *  a été suffixé. */
+  collisionWith?: string;
 };
 
-/** Trouve une entité déjà en base par `id` ou `name`, insensible à la casse — repli utilisé quand
- *  un Code du fichier ne correspond à aucune ligne du même import (voir doc-comment en tête de
- *  fichier, "Résolution de repli sur l'existant"). */
-function findExistingByCodeOrName<T extends { id: string; name: string }>(
+export type StrategicImportPreview = {
+  toCreate: StrategicImportWrites;
+  toUpdate: StrategicImportWrites;
+  unchanged: {
+    axes: number;
+    chantiers: number;
+    actions: number;
+    indicators: number;
+    staffing: number;
+  };
+  errors: StrategicImportError[];
+  warnings: StrategicImportError[];
+  /** Personnes référencées NON rapprochées d'un compte existant. */
+  people: StrategicImportPerson[];
+};
+
+export type StrategicImportOptions = {
+  /** Comptes de l'entreprise ciblée (rapprochement Owner/Pilote/Sponsor). */
+  users?: { username: string; name: string }[];
+  /** Horloge injectable (tests). */
+  now?: Date;
+};
+
+// ---------- Utilitaires ----------
+
+function str(v: unknown): string {
+  if (v === undefined || v === null) return "";
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "" : v.toISOString();
+  return String(v).trim();
+}
+
+function isRowEmpty(row: Record<string, unknown>): boolean {
+  return Object.values(row).every((v) => isBlankCell(v));
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Date locale "AAAA-MM-JJ" (jamais `toISOString`, décalage UTC). */
+function localIsoDate(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+let idSeq = 0;
+function makeId(prefix: string): string {
+  idSeq += 1;
+  return `${prefix}-${Date.now().toString(36)}-${idSeq}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+const MONTHS_PER_PERIOD: Record<IndicatorFrequency, number> = {
+  monthly: 1,
+  quarterly: 3,
+  semiannual: 6,
+  annual: 12,
+};
+
+/** Période de la mesure de référence importée : la période qui PRÉCÈDE la période courante
+ *  (mois/trimestre/semestre/année précédent) — la période courante reste libre pour la première
+ *  saisie réelle (évite la collision de période signalée par l'audit). */
+export function baselinePeriod(frequency: IndicatorFrequency, now: Date = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth() - MONTHS_PER_PERIOD[frequency], 1);
+  return currentPeriod(frequency, d);
+}
+
+/** Sérialisation stable (clés triées, `undefined` ignorés) pour comparer existant et fichier. */
+function stableStringify(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(",")}]`;
+  if (v && typeof v === "object") {
+    const obj = v as Record<string, unknown>;
+    return `{${Object.keys(obj)
+      .filter((k) => obj[k] !== undefined)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(v) ?? "null";
+}
+
+function sameIgnoring(a: object, b: object, ignored: string[]): boolean {
+  const strip = (o: object) => {
+    const copy = { ...(o as Record<string, unknown>) };
+    for (const k of ignored) delete copy[k];
+    return copy;
+  };
+  return stableStringify(strip(a)) === stableStringify(strip(b));
+}
+
+function importCodeOf(e: object): string | undefined {
+  const code = (e as StrategicImportRef).importCode;
+  return typeof code === "string" && code.trim() !== "" ? code : undefined;
+}
+
+/** Rapproche une ligne du fichier d'une entité existante : par Code (importCode ou id), sinon par
+ *  nom dans le même parent (entités sans importCode uniquement). Chaque entité existante n'est
+ *  rapprochée qu'une fois (`used`). */
+function matchExisting<T extends { id: string; name: string }>(
+  list: T[],
+  used: Set<string>,
+  code: string | undefined,
+  name: string,
+  inParent: (e: T) => boolean
+): { entity: T; by: "code" | "id" | "name" } | undefined {
+  if (code) {
+    const c = code.toLowerCase();
+    const byCode = list.find((e) => !used.has(e.id) && importCodeOf(e)?.toLowerCase() === c);
+    if (byCode) return { entity: byCode, by: "code" };
+    const byId = list.find((e) => !used.has(e.id) && e.id.toLowerCase() === c);
+    if (byId) return { entity: byId, by: "id" };
+  }
+  const n = norm(name);
+  const byName = list.find(
+    (e) => !used.has(e.id) && !importCodeOf(e) && inParent(e) && norm(e.name) === n
+  );
+  return byName ? { entity: byName, by: "name" } : undefined;
+}
+
+/** Résolution d'une clé étrangère vers l'existant : importCode, id, puis nom (insensible). */
+function findExistingByRef<T extends { id: string; name: string }>(
   list: T[],
   raw: string
 ): T | undefined {
   const lower = raw.toLowerCase();
-  return list.find((e) => e.id.toLowerCase() === lower || e.name.toLowerCase() === lower);
+  return (
+    list.find((e) => importCodeOf(e)?.toLowerCase() === lower) ??
+    list.find((e) => e.id.toLowerCase() === lower) ??
+    list.find((e) => norm(e.name) === norm(raw))
+  );
+}
+
+function resolveStage(raw: string, stages: MaturityStageConfig[]): string | undefined {
+  const n = norm(raw);
+  return stages.find((s) => norm(s.id) === n || norm(s.label) === n)?.id;
+}
+
+function stageLabels(stages: MaturityStageConfig[]): string {
+  return stages.length > 0 ? stages.map((s) => s.label).join(", ") : "—";
+}
+
+// ---------- Personnes ----------
+
+/** Clé de rapprochement d'une personne (casse, accents, espaces). */
+export function normalizePersonKey(value: string): string {
+  return norm(value);
+}
+
+/** Mots qui désignent une équipe/instance, jamais une personne. */
+const TEAM_WORDS = new Set(
+  [
+    "equipe",
+    "team",
+    "direction",
+    "service",
+    "comite",
+    "cellule",
+    "departement",
+    "dept",
+    "pole",
+    "groupe",
+    "squad",
+    "dsi",
+    "drh",
+    "daf",
+    "dg",
+    "codir",
+    "comex",
+    "rh",
+    "pmo",
+    "collectif",
+    "filiale",
+    "division",
+    "agence",
+    "ressources",
+    "humaines",
+    "programme",
+    "projet",
+    "tous",
+    "unite",
+    "bu",
+  ].map(norm)
+);
+
+const isLetter = (ch: string) => ch.toLowerCase() !== ch.toUpperCase();
+
+/** Mot de nom propre : commence par une lettre, puis lettres / trait d'union / apostrophe. */
+function isNameToken(tok: string): boolean {
+  const chars = Array.from(tok);
+  return isLetter(chars[0] ?? "") && chars.every((ch) => isLetter(ch) || "'’-".includes(ch));
+}
+
+function slug(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 /**
- * Valide les feuilles (5 obligatoires + "ETP" facultative) ENSEMBLE et produit un aperçu (entités
- * prêtes à créer par type + erreurs ligne par ligne) sans rien écrire — voir doc-comment en tête
- * de fichier pour le format complet et la stratégie de résolution des clés étrangères.
+ * Proposition de compte pour un texte libre : uniquement pour une valeur de type "Prénom Nom"
+ * (2 à 4 mots, lettres/traits d'union/apostrophes uniquement, aucun mot d'équipe : "Direction
+ * Financière", "Équipe Data", "DG"… ne sont jamais proposés). Dernier mot = nom de famille.
+ */
+export function proposeAccountForName(
+  raw: string
+): { firstName: string; lastName: string; username: string } | undefined {
+  const tokens = raw.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length < 2 || tokens.length > 4) return undefined;
+  if (!tokens.every(isNameToken)) return undefined;
+  if (tokens.some((tok) => TEAM_WORDS.has(norm(tok)))) return undefined;
+  const lastName = tokens[tokens.length - 1];
+  const firstName = tokens.slice(0, -1).join(" ");
+  const first = slug(firstName);
+  const last = slug(lastName);
+  if (!first || !last) return undefined;
+  return { firstName, lastName, username: `${first}.${last}` };
+}
+
+type PersonResolver = {
+  /** Renvoie le username rapproché, ou le texte d'origine (et le mémorise comme non rapproché). */
+  resolve: (raw: string, sheet: StrategicImportSheet, rowNumber: number) => string;
+  finish: (warn: WarnFn) => StrategicImportPerson[];
+};
+
+type WarnFn = (
+  sheet: StrategicImportSheet,
+  rowNumber: number,
+  code: StrategicImportMessageCode,
+  vars?: StrategicImportMessageVars
+) => void;
+
+function createPersonResolver(
+  users: { username: string; name: string }[],
+  companyId: string
+): PersonResolver {
+  const unmatched = new Map<
+    string,
+    {
+      name: string;
+      references: number;
+      sheet: StrategicImportSheet;
+      rowNumber: number;
+      homonyms?: string[];
+    }
+  >();
+  const companySuffix = companyId ? `.${companyId.toLowerCase()}` : "";
+
+  const match = (raw: string): { username?: string; homonyms?: string[] } => {
+    const n = norm(raw);
+    const byUsername = users.find((u) => norm(u.username) === n);
+    if (byUsername) return { username: byUsername.username };
+    if (n.includes("@")) {
+      const local = n.split("@")[0];
+      const byMail = users.find(
+        (u) => norm(u.username) === local || `${norm(u.username)}${companySuffix}` === local
+      );
+      if (byMail) return { username: byMail.username };
+      return {};
+    }
+    const byName = users.filter((u) => norm(u.name) === n);
+    if (byName.length === 1) return { username: byName[0].username };
+    if (byName.length > 1) return { homonyms: byName.map((u) => u.username) };
+    // "Nom Prénom" inversé.
+    const reversed = n.split(" ").reverse().join(" ");
+    const byReversed = users.filter((u) => norm(u.name) === reversed);
+    if (byReversed.length === 1) return { username: byReversed[0].username };
+    return {};
+  };
+
+  return {
+    resolve(raw, sheet, rowNumber) {
+      const { username, homonyms } = match(raw);
+      if (username) return username;
+      const key = norm(raw);
+      const entry = unmatched.get(key);
+      if (entry) entry.references += 1;
+      else unmatched.set(key, { name: raw, references: 1, sheet, rowNumber, homonyms });
+      return raw;
+    },
+    finish(warn) {
+      const taken = new Set(users.map((u) => norm(u.username)));
+      const people: StrategicImportPerson[] = [];
+      for (const [key, entry] of Array.from(unmatched.entries())) {
+        if (entry.homonyms) {
+          warn(entry.sheet, entry.rowNumber, "personAmbiguous", {
+            name: entry.name,
+            usernames: entry.homonyms.join(", "),
+          });
+          people.push({ key, name: entry.name, references: entry.references, kind: "ambiguous" });
+          continue;
+        }
+        warn(entry.sheet, entry.rowNumber, "personNotLinked", {
+          name: entry.name,
+          count: entry.references,
+        });
+        const proposal = proposeAccountForName(entry.name);
+        if (!proposal) {
+          people.push({
+            key,
+            name: entry.name,
+            references: entry.references,
+            kind: "not_a_person",
+          });
+          continue;
+        }
+        let username = proposal.username;
+        let collisionWith: string | undefined;
+        if (taken.has(username)) {
+          collisionWith = username;
+          let i = 2;
+          while (taken.has(`${proposal.username}${i}`)) i += 1;
+          username = `${proposal.username}${i}`;
+        }
+        taken.add(username);
+        people.push({
+          key,
+          name: entry.name,
+          references: entry.references,
+          kind: "proposable",
+          username,
+          firstName: proposal.firstName,
+          lastName: proposal.lastName,
+          ...(collisionWith ? { collisionWith } : {}),
+        });
+      }
+      return people;
+    },
+  };
+}
+
+/** Réécrit Owner/Pilote/Sponsor des entités avec les usernames des comptes créés
+ *  (`mapping` : clé `normalizePersonKey(texte)` → username). Pur, renvoie une copie. */
+export function applyPeopleMapping(
+  writes: StrategicImportWrites,
+  mapping: Map<string, string>
+): StrategicImportWrites {
+  if (mapping.size === 0) return writes;
+  const map = (v: string | undefined) => (v ? (mapping.get(norm(v)) ?? v) : v);
+  return {
+    ...writes,
+    axes: writes.axes.map((a) => (a.owner ? { ...a, owner: map(a.owner) } : a)),
+    chantiers: writes.chantiers.map((c) => (c.pilote ? { ...c, pilote: map(c.pilote) } : c)),
+    actions: writes.actions.map((a) =>
+      a.owner || a.sponsor
+        ? {
+            ...a,
+            ...(a.owner ? { owner: map(a.owner) } : {}),
+            ...(a.sponsor ? { sponsor: map(a.sponsor) } : {}),
+          }
+        : a
+    ),
+  };
+}
+
+/** Créations + mises à jour à écrire (ordre parent → enfant). */
+export function combineStrategicImportWrites(
+  preview: StrategicImportPreview
+): StrategicImportWrites {
+  const c = preview.toCreate;
+  const u = preview.toUpdate;
+  return {
+    axes: [...c.axes, ...u.axes],
+    chantiers: [...c.chantiers, ...u.chantiers],
+    actions: [...c.actions, ...u.actions],
+    indicators: [...c.indicators, ...u.indicators],
+    measurements: [...c.measurements, ...u.measurements],
+    staffing: [...c.staffing, ...u.staffing],
+  };
+}
+
+export function countStrategicImportWrites(w: StrategicImportWrites): number {
+  return (
+    w.axes.length +
+    w.chantiers.length +
+    w.actions.length +
+    w.indicators.length +
+    w.measurements.length +
+    w.staffing.length
+  );
+}
+
+// ---------- Spécification des feuilles ----------
+
+type SheetSpec = {
+  label: StrategicImportSheet;
+  headers: readonly string[];
+  /** En-tête ancien/variante -> en-tête canonique. */
+  aliases: Record<string, string>;
+  /** En-têtes connus mais non canoniques (compatibilité). */
+  extra?: string[];
+  required: string[];
+  /** Au moins une de ces colonnes doit exister. */
+  requiredOneOf?: string[];
+};
+
+const SHEET_SPECS: Record<SheetKey, SheetSpec> = {
+  axes: {
+    label: "Axes",
+    headers: STRATEGIC_AXIS_IMPORT_HEADERS,
+    aliases: {},
+    required: ["Code", "Nom"],
+  },
+  chantiers: {
+    label: "Chantiers",
+    headers: STRATEGIC_CHANTIER_IMPORT_HEADERS,
+    aliases: {
+      "Code Axe": "Codes Axes (séparés par ;)",
+      "Codes Axes": "Codes Axes (séparés par ;)",
+      Dépendances: "Dépendances (Code:type, séparées par ;)",
+    },
+    required: ["Code", "Codes Axes (séparés par ;)", "Nom"],
+  },
+  actions: {
+    label: "Projets",
+    headers: STRATEGIC_ACTION_IMPORT_HEADERS,
+    aliases: { "Poids dans le chantier": "Poids dans le chantier (%)" },
+    required: ["Code", "Code Chantier", "Nom", "Date début", "Date fin"],
+  },
+  livrables: {
+    label: "Livrables",
+    headers: STRATEGIC_DELIVERABLE_IMPORT_HEADERS,
+    aliases: { "Code Action": "Code Projet" },
+    extra: ["Début", "Fin"],
+    required: ["Code Projet", "Label"],
+  },
+  indicateurs: {
+    label: "Indicateurs",
+    headers: STRATEGIC_INDICATOR_IMPORT_HEADERS,
+    aliases: { "Rôles responsables": "Rôles responsables (séparés par ;)" },
+    required: ["Nom", "Type", "Fréquence", "Objectif", "Rôles responsables (séparés par ;)"],
+    requiredOneOf: ["Code Axe", "Code Chantier"],
+  },
+  etp: {
+    label: "ETP",
+    headers: STRATEGIC_STAFFING_IMPORT_HEADERS,
+    aliases: {
+      "Code Action": "Code Projet",
+      "Fonction (équipe)": "Fonction (équipe, base ETP)",
+      Fonction: "Fonction (équipe, base ETP)",
+    },
+    required: ["Code Chantier", "Fonction (équipe, base ETP)", "Nombre d'ETP"],
+  },
+};
+
+type PreparedRow = { row: Record<string, unknown>; rowNumber: number };
+
+/** Canonicalise les en-têtes d'une feuille (casse/accents/alias), signale une fois par feuille les
+ *  colonnes inconnues (avertissement) et obligatoires manquantes (erreur, feuille ignorée). */
+function prepareSheet(
+  key: SheetKey,
+  sheets: StrategicImportRawSheets,
+  err: WarnFn,
+  warn: WarnFn
+): PreparedRow[] {
+  const spec = SHEET_SPECS[key];
+  const rawRows = sheets[key];
+  if (rawRows.length === 0) return [];
+  const known = [...spec.headers, ...Object.keys(spec.aliases), ...(spec.extra ?? [])];
+  const knownByNorm = new Map(known.map((h) => [norm(h), h]));
+
+  const headers =
+    sheets.headers?.[key] ??
+    Array.from(new Set(rawRows.flatMap((r) => Object.keys(r).filter((k) => k !== "__rowNum__"))));
+  const present = new Set<string>();
+  const unknown: string[] = [];
+  for (const h of headers) {
+    if (!h || h.startsWith("__EMPTY") || h.trim() === "") continue;
+    const k = knownByNorm.get(norm(h));
+    if (!k) unknown.push(h);
+    else present.add(spec.aliases[k] ?? k);
+  }
+  if (unknown.length > 0) warn(spec.label, 1, "unknownColumns", { columns: unknown.join(", ") });
+  const missing = spec.required.filter((h) => !present.has(h));
+  if (spec.requiredOneOf && !spec.requiredOneOf.some((h) => present.has(h))) {
+    missing.push(spec.requiredOneOf.join(" / "));
+  }
+  if (missing.length > 0) {
+    err(spec.label, 1, "missingColumns", { columns: missing.join(", ") });
+    return [];
+  }
+
+  return rawRows.map((raw, i) => {
+    const rowNumber = excelRowNumber(raw, i);
+    const { row } = canonicalizeRowKeys(raw, known);
+    for (const [alias, canonical] of Object.entries(spec.aliases)) {
+      if (alias in row) {
+        if (isBlankCell(row[canonical])) row[canonical] = row[alias];
+        delete row[alias];
+      }
+    }
+    return { row, rowNumber };
+  });
+}
+
+// ---------- Validation / aperçu ----------
+
+/**
+ * Valide les feuilles ENSEMBLE et produit l'aperçu (créations / mises à jour / inchangés, erreurs
+ * et avertissements) sans rien écrire — voir le doc-comment de tête pour les règles.
  *
- * `importedBy` (round 31) : identifiant (username) de l'admin qui réalise l'import, reporté tel
- * quel dans `IndicatorMeasurement.reportedBy` des mesures de baseline produites (voir la section
- * "Indicateurs" ci-dessous) — même esprit que `companyId`/`programId`, facultatif pour ne pas
- * casser les appels existants (tests, appelants antérieurs à ce round) : à défaut, retombe sur un
- * libellé générique plutôt que d'écrire une chaîne vide illisible dans l'historique du KPI.
+ * `importedBy` : username de l'admin, reporté dans `reportedBy` des mesures de référence (repli
+ * "import-excel").
  */
 export function validateStrategicImportRows(
   sheets: StrategicImportRawSheets,
@@ -478,556 +861,772 @@ export function validateStrategicImportRows(
   companyId: string | null | undefined,
   programId: string | null | undefined,
   maturityStages: MaturityStageConfig[],
-  importedBy?: string | null
+  importedBy?: string | null,
+  options: StrategicImportOptions = {}
 ): StrategicImportPreview {
   const errors: StrategicImportError[] = [];
+  const warnings: StrategicImportError[] = [];
+  const push =
+    (list: StrategicImportError[]): WarnFn =>
+    (sheet, rowNumber, code, vars) =>
+      list.push({
+        sheet,
+        rowNumber,
+        code,
+        ...(vars ? { vars } : {}),
+        reason: formatStrategicImportMessage(STRATEGIC_IMPORT_MESSAGES[code], vars),
+      });
+  const err = push(errors);
+  const warn = push(warnings);
+
   const resolvedCompanyId = companyId ?? "";
+  const resolvedProgramId = programId ?? "";
   const resolvedReportedBy =
     importedBy && importedBy.trim() !== "" ? importedBy.trim() : "import-excel";
-  const resolvedProgramId = programId ?? "";
+  const now = options.now ?? new Date();
+  const today = localIsoDate(now);
+  const people = createPersonResolver(options.users ?? [], resolvedCompanyId);
+
+  // Existant restreint au programme ciblé (les appelants passent déjà des listes filtrées).
+  const inProgram = (e: { programId?: string }) =>
+    !resolvedProgramId || !e.programId || e.programId === resolvedProgramId;
+  const exAxes = existingData.axes.filter(inProgram);
+  const exChantiers = existingData.chantiers.filter(inProgram);
+  const exChantierIds = new Set(exChantiers.map((c) => c.id));
+  const exActions = existingData.actions.filter(
+    (a) => exChantierIds.has(a.chantierId) || existingData.chantiers.length === 0
+  );
+  const exIndicators = existingData.indicators.filter(inProgram);
+  const exMeasurements = existingData.measurements;
+  const exStaffing = (existingData.staffing ?? []).filter(inProgram);
+
+  // ---------- Feuilles absentes ----------
+  const allKeys: SheetKey[] = ["axes", "chantiers", "actions", "livrables", "indicateurs", "etp"];
+  if (sheets.missingSheets) {
+    const mainKeys: SheetKey[] = ["axes", "chantiers", "actions", "indicateurs"];
+    if (allKeys.every((k) => sheets.missingSheets!.includes(k))) {
+      err("Classeur", 1, "noDataSheet");
+    } else {
+      for (const k of mainKeys) {
+        if (sheets.missingSheets.includes(k)) {
+          err(SHEET_SPECS[k].label, 1, "sheetMissing", { sheet: SHEET_SPECS[k].label });
+        }
+      }
+    }
+  }
+  for (const [k, found] of Object.entries(sheets.aliasedSheets ?? {})) {
+    const label = SHEET_SPECS[k as SheetKey].label;
+    warn(label, 1, "sheetAlias", { found: found as string, sheet: label });
+  }
+
+  const prepared = Object.fromEntries(
+    allKeys.map((k) => [k, prepareSheet(k, sheets, err, warn)])
+  ) as Record<SheetKey, PreparedRow[]>;
+
+  // ---------- Petits validateurs de cellule (poussent l'erreur, renvoient null) ----------
+  const text = (
+    sheet: StrategicImportSheet,
+    rowNumber: number,
+    row: Record<string, unknown>,
+    column: string,
+    { required = false, max = STRATEGIC_IMPORT_MAX_NAME_LENGTH } = {}
+  ): string | null => {
+    const value = str(row[column]);
+    if (!value) {
+      if (required) {
+        err(sheet, rowNumber, "required", { column });
+        return null;
+      }
+      return "";
+    }
+    if (value.length > max) {
+      err(sheet, rowNumber, "tooLong", { column, max, length: value.length });
+      return null;
+    }
+    return value;
+  };
+
+  const optNumber = (
+    sheet: StrategicImportSheet,
+    rowNumber: number,
+    row: Record<string, unknown>,
+    column: string,
+    { min, max }: { min?: number; max?: number } = {}
+  ): number | undefined | null => {
+    const parsed = parseCellNumber(row[column]);
+    if (parsed === undefined) return undefined;
+    if (!parsed.ok) {
+      err(sheet, rowNumber, "notNumber", { column, value: parsed.raw });
+      return null;
+    }
+    if (min !== undefined && max !== undefined && (parsed.value < min || parsed.value > max)) {
+      err(sheet, rowNumber, "outOfRange", { column, min, max, value: parsed.value });
+      return null;
+    }
+    if (min !== undefined && parsed.value < min) {
+      err(sheet, rowNumber, "negative", { column, value: parsed.value });
+      return null;
+    }
+    return parsed.value;
+  };
+
+  const optDate = (
+    sheet: StrategicImportSheet,
+    rowNumber: number,
+    row: Record<string, unknown>,
+    column: string,
+    required = false
+  ): string | undefined | null => {
+    const parsed = parseCellDate(row[column]);
+    if (parsed === undefined) {
+      if (required) {
+        err(sheet, rowNumber, "requiredDate", { column });
+        return null;
+      }
+      return undefined;
+    }
+    if (!parsed.ok) {
+      err(sheet, rowNumber, "invalidDate", { column, value: parsed.raw });
+      return null;
+    }
+    return parsed.value;
+  };
+
+  const checkOrder = (
+    sheet: StrategicImportSheet,
+    rowNumber: number,
+    start: string | undefined,
+    end: string | undefined,
+    startColumn: string,
+    endColumn: string
+  ): boolean => {
+    if (start && end && start > end) {
+      err(sheet, rowNumber, "startAfterEnd", { startColumn, start, endColumn, end });
+      return false;
+    }
+    return true;
+  };
+
+  const stageOf = (
+    sheet: StrategicImportSheet,
+    rowNumber: number,
+    row: Record<string, unknown>
+  ): string | undefined | null => {
+    const raw = str(row["Étape de maturité"]);
+    if (!raw) return undefined;
+    const stage = resolveStage(raw, maturityStages);
+    if (stage === undefined) {
+      err(sheet, rowNumber, "unknownStage", { value: raw, expected: stageLabels(maturityStages) });
+      return null;
+    }
+    return stage;
+  };
+
+  const person = (
+    sheet: StrategicImportSheet,
+    rowNumber: number,
+    row: Record<string, unknown>,
+    column: string
+  ): string | undefined | null => {
+    const value = text(sheet, rowNumber, row, column);
+    if (value === null) return null;
+    return value ? people.resolve(value, sheet, rowNumber) : undefined;
+  };
+
+  const dupCheck = (
+    sheet: StrategicImportSheet,
+    rowNumber: number,
+    seen: Map<string, number>,
+    code: string
+  ): boolean => {
+    const lower = code.toLowerCase();
+    if (seen.has(lower)) {
+      err(sheet, rowNumber, "duplicateCode", { code, line: seen.get(lower)! });
+      return false;
+    }
+    return true;
+  };
+
+  /** Ne garde que les champs renseignés (upsert non destructif). */
+  const defined = <T extends Record<string, unknown>>(o: T): Partial<T> =>
+    Object.fromEntries(
+      Object.entries(o).filter(([, v]) => v !== undefined && v !== "")
+    ) as Partial<T>;
 
   // ---------- Feuille "Axes" ----------
   const axesToCreate: StrategicAxis[] = [];
-  const axisIdByCode = new Map<string, string>(); // Code (fichier, minuscule) -> id réel alloué
-  const axisCodeFirstSeenAtRow = new Map<string, number>();
+  const axesToUpdate: StrategicAxis[] = [];
+  let axesUnchanged = 0;
+  const axisIdByCode = new Map<string, string>();
+  const axisCodeSeen = new Map<string, number>();
+  const usedAxes = new Set<string>();
 
-  sheets.axes.forEach((row, i) => {
-    const rowNumber = i + 2; // ligne 1 = en-têtes
-    if (isRowEmpty(row)) return;
+  for (const { row, rowNumber } of prepared.axes) {
+    if (isRowEmpty(row)) continue;
+    const sheet = "Axes";
+    const code = text(sheet, rowNumber, row, "Code", { required: true });
+    if (code === null) continue;
+    if (!dupCheck(sheet, rowNumber, axisCodeSeen, code)) continue;
+    const name = text(sheet, rowNumber, row, "Nom", { required: true });
+    if (name === null) continue;
+    const description = text(sheet, rowNumber, row, "Description", {
+      max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
+    });
+    if (description === null) continue;
+    const color = text(sheet, rowNumber, row, "Couleur");
+    if (color === null) continue;
+    const stage = stageOf(sheet, rowNumber, row);
+    if (stage === null) continue;
+    const owner = person(sheet, rowNumber, row, "Owner");
+    if (owner === null) continue;
 
-    const code = str(row["Code"]);
-    if (!code) {
-      errors.push({ sheet: "Axes", rowNumber, reason: `"Code" est obligatoire` });
-      return;
+    const fields = defined({ name, description, owner, color, stage });
+    const match = matchExisting(exAxes, usedAxes, code, name, () => true);
+    if (match) {
+      usedAxes.add(match.entity.id);
+      const merged: StrategicAxis & StrategicImportRef = {
+        ...match.entity,
+        ...fields,
+        ...(match.by === "id" ? {} : { importCode: code }),
+      };
+      if (sameIgnoring(merged, match.entity, ["lastUpdate"])) axesUnchanged += 1;
+      else axesToUpdate.push({ ...merged, lastUpdate: today });
+      axisIdByCode.set(code.toLowerCase(), match.entity.id);
+    } else {
+      const axis: StrategicAxis & StrategicImportRef = {
+        id: makeId("AX"),
+        companyId: resolvedCompanyId,
+        programId: resolvedProgramId,
+        stage: maturityStages[0]?.id ?? "",
+        ...fields,
+        name,
+        importCode: code,
+        createdAt: today,
+        lastUpdate: today,
+      };
+      axesToCreate.push(axis);
+      axisIdByCode.set(code.toLowerCase(), axis.id);
     }
-    const lowerCode = code.toLowerCase();
-    if (axisCodeFirstSeenAtRow.has(lowerCode)) {
-      errors.push({
-        sheet: "Axes",
-        rowNumber,
-        reason: `Code "${code}" en doublon dans le fichier (déjà utilisé ligne ${axisCodeFirstSeenAtRow.get(lowerCode)})`,
-      });
-      return;
-    }
-
-    const name = str(row["Nom"]);
-    if (!name) {
-      errors.push({ sheet: "Axes", rowNumber, reason: `"Nom" est obligatoire` });
-      return;
-    }
-
-    const stageRaw = str(row["Étape de maturité"]);
-    // Facultative comme sur Chantiers/Projets : le Kanban est abandonné au profit des jalons J0-J4.
-    const stage = resolveOptionalStage(stageRaw, maturityStages);
-    if (stage === undefined) {
-      errors.push({
-        sheet: "Axes",
-        rowNumber,
-        reason: `Étape de maturité "${stageRaw}" inconnue (attendu : ${stageNamesForError(maturityStages)})`,
-      });
-      return;
-    }
-
-    const id = makeId("AX");
-    const axis: StrategicAxis = {
-      id,
-      companyId: resolvedCompanyId,
-      programId: resolvedProgramId,
-      name,
-      stage,
-      ...(str(row["Description"]) ? { description: str(row["Description"]) } : {}),
-      ...(str(row["Owner"]) ? { owner: str(row["Owner"]) } : {}),
-      ...(str(row["Couleur"]) ? { color: str(row["Couleur"]) } : {}),
-      createdAt: nowDate(),
-      lastUpdate: nowDate(),
-    };
-    axesToCreate.push(axis);
-    axisIdByCode.set(lowerCode, id);
-    axisCodeFirstSeenAtRow.set(lowerCode, rowNumber);
-  });
+    axisCodeSeen.set(code.toLowerCase(), rowNumber);
+  }
 
   const resolveAxisCode = (raw: string): string | undefined =>
-    axisIdByCode.get(raw.toLowerCase()) ?? findExistingByCodeOrName(existingData.axes, raw)?.id;
+    axisIdByCode.get(raw.toLowerCase()) ?? findExistingByRef(exAxes, raw)?.id;
 
-  // ---------- Feuille "Chantiers" (passe 1 : champs simples + allocation d'id) ----------
+  // ---------- Feuille "Chantiers" (passe 1) ----------
   type ParsedChantier = {
     rowNumber: number;
     code: string;
+    id: string;
     depsRaw: string;
-    chantier: Chantier;
+    fields: Partial<Chantier>;
+    axisIds: string[];
+    name: string;
+    existing?: Chantier;
+    matchedBy?: "code" | "id" | "name";
   };
   const parsedChantiers: ParsedChantier[] = [];
   const chantierIdByCode = new Map<string, string>();
-  // id réel -> axisIds[0] (axe "primaire" au sens interne uniquement, voir doc-comment de
-  // `Chantier.axisIds` dans types/index.ts) — pour la dérivation d'axe des indicateurs rattachés
-  // par "Code Chantier" seul.
-  const chantierAxisById = new Map<string, string>();
-  const chantierCodeFirstSeenAtRow = new Map<string, number>();
+  const chantierCodeSeen = new Map<string, number>();
+  const usedChantiers = new Set<string>();
 
-  sheets.chantiers.forEach((row, i) => {
-    const rowNumber = i + 2;
-    if (isRowEmpty(row)) return;
-
-    const code = str(row["Code"]);
-    if (!code) {
-      errors.push({ sheet: "Chantiers", rowNumber, reason: `"Code" est obligatoire` });
-      return;
-    }
-    const lowerCode = code.toLowerCase();
-    if (chantierCodeFirstSeenAtRow.has(lowerCode)) {
-      errors.push({
-        sheet: "Chantiers",
-        rowNumber,
-        reason: `Code "${code}" en doublon dans le fichier (déjà utilisé ligne ${chantierCodeFirstSeenAtRow.get(lowerCode)})`,
-      });
-      return;
-    }
+  for (const { row, rowNumber } of prepared.chantiers) {
+    if (isRowEmpty(row)) continue;
+    const sheet = "Chantiers";
+    const code = text(sheet, rowNumber, row, "Code", { required: true });
+    if (code === null) continue;
+    if (!dupCheck(sheet, rowNumber, chantierCodeSeen, code)) continue;
 
     const axisCodesRaw = str(row["Codes Axes (séparés par ;)"]);
-    if (!axisCodesRaw) {
-      errors.push({
-        sheet: "Chantiers",
-        rowNumber,
-        reason: `"Codes Axes (séparés par ;)" est obligatoire`,
-      });
-      return;
+    const axisCodes = axisCodesRaw
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (axisCodes.length === 0) {
+      err(sheet, rowNumber, "required", { column: "Codes Axes (séparés par ;)" });
+      continue;
     }
-    const { axisIds, unresolved: unresolvedAxes } = parseAxisCodes(axisCodesRaw, resolveAxisCode);
-    if (unresolvedAxes.length > 0) {
-      errors.push({
-        sheet: "Chantiers",
-        rowNumber,
-        reason: `Axe(s) introuvable(s) (ni dans la feuille Axes, ni en base) : ${unresolvedAxes.join(", ")}`,
-      });
-      return;
+    const axisIds: string[] = [];
+    const unresolved: string[] = [];
+    for (const c of axisCodes) {
+      const id = resolveAxisCode(c);
+      if (!id) unresolved.push(c);
+      else if (!axisIds.includes(id)) axisIds.push(id);
     }
-    if (axisIds.length === 0) {
-      errors.push({
-        sheet: "Chantiers",
-        rowNumber,
-        reason: `"Codes Axes (séparés par ;)" est obligatoire`,
-      });
-      return;
+    if (unresolved.length > 0) {
+      err(sheet, rowNumber, "axesNotFound", { codes: unresolved.join(", ") });
+      continue;
     }
 
-    const name = str(row["Nom"]);
-    if (!name) {
-      errors.push({ sheet: "Chantiers", rowNumber, reason: `"Nom" est obligatoire` });
-      return;
-    }
+    const name = text(sheet, rowNumber, row, "Nom", { required: true });
+    if (name === null) continue;
+    const description = text(sheet, rowNumber, row, "Description", {
+      max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
+    });
+    if (description === null) continue;
+    const stage = stageOf(sheet, rowNumber, row);
+    if (stage === null) continue;
+    const allocatedBudget = optNumber(sheet, rowNumber, row, "Budget alloué", { min: 0 });
+    if (allocatedBudget === null) continue;
+    const consumedBudget = optNumber(sheet, rowNumber, row, "Budget consommé", { min: 0 });
+    if (consumedBudget === null) continue;
+    const consumedFte = optNumber(sheet, rowNumber, row, "ETP consommés", { min: 0 });
+    if (consumedFte === null) continue;
+    const pilote = person(sheet, rowNumber, row, "Pilote");
+    if (pilote === null) continue;
 
-    // Facultative depuis le round 31 (voir doc-comment de `resolveOptionalStage`) : une valeur
-    // vide ne bloque plus la ligne, seule une valeur renseignée mais inconnue reste une erreur.
-    const stageRaw = str(row["Étape de maturité"]);
-    const stage = resolveOptionalStage(stageRaw, maturityStages);
-    if (stage === undefined) {
-      errors.push({
-        sheet: "Chantiers",
-        rowNumber,
-        reason: `Étape de maturité "${stageRaw}" inconnue (attendu : ${stageNamesForError(maturityStages)})`,
-      });
-      return;
-    }
-
-    const allocatedBudgetParsed = parseOptionalNumberField(
-      str(row["Budget alloué"]),
-      "Budget alloué"
+    const match = matchExisting(exChantiers, usedChantiers, code, name, (c) =>
+      (c.axisIds ?? []).some((id) => axisIds.includes(id))
     );
-    if (allocatedBudgetParsed.error) {
-      errors.push({ sheet: "Chantiers", rowNumber, reason: allocatedBudgetParsed.error });
-      return;
-    }
-    const consumedBudgetParsed = parseOptionalNumberField(
-      str(row["Budget consommé"]),
-      "Budget consommé"
-    );
-    if (consumedBudgetParsed.error) {
-      errors.push({ sheet: "Chantiers", rowNumber, reason: consumedBudgetParsed.error });
-      return;
-    }
-    const consumedFteParsed = parseOptionalNumberField(str(row["ETP consommés"]), "ETP consommés");
-    if (consumedFteParsed.error) {
-      errors.push({ sheet: "Chantiers", rowNumber, reason: consumedFteParsed.error });
-      return;
-    }
-
-    const id = makeId("CH");
-    const chantier: Chantier = {
-      id,
-      companyId: resolvedCompanyId,
-      programId: resolvedProgramId,
-      axisIds,
-      name,
-      stage,
-      dependencies: [], // résolu en passe 2, une fois tous les Code de chantiers connus
-      ...(str(row["Description"]) ? { description: str(row["Description"]) } : {}),
-      ...(str(row["Pilote"]) ? { pilote: str(row["Pilote"]) } : {}),
-      ...(allocatedBudgetParsed.value !== undefined
-        ? { allocatedBudget: allocatedBudgetParsed.value }
-        : {}),
-      ...(consumedBudgetParsed.value !== undefined
-        ? { consumedBudget: consumedBudgetParsed.value }
-        : {}),
-      ...(consumedFteParsed.value !== undefined ? { consumedFte: consumedFteParsed.value } : {}),
-      createdAt: nowDate(),
-      lastUpdate: nowDate(),
-    };
-
+    if (match) usedChantiers.add(match.entity.id);
+    const id = match?.entity.id ?? makeId("CH");
     parsedChantiers.push({
       rowNumber,
       code,
+      id,
       depsRaw: str(row["Dépendances (Code:type, séparées par ;)"]),
-      chantier,
+      fields: defined({
+        name,
+        description,
+        pilote,
+        stage,
+        allocatedBudget,
+        consumedBudget,
+        consumedFte,
+      }) as Partial<Chantier>,
+      axisIds,
+      name,
+      existing: match?.entity,
+      matchedBy: match?.by,
     });
-    chantierIdByCode.set(lowerCode, id);
-    chantierAxisById.set(id, axisIds[0]);
-    chantierCodeFirstSeenAtRow.set(lowerCode, rowNumber);
-  });
-
-  const resolveChantierCode = (raw: string): string | undefined =>
-    chantierIdByCode.get(raw.toLowerCase()) ??
-    findExistingByCodeOrName(existingData.chantiers, raw)?.id;
-
-  // ---------- Feuille "Chantiers" (passe 2 : dépendances, tous les Code sont maintenant connus) ----------
-  const chantiersToCreate: Chantier[] = [];
-  for (const p of parsedChantiers) {
-    const { dependencies, unresolved } = parseDependencies(p.depsRaw, (code) =>
-      resolveChantierCode(code)
-    );
-    if (unresolved.length > 0) {
-      errors.push({
-        sheet: "Chantiers",
-        rowNumber: p.rowNumber,
-        reason: `Dépendance(s) introuvable(s) : ${unresolved.join(", ")}`,
-      });
-      continue;
-    }
-    chantiersToCreate.push({ ...p.chantier, dependencies });
+    chantierIdByCode.set(code.toLowerCase(), id);
+    chantierCodeSeen.set(code.toLowerCase(), rowNumber);
   }
 
-  // ---------- Feuille "Projets" (type interne ChantierAction, inchangé — voir doc-comment de tête
-  // de fichier, round 27) ----------
-  type ParsedAction = { rowNumber: number; code: string; action: ChantierAction };
+  const resolveChantierCode = (raw: string): string | undefined =>
+    chantierIdByCode.get(raw.toLowerCase()) ?? findExistingByRef(exChantiers, raw)?.id;
+
+  // ---------- Feuille "Chantiers" (passe 2 : dépendances, auto-dépendances, cycles) ----------
+  const excludedChantiers = new Set<string>(); // ids des lignes en erreur
+  const depsById = new Map<string, ChantierDependency[] | undefined>(); // undefined = inchangé
+  for (const p of parsedChantiers) {
+    if (!p.depsRaw) {
+      depsById.set(p.id, undefined);
+      continue;
+    }
+    const dependencies: ChantierDependency[] = [];
+    const unresolved: string[] = [];
+    let failed = false;
+    for (const entry of p.depsRaw
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)) {
+      const sep = entry.indexOf(":");
+      const codeRaw = (sep >= 0 ? entry.slice(0, sep) : entry).trim();
+      const typeRaw = (sep >= 0 ? entry.slice(sep + 1) : "").trim();
+      if (!codeRaw) continue;
+      let type: ChantierDependencyType = "FS";
+      if (typeRaw) {
+        const upper = typeRaw.toUpperCase() as ChantierDependencyType;
+        if (!DEPENDENCY_TYPES.includes(upper)) {
+          err("Chantiers", p.rowNumber, "depBadType", { value: typeRaw, code: codeRaw });
+          failed = true;
+          break;
+        }
+        type = upper;
+      }
+      const targetId = resolveChantierCode(codeRaw);
+      if (!targetId) {
+        unresolved.push(codeRaw);
+        continue;
+      }
+      if (targetId === p.id) {
+        err("Chantiers", p.rowNumber, "depSelf", { code: codeRaw });
+        failed = true;
+        break;
+      }
+      if (!dependencies.some((d) => d.targetId === targetId)) dependencies.push({ targetId, type });
+    }
+    if (!failed && unresolved.length > 0) {
+      err("Chantiers", p.rowNumber, "depNotFound", { codes: unresolved.join(", ") });
+      failed = true;
+    }
+    if (failed) excludedChantiers.add(p.id);
+    else depsById.set(p.id, dependencies);
+  }
+
+  // Détection de cycles (Tarjan) sur le graphe final : lignes du fichier + chantiers existants.
+  {
+    const graph = new Map<string, string[]>();
+    for (const c of exChantiers)
+      graph.set(
+        c.id,
+        (c.dependencies ?? []).map((d) => d.targetId)
+      );
+    for (const p of parsedChantiers) {
+      if (excludedChantiers.has(p.id)) {
+        graph.set(p.id, []);
+        continue;
+      }
+      const deps = depsById.get(p.id) ?? p.existing?.dependencies ?? [];
+      graph.set(
+        p.id,
+        deps.map((d) => d.targetId)
+      );
+    }
+    const labelOf = (id: string) =>
+      parsedChantiers.find((p) => p.id === id)?.code ??
+      exChantiers.find((c) => c.id === id)?.name ??
+      id;
+    let index = 0;
+    const idx = new Map<string, number>();
+    const low = new Map<string, number>();
+    const stack: string[] = [];
+    const onStack = new Set<string>();
+    const sccs: string[][] = [];
+    const strong = (v: string) => {
+      idx.set(v, index);
+      low.set(v, index);
+      index += 1;
+      stack.push(v);
+      onStack.add(v);
+      for (const w of graph.get(v) ?? []) {
+        if (!graph.has(w)) continue;
+        if (!idx.has(w)) {
+          strong(w);
+          low.set(v, Math.min(low.get(v)!, low.get(w)!));
+        } else if (onStack.has(w)) {
+          low.set(v, Math.min(low.get(v)!, idx.get(w)!));
+        }
+      }
+      if (low.get(v) === idx.get(v)) {
+        const scc: string[] = [];
+        let w: string;
+        do {
+          w = stack.pop()!;
+          onStack.delete(w);
+          scc.push(w);
+        } while (w !== v);
+        if (scc.length > 1) sccs.push(scc);
+      }
+    };
+    for (const v of Array.from(graph.keys())) if (!idx.has(v)) strong(v);
+    for (const scc of sccs) {
+      const cycle = scc.map(labelOf).join(" → ");
+      for (const p of parsedChantiers) {
+        if (scc.includes(p.id) && !excludedChantiers.has(p.id)) {
+          err("Chantiers", p.rowNumber, "depCycle", { cycle });
+          excludedChantiers.add(p.id);
+        }
+      }
+    }
+  }
+
+  // Lignes exclues : ne sont plus résolvables par leur Code du fichier (repli sur l'existant).
+  for (const p of parsedChantiers) {
+    if (excludedChantiers.has(p.id)) chantierIdByCode.delete(p.code.toLowerCase());
+  }
+  const newExcludedIds = new Set(
+    parsedChantiers.filter((p) => excludedChantiers.has(p.id) && !p.existing).map((p) => p.id)
+  );
+
+  const chantiersToCreate: Chantier[] = [];
+  const chantiersToUpdate: Chantier[] = [];
+  let chantiersUnchanged = 0;
+  const chantierAxesById = new Map<string, string[]>();
+  for (const c of exChantiers) chantierAxesById.set(c.id, c.axisIds ?? []);
+
+  for (const p of parsedChantiers) {
+    if (excludedChantiers.has(p.id)) continue;
+    let deps = depsById.get(p.id);
+    if (deps) {
+      const kept = deps.filter((d) => !newExcludedIds.has(d.targetId));
+      for (const d of deps) {
+        if (newExcludedIds.has(d.targetId)) {
+          const target = parsedChantiers.find((x) => x.id === d.targetId);
+          warn("Chantiers", p.rowNumber, "depDropped", { code: target?.code ?? d.targetId });
+        }
+      }
+      deps = kept;
+    }
+    if (p.existing) {
+      const merged: Chantier & StrategicImportRef = {
+        ...p.existing,
+        ...p.fields,
+        axisIds: p.axisIds,
+        ...(deps ? { dependencies: deps } : {}),
+        ...(p.matchedBy === "id" ? {} : { importCode: p.code }),
+      };
+      if (sameIgnoring(merged, p.existing, ["lastUpdate"])) chantiersUnchanged += 1;
+      else chantiersToUpdate.push({ ...merged, lastUpdate: today });
+    } else {
+      const chantier: Chantier & StrategicImportRef = {
+        id: p.id,
+        companyId: resolvedCompanyId,
+        programId: resolvedProgramId,
+        stage: maturityStages[0]?.id ?? "",
+        ...p.fields,
+        axisIds: p.axisIds,
+        name: p.name,
+        dependencies: deps ?? [],
+        importCode: p.code,
+        createdAt: today,
+        lastUpdate: today,
+      };
+      chantiersToCreate.push(chantier);
+    }
+    chantierAxesById.set(p.id, p.axisIds);
+  }
+
+  // ---------- Feuille "Projets" ----------
+  type ParsedAction = {
+    rowNumber: number;
+    code: string;
+    action: ChantierAction;
+    existing?: ChantierAction;
+  };
   const parsedActions: ParsedAction[] = [];
   const actionIdByCode = new Map<string, string>();
-  const actionCodeFirstSeenAtRow = new Map<string, number>();
+  const actionCodeSeen = new Map<string, number>();
+  const usedActions = new Set<string>();
 
-  sheets.actions.forEach((row, i) => {
-    const rowNumber = i + 2;
-    if (isRowEmpty(row)) return;
-
-    const code = str(row["Code"]);
-    if (!code) {
-      errors.push({ sheet: "Projets", rowNumber, reason: `"Code" est obligatoire` });
-      return;
-    }
-    const lowerCode = code.toLowerCase();
-    if (actionCodeFirstSeenAtRow.has(lowerCode)) {
-      errors.push({
-        sheet: "Projets",
-        rowNumber,
-        reason: `Code "${code}" en doublon dans le fichier (déjà utilisé ligne ${actionCodeFirstSeenAtRow.get(lowerCode)})`,
-      });
-      return;
-    }
-
-    const chantierCodeRaw = str(row["Code Chantier"]);
-    if (!chantierCodeRaw) {
-      errors.push({ sheet: "Projets", rowNumber, reason: `"Code Chantier" est obligatoire` });
-      return;
-    }
-    const chantierId = resolveChantierCode(chantierCodeRaw);
+  for (const { row, rowNumber } of prepared.actions) {
+    if (isRowEmpty(row)) continue;
+    const sheet = "Projets";
+    const code = text(sheet, rowNumber, row, "Code", { required: true });
+    if (code === null) continue;
+    if (!dupCheck(sheet, rowNumber, actionCodeSeen, code)) continue;
+    const chantierCode = text(sheet, rowNumber, row, "Code Chantier", { required: true });
+    if (chantierCode === null) continue;
+    const chantierId = resolveChantierCode(chantierCode);
     if (!chantierId) {
-      errors.push({
-        sheet: "Projets",
-        rowNumber,
-        reason: `Chantier "${chantierCodeRaw}" introuvable (ni dans la feuille Chantiers, ni en base)`,
-      });
-      return;
+      err(sheet, rowNumber, "chantierNotFound", { code: chantierCode });
+      continue;
     }
+    const name = text(sheet, rowNumber, row, "Nom", { required: true });
+    if (name === null) continue;
+    const description = text(sheet, rowNumber, row, "Description", {
+      max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
+    });
+    if (description === null) continue;
+    const start = optDate(sheet, rowNumber, row, "Date début", true);
+    if (!start) continue;
+    const end = optDate(sheet, rowNumber, row, "Date fin", true);
+    if (!end) continue;
+    if (!checkOrder(sheet, rowNumber, start, end, "Date début", "Date fin")) continue;
+    const status = stageOf(sheet, rowNumber, row);
+    if (status === null) continue;
+    const budget = optNumber(sheet, rowNumber, row, "Budget", { min: 0 });
+    if (budget === null) continue;
+    const consumedBudget = optNumber(sheet, rowNumber, row, "Budget consommé", { min: 0 });
+    if (consumedBudget === null) continue;
+    const chantierWeightPct = optNumber(sheet, rowNumber, row, "Poids dans le chantier (%)", {
+      min: 0,
+      max: 100,
+    });
+    if (chantierWeightPct === null) continue;
+    const owner = person(sheet, rowNumber, row, "Owner");
+    if (owner === null) continue;
+    const sponsor = person(sheet, rowNumber, row, "Sponsor");
+    if (sponsor === null) continue;
 
-    const name = str(row["Nom"]);
-    if (!name) {
-      errors.push({ sheet: "Projets", rowNumber, reason: `"Nom" est obligatoire` });
-      return;
-    }
-
-    const start = parseFlexibleDate(row["Date début"]);
-    if (!start) {
-      errors.push({
-        sheet: "Projets",
-        rowNumber,
-        reason: `"Date début" obligatoire et doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)`,
-      });
-      return;
-    }
-    const end = parseFlexibleDate(row["Date fin"]);
-    if (!end) {
-      errors.push({
-        sheet: "Projets",
-        rowNumber,
-        reason: `"Date fin" obligatoire et doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)`,
-      });
-      return;
-    }
-
-    // Facultative depuis le round 31 (voir doc-comment de `resolveOptionalStage`) — même repli
-    // silencieux que la feuille Chantiers ci-dessus.
-    const stageRaw = str(row["Étape de maturité"]);
-    const status = resolveOptionalStage(stageRaw, maturityStages);
-    if (status === undefined) {
-      errors.push({
-        sheet: "Projets",
-        rowNumber,
-        reason: `Étape de maturité "${stageRaw}" inconnue (attendu : ${stageNamesForError(maturityStages)})`,
-      });
-      return;
-    }
-
-    const budgetParsed = parseOptionalNumberField(str(row["Budget"]), "Budget");
-    if (budgetParsed.error) {
-      errors.push({ sheet: "Projets", rowNumber, reason: budgetParsed.error });
-      return;
-    }
-    const consumedBudgetParsed = parseOptionalNumberField(
-      str(row["Budget consommé"]),
-      "Budget consommé"
-    );
-    if (consumedBudgetParsed.error) {
-      errors.push({ sheet: "Projets", rowNumber, reason: consumedBudgetParsed.error });
-      return;
-    }
-    // `ChantierAction.chantierWeightPct` (voir types/index.ts) — colonne facultative, même
-    // convention de validation que les champs budget ci-dessus.
-    const weightParsed = parseOptionalNumberField(
-      str(row["Poids dans le chantier (%)"]),
-      "Poids dans le chantier (%)"
-    );
-    if (weightParsed.error) {
-      errors.push({ sheet: "Projets", rowNumber, reason: weightParsed.error });
-      return;
-    }
-
-    const id = makeId("CA");
-    const action: ChantierAction = {
-      id,
-      companyId: resolvedCompanyId,
-      chantierId,
+    const fields = defined({
       name,
+      description,
+      owner,
+      sponsor,
       start,
       end,
       status,
-      ...(str(row["Description"]) ? { description: str(row["Description"]) } : {}),
-      ...(str(row["Owner"]) ? { owner: str(row["Owner"]) } : {}),
-      ...(str(row["Sponsor"]) ? { sponsor: str(row["Sponsor"]) } : {}),
-      ...(budgetParsed.value !== undefined ? { budget: budgetParsed.value } : {}),
-      ...(consumedBudgetParsed.value !== undefined
-        ? { consumedBudget: consumedBudgetParsed.value }
-        : {}),
-      ...(weightParsed.value !== undefined ? { chantierWeightPct: weightParsed.value } : {}),
-    };
+      budget,
+      consumedBudget,
+      chantierWeightPct,
+    }) as Partial<ChantierAction>;
+    const match = matchExisting(
+      exActions,
+      usedActions,
+      code,
+      name,
+      (a) => a.chantierId === chantierId
+    );
+    let action: ChantierAction & StrategicImportRef;
+    if (match) {
+      usedActions.add(match.entity.id);
+      action = {
+        ...match.entity,
+        ...fields,
+        chantierId,
+        ...(match.by === "id" ? {} : { importCode: code }),
+      };
+    } else {
+      action = {
+        id: makeId("CA"),
+        companyId: resolvedCompanyId,
+        status: maturityStages[0]?.id ?? "",
+        ...fields,
+        chantierId,
+        name,
+        start,
+        end,
+        importCode: code,
+      };
+    }
+    parsedActions.push({ rowNumber, code, action, existing: match?.entity });
+    actionIdByCode.set(code.toLowerCase(), action.id);
+    actionCodeSeen.set(code.toLowerCase(), rowNumber);
+  }
 
-    parsedActions.push({ rowNumber, code, action });
-    actionIdByCode.set(lowerCode, id);
-    actionCodeFirstSeenAtRow.set(lowerCode, rowNumber);
-  });
-
-  // Contrairement à `deliverablesByActionCode` (feuille "Livrables" ci-dessous, restreinte au
-  // MÊME fichier — voir son doc-comment), une ligne "ETP" (round 31) ne s'EMBARQUE PAS dans
-  // l'action : c'est une entité `ChantierStaffing` top-level indépendante, dont le lien à un
-  // projet EXISTANT en base est un simple champ (`actionId`), pas une écriture composée. Le repli
-  // sur `existingData.actions` est donc sûr ici, même convention que `resolveChantierCode`.
   const resolveActionCode = (raw: string): string | undefined =>
-    actionIdByCode.get(raw.toLowerCase()) ??
-    findExistingByCodeOrName(existingData.actions, raw)?.id;
+    actionIdByCode.get(raw.toLowerCase()) ?? findExistingByRef(exActions, raw)?.id;
 
-  // ---------- Feuille "Livrables" (optionnelle — embarquée dans l'action résolue, jamais un
-  // toCreate séparé : une erreur sur une ligne Livrable n'invalide QUE ce livrable, jamais
-  // l'action parente). Contrairement aux autres feuilles, la FK ne se replie PAS sur
-  // `existingData.actions` : un livrable ne peut être rattaché qu'à une action CRÉÉE PAR CE MÊME
-  // IMPORT (`toCreate.actions`), puisqu'il n'existe aucun chemin d'écriture pour greffer un
-  // livrable sur une action déjà en base sans la recharger entièrement (hors scope v1, la
-  // librairie reste pure et n'appelle jamais Firestore). ----------
-  const deliverablesByActionCode = new Map<string, Deliverable[]>();
-
-  sheets.livrables.forEach((row, i) => {
-    const rowNumber = i + 2;
-    if (isRowEmpty(row)) return;
-
-    const actionCodeRaw = str(row["Code Projet"]);
-    if (!actionCodeRaw) {
-      errors.push({ sheet: "Livrables", rowNumber, reason: `"Code Projet" est obligatoire` });
-      return;
+  // ---------- Feuille "Livrables" (embarqués dans un projet de CE fichier ; fusion par libellé) ----------
+  const deliverablesByActionCode = new Map<string, { label: string; dueDate?: string }[]>();
+  for (const { row, rowNumber } of prepared.livrables) {
+    if (isRowEmpty(row)) continue;
+    const sheet = "Livrables";
+    const actionCode = text(sheet, rowNumber, row, "Code Projet", { required: true });
+    if (actionCode === null) continue;
+    const lower = actionCode.toLowerCase();
+    if (!actionIdByCode.has(lower)) {
+      err(sheet, rowNumber, "projectNotInFile", { code: actionCode });
+      continue;
     }
-    const lowerActionCode = actionCodeRaw.toLowerCase();
-    if (!actionIdByCode.has(lowerActionCode)) {
-      errors.push({
-        sheet: "Livrables",
-        rowNumber,
-        reason: `Projet "${actionCodeRaw}" introuvable dans la feuille Projets de ce même fichier`,
-      });
-      return;
-    }
+    const label = text(sheet, rowNumber, row, "Label", { required: true });
+    if (label === null) continue;
+    const dueColumn = !isBlankCell(row["Échéance"]) ? "Échéance" : "Fin";
+    const dueDate = optDate(sheet, rowNumber, row, dueColumn);
+    if (dueDate === null) continue;
+    const list = deliverablesByActionCode.get(lower) ?? [];
+    list.push({ label, ...(dueDate ? { dueDate } : {}) });
+    deliverablesByActionCode.set(lower, list);
+  }
 
-    const label = str(row["Label"]);
-    if (!label) {
-      errors.push({ sheet: "Livrables", rowNumber, reason: `"Label" est obligatoire` });
-      return;
-    }
-
-    // Livrable = ÉCHÉANCE (décision PO) : une seule date. Colonne "Échéance" (modèle actuel) ; à
-    // défaut, "Fin" d'un ancien fichier au format "Début"/"Fin" — la date de DÉBUT est ignorée
-    // (compatibilité des fichiers existants, jamais bloquante).
-    // Valeurs BRUTES passées à `parseFlexibleDate` (pas `str(...)`) : une vraie date Excel arrive
-    // en numéro de série (nombre) via `sheet_to_json`, que la conversion en chaîne rendrait
-    // ininterprétable ("46023" lu comme l'an 46023).
-    const dueColumn = str(row["Échéance"]) ? "Échéance" : "Fin";
-    const dueCell = row[dueColumn];
-    let dueDate: string | undefined;
-    if (str(dueCell)) {
-      dueDate = parseFlexibleDate(dueCell) || undefined;
-      if (!dueDate) {
-        errors.push({
-          sheet: "Livrables",
-          rowNumber,
-          reason: `"${dueColumn}" doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ), ou vide`,
-        });
-        return;
+  const actionsToCreate: ChantierAction[] = [];
+  const actionsToUpdate: ChantierAction[] = [];
+  let actionsUnchanged = 0;
+  for (const p of parsedActions) {
+    const fileDeliverables = deliverablesByActionCode.get(p.code.toLowerCase()) ?? [];
+    let action = p.action;
+    if (fileDeliverables.length > 0) {
+      const current: Deliverable[] = [...(action.deliverables ?? [])];
+      const usedDeliverables = new Set<string>();
+      for (const d of fileDeliverables) {
+        const i = current.findIndex(
+          (e) => !usedDeliverables.has(e.id) && norm(e.label) === norm(d.label)
+        );
+        if (i >= 0) {
+          usedDeliverables.add(current[i].id);
+          if (d.dueDate && d.dueDate !== current[i].dueDate) {
+            current[i] = { ...current[i], dueDate: d.dueDate };
+          }
+        } else {
+          const created: Deliverable = {
+            id: makeId("DL"),
+            label: d.label,
+            phases: [],
+            status: "todo",
+            ...(d.dueDate ? { dueDate: d.dueDate } : {}),
+          };
+          usedDeliverables.add(created.id);
+          current.push(created);
+        }
       }
+      action = { ...action, deliverables: current };
     }
-
-    const deliverable: Deliverable = {
-      id: makeId("DL"),
-      label,
-      phases: [],
-      status: "todo",
-      ...(dueDate ? { dueDate } : {}),
-    };
-    const list = deliverablesByActionCode.get(lowerActionCode) ?? [];
-    list.push(deliverable);
-    deliverablesByActionCode.set(lowerActionCode, list);
-  });
-
-  const actionsToCreate: ChantierAction[] = parsedActions.map((p) => {
-    const deliverables = deliverablesByActionCode.get(p.code.toLowerCase());
-    return deliverables && deliverables.length > 0 ? { ...p.action, deliverables } : p.action;
-  });
+    if (p.existing) {
+      if (sameIgnoring(action, p.existing, [])) actionsUnchanged += 1;
+      else actionsToUpdate.push(action);
+    } else {
+      actionsToCreate.push(action);
+    }
+  }
 
   // ---------- Feuille "Indicateurs" ----------
   const indicatorsToCreate: Indicator[] = [];
-  // Round 31, point 1 : une mesure de baseline par ligne dont "Valeur initiale" est numérique —
-  // voir doc-comment de `STRATEGIC_INDICATOR_IMPORT_HEADERS`.
+  const indicatorsToUpdate: Indicator[] = [];
+  let indicatorsUnchanged = 0;
   const measurementsToCreate: IndicatorMeasurement[] = [];
+  const indicatorCodeSeen = new Map<string, number>();
+  const usedIndicators = new Set<string>();
 
-  sheets.indicateurs.forEach((row, i) => {
-    const rowNumber = i + 2;
-    if (isRowEmpty(row)) return;
+  for (const { row, rowNumber } of prepared.indicateurs) {
+    if (isRowEmpty(row)) continue;
+    const sheet = "Indicateurs";
+    const code = text(sheet, rowNumber, row, "Code");
+    if (code === null) continue;
+    if (code && !dupCheck(sheet, rowNumber, indicatorCodeSeen, code)) continue;
 
     const axisCodeRaw = str(row["Code Axe"]);
     const chantierCodeRaw = str(row["Code Chantier"]);
     if (!axisCodeRaw && !chantierCodeRaw) {
-      errors.push({
-        sheet: "Indicateurs",
-        rowNumber,
-        reason: `"Code Axe" ou "Code Chantier" est obligatoire (exactement l'un des deux)`,
-      });
-      return;
+      err(sheet, rowNumber, "indicatorParentMissing");
+      continue;
     }
     if (axisCodeRaw && chantierCodeRaw) {
-      errors.push({
-        sheet: "Indicateurs",
-        rowNumber,
-        reason: `"Code Axe" et "Code Chantier" sont tous les deux renseignés — un indicateur ne peut être rattaché qu'à l'un des deux`,
-      });
-      return;
+      err(sheet, rowNumber, "indicatorParentBoth");
+      continue;
     }
-
     let axisId: string | undefined;
     let chantierId: string | undefined;
     if (chantierCodeRaw) {
       chantierId = resolveChantierCode(chantierCodeRaw);
       if (!chantierId) {
-        errors.push({
-          sheet: "Indicateurs",
-          rowNumber,
-          reason: `Chantier "${chantierCodeRaw}" introuvable (ni dans la feuille Chantiers, ni en base)`,
-        });
-        return;
+        err(sheet, rowNumber, "chantierNotFound", { code: chantierCodeRaw });
+        continue;
       }
-      axisId =
-        chantierAxisById.get(chantierId) ??
-        existingData.chantiers.find((c) => c.id === chantierId)?.axisIds?.[0];
+      axisId = chantierAxesById.get(chantierId)?.[0];
       if (!axisId) {
-        errors.push({
-          sheet: "Indicateurs",
-          rowNumber,
-          reason: `Impossible de déterminer l'axe du chantier "${chantierCodeRaw}"`,
-        });
-        return;
+        err(sheet, rowNumber, "chantierAxisUnknown", { code: chantierCodeRaw });
+        continue;
       }
     } else {
       axisId = resolveAxisCode(axisCodeRaw);
       if (!axisId) {
-        errors.push({
-          sheet: "Indicateurs",
-          rowNumber,
-          reason: `Axe "${axisCodeRaw}" introuvable (ni dans la feuille Axes, ni en base)`,
-        });
-        return;
+        err(sheet, rowNumber, "axisNotFound", { code: axisCodeRaw });
+        continue;
       }
     }
 
-    const name = str(row["Nom"]);
-    if (!name) {
-      errors.push({ sheet: "Indicateurs", rowNumber, reason: `"Nom" est obligatoire` });
-      return;
-    }
+    const name = text(sheet, rowNumber, row, "Nom", { required: true });
+    if (name === null) continue;
 
     const kindRaw = str(row["Type"]);
-    const kind = resolveEnum(kindRaw, KIND_BY_LABEL, ["quantitative", "qualitative"]);
+    const kind = kindRaw ? resolveSynonym(kindRaw, KIND_SYNONYMS) : undefined;
     if (!kind) {
-      errors.push({
-        sheet: "Indicateurs",
-        rowNumber,
-        reason: `Type "${kindRaw}" inconnu (attendu : ${Object.values(KIND_LABEL).join(", ")})`,
-      });
-      return;
+      if (!kindRaw) err(sheet, rowNumber, "required", { column: "Type" });
+      else
+        err(sheet, rowNumber, "unknownValue", {
+          column: "Type",
+          value: kindRaw,
+          expected: Object.values(KIND_LABEL).join(", "),
+        });
+      continue;
     }
-
     const frequencyRaw = str(row["Fréquence"]);
-    const frequency = resolveEnum(frequencyRaw, FREQUENCY_BY_LABEL, [
-      "monthly",
-      "quarterly",
-      "semiannual",
-      "annual",
-    ]);
+    const frequency = frequencyRaw ? resolveSynonym(frequencyRaw, FREQUENCY_SYNONYMS) : undefined;
     if (!frequency) {
-      errors.push({
-        sheet: "Indicateurs",
-        rowNumber,
-        reason: `Fréquence "${frequencyRaw}" inconnue (attendu : ${Object.values(FREQUENCY_LABEL).join(", ")})`,
-      });
-      return;
+      if (!frequencyRaw) err(sheet, rowNumber, "required", { column: "Fréquence" });
+      else
+        err(sheet, rowNumber, "unknownValue", {
+          column: "Fréquence",
+          value: frequencyRaw,
+          expected: Object.values(FREQUENCY_LABEL).join(", "),
+        });
+      continue;
     }
+    const objective = text(sheet, rowNumber, row, "Objectif", {
+      required: true,
+      max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
+    });
+    if (objective === null) continue;
 
-    const objective = str(row["Objectif"]);
-    if (!objective) {
-      errors.push({ sheet: "Indicateurs", rowNumber, reason: `"Objectif" est obligatoire` });
-      return;
-    }
-
-    const rolesRaw = str(row["Rôles responsables (séparés par ;)"]);
-    const roleTokens = rolesRaw
+    const roleTokens = str(row["Rôles responsables (séparés par ;)"])
       .split(";")
       .map((r) => r.trim())
       .filter(Boolean);
     if (roleTokens.length === 0) {
-      errors.push({
-        sheet: "Indicateurs",
-        rowNumber,
-        reason: `"Rôles responsables" est obligatoire (au moins un rôle)`,
-      });
-      return;
+      err(sheet, rowNumber, "rolesRequired");
+      continue;
     }
     const responsibleRoles: Role[] = [];
     let invalidRole: string | undefined;
@@ -1037,185 +1636,223 @@ export function validateStrategicImportRows(
         invalidRole = token;
         break;
       }
-      responsibleRoles.push(role);
+      if (!responsibleRoles.includes(role)) responsibleRoles.push(role);
     }
     if (invalidRole) {
-      errors.push({
-        sheet: "Indicateurs",
-        rowNumber,
-        reason: `Rôle "${invalidRole}" inconnu (attendu : ${ALL_ROLES.join(", ")})`,
-      });
-      return;
+      err(sheet, rowNumber, "unknownRole", { value: invalidRole, expected: ALL_ROLES.join(", ") });
+      continue;
     }
 
-    const objectiveValue = numOrUndefined(row["Valeur cible"]);
+    // Valeur cible présente mais illisible = erreur (jamais ignorée silencieusement).
+    const objectiveValue = optNumber(sheet, rowNumber, row, "Valeur cible");
+    if (objectiveValue === null) continue;
+    const directionRaw = str(row["Sens"]);
     let direction: IndicatorDirection | undefined;
-    if (objectiveValue !== undefined) {
-      const directionRaw = str(row["Sens"]);
-      direction = directionRaw
-        ? resolveEnum(directionRaw, DIRECTION_BY_LABEL, ["up", "down"])
-        : "up";
+    if (directionRaw) {
+      direction = resolveSynonym(directionRaw, DIRECTION_SYNONYMS);
       if (!direction) {
-        errors.push({
-          sheet: "Indicateurs",
-          rowNumber,
-          reason: `Sens "${directionRaw}" inconnu (attendu : ${Object.values(DIRECTION_LABEL).join(", ")})`,
+        err(sheet, rowNumber, "unknownValue", {
+          column: "Sens",
+          value: directionRaw,
+          expected: Object.values(DIRECTION_LABEL).join(", "),
         });
-        return;
+        continue;
       }
     }
+    const unit = text(sheet, rowNumber, row, "Unité");
+    if (unit === null) continue;
 
-    const indicator: Indicator = {
-      id: makeId("IND"),
-      companyId: resolvedCompanyId,
-      programId: resolvedProgramId,
-      axisId,
-      ...(chantierId ? { chantierId } : {}),
+    // Valeur initiale illisible = avertissement (pas de mesure), jamais une erreur de ligne.
+    const baselineParsed = parseCellNumber(row["Valeur initiale"]);
+    let baselineValue: number | undefined;
+    if (baselineParsed && !baselineParsed.ok) {
+      warn(sheet, rowNumber, "baselineNotNumber", { value: baselineParsed.raw });
+    } else if (baselineParsed?.ok) {
+      baselineValue = baselineParsed.value;
+    }
+
+    const match = matchExisting(
+      exIndicators,
+      usedIndicators,
+      code || undefined,
       name,
-      kind,
-      frequency,
-      objective,
-      ...(objectiveValue !== undefined ? { objectiveValue, direction } : {}),
-      ...(str(row["Unité"]) ? { unit: str(row["Unité"]) } : {}),
-      responsibleRoles,
-      // Un indicateur neuf n'a aucune mesure : "on_track" par construction, même convention que
-      // `useStrategicData.createIndicator`.
-      status: "on_track",
-      createdAt: nowDate(),
-      lastUpdate: nowDate(),
-    };
-    indicatorsToCreate.push(indicator);
+      (e) => e.axisId === axisId && (e.chantierId ?? undefined) === chantierId
+    );
 
-    // Round 31, point 1 : "Valeur initiale" (situation initiale du KPI, distincte de la cible
-    // "Valeur cible" ci-dessus) — `numOrUndefined` traite déjà une cellule vide OU textuelle
-    // ("Non consolidé", "Base 100", vocabulaire observé dans les documents de plan stratégique
-    // source) comme "pas de valeur", jamais comme une erreur : voir son doc-comment. Une baseline
-    // numérique produit une `IndicatorMeasurement` datée du jour de l'import (`currentPeriod`,
-    // même helper que la saisie normale d'une mesure sur la page KPI, `lib/kpiHistory.ts`) — choix
-    // délibérément simple plutôt qu'une "période de démarrage du programme" dédiée, qu'aucune
-    // colonne du fichier ne renseigne de toute façon.
-    const baselineValue = numOrUndefined(row["Valeur initiale"]);
-    if (baselineValue !== undefined) {
-      measurementsToCreate.push({
-        id: makeId("IM"),
+    const fields = defined({ name, kind, frequency, objective, objectiveValue, direction, unit });
+    const newBaseline = (indicatorId: string): IndicatorMeasurement | undefined =>
+      baselineValue === undefined
+        ? undefined
+        : {
+            id: makeId("IM"),
+            companyId: resolvedCompanyId,
+            indicatorId,
+            period: baselinePeriod(frequency, now),
+            value: baselineValue,
+            reportedBy: resolvedReportedBy,
+            reportedAt: now.toISOString(),
+          };
+
+    if (match) {
+      usedIndicators.add(match.entity.id);
+      const existing = match.entity;
+      // Un indicateur de chantier garde son axe s'il reste l'un des axes du chantier.
+      const keepAxis =
+        chantierId && (chantierAxesById.get(chantierId) ?? []).includes(existing.axisId);
+      let merged: Indicator & StrategicImportRef = {
+        ...existing,
+        ...fields,
+        axisId: keepAxis ? existing.axisId : axisId,
+        ...(chantierId ? { chantierId } : {}),
+        responsibleRoles,
+        ...(match.by === "id" ? {} : { importCode: code || undefined }),
+      };
+      if (!chantierId && merged.chantierId) {
+        const { chantierId: _drop, ...rest } = merged;
+        void _drop;
+        merged = rest;
+      }
+      let measurement: IndicatorMeasurement | undefined;
+      if (exMeasurements) {
+        const history = exMeasurements.filter((m) => m.indicatorId === existing.id);
+        if (history.length === 0) {
+          measurement = newBaseline(existing.id);
+        } else if (baselineValue !== undefined) {
+          const current = baselineMeasurement(existing.id, history)?.value;
+          if (current !== baselineValue) {
+            warn(sheet, rowNumber, "baselineIgnored", {
+              value: baselineValue,
+              name,
+              current: current ?? "—",
+            });
+          }
+        }
+        const targetChanged =
+          merged.objectiveValue !== existing.objectiveValue ||
+          merged.direction !== existing.direction ||
+          merged.kind !== existing.kind;
+        if (targetChanged || measurement) {
+          merged = {
+            ...merged,
+            status: computeIndicatorStatus(merged, [
+              ...history,
+              ...(measurement ? [measurement] : []),
+            ]),
+          };
+        }
+      }
+      if (measurement) measurementsToCreate.push(measurement);
+      if (sameIgnoring(merged, existing, ["lastUpdate"])) indicatorsUnchanged += 1;
+      else indicatorsToUpdate.push({ ...merged, lastUpdate: today });
+    } else {
+      const id = makeId("IND");
+      const measurement = newBaseline(id);
+      const base: Indicator & StrategicImportRef = {
+        id,
         companyId: resolvedCompanyId,
-        indicatorId: indicator.id,
-        period: currentPeriod(frequency),
-        value: baselineValue,
-        reportedBy: resolvedReportedBy,
-        reportedAt: nowIso(),
-      });
+        programId: resolvedProgramId,
+        axisId,
+        ...(chantierId ? { chantierId } : {}),
+        name,
+        kind,
+        frequency,
+        objective,
+        ...(objectiveValue !== undefined
+          ? { objectiveValue, direction: direction ?? "up" }
+          : direction
+            ? { direction }
+            : {}),
+        ...(unit ? { unit } : {}),
+        responsibleRoles,
+        status: "on_track",
+        ...(code ? { importCode: code } : {}),
+        createdAt: today,
+        lastUpdate: today,
+      };
+      // Statut calculé à partir de la mesure de référence (baseline sous la cible = à risque).
+      const indicator = {
+        ...base,
+        status: computeIndicatorStatus(base, measurement ? [measurement] : []),
+      };
+      indicatorsToCreate.push(indicator);
+      if (measurement) measurementsToCreate.push(measurement);
     }
-  });
+    if (code) indicatorCodeSeen.set(code.toLowerCase(), rowNumber);
+  }
 
-  // ---------- Feuille "ETP" (facultative, round 31, point 3 — mappée sur `ChantierStaffing`) ----------
+  // ---------- Feuille "ETP" (upsert sur chantier + projet + fonction) ----------
   const staffingToCreate: ChantierStaffing[] = [];
+  const staffingToUpdate: ChantierStaffing[] = [];
+  let staffingUnchanged = 0;
+  const usedStaffing = new Set<string>();
 
-  sheets.etp.forEach((row, i) => {
-    const rowNumber = i + 2;
-    if (isRowEmpty(row)) return;
-
-    const chantierCodeRaw = str(row["Code Chantier"]);
-    if (!chantierCodeRaw) {
-      errors.push({ sheet: "ETP", rowNumber, reason: `"Code Chantier" est obligatoire` });
-      return;
-    }
-    const chantierId = resolveChantierCode(chantierCodeRaw);
+  for (const { row, rowNumber } of prepared.etp) {
+    if (isRowEmpty(row)) continue;
+    const sheet = "ETP";
+    const chantierCode = text(sheet, rowNumber, row, "Code Chantier", { required: true });
+    if (chantierCode === null) continue;
+    const chantierId = resolveChantierCode(chantierCode);
     if (!chantierId) {
-      errors.push({
-        sheet: "ETP",
-        rowNumber,
-        reason: `Chantier "${chantierCodeRaw}" introuvable (ni dans la feuille Chantiers, ni en base)`,
-      });
-      return;
+      err(sheet, rowNumber, "chantierNotFound", { code: chantierCode });
+      continue;
     }
-
-    // Lien facultatif vers un projet précis — résolu contre la feuille Projets de ce même fichier
-    // OU un projet déjà en base (voir doc-comment de `resolveActionCode` ci-dessus) ; une cellule
-    // vide laisse le staffing transverse au chantier (`ChantierStaffing.actionId` absent).
-    const actionCodeRaw = str(row["Code Projet"]);
+    const actionCode = str(row["Code Projet"]);
     let actionId: string | undefined;
-    if (actionCodeRaw) {
-      actionId = resolveActionCode(actionCodeRaw);
+    if (actionCode) {
+      actionId = resolveActionCode(actionCode);
       if (!actionId) {
-        errors.push({
-          sheet: "ETP",
-          rowNumber,
-          reason: `Projet "${actionCodeRaw}" introuvable (ni dans la feuille Projets, ni en base)`,
-        });
-        return;
+        err(sheet, rowNumber, "projectNotFound", { code: actionCode });
+        continue;
       }
     }
-
-    // Texte libre censé correspondre à un `Employee.department` de la base ETP entreprise — voir
-    // doc-comment de `STRATEGIC_STAFFING_IMPORT_HEADERS`, aucune validation stricte ici.
-    const fn = str(row["Fonction (équipe, base ETP)"]);
-    if (!fn) {
-      errors.push({
-        sheet: "ETP",
-        rowNumber,
-        reason: `"Fonction (équipe, base ETP)" est obligatoire`,
-      });
-      return;
+    const fn = text(sheet, rowNumber, row, "Fonction (équipe, base ETP)", { required: true });
+    if (fn === null) continue;
+    const fteParsed = parseCellNumber(row["Nombre d'ETP"]);
+    if (!fteParsed || !fteParsed.ok || fteParsed.value <= 0) {
+      err(sheet, rowNumber, "notPositive", { column: "Nombre d'ETP" });
+      continue;
     }
-
-    const fteRaw = str(row["Nombre d'ETP"]);
-    const fte = toNumber(fteRaw);
-    if (!fteRaw || !Number.isFinite(fte) || fte <= 0) {
-      errors.push({
-        sheet: "ETP",
-        rowNumber,
-        reason: `"Nombre d'ETP" doit être un nombre strictement positif`,
-      });
-      return;
-    }
-
-    // Dates indépendantes (contrairement au couple Début/Fin des Livrables, qui forme une seule
-    // phase) : chacune est facultative, une valeur présente mais non interprétable reste une
-    // erreur plutôt que d'être silencieusement ignorée (même discipline que "Date début"/
-    // "Date fin" de la feuille Projets).
-    // Valeurs brutes (dates Excel natives) — même raison que la feuille Livrables ci-dessus.
-    const startRaw = str(row["Date début"]);
-    let startDate: string | undefined;
-    if (startRaw) {
-      startDate = parseFlexibleDate(row["Date début"]);
-      if (!startDate) {
-        errors.push({
-          sheet: "ETP",
-          rowNumber,
-          reason: `"Date début" doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)`,
-        });
-        return;
-      }
-    }
-    const endRaw = str(row["Date fin"]);
-    let endDate: string | undefined;
-    if (endRaw) {
-      endDate = parseFlexibleDate(row["Date fin"]);
-      if (!endDate) {
-        errors.push({
-          sheet: "ETP",
-          rowNumber,
-          reason: `"Date fin" doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)`,
-        });
-        return;
-      }
-    }
-
-    staffingToCreate.push({
-      id: makeId("ST"),
-      companyId: resolvedCompanyId,
-      programId: resolvedProgramId,
-      chantierId,
-      function: fn,
-      fte,
-      ...(str(row["Précision"]) ? { note: str(row["Précision"]) } : {}),
-      ...(startDate ? { startDate } : {}),
-      ...(endDate ? { endDate } : {}),
-      ...(actionId ? { actionId } : {}),
-      createdAt: nowDate(),
+    const note = text(sheet, rowNumber, row, "Précision", {
+      max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
     });
-  });
+    if (note === null) continue;
+    const startDate = optDate(sheet, rowNumber, row, "Date début");
+    if (startDate === null) continue;
+    const endDate = optDate(sheet, rowNumber, row, "Date fin");
+    if (endDate === null) continue;
+    if (!checkOrder(sheet, rowNumber, startDate, endDate, "Date début", "Date fin")) continue;
+
+    const fields = defined({ fte: fteParsed.value, note, startDate, endDate });
+    const existing = exStaffing.find(
+      (s) =>
+        !usedStaffing.has(s.id) &&
+        s.chantierId === chantierId &&
+        (s.actionId ?? undefined) === actionId &&
+        norm(s.function) === norm(fn)
+    );
+    if (existing) {
+      usedStaffing.add(existing.id);
+      const merged: ChantierStaffing = { ...existing, ...fields };
+      if (sameIgnoring(merged, existing, [])) staffingUnchanged += 1;
+      else staffingToUpdate.push(merged);
+    } else {
+      staffingToCreate.push({
+        id: makeId("ST"),
+        companyId: resolvedCompanyId,
+        programId: resolvedProgramId,
+        chantierId,
+        function: fn,
+        fte: fteParsed.value,
+        ...(note ? { note } : {}),
+        ...(startDate ? { startDate } : {}),
+        ...(endDate ? { endDate } : {}),
+        ...(actionId ? { actionId } : {}),
+        createdAt: today,
+      });
+    }
+  }
+
+  const peopleList = people.finish(warn);
 
   return {
     toCreate: {
@@ -1226,60 +1863,86 @@ export function validateStrategicImportRows(
       measurements: measurementsToCreate,
       staffing: staffingToCreate,
     },
+    toUpdate: {
+      axes: axesToUpdate,
+      chantiers: chantiersToUpdate,
+      actions: actionsToUpdate,
+      indicators: indicatorsToUpdate,
+      measurements: [],
+      staffing: staffingToUpdate,
+    },
+    unchanged: {
+      axes: axesUnchanged,
+      chantiers: chantiersUnchanged,
+      actions: actionsUnchanged,
+      indicators: indicatorsUnchanged,
+      staffing: staffingUnchanged,
+    },
     errors,
+    warnings,
+    people: peopleList,
   };
 }
 
-// ---------- Template Excel ----------
+// ---------- Lecture du classeur ----------
 
-/** Bouché ici (plutôt que dans le composant bouton) pour rester testable sans DOM — même
- *  organisation que `lib/leverExcelImport.ts`, où seul le composant appelle `XLSX.writeFile`.
- *  Le composant `StrategicImportButton` importe `XLSX` lui-même et compose les feuilles avec ces
- *  en-têtes + exemples, exactement comme `LeverImportButton.downloadTemplate`. */
 export const STRATEGIC_IMPORT_SHEET_NAMES = {
-  // Round 31, point 4 : feuille de garde en tête de classeur — voir `STRATEGIC_IMPORT_GUIDE_ROWS`.
   guide: "Lisez-moi",
   axes: "Axes",
   chantiers: "Chantiers",
-  // Clé interne inchangée (`actions`, type `ChantierAction`) — nom de feuille affiché renommé en
-  // "Projets" round 27, voir doc-comment de tête de fichier.
+  // Clé interne `actions` (type `ChantierAction`) — feuille affichée "Projets".
   actions: "Projets",
   livrables: "Livrables",
   indicateurs: "Indicateurs",
-  // Round 31, point 3 — facultative, voir `STRATEGIC_STAFFING_IMPORT_HEADERS`.
   etp: "ETP",
 } as const;
 
-/** Trouve une feuille par nom insensible à la casse (un onglet "axes" au lieu de "Axes" ne doit
- *  pas bloquer) et la convertit en lignes objet indexées par en-tête. */
-function findSheetRows(workbook: XLSX.WorkBook, name: string): Record<string, unknown>[] {
-  const sheetName = workbook.SheetNames.find((n) => n.trim().toLowerCase() === name.toLowerCase());
-  if (!sheetName) return [];
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
-    defval: "",
-  });
-}
+/** Anciens noms de feuille acceptés. */
+const SHEET_ALIASES: Partial<Record<SheetKey, string[]>> = {
+  actions: ["Actions"],
+  livrables: ["Deliverables"],
+};
 
-/** Extrait les 6 feuilles de données d'un classeur (la feuille "Lisez-moi" est ignorée) — point
- *  d'entrée unique partagé par `StrategicImportButton` et les tests (pas de DOM requis). */
+/** Lit un classeur (feuille "Lisez-moi" ignorée) : lignes par feuille + en-têtes réels + feuilles
+ *  absentes/renommées — point d'entrée partagé par `StrategicImportButton` et les tests. */
 export function parseStrategicImportWorkbook(workbook: XLSX.WorkBook): StrategicImportRawSheets {
-  return {
-    axes: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.axes),
-    chantiers: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.chantiers),
-    actions: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.actions),
-    livrables: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.livrables),
-    indicateurs: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.indicateurs),
-    etp: findSheetRows(workbook, STRATEGIC_IMPORT_SHEET_NAMES.etp),
+  const find = (name: string) => workbook.SheetNames.find((n) => norm(n) === norm(name));
+  const result: StrategicImportRawSheets = {
+    axes: [],
+    chantiers: [],
+    actions: [],
+    livrables: [],
+    indicateurs: [],
+    etp: [],
+    headers: {},
+    missingSheets: [],
+    aliasedSheets: {},
   };
+  for (const key of Object.keys(SHEET_SPECS) as SheetKey[]) {
+    let sheetName = find(STRATEGIC_IMPORT_SHEET_NAMES[key]);
+    if (!sheetName) {
+      for (const alias of SHEET_ALIASES[key] ?? []) {
+        sheetName = find(alias);
+        if (sheetName) {
+          result.aliasedSheets![key] = sheetName;
+          break;
+        }
+      }
+    }
+    if (!sheetName) {
+      result.missingSheets!.push(key);
+      continue;
+    }
+    const ws = workbook.Sheets[sheetName];
+    const headerRow = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" })[0] ?? [];
+    result.headers![key] = headerRow.map((h) => str(h)).filter(Boolean);
+    result[key] = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+  }
+  return result;
 }
 
-/**
- * Contenu de la feuille "Lisez-moi" (round 31, point 4) — une ligne = une ligne de cellule A de la
- * feuille (`aoa_to_sheet` d'un tableau à une seule colonne, largeur forcée par `StrategicImportButton`
- * pour rester lisible). Volontairement court et scannable ("pas un mur de texte", demande PO) :
- * l'ordre des feuilles, la convention de clé `Code`, obligatoire vs facultatif, et le workflow de
- * pré-remplissage par IA visé par ce modèle (voir contexte du round, section "Workflow IA").
- */
+// ---------- Modèle & export ----------
+
 export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
   ["Guide d'import — Plan Stratégique BeTrack"],
   [""],
@@ -1288,7 +1951,7 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
   [""],
   ['2. Clé de liaison "Code"'],
   [
-    'Chaque feuille référence la précédente par un "Code" propre à ce fichier (jamais écrit tel quel dans BeTrack) :',
+    'Chaque feuille référence la précédente par un "Code". Ce Code est conservé dans BeTrack : réimporter le même fichier met à jour les lignes existantes au lieu de les dupliquer.',
   ],
   [
     '  - "Code" (Axes) est repris par "Codes Axes (séparés par ;)" (Chantiers) — un chantier peut avoir plusieurs axes.',
@@ -1299,21 +1962,33 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
     '  - Livrables : une seule date, "Échéance" (date à laquelle le livrable doit être fait). Un ancien fichier avec "Début"/"Fin" reste accepté : "Fin" = échéance, "Début" ignoré.',
   ],
   [
-    '  - "Indicateurs" se rattache à UN axe OU UN chantier : renseignez "Code Axe" OU "Code Chantier", jamais les deux.',
+    '  - "Indicateurs" se rattache à UN axe OU UN chantier : renseignez "Code Axe" OU "Code Chantier", jamais les deux. Leur "Code" est facultatif.',
+  ],
+  [
+    '  - Dépendances : "CH1:FS;CH2:SS" (types FS, SS, FF, SF ; FS si omis). Un chantier ne peut dépendre de lui-même, et les cycles sont refusés.',
   ],
   [""],
   ["3. Obligatoire vs facultatif"],
-  ['Obligatoires : "Code"/"Nom" de chaque feuille, dates de Projets.'],
+  ['Obligatoires : "Code"/"Nom" de chaque feuille, dates de Projets (début <= fin).'],
   [
-    'Facultatifs : Description/Pilote/Owner/Sponsor, budgets et ETP consommés, "Étape de maturité" des Axes/Chantiers/Projets (vide = 1re étape du programme), "Valeur initiale" des Indicateurs (situation de départ du KPI), et les feuilles Livrables et ETP dans leur intégralité.',
+    'Facultatifs : Description/Pilote/Owner/Sponsor, budgets (>= 0), poids (0 à 100), "Étape de maturité" (vide = 1re étape du programme), "Valeur initiale" des Indicateurs (mesure de référence datée de la période précédente), feuilles Livrables et ETP.',
+  ],
+  [
+    "Owner/Pilote/Sponsor : saisissez l'identifiant BeTrack, l'e-mail ou le « Prénom Nom » d'un compte existant. Un nom inconnu est conservé en texte et proposé à la création de compte.",
+  ],
+  ["Longueurs maximales : 200 caractères pour un nom, 5000 pour une description."],
+  [""],
+  ["4. Mise à jour d'un plan existant"],
+  [
+    "Exportez le plan (bouton « Exporter le plan »), modifiez le fichier puis réimportez-le : l'aperçu indique ce qui sera créé, mis à jour ou inchangé. Une cellule vide ne remplace jamais une valeur existante.",
   ],
   [""],
-  ["4. Workflow conseillé (pré-remplissage par IA)"],
+  ["5. Workflow conseillé (pré-remplissage par IA)"],
   [
     'Collez le contenu de vos slides/documents de plan stratégique dans un assistant IA et demandez-lui de remplir CE modèle exact : mêmes onglets, mêmes en-têtes, en gardant les "Code" cohérents entre les feuilles. Relisez, supprimez les lignes d\'exemple, puis importez.',
   ],
   [""],
-  ["5. En cas d'erreur"],
+  ["6. En cas d'erreur"],
   [
     "Une ligne en erreur n'invalide qu'elle-même : l'aperçu avant import liste chaque anomalie (feuille + numéro de ligne + raison). Corrigez et réimportez.",
   ],
@@ -1347,8 +2022,6 @@ export const STRATEGIC_AXIS_EXAMPLE_ROWS = [
 ];
 
 export const STRATEGIC_CHANTIER_EXAMPLE_ROWS = [
-  // "AX1" seul reste une liste valide "séparée par ;" à un élément ; pour rattacher un chantier à
-  // plusieurs axes, saisir par ex. "AX1;AX3" (voir CH3 ci-dessous).
   [
     "CH1",
     "AX1",
@@ -1411,8 +2084,7 @@ export const STRATEGIC_ACTION_EXAMPLE_ROWS = [
     "Karim Haddad",
     "2026-02-01",
     "2026-06-30",
-    // Étape de maturité laissée VIDE à dessein — démontre le repli silencieux sur la 1re étape du
-    // programme (round 31, "Étape de maturité" désormais facultative sur Chantiers/Projets).
+    // Étape laissée VIDE à dessein — repli sur la 1re étape du programme.
     "",
     45000,
     0,
@@ -1441,6 +2113,7 @@ export const STRATEGIC_DELIVERABLE_EXAMPLE_ROWS = [
 
 export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [
   [
+    "KPI1",
     "AX1",
     "",
     "Taux de disponibilité des systèmes critiques",
@@ -1454,6 +2127,7 @@ export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [
     "cto;strategic_lead",
   ],
   [
+    "KPI2",
     "",
     "CH1",
     "Taux d'automatisation du reporting de production",
@@ -1467,10 +2141,8 @@ export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [
     "chantier_owner;strategic_lead",
   ],
   [
-    // "Valeur cible"/"Sens" vides (indicateur qualitatif) et "Valeur initiale" TEXTUELLE
-    // ("Non consolidé", vocabulaire observé dans les documents de plan stratégique source) — ne
-    // bloque jamais la ligne, aucune mesure n'est simplement créée pour cette ligne (voir
-    // doc-comment de `STRATEGIC_INDICATOR_IMPORT_HEADERS`).
+    // Indicateur qualitatif : "Valeur cible"/"Sens"/"Valeur initiale" vides.
+    "KPI3",
     "AX2",
     "",
     "Indice de maturité digitale (baromètre interne)",
@@ -1478,7 +2150,7 @@ export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [
     "Semestrielle",
     'Passer au niveau "avancé" du baromètre interne',
     "",
-    "Non consolidé",
+    "",
     "",
     "",
     "strategic_lead",
@@ -1498,3 +2170,117 @@ export const STRATEGIC_STAFFING_EXAMPLE_ROWS = [
   ["CH2", "", "Ressources Humaines", 1, "Cheffe de projet RH à mi-temps", "2026-02-01", ""],
   ["CH3", "", "Cybersécurité", 1.5, "", "", ""],
 ];
+
+type SheetRows = Record<SheetKey, unknown[][]>;
+
+/** Compose un classeur au format d'import (feuille "Lisez-moi" + 6 feuilles). */
+function buildWorkbook(rows: SheetRows): XLSX.WorkBook {
+  const wb = XLSX.utils.book_new();
+  const guideSheet = XLSX.utils.aoa_to_sheet(STRATEGIC_IMPORT_GUIDE_ROWS);
+  guideSheet["!cols"] = [{ wch: 110 }];
+  XLSX.utils.book_append_sheet(wb, guideSheet, STRATEGIC_IMPORT_SHEET_NAMES.guide);
+  for (const key of Object.keys(SHEET_SPECS) as SheetKey[]) {
+    const headers = SHEET_SPECS[key].headers;
+    const sheet = XLSX.utils.aoa_to_sheet([[...headers], ...rows[key]]);
+    sheet["!cols"] = headers.map((h) => ({ wch: Math.max(14, Math.min(48, h.length + 2)) }));
+    XLSX.utils.book_append_sheet(wb, sheet, STRATEGIC_IMPORT_SHEET_NAMES[key]);
+  }
+  return wb;
+}
+
+/** Modèle vierge avec lignes d'exemple. */
+export function buildStrategicImportTemplateWorkbook(): XLSX.WorkBook {
+  return buildWorkbook({
+    axes: STRATEGIC_AXIS_EXAMPLE_ROWS,
+    chantiers: STRATEGIC_CHANTIER_EXAMPLE_ROWS,
+    actions: STRATEGIC_ACTION_EXAMPLE_ROWS,
+    livrables: STRATEGIC_DELIVERABLE_EXAMPLE_ROWS,
+    indicateurs: STRATEGIC_INDICATOR_EXAMPLE_ROWS,
+    etp: STRATEGIC_STAFFING_EXAMPLE_ROWS,
+  });
+}
+
+/**
+ * Export du plan courant AU FORMAT D'IMPORT : Code = `importCode` (ou `id` BeTrack à défaut),
+ * étapes par libellé, personnes par identifiant (username stocké), mesure de référence = 1re
+ * mesure numérique. Réimporter ce fichier sans modification = 0 création, 0 mise à jour.
+ */
+export function buildStrategicPlanExportWorkbook(
+  data: StrategicImportExistingData,
+  stages: MaturityStageConfig[]
+): XLSX.WorkBook {
+  const codeOf = (e: { id: string }) => importCodeOf(e) ?? e.id;
+  const axisCode = new Map(data.axes.map((a) => [a.id, codeOf(a)]));
+  const chantierCode = new Map(data.chantiers.map((c) => [c.id, codeOf(c)]));
+  const actionCode = new Map(data.actions.map((a) => [a.id, codeOf(a)]));
+  // Étape inconnue du référentiel → vide (= conservée à l'import), jamais une erreur.
+  const stageLabel = (id: string | undefined) =>
+    (id && stages.find((s) => s.id === id)?.label) || "";
+  const num = (v: number | undefined) => (v === undefined ? "" : v);
+  const measurements = data.measurements ?? [];
+
+  return buildWorkbook({
+    axes: data.axes.map((a) => [
+      codeOf(a),
+      a.name,
+      a.description ?? "",
+      a.owner ?? "",
+      a.color ?? "",
+      stageLabel(a.stage),
+    ]),
+    chantiers: data.chantiers.map((c) => [
+      codeOf(c),
+      (c.axisIds ?? []).map((id) => axisCode.get(id) ?? id).join(";"),
+      c.name,
+      c.description ?? "",
+      c.pilote ?? "",
+      stageLabel(c.stage),
+      num(c.allocatedBudget),
+      num(c.consumedBudget),
+      num(c.consumedFte),
+      (c.dependencies ?? [])
+        .map((d) => `${chantierCode.get(d.targetId) ?? d.targetId}:${d.type}`)
+        .join(";"),
+    ]),
+    actions: data.actions.map((a) => [
+      codeOf(a),
+      chantierCode.get(a.chantierId) ?? a.chantierId,
+      a.name,
+      a.description ?? "",
+      a.owner ?? "",
+      a.sponsor ?? "",
+      a.start ?? "",
+      a.end ?? "",
+      stageLabel(a.status),
+      num(a.budget),
+      num(a.consumedBudget),
+      num(a.chantierWeightPct),
+    ]),
+    livrables: data.actions.flatMap((a) =>
+      (a.deliverables ?? []).map((d) => [codeOf(a), d.label, d.dueDate ?? ""])
+    ),
+    indicateurs: data.indicators.map((i) => [
+      codeOf(i),
+      i.chantierId ? "" : (axisCode.get(i.axisId) ?? i.axisId),
+      i.chantierId ? (chantierCode.get(i.chantierId) ?? i.chantierId) : "",
+      i.name,
+      KIND_LABEL[i.kind] ?? i.kind,
+      FREQUENCY_LABEL[i.frequency] ?? i.frequency,
+      i.objective,
+      num(i.objectiveValue),
+      num(baselineMeasurement(i.id, measurements)?.value),
+      i.direction ? DIRECTION_LABEL[i.direction] : "",
+      i.unit ?? "",
+      (i.responsibleRoles ?? []).join(";"),
+    ]),
+    etp: (data.staffing ?? []).map((s) => [
+      chantierCode.get(s.chantierId) ?? s.chantierId,
+      s.actionId ? (actionCode.get(s.actionId) ?? s.actionId) : "",
+      s.function,
+      s.fte,
+      s.note ?? "",
+      s.startDate ?? "",
+      s.endDate ?? "",
+    ]),
+  });
+}

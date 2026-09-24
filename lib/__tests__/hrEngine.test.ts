@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   MOVEMENT_TYPES,
+  alertedMovementIds,
   bucketByLever,
   currentFTE,
   deltaByDepartment,
+  deriveWorkforceBaseline,
   fteBridge,
   fteBridgeSummary,
   fteEffect,
+  fteOpening,
   ftePositionsByDimension,
+  hrToday,
+  knownDepartments,
   movementAlerts,
   movementBreakdownByDimension,
   movementRealizationByDimension,
@@ -17,9 +22,14 @@ import {
   plannedFTE,
   pseSummary,
   realizedSalarySavings,
+  salaryBridge,
+  scopeWorkforceBaseline,
   targetFTE,
+  transferDepartmentLegs,
+  withDerivedWorkforceBaseline,
 } from "@/lib/hrEngine";
-import type { Lever, Workforce, WorkforceMovement } from "@/types";
+import { loadedAnnualSalary } from "@/lib/hrFinancials";
+import type { Employee, Lever, Workforce, WorkforceMovement } from "@/types";
 
 function makeLever(overrides: Partial<Lever>): Lever {
   return {
@@ -214,9 +224,152 @@ describe("hrEngine — plannedFTE", () => {
   });
 });
 
-describe("hrEngine — targetFTE", () => {
-  it("sums department fteTargets", () => {
-    expect(targetFTE(makeWorkforce())).toBe(45 + 32 + 20);
+describe("hrEngine — targetFTE (définition unique « Effectif cible », m3)", () => {
+  it("is the baseline when there is no movement (department fteTargets are ignored)", () => {
+    expect(targetFTE(makeWorkforce())).toBe(100);
+  });
+
+  it("adds the planned (lockedPlan) FTE impact of active movements, transfers neutral", () => {
+    const wf = makeWorkforce({
+      totalFTE: 100,
+      movements: [
+        makeMovement({
+          id: "M1",
+          type: "Départ forcé",
+          fte: 2,
+          lockedPlan: { fte: 3, salaryImpact: 0, savings: 0, cost: 0 },
+        }),
+        makeMovement({ id: "M2", type: "Recrutement", fte: 1 }),
+        makeMovement({ id: "M3", type: "Transfert entrant", fte: 5 }),
+        makeMovement({ id: "M4", type: "Attrition", fte: 4, status: "Abandonné" }),
+      ],
+    });
+    expect(targetFTE(wf)).toBe(100 - 3 + 1);
+  });
+});
+
+describe("hrEngine — hrToday (B1)", () => {
+  it("returns the real LOCAL date by default (not a frozen demo date)", () => {
+    const now = new Date();
+    const expected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    expect(hrToday()).toBe(expected);
+    expect(hrToday()).not.toBe("2026-06-22");
+  });
+
+  it("accepts an override (ISO string or Date) for tests / demos", () => {
+    expect(hrToday("2026-06-22")).toBe("2026-06-22");
+    expect(hrToday("2026-06-22T23:59:00Z")).toBe("2026-06-22");
+    expect(hrToday(new Date(2027, 0, 5))).toBe("2027-01-05");
+    // Valeur invalide : ignorée, repli sur la date réelle.
+    expect(hrToday("n/a")).toBe(hrToday());
+  });
+
+  it("drives the default reference date of movement alerts", () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const plannedDate = hrToday(tomorrow);
+    const alerts = movementAlerts(
+      makeWorkforce({ movements: [makeMovement({ id: "M1", plannedDate })] }),
+      []
+    );
+    expect(alerts.find((a) => a.movement.id === "M1")?.detail).toEqual({
+      reason: "due",
+      daysLeft: 1,
+    });
+  });
+});
+
+function makeEmployee(overrides: Partial<Employee>): Employee {
+  return {
+    id: "E1",
+    name: "Alice",
+    region: "EU",
+    country: "France",
+    department: "IT",
+    direction: "DSI",
+    hrOwner: "HR",
+    func: "Dev",
+    team: "T",
+    bu: "BU",
+    entity: "E",
+    level: "Local",
+    fte: 1,
+    salary: 50000,
+    hireDate: "2020-01-01",
+    retirement: "2050-01-01",
+    ...overrides,
+  };
+}
+
+describe("hrEngine — baseline dérivée des employés (B2)", () => {
+  const employees = [
+    makeEmployee({ id: "E1", department: "IT", country: "France", fte: 1, salary: 50000 }),
+    makeEmployee({ id: "E2", department: "IT", country: "Germany", fte: 0.5, salary: 60000 }),
+    makeEmployee({ id: "E3", department: "HR", country: "France", fte: 1, salary: 40000 }),
+  ];
+
+  it("derives total FTE, loaded salary mass, departments and country baselines", () => {
+    const b = deriveWorkforceBaseline(employees);
+    expect(b.totalFTE).toBe(2.5);
+    const mass =
+      (loadedAnnualSalary(50000) + loadedAnnualSalary(60000) + loadedAnnualSalary(40000)) /
+      1_000_000;
+    expect(b.massSalary).toBeCloseTo(mass, 2);
+    expect(b.departments).toEqual([
+      { name: "HR", fte: 1, fteTarget: 1 },
+      { name: "IT", fte: 1.5, fteTarget: 1.5 },
+    ]);
+    expect(b.countryBaselines).toEqual([
+      { key: "France", label: "France", fte: 2 },
+      { key: "Germany", label: "Germany", fte: 0.5 },
+    ]);
+    expect(b.workstreamBaselines).toEqual([]);
+  });
+
+  it("fills only the missing parts of a workforce (explicit baseline wins)", () => {
+    const empty = makeWorkforce({ totalFTE: 0, massSalary: 0, departments: [], employees });
+    const filled = withDerivedWorkforceBaseline(empty);
+    expect(filled.totalFTE).toBe(2.5);
+    expect(filled.departments.map((d) => d.name)).toEqual(["HR", "IT"]);
+    expect(filled.countryBaselines?.length).toBe(2);
+
+    const explicit = makeWorkforce({ totalFTE: 100, employees });
+    const kept = withDerivedWorkforceBaseline(explicit);
+    expect(kept.totalFTE).toBe(100);
+    expect(kept.departments.map((d) => d.name)).toEqual(["IT", "HR", "Finance"]);
+    // Pas d'employés : inchangé.
+    const noEmployees = makeWorkforce({ totalFTE: 0, departments: [] });
+    expect(withDerivedWorkforceBaseline(noEmployees)).toBe(noEmployees);
+  });
+
+  it("lists department options from employees when no explicit baseline exists", () => {
+    expect(
+      knownDepartments({
+        departments: [],
+        employees,
+        movements: [makeMovement({ department: "Ops", toDepartment: "Sales" })],
+      })
+    ).toEqual(["HR", "IT", "Ops", "Sales"]);
+  });
+
+  it("scopes the baseline to department / country filters, or returns null (M3)", () => {
+    const wf = makeWorkforce({ totalFTE: 0, massSalary: 0, departments: [], employees });
+    expect(scopeWorkforceBaseline(wf, {})?.totalFTE).toBe(2.5);
+    expect(scopeWorkforceBaseline(wf, { department: ["IT"] })?.totalFTE).toBe(1.5);
+    expect(scopeWorkforceBaseline(wf, { country: ["France"] })?.totalFTE).toBe(2);
+    expect(scopeWorkforceBaseline(wf, { department: ["IT"], country: ["France"] })?.totalFTE).toBe(
+      1
+    );
+    // Workstream : pas de baseline explicite → non scopable.
+    expect(scopeWorkforceBaseline(wf, { workstream: ["WS-01"] })).toBeNull();
+    const withWs = makeWorkforce({
+      workstreamBaselines: [{ key: "WS-01", label: "WS-01", fte: 60 }],
+    });
+    expect(scopeWorkforceBaseline(withWs, { workstream: ["WS-01"] })?.totalFTE).toBe(60);
+    // Baselines départementales explicites prioritaires en mono-dimension.
+    expect(scopeWorkforceBaseline(makeWorkforce(), { department: ["IT", "HR"] })?.totalFTE).toBe(
+      80
+    );
   });
 });
 
@@ -227,7 +380,10 @@ describe("hrEngine — fteBridge", () => {
     });
     const buckets = fteBridge(wf, "month");
     expect(buckets).toHaveLength(12);
-    expect(buckets[2].label).toBe("Mar 2026");
+    expect(buckets[2].key).toBe("2026-03");
+    expect(buckets[2].label).toBe("mars 2026");
+    expect(fteBridge(wf, "month", undefined, { locale: "en-GB" })[2].label).toBe("Mar 2026");
+    expect(fteBridge(wf, "quarter", undefined, { locale: "de-DE" })[0].label).toBe("Q1 2026");
   });
 
   it("returns 4 quarterly buckets across the year", () => {
@@ -247,7 +403,7 @@ describe("hrEngine — fteBridge", () => {
       ],
     });
     const buckets = fteBridge(wf, "month");
-    const feb = buckets.find((b) => b.label === "Fév 2026");
+    const feb = buckets.find((b) => b.key === "2026-02");
     expect(feb?.delta).toBe(-3 + 1 - 1);
     expect(feb?.byType["Départ forcé"]).toBe(-3);
     expect(feb?.byType["Recrutement"]).toBe(1);
@@ -279,6 +435,39 @@ describe("hrEngine — fteBridge", () => {
     expect(buckets[1].cumulative).toBe(97);
     expect(buckets[4].cumulative).toBe(98);
     expect(buckets[11].cumulative).toBe(98);
+  });
+
+  it("starts a period from the opening FTE (baseline + realized before `from`), M2", () => {
+    const wf = makeWorkforce({
+      totalFTE: 100,
+      massSalary: 8,
+      movements: [
+        // Réalisé avant la plage : intégré à l'ouverture.
+        makeMovement({
+          id: "M1",
+          type: "Départ forcé",
+          fte: 3,
+          status: "Réalisé",
+          plannedDate: "2026-02-10",
+          salaryImpact: -300000,
+        }),
+        // Non réalisé avant la plage : ignoré.
+        makeMovement({ id: "M2", type: "Départ forcé", fte: 2, plannedDate: "2026-03-10" }),
+        // Dans la plage.
+        makeMovement({ id: "M3", type: "Recrutement", fte: 1, plannedDate: "2026-07-15" }),
+      ],
+    });
+    const range = { from: "2026-07-01", to: "2026-12-31" };
+    expect(fteOpening(wf, range)).toBe(97);
+    const buckets = fteBridge(wf, "month", range);
+    expect(buckets[0].key).toBe("2026-07");
+    expect(buckets[0].cumulative).toBe(98);
+    expect(buckets[buckets.length - 1].cumulative).toBe(98);
+    expect(fteBridgeSummary(wf, range).opening).toBe(97);
+    // Masse salariale : ouverture = 8 − 0,3 M€.
+    const salary = salaryBridge(wf, "month", range);
+    expect(salary[0].key).toBe("2026-07");
+    expect(salary[0].cumulative - salary[0].delta).toBeCloseTo(7.7, 2);
   });
 
   it("skips movements with invalid dates", () => {
@@ -320,7 +509,7 @@ describe("hrEngine — bucketByLever", () => {
       ],
     });
     const buckets = fteBridge(wf, "month");
-    const feb = buckets.find((b) => b.label === "Fév 2026")!;
+    const feb = buckets.find((b) => b.key === "2026-02")!;
     const levers: Lever[] = [];
     const grouped = bucketByLever(feb, levers);
     expect(grouped).toHaveLength(2);
@@ -485,6 +674,55 @@ describe("hrEngine — movementBreakdownByDimension", () => {
       expect(hrRow.movements.map((m) => m.id)).toEqual(["M1"]);
     }
   );
+
+  it("uses the plan FTE (lockedPlan.fte ?? fte) like the net balance tooltip (M10)", () => {
+    const rows = movementBreakdownByDimension(
+      [
+        makeMovement({
+          id: "M1",
+          type: "Départ forcé",
+          country: "France",
+          fte: 1,
+          lockedPlan: { fte: 2, salaryImpact: 0, savings: 0, cost: 0 },
+        }),
+      ],
+      "country"
+    );
+    expect(rows[0].forcedDepartures).toBe(2);
+  });
+
+  it("treats a legacy transfer without destination by its stored type in every view (M11)", () => {
+    const legacyIn = makeMovement({
+      id: "M1",
+      type: "Transfert entrant",
+      department: "IT",
+      toDepartment: undefined,
+      fte: 2,
+      status: "Réalisé",
+    });
+    const byDept = movementBreakdownByDimension([legacyIn], "department");
+    expect(byDept[0]).toMatchObject({ label: "IT", transfertEntrants: 2, transfertSortants: 0 });
+    expect(byDept[0].transferDirections).toEqual({ M1: "in" });
+    const byCountry = movementBreakdownByDimension([legacyIn], "country");
+    expect(byCountry[0]).toMatchObject({ transfertEntrants: 2, transfertSortants: 0 });
+    const positions = ftePositionsByDimension(
+      makeWorkforce({ movements: [legacyIn] }),
+      "department"
+    );
+    expect(positions.find((row) => row.key === "IT")?.current).toBe(52);
+    expect(movementsByDepartment(makeWorkforce({ movements: [legacyIn] }))[0]).toMatchObject({
+      department: "IT",
+      transfertEntrants: 2,
+      net: 2,
+    });
+    // Avec destination : sortie source + entrée cible, quel que soit le type enregistré.
+    expect(
+      transferDepartmentLegs({ type: "Transfert entrant", department: "IT", toDepartment: "HR" })
+    ).toEqual([
+      { department: "IT", direction: "out" },
+      { department: "HR", direction: "in" },
+    ]);
+  });
 
   it("keeps zero-net transfers visible in the ETP bridge with counts", () => {
     const summary = fteBridgeSummary(
@@ -681,6 +919,26 @@ describe("hrEngine — movementAlerts (garde-fou signe/montant)", () => {
     });
     const alerts = movementAlerts(makeWorkforce({ movements: [movement] }), [lever], "2026-06-01");
     expect(alerts.some((a) => a.movement.id === "M1")).toBe(false);
+  });
+});
+
+describe("hrEngine — movementAlerts (réalisé non validé, m1 / M4)", () => {
+  it("still checks the lever direction for realized movements awaiting RH validation", () => {
+    const lever = makeLever({ id: "L001", code: "L001", fteImpact: -6 });
+    const movement = makeMovement({
+      id: "M1",
+      leverId: "L001",
+      type: "Recrutement",
+      status: "Réalisé",
+      actualDate: "2026-03-01",
+      hrValidated: false,
+    });
+    const alerts = movementAlerts(makeWorkforce({ movements: [movement] }), [lever], "2026-06-01");
+    expect(alerts.map((a) => a.kind).sort()).toEqual(["leverMismatch", "toValidate"]);
+    // Deux alertes, UN mouvement.
+    expect(alertedMovementIds(alerts)).toEqual(["M1"]);
+    expect(alertedMovementIds(alerts, "toValidate")).toEqual(["M1"]);
+    expect(alertedMovementIds(alerts, ["overdue"])).toEqual([]);
   });
 });
 

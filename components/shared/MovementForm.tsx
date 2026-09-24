@@ -13,6 +13,7 @@ import {
 import { fmtCurr } from "@/lib/engine";
 import { effectiveLeafLevel, selectableLeafNodes } from "@/lib/hierarchyLogic";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
+import { hrToday, knownDepartments } from "@/lib/hrEngine";
 import type {
   BeTrackData,
   HierarchyLevelDef,
@@ -81,7 +82,8 @@ export function MovementForm({
   const { t: translate } = useTranslation();
   const resolvedSubmitLabel =
     submitLabel ?? translate("etp.form.createMovement", "Créer le mouvement");
-  const today = new Date().toISOString().slice(0, 10);
+  // Date locale réelle (B1) — `toISOString()` basculait au jour voisin autour de minuit.
+  const today = hrToday();
   const employees = data.workforce.employees;
   // Liste de pays dérivée des employés existants plutôt qu'une liste figée — sinon un pays hors de
   // cette liste (entreprise opérant ailleurs qu'en France/Allemagne/Espagne/Italie/UK/USA) était
@@ -93,7 +95,12 @@ export function MovementForm({
         .sort(),
     [employees]
   );
-  const departments = data.workforce.departments;
+  // Référentiel des départements : baseline explicite + départements des employés + ceux déjà
+  // cités par les mouvements (B2) — une entreprise sans méta workforce n'avait AUCUNE option.
+  const departments = useMemo(
+    () => knownDepartments(data.workforce).map((name) => ({ name })),
+    [data.workforce]
+  );
   const firstEmployee = employees[0];
   const firstLever = data.levers[0];
 
@@ -195,6 +202,8 @@ export function MovementForm({
     cost: 0,
     ...initialValues,
   });
+  // Erreur de validation affichée sous le formulaire (département d'arrivée d'un transfert).
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Salaire chargé annuel de référence pour un Recrutement (pas d'Employee existant) — s'il
   // s'agit d'un mouvement existant déjà chiffré, salaryImpact = +loadedSalary pour un
@@ -318,6 +327,21 @@ export function MovementForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (!values.label.trim()) return;
+        // Un transfert sans département d'arrivée changeait de sens selon la vue (M11) : la
+        // destination est désormais obligatoire et distincte du département de départ.
+        if (
+          TRANSFER_TYPES.includes(values.type) &&
+          (!values.toDepartment || values.toDepartment === values.department)
+        ) {
+          setFormError(
+            translate(
+              "shared.movementForm.destinationRequired",
+              "Un transfert nécessite un département d'arrivée différent du département de départ."
+            )
+          );
+          return;
+        }
+        setFormError(null);
         onSubmit(values);
       }}
     >
@@ -443,18 +467,24 @@ export function MovementForm({
             label={translate("shared.movementForm.destinationDepartment", "Département d'arrivée")}
           >
             <select
+              required
               className={inputClass}
               value={values.toDepartment ?? ""}
-              onChange={(e) => set("toDepartment", e.target.value || undefined)}
+              onChange={(e) => {
+                setFormError(null);
+                set("toDepartment", e.target.value || undefined);
+              }}
             >
               <option value="">
                 {translate("shared.movementForm.choosePlaceholder", "— choisir —")}
               </option>
-              {departments.map((d) => (
-                <option key={d.name} value={d.name}>
-                  {d.name}
-                </option>
-              ))}
+              {departments
+                .filter((d) => d.name !== values.department)
+                .map((d) => (
+                  <option key={d.name} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
             </select>
           </Field>
         ) : (
@@ -756,6 +786,11 @@ export function MovementForm({
         </div>
       </div>
 
+      {formError && (
+        <p role="alert" className="mt-4 text-[12px] font-semibold text-rag-red">
+          {formError}
+        </p>
+      )}
       <div className="mt-6 flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
           {translate("common.cancel", "Annuler")}
