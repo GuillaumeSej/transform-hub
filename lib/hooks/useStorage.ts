@@ -124,6 +124,8 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   // rapprochées, ex. créer une action juste après en avoir supprimé une autre).
   const leversRef = useRef(levers);
   leversRef.current = levers;
+  const programConfigRef = useRef(programConfig);
+  programConfigRef.current = programConfig;
   const commentsRef = useRef(comments);
   commentsRef.current = comments;
   const auditRef = useRef(audit);
@@ -400,15 +402,21 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
 
   /** Import Excel en masse (leviers + actions + impacts) — voir lib/leverExcelImport.ts pour la
    *  validation/construction des lignes en amont. Un seul writeBatch Firestore pour tout le lot. */
+  /** Non optimiste, comme `createLever` : l'écriture Firestore est attendue avant de mettre à
+   *  jour l'écran et l'audit, et une erreur est propagée à l'appelant — sinon l'import affichait
+   *  « Import Excel terminé » alors que rien n'était enregistré. */
   const importLevers = useCallback(
-    (inputs: Omit<Lever, "id" | "createdAt" | "lastUpdate">[]) => {
+    async (inputs: Omit<Lever, "id" | "createdAt" | "lastUpdate">[]) => {
       const result = leversLogic.bulkUpsertLeversByCode(leversRef.current, inputs, DEMO_USER);
-      leversRef.current = result.levers;
-      setLevers(result.levers);
+      await leversDb.saveLeversBatch(result.changedLevers);
+      // La souscription Firestore a pu livrer une partie des écritures pendant l'attente :
+      // repartir de l'état le plus récent et y remplacer/ajouter les leviers écrits.
+      const changedById = new Map(result.changedLevers.map((l) => [l.id, l]));
+      const next = leversRef.current.map((l) => changedById.get(l.id) ?? l);
+      for (const l of result.changedLevers) if (!next.some((x) => x.id === l.id)) next.push(l);
+      leversRef.current = next;
+      setLevers(next);
       persistAudit(result.auditEntries);
-      leversDb
-        .saveLeversBatch(result.changedLevers)
-        .catch((err) => console.error("[betrack] import leviers :", err));
       return result;
     },
     [persistAudit]
@@ -420,17 +428,17 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
    *  référencés par un fichier mais absents de l'entreprise (voir lib/leverExcelImport.ts,
    *  LeverImportPreview.toCreateWorkstreams). */
   const addWorkstreams = useCallback(
-    (newOnes: Workstream[]) => {
+    async (newOnes: Workstream[]) => {
       if (newOnes.length === 0) return;
-      setProgramConfig((prev) => {
-        const byId = new Map(prev.workstreams.map((w) => [w.id, w]));
-        for (const w of newOnes) byId.set(w.id, w);
-        const next = { ...prev, workstreams: Array.from(byId.values()) };
-        programDb
-          .saveProgramConfig(next, companyId)
-          .catch((err) => console.error("[betrack] ajout workstreams :", err));
-        return next;
-      });
+      const prev = programConfigRef.current;
+      const byId = new Map(prev.workstreams.map((w) => [w.id, w]));
+      for (const w of newOnes) byId.set(w.id, w);
+      const next = { ...prev, workstreams: Array.from(byId.values()) };
+      // Attendue (et propagée en cas d'échec) : l'import écrit les leviers APRÈS les chantiers
+      // qu'ils référencent, et ne doit pas annoncer un succès si ceux-ci n'ont pas été créés.
+      await programDb.saveProgramConfig(next, companyId);
+      programConfigRef.current = next;
+      setProgramConfig(next);
     },
     [companyId]
   );

@@ -1162,6 +1162,9 @@ const en: Record<string, string> = {
     "because they are missing from the file's Actions sheet: {list}.",
   "shared.leverImportButton.noActionsSheet":
     'No "Actions" sheet in this file: existing action plans are kept.',
+  "shared.leverImportButton.importFailedTitle": "Import failed",
+  "shared.leverImportButton.importFailedBody":
+    "No initiative was saved. Check your access to this company and try again.",
   "shared.leverImportButton.workstreamsNoteIntro":
     "work package(s) referenced in the file do not yet exist for this company, and",
   "shared.leverImportButton.willBeCreatedPlural": "will be created",

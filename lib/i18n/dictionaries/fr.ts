@@ -1201,6 +1201,9 @@ const fr: Record<string, string> = {
     "car absentes de la feuille Actions du fichier : {list}.",
   "shared.leverImportButton.noActionsSheet":
     "Pas de feuille « Actions » dans ce fichier : les plans d'action existants sont conservés.",
+  "shared.leverImportButton.importFailedTitle": "Échec de l'import",
+  "shared.leverImportButton.importFailedBody":
+    "Aucun levier n'a été enregistré. Vérifiez vos droits sur l'entreprise et réessayez.",
   "shared.leverImportButton.workstreamsNoteIntro":
     "chantier(s) référencé(s) dans le fichier n'existe(nt) pas encore pour cette entreprise et",
   "shared.leverImportButton.willBeCreatedPlural": "seront créés",

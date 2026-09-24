@@ -1165,6 +1165,9 @@ const de: Record<string, string> = {
     "da sie im Blatt „Actions“ der Datei fehlen: {list}.",
   "shared.leverImportButton.noActionsSheet":
     "Kein Blatt „Actions“ in dieser Datei: bestehende Maßnahmenpläne bleiben erhalten.",
+  "shared.leverImportButton.importFailedTitle": "Import fehlgeschlagen",
+  "shared.leverImportButton.importFailedBody":
+    "Es wurde kein Hebel gespeichert. Prüfen Sie Ihre Berechtigungen für das Unternehmen und versuchen Sie es erneut.",
   "shared.leverImportButton.workstreamsNoteIntro":
     "in der Datei referenzierte(s) Arbeitspaket(e) existiert/existieren für dieses Unternehmen noch nicht, und",
   "shared.leverImportButton.willBeCreatedPlural": "werden erstellt",

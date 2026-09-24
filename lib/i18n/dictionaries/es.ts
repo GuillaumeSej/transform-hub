@@ -1166,6 +1166,9 @@ const es: Record<string, string> = {
     "porque no figuran en la hoja Actions del archivo: {list}.",
   "shared.leverImportButton.noActionsSheet":
     "No hay hoja «Actions» en este archivo: se conservan los planes de acción existentes.",
+  "shared.leverImportButton.importFailedTitle": "La importación ha fallado",
+  "shared.leverImportButton.importFailedBody":
+    "No se ha guardado ninguna palanca. Compruebe sus permisos sobre la empresa e inténtelo de nuevo.",
   "shared.leverImportButton.workstreamsNoteIntro":
     "proyecto(s) referenciado(s) en el archivo aún no existe(n) para esta empresa, y",
   "shared.leverImportButton.willBeCreatedPlural": "se crearán",

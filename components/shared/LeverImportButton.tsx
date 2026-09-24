@@ -61,13 +61,15 @@ export function LeverImportButton({
   /** Programme sélectionné dans l'app : cible des lignes sans colonne "Programme" renseignée, et
    *  valeur pré-remplie de cette colonne dans le modèle téléchargé. */
   defaultProgramId?: string | null;
-  onImport: (rows: LeverImportPreview["toUpsert"]) => {
+  /** Asynchrone : doit être rejetée si l'écriture échoue (le toast de succès n'est affiché
+   *  qu'une fois la promesse résolue). */
+  onImport: (rows: LeverImportPreview["toUpsert"]) => Promise<{
     createdCount: number;
     updatedCount: number;
-  };
+  }>;
   /** Persiste les workstreams auto-créés (voir LeverImportPreview.toCreateWorkstreams) — appelé
    *  AVANT onImport pour que les leviers importés référencent des workstreams déjà enregistrés. */
-  onCreateWorkstreams: (workstreams: Workstream[]) => void;
+  onCreateWorkstreams: (workstreams: Workstream[]) => Promise<void>;
 }) {
   const { showToast } = useToast();
   const { t } = useTranslation();
@@ -132,14 +134,14 @@ export function LeverImportButton({
   /** Écriture effective (workstreams auto-créés puis leviers) — appelée soit directement depuis
    *  `confirmImport` (aucun levier à réconcilier), soit après résolution du dialogue de
    *  réconciliation propriétaire (voir `resolveReconciliation` plus bas). */
-  const writeImport = (rowsToUpsert: LeverImportPreview["toUpsert"]) => {
+  const writeImport = async (rowsToUpsert: LeverImportPreview["toUpsert"]) => {
     if (!preview) return;
     setImporting(true);
     try {
       if (preview.toCreateWorkstreams.length > 0) {
-        onCreateWorkstreams(preview.toCreateWorkstreams);
+        await onCreateWorkstreams(preview.toCreateWorkstreams);
       }
-      const { createdCount, updatedCount } = onImport(rowsToUpsert);
+      const { createdCount, updatedCount } = await onImport(rowsToUpsert);
       const wsNote =
         preview.toCreateWorkstreams.length > 0
           ? ` · ${t("shared.leverImportButton.workstreamsCreatedNote", "{n} chantier(s) créé(s)").replace("{n}", String(preview.toCreateWorkstreams.length))}`
@@ -162,6 +164,18 @@ export function LeverImportButton({
       );
       setPreview(null);
       setReconciliationQueue(null);
+    } catch (err) {
+      // L'aperçu reste ouvert : l'utilisateur peut corriger (droits, connexion) et réessayer.
+      console.error("[betrack] import leviers :", err);
+      setReconciliationQueue(null);
+      showToast(
+        t("shared.leverImportButton.importFailedTitle", "Échec de l'import"),
+        t(
+          "shared.leverImportButton.importFailedBody",
+          "Aucun levier n'a été enregistré. Vérifiez vos droits sur l'entreprise et réessayez."
+        ),
+        "error"
+      );
     } finally {
       setImporting(false);
     }
@@ -176,7 +190,7 @@ export function LeverImportButton({
     if (!preview || preview.toUpsert.length === 0) return;
     const queue = buildReconciliationQueue(preview.toUpsert, companyUsers);
     if (queue.length === 0) {
-      writeImport(preview.toUpsert);
+      void writeImport(preview.toUpsert);
       return;
     }
     setReconciliationQueue(queue);
@@ -189,7 +203,7 @@ export function LeverImportButton({
       if (!decision) return row;
       return { ...row, owner: decision.owner, ownerUsername: decision.ownerUsername };
     });
-    writeImport(resolvedRows);
+    void writeImport(resolvedRows);
   };
 
   return (
