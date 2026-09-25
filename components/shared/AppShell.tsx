@@ -19,7 +19,11 @@ import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
 import { useNotifications } from "@/lib/hooks/useNotifications";
-import { useApprovalQueue, useMilestoneApprovalQueue } from "@/lib/hooks/useApprovalQueue";
+import {
+  useApprovalQueue,
+  useMilestoneApprovalQueue,
+  useRealizedApprovalQueue,
+} from "@/lib/hooks/useApprovalQueue";
 import { useStrategicApprovals } from "@/lib/hooks/useStrategicApprovals";
 import { StrategicApprovalsProvider } from "@/lib/hooks/useStrategicApprovalsContext";
 import { APPROVAL_ALERT_ROUTE } from "@/lib/strategicApprovals";
@@ -58,6 +62,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   // (calculé plus bas) puisque `resolveApprovalQueue` ne retient déjà que les leviers portant un
   // `approval` en cours, structurellement absent en mode stratégique.
   const approvalQueue = useApprovalQueue(data, user);
+  // Impacts cochés « Réalisé » en attente de la finance (audit C4) — vide hors profil finance.
+  const realizedApprovalQueue = useRealizedApprovalQueue(data, user);
   const [ready, setReady] = useState(false);
   const [noAccess, setNoAccess] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -369,9 +375,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
-          alertCount={shellAlerts.length + approvalQueue.count + milestoneApprovalQueue.count}
+          alertCount={
+            shellAlerts.length +
+            approvalQueue.count +
+            milestoneApprovalQueue.count +
+            realizedApprovalQueue.count
+          }
           alerts={shellAlerts}
           approvalQueue={approvalQueue.queue}
+          realizedApprovalQueue={realizedApprovalQueue.queue}
           milestoneApprovalQueue={milestoneApprovalQueue.queue}
           onAlertClick={(alert) => {
             if (isStrategic) {

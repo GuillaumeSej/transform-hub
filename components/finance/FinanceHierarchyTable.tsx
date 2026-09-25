@@ -22,7 +22,7 @@ const COLUMNS: { key: Exclude<FinanceSortKey, "label">; labelKey: string; label:
   { key: "planned", labelKey: "finance.hierarchyTable.col.planned", label: "Planifié initial" },
   { key: "reforecast", labelKey: "finance.hierarchyTable.col.reforecast", label: "Réactualisé" },
   { key: "cancelled", labelKey: "finance.hierarchyTable.col.cancelled", label: "Annulé" },
-  { key: "late", labelKey: "finance.hierarchyTable.col.late", label: "En retard" },
+  { key: "late", labelKey: "finance.hierarchyTable.col.late", label: "Gains en retard" },
   { key: "realized", labelKey: "finance.hierarchyTable.col.realized", label: "Réalisé" },
 ];
 

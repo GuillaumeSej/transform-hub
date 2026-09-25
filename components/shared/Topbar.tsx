@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtCurr } from "@/lib/engine";
+
 import { useDismissable } from "@/lib/hooks/useDismissable";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
@@ -11,7 +13,10 @@ import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 
 import { getDisplayRoleDefinition } from "@/lib/nav-config";
 import { displayMilestoneId } from "@/lib/axisLogic";
-import type { MilestoneApprovalQueueEntry } from "@/lib/hooks/useApprovalQueue";
+import type {
+  MilestoneApprovalQueueEntry,
+  RealizedApprovalEntry,
+} from "@/lib/hooks/useApprovalQueue";
 import { Avatar } from "@/components/shared/Avatar";
 import type { Alert, Company, Lever } from "@/types";
 import { subscribeCompanies } from "@/lib/firestore/admin";
@@ -96,6 +101,7 @@ export function Topbar({
   onAlertClick,
   approvalQueue = [],
   milestoneApprovalQueue = [],
+  realizedApprovalQueue = [],
 }: {
   alertCount: number;
   onMenuClick: () => void;
@@ -116,6 +122,9 @@ export function Topbar({
    *  s'affichent donc jamais en même temps en pratique, même mécanisme que `AppShell.tsx`'s
    *  `approvalQueue`/`shellAlerts`. */
   milestoneApprovalQueue?: MilestoneApprovalQueueEntry[];
+  /** Impacts cochés « Réalisé » en attente de validation finance (profil finance uniquement,
+   *  voir `useRealizedApprovalQueue`) — la décision se prend dans la page Validation. */
+  realizedApprovalQueue?: RealizedApprovalEntry[];
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -210,7 +219,8 @@ export function Topbar({
               <div className="max-h-[360px] overflow-y-auto">
                 {alerts.length === 0 &&
                 approvalQueue.length === 0 &&
-                milestoneApprovalQueue.length === 0 ? (
+                milestoneApprovalQueue.length === 0 &&
+                realizedApprovalQueue.length === 0 ? (
                   <p className="px-4 py-6 text-center text-xs text-tertiary">
                     {t("shared.topbar.noNotifications", "Aucune notification à traiter.")}
                   </p>
@@ -254,6 +264,39 @@ export function Topbar({
                     plutôt qu'un onglet : le dropdown n'a pas de structure à onglets existante.
                     Liste courte (badge de notification) — la page /validation offre la vue
                     complète avec actions inline. */}
+                {realizedApprovalQueue.length > 0 && (
+                  <div className="border-t-2 border-border">
+                    <div className="bg-neutral-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                      {t("validation.realized.title", "Réalisés à valider")}
+                    </div>
+                    {realizedApprovalQueue.map(({ lever, impact }) => (
+                      <button
+                        key={`${lever.id}-${impact.id}`}
+                        type="button"
+                        onClick={async () => {
+                          const proceed = await confirmDiscard();
+                          if (!proceed) return;
+                          setAlertsOpen(false);
+                          router.push("/validation");
+                        }}
+                        className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
+                      >
+                        <span className="block text-xs font-semibold text-primary">
+                          {lever.name}
+                        </span>
+                        <span className="mt-1 block text-[11px] text-secondary">
+                          {impact.label}
+                        </span>
+                        <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
+                          {t(
+                            "shared.topbar.realizedPending",
+                            "Réalisé à valider · {amount}"
+                          ).replace("{amount}", fmtCurr(impact.amount))}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {approvalQueue.length > 0 && (
                   <div className="border-t-2 border-border">
                     <div className="bg-neutral-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-tertiary">

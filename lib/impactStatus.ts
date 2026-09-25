@@ -1,4 +1,4 @@
-import type { AuthUser, LeverImpact } from "@/types";
+import type { AuthUser, LeverImpact, LeverStatus } from "@/types";
 import { hasRole } from "@/lib/roleProfiles";
 
 export type ImpactStatus = NonNullable<LeverImpact["status"]>;
@@ -65,9 +65,26 @@ export function impactStatusOf(
  * (champ absent, données antérieures) ou une fois approuvé, il compte. Un impact rejeté est repassé
  * « planned » par `decideImpactRealized`, donc non réalisé.
  */
-export function isImpactRealized(imp: LeverImpact, today: Date = new Date()): boolean {
+export function isImpactRealized(
+  imp: LeverImpact,
+  today: Date = new Date(),
+  /** Stade du levier porteur. Avant son lancement (Identifié / Validé / Planifié), une date passée
+   *  ne suffit pas : seul un impact coché « Réalisé » à la main compte (décision audit C4 — sinon
+   *  des coûts datés faisaient des réalisés négatifs sur des leviers jamais démarrés). Absent =
+   *  pas de contrainte de stade. */
+  leverStatus?: LeverStatus
+): boolean {
   if (impactStatusOf(imp, today) === "planned") return false;
+  if (!imp.status && leverStatus && !LAUNCHED_LEVER_STATUSES.includes(leverStatus)) return false;
   return imp.realizedApproval?.status !== "pending";
+}
+
+/** Stades où le levier est lancé (« Exécuté », « Réalisé ») — voir `isImpactRealized`. */
+const LAUNCHED_LEVER_STATUSES: readonly LeverStatus[] = ["in_progress", "delivered"];
+
+/** Impact de GAIN (économie, ou départ ETP) — par opposition aux coûts et aux recrutements. */
+export function isGainImpact(imp: LeverImpact): boolean {
+  return imp.type === "saving" || (imp.type === "fte" && imp.fteDirection !== "hire");
 }
 
 /**
@@ -82,9 +99,10 @@ export function isImpactRealized(imp: LeverImpact, today: Date = new Date()): bo
 export function isImpactLate(
   imp: LeverImpact,
   today: Date = new Date(),
-  fallbackDate?: string
+  fallbackDate?: string,
+  leverStatus?: LeverStatus
 ): boolean {
-  if (isImpactRealized(imp, today)) return false;
+  if (isImpactRealized(imp, today, leverStatus)) return false;
   if (imp.realizedApproval?.status === "pending") return false;
   const start = impactStartDateOf(imp) ?? fallbackDate;
   if (!start) return false;

@@ -25,6 +25,7 @@ import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-con
 import type { LeverStatus } from "@/types";
 import {
   impactStatusOf,
+  isGainImpact,
   isImpactLate,
   isImpactRealized,
   isRecurringImpact,
@@ -169,6 +170,7 @@ export function leverActionProgress(lever: Pick<Lever, "actions">): number {
  *  net (jamais dans le "net", règle métier constante — voir `leverImpactTotals`). */
 function impactsRealizedNet(
   impacts: LeverImpact[],
+  leverStatus?: Lever["status"],
   today: Date = new Date()
 ): { gross: number; opexRec: number; fte: number } {
   let gross = 0;
@@ -177,7 +179,7 @@ function impactsRealizedNet(
   for (const imp of impacts) {
     // Règle UNIQUE « réalisé » (audit M7) : statut effectif non planifié ET validé par la finance
     // (ou sans workflow de validation) — voir `isImpactRealized`, complément de `isImpactLate`.
-    if (!isImpactRealized(imp, today)) continue;
+    if (!isImpactRealized(imp, today, leverStatus)) continue;
     if (imp.type === "saving") {
       if (imp.gainRecurrence !== "oneoff") gross += imp.amount;
       if (imp.fteCount) fte += imp.fteCount;
@@ -231,7 +233,7 @@ function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): nu
 export function realizedSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   if (lever.impacts && lever.impacts.length > 0) {
-    const { gross, opexRec } = impactsRealizedNet(lever.impacts);
+    const { gross, opexRec } = impactsRealizedNet(lever.impacts, lever.status);
     return round2(gross - opexRec);
   }
   return doneActionImpactsTotal(lever, "net");
@@ -241,7 +243,7 @@ export function realizedSavings(lever: Lever): number {
 export function realizedGrossSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   if (lever.impacts && lever.impacts.length > 0) {
-    return impactsRealizedNet(lever.impacts).gross;
+    return impactsRealizedNet(lever.impacts, lever.status).gross;
   }
   return doneActionImpactsTotal(lever, "gross");
 }
@@ -394,7 +396,7 @@ export function displayedProgressPct(lever: Lever): number {
 export function realizedFte(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   if (lever.impacts && lever.impacts.length > 0) {
-    return impactsRealizedNet(lever.impacts).fte;
+    return impactsRealizedNet(lever.impacts, lever.status).fte;
   }
   return Math.round(doneActionImpactsTotal(lever, "fte") * 10) / 10;
 }
@@ -678,7 +680,7 @@ function leverNetLines(lever: Lever, today: Date): LeverNetLine[] {
         imp,
         signed,
         date,
-        realized: !cancelled && isImpactRealized(imp, today),
+        realized: !cancelled && isImpactRealized(imp, today, lever.status),
         realDate: date,
       });
     }
@@ -1579,7 +1581,11 @@ export function isLeverLate(lever: Lever, today: Date = new Date()): boolean {
   // `isImpactRealized` — un impact ne peut plus être à la fois compté réalisé ET en retard (avant,
   // un impact daté dans le passé sans statut saisi était les deux). Échéance d'un impact sans date
   // propre : la fin du levier.
-  return leverImpactsOf(lever).some((imp) => isImpactLate(imp, today, lever.end));
+  // « Gains en retard » : seuls les impacts de GAIN (un coût non engagé n'est pas un retard de
+  // gain) — notion distincte des « Actions en retard » du plan d'action (décision audit C4).
+  return leverImpactsOf(lever).some(
+    (imp) => isGainImpact(imp) && isImpactLate(imp, today, lever.end, lever.status)
+  );
 }
 
 export function savingsSeries(

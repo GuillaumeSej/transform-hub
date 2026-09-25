@@ -4,12 +4,14 @@ import { useMemo } from "react";
 import { canDecideMilestone } from "@/lib/axisLogic";
 import { isLeverSponsoredBy } from "@/lib/leversLogic";
 import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
+import { canDecideImpactRealized, isImpactRealizedPending } from "@/lib/impactStatus";
 import type {
   AuthUser,
   BeTrackData,
   Chantier,
   ChantierAction,
   Lever,
+  LeverImpact,
   StrategicAxis,
 } from "@/types";
 
@@ -65,6 +67,37 @@ export function useApprovalQueue(data: BeTrackData, user: AuthUser | null | unde
     queue,
     count: queue.length,
   };
+}
+
+// ─── Réalisés à valider (profil finance) ────────────────────────────────────────────────────
+//
+// Impacts cochés « Réalisé » par un profil non-finance : ils restent HORS du réalisé tant que la
+// finance n'a pas décidé (voir `isImpactRealized`, audit C4). Avant, cette décision n'était
+// possible que dans l'onglet Impact de la fiche, sans aucune file pour la finance.
+
+/** Une ligne de la file « Réalisés à valider » : l'impact en attente et son levier. */
+export type RealizedApprovalEntry = { lever: Lever; impact: LeverImpact };
+
+export function resolveRealizedApprovalQueue(
+  data: Pick<BeTrackData, "levers">,
+  user: AuthUser | null | undefined
+): RealizedApprovalEntry[] {
+  if (!canDecideImpactRealized(user)) return [];
+  return data.levers
+    .filter((lever) => lever.status !== "cancelled")
+    .flatMap((lever) =>
+      (lever.impacts ?? [])
+        .filter((impact) => isImpactRealizedPending(impact))
+        .map((impact) => ({ lever, impact }))
+    );
+}
+
+export function useRealizedApprovalQueue(
+  data: Pick<BeTrackData, "levers">,
+  user: AuthUser | null | undefined
+) {
+  const queue = useMemo(() => resolveRealizedApprovalQueue(data, user), [data, user]);
+  return { queue, count: queue.length };
 }
 
 // ─── Pendant Plan Stratégique — jalons E0→E4 (round "jalon validation gate") ───────────────────

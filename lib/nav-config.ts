@@ -150,6 +150,14 @@ export const roles: Record<Role, RoleDefinition> = {
         label: "nav.financeModule",
         programTypes: ["performance"],
       },
+      // File « Réalisés à valider » (impacts cochés réalisés en attente de la finance, audit C4).
+      {
+        id: "validation",
+        icon: "ShieldCheck",
+        label: "nav.validation",
+        programTypes: ["performance"],
+        section: "decision",
+      },
       {
         id: "levers",
         icon: "Target",
