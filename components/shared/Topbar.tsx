@@ -26,6 +26,7 @@ import { alertDesc, alertTitle } from "@/lib/alertText";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
 
 const CRUMBS: Record<string, string> = {
+  "/me": "nav.myWorkspace",
   "/dashboard": "nav.executiveDashboard",
   "/levers": "nav.leverLibrary",
   "/kpi": "nav.kpi",

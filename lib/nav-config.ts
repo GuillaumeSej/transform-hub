@@ -32,6 +32,13 @@ import type { AuthUser, NavItem, Role, RoleDefinition } from "@/types";
  *     elle qui alimente désormais `"effectifs"` (comparaison besoin/disponible par équipe) ;
  *   - Finance / RH (dashboard) / Workstreams / Opérations n'ont pas de sens sans leviers et
  *     restent donc réservés au Plan Performance. */
+/** « Mon espace » (route `/me`, portail personnel en lecture seule — voir app/(app)/me/page.tsx) :
+ *  PREMIER item de CHAQUE définition de nav (rôles métier des deux plans + habilitations admin),
+ *  donc aussi page d'atterrissage post-connexion (`resolveUserNav(user)[0]`, voir login/page.tsx)
+ *  et repli d'AppShell. Sans `programTypes` : commun aux deux plans. Même objet partagé partout —
+ *  `resolveUserNav` ne garde de toute façon que sa 1re occurrence. */
+const ME_NAV_ITEM: NavItem = { id: "me", icon: "UserCircle", label: "nav.myWorkspace" };
+
 /** Nav du `cto` — même écrans/périmètre que les deux rôles "programme" de la fondation vue
  *  consolidée (`program_sponsor`/`program_owner`, voir types/index.ts) : SEULE leur VISIBILITÉ
  *  diffère (tous les programmes de l'entreprise pour `cto`, seulement ceux dont l'utilisateur est
@@ -40,6 +47,7 @@ import type { AuthUser, NavItem, Role, RoleDefinition } from "@/types";
  *  diverger accidentellement au fil des rounds futurs (une modification de la nav CTO doit se
  *  répercuter automatiquement sur les deux nouveaux rôles). */
 const CTO_LIKE_NAV: RoleDefinition["nav"] = [
+  ME_NAV_ITEM,
   { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
   {
     id: "levers",
@@ -103,6 +111,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.sponsor.label",
     short: "roles.sponsor.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "workstreams",
         icon: "Layers",
@@ -130,6 +139,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.lever.label",
     short: "roles.lever.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -144,6 +154,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.finance.label",
     short: "roles.finance.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "finance",
         icon: "LineChart",
@@ -172,6 +183,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.hr.label",
     short: "roles.hr.short",
     nav: [
+      ME_NAV_ITEM,
       { id: "hr", icon: "PieChart", label: "nav.hrDashboard", programTypes: ["performance"] },
       // Round 13 : voir le commentaire identique sur le rôle `cto` ci-dessus.
       { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
@@ -189,6 +201,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.ops.label",
     short: "roles.ops.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "operations",
         icon: "Factory",
@@ -223,6 +236,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.strategicLead.label",
     short: "roles.strategicLead.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -273,6 +287,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.axisSponsor.label",
     short: "roles.axisSponsor.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -296,6 +311,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.chantierOwner.label",
     short: "roles.chantierOwner.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -319,6 +335,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.chantierContributor.label",
     short: "roles.chantierContributor.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -342,6 +359,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.internalComm.label",
     short: "roles.internalComm.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -356,6 +374,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.budgetControl.label",
     short: "roles.budgetControl.short",
     nav: [
+      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -386,6 +405,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.comexMember.label",
     short: "roles.comexMember.short",
     nav: [
+      ME_NAV_ITEM,
       { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
       {
         id: "levers",
@@ -409,6 +429,7 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
     label: "roles.admin.label",
     short: "roles.admin.short",
     nav: [
+      ME_NAV_ITEM,
       { id: "admin-companies", icon: "Building2", label: "nav.companies" },
       // Portes de validation (voir CTO_LIKE_NAV ci-dessus) : un admin peut agir sur n'importe
       // quelle demande en cours (isAnyAdmin, lib/leversLogic.ts::approveLeverGate), doit donc
@@ -425,6 +446,7 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
     label: "roles.admin_entreprise.label",
     short: "roles.admin_entreprise.short",
     nav: [
+      ME_NAV_ITEM,
       { id: "admin-users", icon: "Users", label: "nav.users" },
       { id: "admin-data", icon: "BarChart3", label: "nav.data" },
       { id: "admin-history", icon: "History", label: "nav.history" },
@@ -488,6 +510,7 @@ export function getDisplayRoleDefinition(
 }
 
 export const PAGE_ROUTES: Record<string, string> = {
+  me: "/me",
   dashboard: "/dashboard",
   workstreams: "/workstreams",
   levers: "/levers",

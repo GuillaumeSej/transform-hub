@@ -32,6 +32,7 @@ import {
   ShieldCheck,
   Sigma,
   TrendingUp,
+  UserCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -72,4 +73,5 @@ export const ICON_REGISTRY: Record<string, LucideIcon> = {
   Unlink,
   Gauge,
   Sigma,
+  UserCircle,
 };
