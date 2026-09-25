@@ -51,7 +51,7 @@ const sectionHeaders = (nav: NavItem[]) =>
     .map((i) => i.section);
 
 describe("« Mon espace » in the « Mes actions » (decision) section", () => {
-  const PILOT_ROLES: Role[] = ["cto", "program_sponsor", "program_owner"];
+  const PILOT_ROLES: Role[] = ["cto", "program_sponsor", "program_owner", "strategic_lead"];
   const allDefs = [
     ...Object.entries(roles)
       .filter(([role]) => !PILOT_ROLES.includes(role as Role))
@@ -72,7 +72,16 @@ describe("« Mon espace » in the « Mes actions » (decision) section", () => {
   );
 
   it.each(PILOT_ROLES)("%s: no « Mon espace » (pilot profile, see Validation tab)", (role) => {
-    expect(roles[role].nav.some((i) => i.id === "me")).toBe(false);
+    expect(resolveUserNav(u(role)).some((i) => i.id === "me")).toBe(false);
+  });
+
+  it("test.cto (cto + strategic_lead), and a pilot who is also admin or operational: no « Mon espace »", () => {
+    expect(resolveUserNav(u("cto", "strategic_lead")).some((i) => i.id === "me")).toBe(false);
+    expect(resolveUserNav(u("strategic_lead", "chantier_owner")).some((i) => i.id === "me")).toBe(
+      false
+    );
+    const pilotAdmin = { ...u("cto"), isCompanyAdmin: true } as AuthUser;
+    expect(resolveUserNav(pilotAdmin).some((i) => i.id === "me")).toBe(false);
   });
 
   it.each(Object.keys(roles) as Role[])(
@@ -101,13 +110,19 @@ describe("« Mon espace » in the « Mes actions » (decision) section", () => {
 });
 
 describe("resolveLandingRoute — /me for operational profiles, dashboard for pilots", () => {
-  const PILOTS: Role[] = ["cto", "program_sponsor", "program_owner"];
+  const PILOTS: Role[] = ["cto", "program_sponsor", "program_owner", "strategic_lead"];
   it.each((Object.keys(roles) as Role[]).filter((r) => !PILOTS.includes(r)))("%s → /me", (role) => {
     expect(resolveLandingRoute(resolveUserNav(u(role)))).toBe("/me");
   });
 
-  it.each(PILOTS)("%s → /dashboard", (role) => {
-    expect(resolveLandingRoute(resolveUserNav(u(role)))).toBe("/dashboard");
+  it.each(PILOTS)("%s → never /me (first page of its nav)", (role) => {
+    const nav = resolveUserNav(u(role));
+    expect(resolveLandingRoute(nav)).not.toBe("/me");
+  });
+
+  it("cto → /dashboard ; test.cto (cto + strategic_lead) → /dashboard", () => {
+    expect(resolveLandingRoute(resolveUserNav(u("cto")))).toBe("/dashboard");
+    expect(resolveLandingRoute(resolveUserNav(u("cto", "strategic_lead")))).toBe("/dashboard");
   });
 
   it("admins → /me", () => {

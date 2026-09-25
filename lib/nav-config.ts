@@ -473,6 +473,15 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
  *  Plan Stratégique, admin global, admin entreprise — dans cet ordre. Point de passage UNIQUE pour
  *  cette logique, consommé par AppShell (garde-fou de routes), Sidebar, Topbar et l'écran de login
  *  (page d'atterrissage post-connexion) : ne pas la dupliquer ailleurs. */
+/** Profils de pilotage sans « Mon espace » : leurs décisions sont dans Validation (onglet « En
+ *  attente chez d'autres » compris) et leur vue d'ensemble dans le tableau de bord. */
+const PILOT_ROLES_WITHOUT_ME: Role[] = [
+  "cto",
+  "program_sponsor",
+  "program_owner",
+  "strategic_lead",
+];
+
 export function resolveUserNav(
   user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
 ): NavItem[] {
@@ -482,10 +491,18 @@ export function resolveUserNav(
   if (user?.isGlobalAdmin) navLists.push(ADMIN_NAV_DEFINITIONS.global.nav);
   if (user?.isCompanyAdmin) navLists.push(ADMIN_NAV_DEFINITIONS.company.nav);
 
+  // « Mon espace » n'est PAS proposé aux profils de pilotage (doublon de Validation et du tableau
+  // de bord, voir CTO_LIKE_NAV) — y compris quand un autre profil cumulé de l'utilisateur
+  // l'apporterait (ex. test.cto = cto + strategic_lead, ou pilote + admin) : le menu est l'union
+  // des navs de tous ses profils, d'où ce filtre au niveau de l'union plutôt que par rôle.
+  const isPilot = [...getPerformanceProfiles(user), ...getStrategicProfiles(user)].some((p) =>
+    PILOT_ROLES_WITHOUT_ME.includes(p.role)
+  );
   const seen = new Set<string>();
   const result: NavItem[] = [];
   for (const list of navLists) {
     for (const item of list) {
+      if (isPilot && item.id === "me") continue;
       if (seen.has(item.id)) continue;
       seen.add(item.id);
       result.push(item);
