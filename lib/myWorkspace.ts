@@ -840,15 +840,15 @@ function buildPerimeter(
       });
     }
     for (const chantier of chantiers) {
-      const pilote = chantier.pilote === user.username;
-      const sponsor = !pilote && chantier.sponsorName === user.username;
-      if (!pilote && !sponsor) continue;
+      // Seul le sponsor de chantier (`pilote`) compte : `sponsorName` (ex-« sponsor COMEX ») n'a
+      // plus de rôle (décision PO).
+      if (chantier.pilote !== user.username) continue;
       out.push({
         id: `chantier:${chantier.id}`,
         kind: "chantier",
         plan: "strategic",
         label: chantier.name,
-        role: pilote ? t("me.role.pilote", "Pilote") : roleSponsor,
+        role: t("me.role.pilote", "Sponsor de chantier"),
         health: healthOf(chantier),
         progressPct: average(
           chantierActions.filter((a) => a.chantierId === chantier.id).map(progressOf)

@@ -258,6 +258,13 @@ export function assertValidProfiles(
    *  sur un programme Stratégique). Sans cette table, comportement historique (les deux pistes). */
   programTypeById?: Record<string, ProgramType>
 ): void {
+  // Directeur RH : un seul programme pour l'instant (décision PO) — le profil doit viser un
+  // programme précis, jamais « tous les programmes ».
+  if (profiles.some((p) => p.role === "hr" && !p.programId)) {
+    throw new Error(
+      "Le profil Directeur RH doit être rattaché à un programme précis (pas « tous les programmes »)."
+    );
+  }
   for (const [trackLabel, isTrackRole, trackType] of [
     ["Plan Performance", isPerformanceRole, "performance"],
     ["Plan Stratégique", isStrategicRole, "strategic"],

@@ -1056,7 +1056,9 @@ function ChantierActionForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [owner, setOwner] = useState<string | undefined>(initial?.owner);
   const [contributors, setContributors] = useState<string[]>(initial?.contributors ?? []);
-  const [sponsor, setSponsor] = useState<string | undefined>(initial?.sponsor);
+  // Plus de « sponsor » de projet saisissable (décision PO : pas de sponsor COMEX, seul le
+  // Membre du COMEX existe, en vue seule) — valeur historique conservée telle quelle à l'édition.
+  const sponsor = initial?.sponsor;
   const [start, setStart] = useState(initial?.start ?? today);
   const [end, setEnd] = useState(initial?.end ?? addDays(today, 30));
   // Round <n> : le champ "Étape" (MaturityStageConfig, Défini/Validé/Planifié/Exécuté/Réalisé)
@@ -1278,17 +1280,6 @@ function ChantierActionForm({
             title={designation?.contributorsTooltip}
           />
           {pendingOf("contributors")}
-        </div>
-        <div>
-          <UserPicker
-            users={users}
-            value={sponsor}
-            onChange={setSponsor}
-            label={`${labels.sponsor} ${labels.optional}`}
-            id="ca-sponsor"
-            disabled={!!pendingOf("sponsor")}
-          />
-          {pendingOf("sponsor")}
         </div>
         <div>
           <label className="text-xs font-medium text-secondary" htmlFor="ca-indicator">
@@ -2857,11 +2848,6 @@ export function ChantierDetailPanel({
               )}
               <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {renderChantierPerson(
-                  "sponsorName",
-                  t("strategicChantierDetail.sponsor"),
-                  "chantier-sponsor"
-                )}
-                {renderChantierPerson(
                   "pilote",
                   t("strategicChantierDetail.pilote"),
                   "chantier-pilote"
@@ -3649,12 +3635,6 @@ export function ChantierDetailPanel({
                                     {resolveUserLabel(action.owner, data.users)}
                                   </span>
                                 </>
-                              )}
-                              {action.sponsor && (
-                                <span>
-                                  · {t("strategicChantierDetail.sponsor")} :{" "}
-                                  {resolveUserLabel(action.sponsor, data.users)}
-                                </span>
                               )}
                               {(action.contributors?.length ?? 0) > 0 && (
                                 <span>

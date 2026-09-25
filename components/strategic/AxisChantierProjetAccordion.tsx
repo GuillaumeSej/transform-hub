@@ -284,12 +284,7 @@ export function AxisChantierProjetAccordion({
                             />
                           }
                           name={chantier.name}
-                          owner={
-                            chantier.pilote ??
-                            chantier.sponsorName ??
-                            mostFrequentOwner(projets) ??
-                            noOwner
-                          }
+                          owner={chantier.pilote ?? mostFrequentOwner(projets) ?? noOwner}
                           count={fmt("strategicAxes.tree.projetsN", "{n} projet(s)", {
                             n: projets.length,
                           })}

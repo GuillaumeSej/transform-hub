@@ -571,9 +571,7 @@ export function StrategicAxesView() {
                   </span>
                   <span className="block truncate text-[10.5px] text-tertiary">
                     {axisNames || "-"} ·{" "}
-                    {c.pilote ??
-                      c.sponsorName ??
-                      t("strategicAxes.tree.noOwner", "Aucun responsable")}
+                    {c.pilote ?? t("strategicAxes.tree.noOwner", "Aucun responsable")}
                   </span>
                 </span>
                 <span className="w-[120px] shrink-0">

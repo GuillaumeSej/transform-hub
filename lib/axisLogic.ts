@@ -2354,7 +2354,6 @@ export function resolveChantierOwner(
   unassignedLabel: string
 ): string {
   if (chantier.pilote) return chantier.pilote;
-  if (chantier.sponsorName) return chantier.sponsorName;
   const axis = axes.find((a) => a.id === chantier.axisIds[0]);
   return axis?.owner ?? unassignedLabel;
 }

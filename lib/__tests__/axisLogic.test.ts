@@ -2619,9 +2619,9 @@ describe("resolveChantierOwner", () => {
     expect(resolveChantierOwner(chantier, [], FALLBACK)).toBe("jean.dupont");
   });
 
-  it("falls back to the chantier's sponsorName when pilote is unset", () => {
+  it("ignores the legacy sponsorName (ex-« sponsor COMEX », no longer a role)", () => {
     const chantier = makeChantier("CH1", { sponsorName: "marie.martin" });
-    expect(resolveChantierOwner(chantier, [], FALLBACK)).toBe("marie.martin");
+    expect(resolveChantierOwner(chantier, [], FALLBACK)).toBe(FALLBACK);
   });
 
   it("falls back to the parent axis owner when both pilote and sponsorName are unset", () => {
@@ -2657,10 +2657,10 @@ describe("resolveIndicatorOwner", () => {
     expect(resolveIndicatorOwner(indicator, [], chantiers, FALLBACK)).toBe("jean.dupont");
   });
 
-  it("falls back to the chantier's sponsorName when pilote is unset", () => {
+  it("ignores the legacy sponsorName (ex-« sponsor COMEX », no longer a role)", () => {
     const chantiers = [makeChantier("CH1", { sponsorName: "marie.martin" })];
     const indicator = makeIndicator({ chantierId: "CH1" });
-    expect(resolveIndicatorOwner(indicator, [], chantiers, FALLBACK)).toBe("marie.martin");
+    expect(resolveIndicatorOwner(indicator, [], chantiers, FALLBACK)).toBe(FALLBACK);
   });
 
   it("resolves the axis owner for a macro indicator (no chantierId)", () => {
