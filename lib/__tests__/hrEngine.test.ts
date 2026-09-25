@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   MOVEMENT_TYPES,
+  ALERT_KIND_SEVERITY,
+  alertPrimaryBreakdown,
   alertedMovementIds,
+  primaryAlertKindByMovement,
   bucketByLever,
   currentFTE,
   deltaByDepartment,
@@ -28,6 +31,7 @@ import {
   transferDepartmentLegs,
   withDerivedWorkforceBaseline,
 } from "@/lib/hrEngine";
+import type { MovementAlert } from "@/lib/hrEngine";
 import { loadedAnnualSalary } from "@/lib/hrFinancials";
 import type { Employee, Lever, Workforce, WorkforceMovement } from "@/types";
 
@@ -939,6 +943,45 @@ describe("hrEngine — movementAlerts (réalisé non validé, m1 / M4)", () => {
     expect(alertedMovementIds(alerts)).toEqual(["M1"]);
     expect(alertedMovementIds(alerts, "toValidate")).toEqual(["M1"]);
     expect(alertedMovementIds(alerts, ["overdue"])).toEqual([]);
+  });
+});
+
+describe("hrEngine — alertPrimaryBreakdown (un mouvement = une catégorie principale)", () => {
+  it("assigns each alerted movement to its most severe kind so parts sum to the distinct total", () => {
+    const m = (id: string) => makeMovement({ id });
+    const alerts: MovementAlert[] = [
+      // M1 : en retard ET désynchronisé → désynchronisé (plus grave)
+      { movement: m("M1"), kind: "overdue", message: "" },
+      { movement: m("M1"), kind: "leverMismatch", message: "" },
+      { movement: m("M1"), kind: "leverMismatch", message: "" },
+      // M2 : à valider ET désynchronisé → désynchronisé
+      { movement: m("M2"), kind: "toValidate", message: "" },
+      { movement: m("M2"), kind: "leverMismatch", message: "" },
+      // M3 : en retard seul
+      { movement: m("M3"), kind: "overdue", message: "" },
+      // M4 : échéance proche seule
+      { movement: m("M4"), kind: "due", message: "" },
+    ];
+    const primary = primaryAlertKindByMovement(alerts);
+    expect(primary.get("M1")).toBe("leverMismatch");
+    expect(primary.get("M2")).toBe("leverMismatch");
+    expect(primary.get("M3")).toBe("overdue");
+    expect(primary.get("M4")).toBe("due");
+
+    const b = alertPrimaryBreakdown(alerts);
+    expect(b.total).toBe(alertedMovementIds(alerts).length);
+    expect(b.total).toBe(4);
+    expect(b.parts).toEqual([
+      { kind: "leverMismatch", count: 2 },
+      { kind: "overdue", count: 1 },
+      { kind: "due", count: 1 },
+    ]);
+    expect(b.parts.reduce((s, p) => s + p.count, 0)).toBe(b.total);
+    expect(ALERT_KIND_SEVERITY).toEqual(["leverMismatch", "overdue", "toValidate", "due"]);
+  });
+
+  it("returns an empty breakdown without alerts", () => {
+    expect(alertPrimaryBreakdown([])).toEqual({ total: 0, parts: [] });
   });
 });
 

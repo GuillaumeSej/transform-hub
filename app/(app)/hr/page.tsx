@@ -12,7 +12,6 @@ import {
   Maximize2,
   Plus,
   RotateCcw,
-  TriangleAlert,
   Users,
   X,
 } from "lucide-react";
@@ -52,6 +51,7 @@ import {
 } from "@/components/shared/charts/MovementProgressByDimensionChart";
 import { MovementDetailDrilldownModal } from "@/components/shared/MovementDetailDrilldownModal";
 import { MovementAlertsSummaryModal } from "@/components/shared/MovementAlertsSummaryModal";
+import { MovementAlertsBreakdown } from "@/components/shared/MovementAlertsBreakdown";
 import { ExecutionStatusChart } from "@/components/shared/charts/HrExecutionCharts";
 import { MovementStatusMatrix } from "@/components/shared/charts/MovementStatusMatrix";
 import { ForcedDepartureStatusChart } from "@/components/shared/charts/ForcedDepartureStatusChart";
@@ -66,6 +66,7 @@ import {
 import { type FilterDef } from "@/components/shared/filterTypes";
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import { DropdownFilterBar } from "@/components/shared/DropdownFilterBar";
+import { FilterToggleButton, useFilterBarExpanded } from "@/components/shared/CollapsibleFilterBar";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter, parseFilterValues, serializeFilterValues } from "@/lib/filterUtils";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
@@ -90,12 +91,7 @@ import {
   subscribePrograms,
 } from "@/lib/firestore/admin";
 import { buildMovementTableRows, type HrMovementTableRow } from "@/lib/hrMovementTable";
-import {
-  executionLabel,
-  movementAlertMessage,
-  movementStatusLabel,
-  movementTypeLabel,
-} from "@/lib/hrMovementLabels";
+import { executionLabel, movementStatusLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
 import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceLogic";
 import { forcedDeparturesBySocialScheme } from "@/lib/hrSocialPlan";
 import {
@@ -140,17 +136,6 @@ import {
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatMillions, formatNumber, intlTag } from "@/lib/format";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
-
-function alertLabels(
-  t: (key: string, fallback?: string) => string
-): Record<MovementAlertKind, string> {
-  return {
-    overdue: t("hr.alert.overdue", "En retard"),
-    leverMismatch: t("hr.alert.leverMismatch", "Désynchronisé levier"),
-    toValidate: t("hr.alert.toValidate", "À valider"),
-    due: t("hr.alert.due", "Échéance proche"),
-  };
-}
 
 /** Libellé lisible d'une vue construite (builder générique RH) — `label` explicite si fourni,
  *  sinon généré à partir des libellés de la métrique et de la dimension. */
@@ -513,6 +498,11 @@ export default function HrDashboardPage() {
     [scopedMovements, rangeFrom, rangeTo]
   );
 
+  // Filtres repliés derrière un bouton "Filtres" (même pattern que la Bibliothèque des leviers).
+  const { expanded: filterBarExpanded, toggle: toggleFilterBar } = useFilterBarExpanded(
+    "betrack_hrFilterBar_expanded"
+  );
+  const activeFilterCount = Object.values(activeFilters).filter((v) => (v?.length ?? 0) > 0).length;
   const hasActiveFilters = Object.keys(activeFilters).some(
     (key) => (activeFilters[key]?.length ?? 0) > 0
   );
@@ -809,13 +799,6 @@ export default function HrDashboardPage() {
   const goalPct = reductionGoal > 0 ? Math.round((reductionDone / reductionGoal) * 100) : 100;
   // Cible de la waterfall de la PÉRIODE : ouverture + impact cible des mouvements de la plage.
   const waterfallTarget = targetFteFromBaseline(bridgeOpening, summary.fte.target);
-
-  const ALERT_LABELS = alertLabels(t);
-  // Compteurs en MOUVEMENTS distincts (un mouvement peut porter plusieurs alertes), M4.
-  const alertedMovementCount = hr.alertedMovementIds(alerts).length;
-  const alertCounts = (Object.keys(ALERT_LABELS) as MovementAlertKind[])
-    .map((kind) => ({ kind, count: hr.alertedMovementIds(alerts, kind).length }))
-    .filter((a) => a.count > 0);
 
   const drill = useMemo(() => {
     if (!drillBucket) return [];
@@ -1937,6 +1920,11 @@ export default function HrDashboardPage() {
           </div>
         </div>
         <div className="hidden items-center gap-2 lg:flex">
+          <FilterToggleButton
+            expanded={filterBarExpanded}
+            onToggle={toggleFilterBar}
+            activeCount={activeFilterCount}
+          />
           {!editMode && (
             <DashboardExportButton
               layout={layout}
@@ -1964,24 +1952,31 @@ export default function HrDashboardPage() {
         </div>
         {/* Mobile : bouton condensé pour la Base ETP */}
         <div className="flex items-center gap-2 lg:hidden">
+          <FilterToggleButton
+            expanded={filterBarExpanded}
+            onToggle={toggleFilterBar}
+            activeCount={activeFilterCount}
+          />
           <Button variant="primary" size="sm" onClick={() => router.push("/hr/etp")}>
             <Users size={13} /> {t("nav.hrEtp", "Base ETP")}
           </Button>
         </div>
       </div>
 
-      {/* Filtres RH — rangée de dropdowns compacts (voir `DropdownFilterBar.tsx`), passent
-          naturellement à la ligne sur mobile via `flex-wrap`. Filtrent tous les graphiques et
-          KPI. */}
-      <div className="mb-4">
-        <DropdownFilterBar
-          items={wf.movements}
-          multiple
-          defs={filterDefs}
-          active={activeFilters}
-          onChange={setActiveFilters}
-        />
-      </div>
+      {/* Filtres RH — repliés derrière le bouton "Filtres" de l'en-tête (même pattern que la
+          Bibliothèque des leviers) ; une fois dépliés, rangée de dropdowns compacts pleine largeur
+          (voir `DropdownFilterBar.tsx`). Filtrent tous les graphiques et KPI. */}
+      {filterBarExpanded && (
+        <div className="mb-4 rounded-lg border border-border bg-white p-3">
+          <DropdownFilterBar
+            items={wf.movements}
+            multiple
+            defs={filterDefs}
+            active={activeFilters}
+            onChange={setActiveFilters}
+          />
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════════════════════════
           BARRE D'AVANCEMENT ETP — pleine largeur, pas de cadre blanc isolé : lecture immédiate
@@ -1989,17 +1984,34 @@ export default function HrDashboardPage() {
           ═══════════════════════════════════════════════════════════════════════════════════════ */}
       <div className="mb-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div className="flex items-baseline gap-2">
+          {/* Cliquable : ouvre le détail "qui a fait quoi" des mouvements du périmètre (statut,
+              dates, levier…) via la même modale que "Avancement des mouvements par {dimension}". */}
+          <button
+            type="button"
+            onClick={() =>
+              setProgressDrilldown({
+                title: t("hr.movementsRealizedDetailTitle", "Mouvements réalisés — {a}/{b}")
+                  .replace("{a}", String(realizedMovements))
+                  .replace("{b}", String(filteredMovements.length)),
+                movements: filteredMovements,
+              })
+            }
+            title={t("hr.movementsRealizedDetailHint", "Voir le détail des mouvements")}
+            className="group flex items-baseline gap-2 text-left"
+          >
             <span className="text-[28px] font-bold leading-none tracking-tight text-primary">
               {realizedMovements}
               <span className="text-[18px] font-semibold text-tertiary">
                 /{filteredMovements.length}
               </span>
             </span>
-            <span className="text-[13px] text-secondary">
+            <span className="text-[13px] text-secondary group-hover:underline">
               {t("hr.movementsRealizedLabel", "mouvements réalisés")}
             </span>
-          </div>
+            <span className="text-[12px] font-medium text-bp-coral opacity-0 transition group-hover:opacity-100">
+              {t("hr.seeDetail", "Voir le détail →")}
+            </span>
+          </button>
           {absoluteAvailable ? (
             <div className="flex items-center gap-3 text-[12px] tabular-nums text-secondary">
               <span>
@@ -2127,57 +2139,9 @@ export default function HrDashboardPage() {
       {/* ═══════════════════════════════════════════════════════════════════════════════════════
           ALERTES MOUVEMENTS — sous les KPI, pas au-dessus.
           ═══════════════════════════════════════════════════════════════════════════════════════ */}
-      {alerts.length > 0 && (
-        <div className="mb-4 rounded-lg border border-rag-amber-light bg-rag-amber-light/30 p-3">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setAlertsModal({ kind: null })}
-              className="flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
-            >
-              <TriangleAlert size={14} className="text-rag-amber" />{" "}
-              {t("hr.alertedMovementsCount", "{n} mouvement(s) en alerte").replace(
-                "{n}",
-                String(alertedMovementCount)
-              )}
-            </button>
-            {alertCounts.map(({ kind, count }) => (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => setAlertsModal({ kind })}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition hover:border-black ${
-                  kind === "overdue" || kind === "leverMismatch"
-                    ? "border-rag-red-light bg-rag-red-light/60 text-rag-red"
-                    : "border-border bg-white text-secondary"
-                }`}
-              >
-                {ALERT_LABELS[kind]} · {count}
-              </button>
-            ))}
-          </div>
-          <div className="space-y-1">
-            {alerts.slice(0, 3).map((a, i) => (
-              <div key={i} className="text-xs text-secondary">
-                <span className="font-mono text-[10px] text-tertiary">{a.movement.id}</span>{" "}
-                {movementAlertMessage(t, a)}
-              </div>
-            ))}
-            {alerts.length > 3 && (
-              <button
-                type="button"
-                onClick={() => setAlertsModal({ kind: null })}
-                className="text-xs font-medium text-bp-coral hover:underline"
-              >
-                {t("hr.alertsModal.seeAll", "Voir la synthèse des {n} alertes →").replace(
-                  "{n}",
-                  String(alerts.length)
-                )}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Un seul chiffre (mouvements distincts) + barre 100 % par catégorie principale : la somme
+          des segments = le titre ; clic titre/segment → synthèse (toutes / filtrée). */}
+      <MovementAlertsBreakdown alerts={alerts} onOpen={(kind) => setAlertsModal({ kind })} />
 
       {editMode && (
         <div className="mb-4 rounded-lg border-2 border-bp-coral/30 bg-bp-coral/[0.04]">

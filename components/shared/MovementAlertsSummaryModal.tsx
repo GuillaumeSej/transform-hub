@@ -6,7 +6,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/shared/Modal";
 import type { MovementAlert, MovementAlertKind } from "@/lib/hrEngine";
 import { etpMovementDeepLink } from "@/lib/hrMovementLink";
-import { alertedMovementIds } from "@/lib/hrEngine";
+import {
+  ALERT_KIND_SEVERITY,
+  alertedMovementIds,
+  primaryAlertKindByMovement,
+} from "@/lib/hrEngine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Locale } from "@/lib/i18n/locales";
 import {
@@ -19,8 +23,8 @@ import { intlTag } from "@/lib/format";
 
 type T = (key: string, fallback?: string) => string;
 
-/** Ordre d'affichage des sections = ordre de gravité (même priorité que `movementAlerts`). */
-const KIND_ORDER: MovementAlertKind[] = ["overdue", "leverMismatch", "toValidate", "due"];
+/** Ordre d'affichage des sections = ordre de gravité (`ALERT_KIND_SEVERITY`, lib/hrEngine.ts). */
+const KIND_ORDER = ALERT_KIND_SEVERITY;
 
 /** Pastille de compteur des en-têtes de section — tokens de la charte uniquement. */
 const KIND_BADGE: Record<MovementAlertKind, string> = {
@@ -118,6 +122,10 @@ function fmtFte(n: number, unit: string): string {
  *   par catégorie d'alerte passerait par `etpAlertFilterLink` avec les CODES stables
  *   (`MovementAlertKind`), jamais les libellés traduits.
  * - Compteurs exprimés en mouvements distincts (un mouvement peut porter plusieurs alertes).
+ * - Chaque mouvement n'apparaît que dans UNE section : sa catégorie PRINCIPALE (la plus grave,
+ *   `primaryAlertKindByMovement`) — même regroupement que la barre de répartition du dashboard,
+ *   donc le chiffre d'un segment = le nombre de mouvements affichés en cliquant dessus. Les autres
+ *   catégories du mouvement sont rappelées sur sa ligne (« Aussi : … »).
  */
 export function MovementAlertsSummaryModal({
   open,
@@ -149,9 +157,22 @@ export function MovementAlertsSummaryModal({
 
   const leverById = useMemo(() => new Map(levers.map((l) => [l.id, l])), [levers]);
 
+  // Catégorie principale de chaque mouvement + toutes ses catégories (pour le rappel « Aussi »).
+  const { primary, kindsByMovement } = useMemo(() => {
+    const kinds = new Map<string, Set<MovementAlertKind>>();
+    for (const a of alerts) {
+      const set = kinds.get(a.movement.id) ?? new Set<MovementAlertKind>();
+      set.add(a.kind);
+      kinds.set(a.movement.id, set);
+    }
+    return { primary: primaryAlertKindByMovement(alerts), kindsByMovement: kinds };
+  }, [alerts]);
+
   const groups = useMemo(() => {
     const byKind = new Map<MovementAlertKind, MovementAlert[]>();
     for (const a of alerts) {
+      // Une section ne liste que les mouvements dont c'est la catégorie principale.
+      if (primary.get(a.movement.id) !== a.kind) continue;
       const list = byKind.get(a.kind) ?? [];
       list.push(a);
       byKind.set(a.kind, list);
@@ -165,7 +186,7 @@ export function MovementAlertsSummaryModal({
           a.movement.label.localeCompare(b.movement.label, "fr")
       ),
     }));
-  }, [alerts]);
+  }, [alerts, primary]);
 
   const visibleGroups = activeKind ? groups.filter((g) => g.kind === activeKind) : groups;
   const dash = "—";
@@ -296,6 +317,7 @@ export function MovementAlertsSummaryModal({
     const program = m.programId ? (programLabels[m.programId] ?? m.programId) : "";
     const lever = leverLabelOf(a);
     const context = [program, lever !== dash ? lever : ""].filter(Boolean).join(" · ");
+    const otherKinds = KIND_ORDER.filter((k) => k !== a.kind && kindsByMovement.get(m.id)?.has(k));
     const place = [m.department, m.country].filter(Boolean).join(" · ") || dash;
     const u = urgency(a);
     const mm = isMismatch ? mismatch(a) : null;
@@ -324,6 +346,14 @@ export function MovementAlertsSummaryModal({
               </span>
             </span>
             {context && <span className="truncate text-[11.5px] text-tertiary">{context}</span>}
+            {otherKinds.length > 0 && (
+              <span className="text-[11px] text-secondary">
+                {t("hr.alertsModal.alsoFlagged", "Aussi : {kinds}").replace(
+                  "{kinds}",
+                  otherKinds.map((k) => sectionTitle(t, k)).join(", ")
+                )}
+              </span>
+            )}
           </span>
 
           {/* Où : département · pays */}
@@ -453,7 +483,7 @@ export function MovementAlertsSummaryModal({
                   <span
                     className={`min-w-[1.5rem] rounded-full border px-2 py-0.5 text-center text-[11px] font-bold tabular-nums ${KIND_BADGE[g.kind]}`}
                   >
-                    {g.items.length}
+                    {distinctCount(g.items)}
                   </span>
                 </button>
                 {!isCollapsed && (

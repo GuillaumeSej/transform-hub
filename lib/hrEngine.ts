@@ -1206,6 +1206,49 @@ export function alertedMovementIds(
   return Array.from(ids);
 }
 
+/** Ordre de GRAVITÉ des catégories d'alerte, de la plus grave à la moins grave. Sert à ranger
+ *  chaque mouvement dans UNE seule catégorie « principale » (sa plus grave), pour que la
+ *  répartition du dashboard somme exactement au nombre de mouvements en alerte :
+ *  désynchronisé levier (donnée incohérente avec le plan) > en retard > à valider > échéance proche. */
+export const ALERT_KIND_SEVERITY: readonly MovementAlertKind[] = [
+  "leverMismatch",
+  "overdue",
+  "toValidate",
+  "due",
+];
+
+/** Catégorie principale (la plus grave, cf. `ALERT_KIND_SEVERITY`) de chaque mouvement en alerte. */
+export function primaryAlertKindByMovement(
+  alerts: MovementAlert[]
+): Map<string, MovementAlertKind> {
+  const rank = (k: MovementAlertKind) => ALERT_KIND_SEVERITY.indexOf(k);
+  const map = new Map<string, MovementAlertKind>();
+  for (const a of alerts) {
+    const cur = map.get(a.movement.id);
+    if (cur === undefined || rank(a.kind) < rank(cur)) map.set(a.movement.id, a.kind);
+  }
+  return map;
+}
+
+/** Répartition des mouvements en alerte par catégorie PRINCIPALE (un mouvement = une catégorie) :
+ *  `total` = nombre de mouvements distincts (= `alertedMovementIds(alerts).length`) et la somme des
+ *  `parts[].count` vaut exactement `total`. `parts` est trié par gravité, catégories vides exclues. */
+export function alertPrimaryBreakdown(alerts: MovementAlert[]): {
+  total: number;
+  parts: { kind: MovementAlertKind; count: number }[];
+} {
+  const primary = primaryAlertKindByMovement(alerts);
+  const counts = new Map<MovementAlertKind, number>();
+  for (const k of Array.from(primary.values())) counts.set(k, (counts.get(k) ?? 0) + 1);
+  return {
+    total: primary.size,
+    parts: ALERT_KIND_SEVERITY.filter((k) => counts.has(k)).map((kind) => ({
+      kind,
+      count: counts.get(kind) ?? 0,
+    })),
+  };
+}
+
 export function movementAlerts(
   wf: Workforce,
   levers: Lever[],
