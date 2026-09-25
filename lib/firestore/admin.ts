@@ -25,6 +25,7 @@ import type {
 } from "@/types";
 import { hierarchyDomain } from "@/lib/hierarchyLogic";
 import { accountSlug } from "@/lib/auth";
+import { normalizeLegacyProfiles } from "@/lib/roleProfiles";
 import { DEMO_HIERARCHY_NODES } from "@/data/mockData";
 
 // --- Companies ---
@@ -279,7 +280,13 @@ export function subscribeUsers(
       const users = snap.docs
         .map((d) => ({ id: d.id, data: d.data() as AuthUser }))
         .filter(({ id, data }) => id === accountSlug(data.username, data.companyId))
-        .map(({ data }) => data);
+        // Rôles stratégiques supprimés (internal_comm/budget_control) relus comme comex_member —
+        // même normalisation que lib/auth.ts ; réécrits au nouveau format au prochain saveUser.
+        .map(({ data }) =>
+          Array.isArray(data.profiles)
+            ? { ...data, profiles: normalizeLegacyProfiles(data.profiles) }
+            : data
+        );
       cb(users);
     },
     onListenerError("adminUsers")

@@ -2,13 +2,17 @@ import { describe, it, expect } from "vitest";
 import {
   assertValidProfiles,
   getPerformanceProfiles,
+  getAuthorizedPrograms,
   getStrategicProfiles,
   hasRole,
+  isCrossTrackRole,
   isPerformanceRole,
   isReadOnlyUser,
+  isStrategicRole,
+  normalizeLegacyProfiles,
 } from "@/lib/roleProfiles";
 import { resolveConfidentialityClearance } from "@/lib/leversLogic";
-import type { ProfileAssignment } from "@/types";
+import type { ProfileAssignment, Program } from "@/types";
 
 describe("program_sponsor / program_owner — fondation vue consolidée (nouveaux rôles Plan Performance)", () => {
   it("are Performance-track roles, not Strategic", () => {
@@ -188,5 +192,82 @@ describe("isReadOnlyUser — round 25 (gate d'édition COMEX)", () => {
     expect(isReadOnlyUser({ profiles: [{ role: "comex_member" }], isCompanyAdmin: true })).toBe(
       false
     );
+  });
+});
+
+describe("rôles Plan Stratégique — décision PO (hr transverse, projet_contributor, rôles supprimés)", () => {
+  it("hr and comex_member are cross-track; projet_contributor is strategic only", () => {
+    expect(isCrossTrackRole("hr")).toBe(true);
+    expect(isCrossTrackRole("comex_member")).toBe(true);
+    expect(isCrossTrackRole("strategic_lead")).toBe(false);
+    expect(isStrategicRole("projet_contributor")).toBe(true);
+    expect(isPerformanceRole("projet_contributor")).toBe(false);
+  });
+
+  it("normalizeLegacyProfiles maps internal_comm/budget_control to comex_member (same program) and dedupes", () => {
+    const legacy = [
+      { role: "internal_comm", programId: "s1" },
+      { role: "comex_member", programId: "s1" },
+      { role: "budget_control" },
+      { role: "hr", programId: "p1" },
+    ] as unknown as ProfileAssignment[];
+    expect(normalizeLegacyProfiles(legacy)).toEqual([
+      { role: "comex_member", programId: "s1" },
+      { role: "comex_member" },
+      { role: "hr", programId: "p1" },
+    ]);
+  });
+
+  it("isReadOnlyUser(user, programId): read-only when only comex_member/hr on that program", () => {
+    const user = {
+      profiles: [
+        { role: "hr" as const, programId: "s1" },
+        { role: "chantier_owner" as const, programId: "s2" },
+      ],
+    };
+    expect(isReadOnlyUser(user, "s1", "strategic")).toBe(true);
+    expect(isReadOnlyUser(user, "s2", "strategic")).toBe(false);
+    // Sans programme : comportement historique (hr ne verrouille pas).
+    expect(isReadOnlyUser(user)).toBe(false);
+    expect(isReadOnlyUser({ profiles: [{ role: "hr" }] }, "s1", "strategic")).toBe(true);
+    expect(isReadOnlyUser({ profiles: [{ role: "hr" }], isCompanyAdmin: true }, "s1")).toBe(false);
+    // Profil "tous programmes" d'une autre piste : ignoré quand le type est connu.
+    const mixed = {
+      profiles: [{ role: "lever" as const }, { role: "hr" as const, programId: "s1" }],
+    };
+    expect(isReadOnlyUser(mixed, "s1", "strategic")).toBe(true);
+  });
+
+  it("getAuthorizedPrograms: a programId-less comex_member/hr profile sees BOTH program types (COMEX bug fix)", () => {
+    const programs = [
+      { id: "p1", type: "performance" },
+      { id: "s1", type: "strategic" },
+    ] as unknown as Program[];
+    for (const role of ["comex_member", "hr"] as const) {
+      expect(getAuthorizedPrograms({ profiles: [{ role }] }, programs).map((p) => p.id)).toEqual([
+        "p1",
+        "s1",
+      ]);
+    }
+    expect(
+      getAuthorizedPrograms({ profiles: [{ role: "axis_sponsor" }] }, programs).map((p) => p.id)
+    ).toEqual(["s1"]);
+  });
+
+  it("assertValidProfiles: a cross-track profile scoped to a program counts only in that program's track when types are given", () => {
+    const profiles: ProfileAssignment[] = [
+      { role: "hr", programId: "p1" },
+      { role: "strategic_lead", programId: "s1" },
+      { role: "cto", programId: "p2" },
+    ];
+    expect(() =>
+      assertValidProfiles(profiles, { p1: "performance", p2: "performance", s1: "strategic" })
+    ).not.toThrow();
+    expect(() =>
+      assertValidProfiles([
+        { role: "hr", programId: "s1" },
+        { role: "strategic_lead", programId: "s1" },
+      ])
+    ).toThrow();
   });
 });

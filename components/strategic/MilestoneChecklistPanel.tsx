@@ -132,6 +132,7 @@ export function MilestoneChecklistPanel({
   onRequestApproval,
   onApproveMilestone,
   onRejectMilestoneApproval,
+  readOnly = false,
 }: {
   milestoneId: MilestoneId;
   /** Réponses manuelles STOCKÉES du chantier pour ce jalon (les items `auto` n'y sont jamais lus,
@@ -157,9 +158,8 @@ export function MilestoneChecklistPanel({
   excludedItemIds: string[];
   users: AuthUser[];
   onChange: (nextItems: MilestoneChecklistItem[]) => void;
-  /** Ajoute une action personnalisée à CE jalon (libellé libre) — n'est rendu appelable (voir
-   *  `canSubmitApproval` ci-dessous) qu'au propriétaire du projet ou à un admin, cohérent avec qui
-   *  contrôle déjà les autres saisies de ce panneau. */
+  /** Ajoute une action personnalisée à CE jalon (libellé libre) — rendu appelable seulement hors
+   *  `readOnly` (responsable, contributeurs du projet et au-dessus), comme les autres saisies. */
   onAddCustomAction: (label: string) => void;
   /** Retire une action personnalisée de CE jalon (par id) — même habilitation que
    *  `onAddCustomAction`. */
@@ -170,9 +170,7 @@ export function MilestoneChecklistPanel({
   /** Propriétaire du projet ou admin (voir `requestMilestoneApproval`, lib/axisLogic.ts) : seul cas
    *  où le bouton "Valider le jalon" est rendu (mirroir du `canSubmitApproval` de
    *  `LeverDetailClientPerformance.tsx`, qui masque de même le bouton "Soumettre pour validation"
-   *  plutôt que de le désactiver pour un non-habilité). Réutilisé pour gater l'ajout/la suppression
-   *  d'actions personnalisées : seul qui pourrait soumettre le jalon peut aussi en modifier la
-   *  liste d'actions clés. */
+   *  plutôt que de le désactiver pour un non-habilité). */
   canSubmitApproval: boolean;
   /** `strategic_lead` du chantier parent ou admin (voir `approveMilestoneGate`) — affiche le bouton
    *  "Approuver" sur une demande en cours. */
@@ -185,6 +183,11 @@ export function MilestoneChecklistPanel({
   /** `comment` : motif de refus optionnel saisi dans le panneau (round "passage de jalon
    *  explicite") — vide/absent = refus sans commentaire. */
   onRejectMilestoneApproval: (comment?: string) => void;
+  /** Saisie de la check-list (avancement, plans d'action, actions personnalisées) désactivée :
+   *  utilisateur sans droit d'édition sur le projet (ni responsable, ni contributeur, ni
+   *  au-dessus), ou modification déjà en attente de validation. Les boutons de passage de jalon
+   *  restent gouvernés par `canSubmitApproval`/`canApproveMilestone`/`canRejectMilestoneApproval`. */
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const defs = MILESTONE_CHECKLISTS[milestoneId];
@@ -199,6 +202,7 @@ export function MilestoneChecklistPanel({
   const findStored = (itemId: string) => items.find((i) => i.itemId === itemId);
 
   const patchManualItem = (itemId: string, patch: Partial<MilestoneChecklistItem>) => {
+    if (readOnly) return;
     const existingIndex = items.findIndex((i) => i.itemId === itemId);
     const base: MilestoneChecklistItem = existingIndex >= 0 ? items[existingIndex] : { itemId };
     const merged = cleanChecklistItem({ ...base, ...patch, itemId });
@@ -291,6 +295,7 @@ export function MilestoneChecklistPanel({
               step={5}
               inputMode="numeric"
               value={pct ?? ""}
+              disabled={readOnly}
               onChange={(e) => handlePctChange(e.target.value)}
               placeholder="—"
               aria-label={t("strategicChantierDetail.milestones.actionPlan.progressAriaLabel")}
@@ -309,6 +314,7 @@ export function MilestoneChecklistPanel({
               <textarea
                 rows={2}
                 value={stored?.actionPlan?.description ?? ""}
+                disabled={readOnly}
                 onChange={(e) => patchActionPlan({ description: e.target.value })}
                 className={INPUT_CLASS}
               />
@@ -319,6 +325,7 @@ export function MilestoneChecklistPanel({
                   users={users}
                   value={stored?.actionPlan?.owner}
                   onChange={(username) => patchActionPlan({ owner: username })}
+                  disabled={readOnly}
                   label={t("strategicChantierDetail.milestones.actionPlan.owner")}
                   id={`milestone-owner-${itemId}`}
                 />
@@ -333,6 +340,7 @@ export function MilestoneChecklistPanel({
                 <DateInput
                   id={`milestone-due-${itemId}`}
                   value={stored?.actionPlan?.dueDate ?? ""}
+                  disabled={readOnly}
                   onChange={(v) => patchActionPlan({ dueDate: v })}
                   className={SMALL_INPUT_CLASS}
                 />
@@ -342,6 +350,7 @@ export function MilestoneChecklistPanel({
               <input
                 type="checkbox"
                 checked={stored?.resolved ?? false}
+                disabled={readOnly}
                 onChange={(e) =>
                   patchManualItem(itemId, {
                     resolved: e.target.checked,
@@ -388,18 +397,17 @@ export function MilestoneChecklistPanel({
 
         {/* ── Actions personnalisées de CE jalon (round "actions clés du jalon") — même rendu
           qu'un item fixe manuel ci-dessus, seul le libellé (libre, jamais i18n) et le bouton de
-          suppression diffèrent. Le bouton de suppression n'apparaît que pour qui pourrait aussi
-          soumettre le jalon (`canSubmitApproval`), la saisie de progression reste ouverte à tous
-          comme pour les items fixes (ce panneau ne gate déjà aucune autre saisie). ─────────── */}
+          suppression diffèrent. Ajout/suppression et saisie de progression : hors `readOnly`
+          seulement (droits d'édition du projet). ────────────────────────────────────────────── */}
         {customActions.map((custom) =>
           renderManualItemRow(
             custom.id,
             custom.label,
-            canSubmitApproval ? () => onRemoveCustomAction(custom.id) : undefined
+            !readOnly ? () => onRemoveCustomAction(custom.id) : undefined
           )
         )}
 
-        {canSubmitApproval && (
+        {!readOnly && (
           <div className="flex items-center gap-2 pt-1">
             <input
               value={newCustomLabel}

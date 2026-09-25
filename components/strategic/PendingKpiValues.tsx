@@ -4,17 +4,27 @@ import { Clock } from "lucide-react";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { approverLabel, pendingApprovals } from "@/lib/strategicApprovalFlows";
-import type { KpiValueApprovalPayload } from "@/lib/strategicApprovals";
+import {
+  approvalStepInfo,
+  pendingApproversOf,
+  type KpiValueApprovalPayload,
+} from "@/lib/strategicApprovals";
+import { displayUserName } from "@/lib/strategicApprovalView";
+import type { AuthUser } from "@/types";
 
-/** Valeurs KPI soumises et « en attente de validation » : lignes grisées (non publiées). */
+/** Valeurs KPI soumises et « en attente de validation » : lignes grisées (non publiées), avec
+ *  l'étape courante (« étape 1/2 ») et le(s) approbateur(s) attendu(s). */
 export function PendingKpiValues({
   indicatorId,
   unit,
   compact = false,
+  users,
 }: {
   indicatorId: string;
   unit?: string;
   compact?: boolean;
+  /** Pour afficher le NOM des approbateurs attendus (repli : username). */
+  users?: Pick<AuthUser, "username" | "name">[];
 }) {
   const { t } = useTranslation();
   const sa = useStrategicApprovalsApi();
@@ -32,6 +42,18 @@ export function PendingKpiValues({
     <ul className="space-y-1" aria-label={label}>
       {rows.map((a) => {
         const p = a.payload as KpiValueApprovalPayload;
+        const info = approvalStepInfo(a);
+        const who = a.chain?.length
+          ? pendingApproversOf(a)
+              .map((u) => displayUserName(u, users))
+              .join(", ")
+          : approverLabel(a);
+        const step =
+          info && info.total > 1
+            ? t("kpi.pendingStep", "étape {current}/{total}")
+                .replace("{current}", String(info.current))
+                .replace("{total}", String(info.total))
+            : "";
         return (
           <li
             key={a.id}
@@ -51,7 +73,8 @@ export function PendingKpiValues({
             </span>
             <span className="ml-auto text-[10.5px]">
               {label}
-              {approverLabel(a) ? ` — ${approverLabel(a)}` : ""}
+              {step ? ` (${step})` : ""}
+              {who ? ` — ${who}` : ""}
             </span>
           </li>
         );

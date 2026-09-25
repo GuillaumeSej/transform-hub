@@ -190,6 +190,9 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
+  // Directeur RH — rôle TRANSVERSE (Performance + Stratégique, décision PO « comme en Transfo »).
+  // Sur un programme stratégique : Effectifs + Base ETP (qu'il édite) + consultation du plan (axes),
+  // en LECTURE SEULE (voir `isReadOnlyUser(user, programId)`), sans validation ni KPI.
   hr: {
     label: "roles.hr.label",
     short: "roles.hr.short",
@@ -204,7 +207,6 @@ export const roles: Record<Role, RoleDefinition> = {
         label: "nav.leverLibrary",
         labelByProgramType: { strategic: "nav.axes" },
       },
-      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
     ],
   },
@@ -230,8 +232,9 @@ export const roles: Record<Role, RoleDefinition> = {
     ],
   },
 
-  // ─── Rôles du Plan Stratégique (organigramme 3-5-15 : axes → chantiers) ──────────────────────
-  // Ces 6 rôles n'ont PAS d'écran dédié pour l'instant : ils servent avant tout de valeurs
+  // ─── Rôles du Plan Stratégique (pilote > sponsor d'axe > sponsor de chantier > responsable
+  // projet > contributeur projet, voir lib/strategicHierarchy.ts) ────────────────────────────────
+  // Ces rôles n'ont PAS d'écran dédié pour l'instant : ils servent avant tout de valeurs
   // sélectionnables pour « qui est responsable de quoi » (`Indicator.responsibleRoles`,
   // `Chantier.responsibleRoles`). Ils reçoivent néanmoins tous la MÊME nav minimale — axes
   // (`levers`, relabelé « Axes stratégiques » en mode stratégique) + KPI — plutôt qu'une nav vide,
@@ -366,9 +369,12 @@ export const roles: Record<Role, RoleDefinition> = {
       },
     ],
   },
-  internal_comm: {
-    label: "roles.internalComm.label",
-    short: "roles.internalComm.short",
+  // Contributeur projet (`ChantierAction.contributors`) : même nav que le responsable projet
+  // (`chantier_contributor`) — ses droits PAR PROJET sont portés par le projet lui-même.
+  // (`internal_comm`/`budget_control`, rôles vides, ont été supprimés — décision PO.)
+  projet_contributor: {
+    label: "roles.projetContributor.label",
+    short: "roles.projetContributor.short",
     nav: [
       {
         id: "levers",
@@ -379,21 +385,14 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
       ME_NAV_ITEM,
-    ],
-  },
-  budget_control: {
-    label: "roles.budgetControl.label",
-    short: "roles.budgetControl.short",
-    nav: [
       {
-        id: "levers",
-        icon: "Target",
-        label: "nav.leverLibrary",
-        labelByProgramType: { strategic: "nav.axes" },
+        id: "validation",
+        icon: "ShieldCheck",
+        label: "nav.validation",
+        programTypes: ["strategic"],
+        section: "decision",
+        badge: "approvals",
       },
-      { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
-      { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
-      ME_NAV_ITEM,
     ],
   },
 

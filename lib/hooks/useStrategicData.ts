@@ -136,10 +136,12 @@ export type StrategicData = {
    *  `resolveStrategicOwnershipScope`, lib/axisLogic.ts. */
   ownershipScope: StrategicOwnershipScope;
   /** Projets réellement CLIQUABLES/ouvrables pour l'utilisateur courant — `"all"` (aucune
-   *  restriction, le cas de TOUS les rôles sauf `chantier_contributor`) ou l'ensemble précis de
-   *  leurs propres `ChantierAction.id`. Round 25, cas `chantier_contributor` : un projet peut être
-   *  VISIBLE (présent dans `chantierActions` ci-dessus, parce qu'il appartient à un chantier où ce
-   *  contributeur a au moins un projet à lui) sans être CLIQUABLE (ce n'est pas SON projet) — cette
+   *  restriction) ou l'ensemble précis des `ChantierAction.id` ouvrables : ceux des chantiers qu'il
+   *  sponsorise (ou dont il sponsorise l'axe) + ceux dont il est responsable (`owner`) OU
+   *  contributeur (`contributors`), traités à l'identique. Toujours un ensemble pour
+   *  `chantier_contributor`/`projet_contributor`. Un projet peut être VISIBLE (présent dans
+   *  `chantierActions` ci-dessus, parce qu'il appartient à un chantier où l'utilisateur est membre
+   *  d'au moins un projet) sans être CLIQUABLE (il n'en est pas membre) — cette
    *  distinction ne peut pas être un simple filtrage de liste (l'UI doit continuer à RENDRE le
    *  projet, juste le rendre inerte au clic), d'où ce champ séparé plutôt que de le fusionner dans
    *  `chantierActions`. Consommé par `ProgramRoadmap.tsx`/`AxisChantierProjetAccordion.tsx`/
@@ -267,12 +269,12 @@ export function useStrategicData(
    * voient toujours tout.
    *
    * Round 25 : ce MÊME paramètre active AUSSI le filtrage par propriétaire nommé (`axis_sponsor`/
-   * `chantier_owner`/`chantier_contributor`, voir `resolveStrategicOwnershipScope`,
+   * `chantier_owner`/`chantier_contributor`/`projet_contributor`, voir `resolveStrategicOwnershipScope`,
    * lib/axisLogic.ts) — un seul et même interrupteur pour les deux mécanismes (confidentialité ET
    * ownership) plutôt qu'un second paramètre : un appelant qui a migré pour activer l'un a de toute
    * façon besoin de l'autre, aucun call site connu ne veut l'un sans l'autre. `username` est
    * désormais nécessaire (en plus des champs déjà requis pour la confidentialité) pour comparer aux
-   * `owner`/`pilote` des entités.
+   * `owner`/`pilote`/`contributors` des entités.
    *
    * `name` (round audit trail Plan Stratégique) sert UNIQUEMENT à attribuer les entrées d'audit
    * (`AuditEntry.user`, voir `lib/strategicAuditLogic.ts`) à un auteur lisible — même convention
@@ -504,8 +506,8 @@ export function useStrategicData(
     if (ownershipScope.mode === "scoped") {
       // Indicateur chantier-scopé : visible si SON chantier l'est. Indicateur macro (pas de
       // `chantierId`, porté directement par l'axe) : visible si SON axe l'est — vrai pour
-      // `axis_sponsor` (ses propres axes) et, à titre d'orientation, pour `chantier_owner`/
-      // `chantier_contributor` sur l'axe PARENT de leur(s) chantier(s) visible(s) (même parti pris
+      // l'axe sponsorisé et, à titre d'orientation, l'axe PARENT d'un chantier visible via son
+      // sponsor ou l'un de ses projets (responsable ou contributeur) (même parti pris
       // que `axisIds` dans `resolveStrategicOwnershipScope`, lib/axisLogic.ts).
       visible = visible.filter((i) =>
         i.chantierId

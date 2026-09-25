@@ -466,6 +466,56 @@ describe("buildMyWorkspace", () => {
       waitingDays: 5,
     });
   });
+
+  it("demande à paliers : seul l'approbateur de l'étape COURANTE l'a « À faire » ; « bloqué chez » = cette étape", () => {
+    const approval: StrategicApproval = {
+      id: "S9",
+      companyId: "c1",
+      programId: "p2",
+      kind: "projet_delete",
+      targetType: "projet",
+      targetId: "X-9",
+      targetName: "Projet 9",
+      payload: {},
+      requestedBy: "alice",
+      requestedAt: "2026-09-05T09:00:00Z",
+      approverRole: "axis_sponsor",
+      approverUsername: "sofia",
+      approverUsernames: ["sofia"],
+      status: "pending",
+      chain: [
+        { level: "chantierSponsor", usernames: ["paul"], decidedBy: "paul", decision: "approved" },
+        { level: "axisSponsor", usernames: ["sofia"] },
+      ],
+      stepIndex: 1,
+    };
+    const strategic = makeStrategic({ approvals: [approval] });
+    // Étape 1 déjà validée par paul : plus rien pour lui.
+    const paul = makeUser("paul", [{ role: "chantier_owner", programId: "p2" }]);
+    const wsPaul = buildMyWorkspace({ user: paul, strategic, today: TODAY }, t);
+    expect(wsPaul.todo.filter((i) => i.source === "strategicApproval")).toEqual([]);
+    // Étape 2 : sofia.
+    const sofia = makeUser("sofia", [{ role: "axis_sponsor", programId: "p2" }]);
+    const wsSofia = buildMyWorkspace({ user: sofia, strategic, today: TODAY }, t);
+    expect(wsSofia.todo).toEqual([
+      expect.objectContaining({
+        id: "strategicApproval:S9",
+        title: "Valider la suppression d'un projet · Étape 2/2",
+      }),
+    ]);
+    // Vue pilotage (cto) : bloqué chez sofia (étape en cours), pas chez paul.
+    const cto = makeUser("carl", [
+      { role: "cto", programId: "p1" },
+      { role: "axis_sponsor", programId: "p2" },
+    ]);
+    const wsCto = buildMyWorkspace(
+      { user: cto, strategic, programs, users: [cto], today: TODAY },
+      t
+    );
+    expect(wsCto.blocked).toEqual([
+      expect.objectContaining({ id: "blockedValidation:strategic:S9", waitingOn: "sofia" }),
+    ]);
+  });
 });
 
 describe("missingMeasurementPeriod", () => {

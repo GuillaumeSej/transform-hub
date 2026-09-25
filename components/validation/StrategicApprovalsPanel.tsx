@@ -7,6 +7,7 @@ import { useToast } from "@/lib/hooks/useToast";
 import { parseNumber } from "@/lib/kpiHistory";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
+  canDecide,
   describeApproval,
   STRATEGIC_APPROVAL_KINDS,
   type KpiValueApprovalPayload,
@@ -15,6 +16,15 @@ import {
   type StrategicApprovalKind,
 } from "@/lib/strategicApprovals";
 import { intlTag } from "@/lib/format";
+import {
+  chainStepsView,
+  LEVEL_FALLBACK,
+  levelLabelKey,
+  patchDiffRows,
+  type ChainStepView,
+} from "@/lib/strategicApprovalView";
+import type { StrategicLevel } from "@/lib/strategicHierarchy";
+import type { AuthUser } from "@/types";
 
 type Tab = "todo" | "mine" | "history";
 
@@ -22,7 +32,10 @@ const KIND_FALLBACK: Record<StrategicApprovalKind, string> = {
   milestone: "Passage de jalon",
   kpi_value: "Valeur KPI",
   projet_create: "Ajout de projet",
+  projet_update: "Modification de projet",
   projet_delete: "Suppression de projet",
+  chantier_create: "Création de chantier",
+  chantier_update: "Modification de chantier",
   chantier_delete: "Suppression de chantier",
 };
 
@@ -57,10 +70,14 @@ type Api = {
 export function StrategicApprovalsPanel({
   api,
   data,
+  user,
   legacy,
 }: {
   api: Api;
   data: StrategicApprovalData;
+  /** Utilisateur courant : Approuver/Refuser seulement s'il peut décider le palier COURANT
+   *  (`canDecide`). Absent = on se fie au bucket `api.pending` (déjà filtré par palier). */
+  user?: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null;
   legacy?: React.ReactNode;
 }) {
   const { t } = useTranslation();
@@ -73,6 +90,17 @@ export function StrategicApprovalsPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const kindLabel = (k: StrategicApprovalKind) => t(`validation.sa.kind.${k}`, KIND_FALLBACK[k]);
+  const levelLabel = (l: StrategicLevel) => t(levelLabelKey(l), LEVEL_FALLBACK[l]);
+  /** Ids → libellés pour le diff des modifications (chantier/axes de rattachement, indicateur). */
+  const idNames = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const c of data.chantiers) out[c.id] = c.name;
+    for (const a of data.axes) out[a.id] = a.name;
+    for (const i of data.indicators) out[i.id] = i.name;
+    return out;
+  }, [data.chantiers, data.axes, data.indicators]);
+  const decidable = (a: StrategicApproval) =>
+    a.status === "pending" && (user === undefined || canDecide(user, a, data));
   /** Correction KPI (valeur modifiable par l'approbateur avant d'accepter). */
   const kpiCorrection = (a: StrategicApproval): KpiValueApprovalPayload | undefined => {
     if (a.kind !== "kpi_value") return undefined;
@@ -193,6 +221,8 @@ export function StrategicApprovalsPanel({
         <div className="space-y-3">
           {list.map((a) => {
             const d = describeApproval(a, data);
+            const steps = chainStepsView(a, data.users);
+            const diff = patchDiffRows(a, data.users, idNames);
             return (
               <Card key={a.id}>
                 <CardBody>
@@ -236,7 +266,10 @@ export function StrategicApprovalsPanel({
                         {t("validation.sa.approver", "Approbateur")} :{" "}
                       </dt>
                       <dd className="inline text-secondary">
-                        {a.approverUsername ?? a.approverRole}
+                        {a.chain?.length
+                          ? (steps.find((s) => s.state === "current")?.approverNames.join(", ") ??
+                            "—")
+                          : (a.approverUsername ?? a.approverRole)}
                       </dd>
                     </div>
                     {a.reason && (
@@ -269,20 +302,49 @@ export function StrategicApprovalsPanel({
                     )}
                   </dl>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-neutral-50 px-3 py-2 text-xs">
-                    <span className="text-tertiary">{t("validation.sa.before", "Avant")}</span>
-                    <span className="font-semibold text-primary">{d.before ?? "—"}</span>
-                    <span aria-hidden="true">→</span>
-                    <span className="text-tertiary">{t("validation.sa.after", "Après")}</span>
-                    <span className="font-semibold text-primary">
-                      {d.after ??
-                        (a.kind === "projet_delete" || a.kind === "chantier_delete"
-                          ? t("validation.sa.deleted", "Supprimé")
-                          : "—")}
-                    </span>
-                  </div>
+                  {steps.length > 0 && <ChainStepper steps={steps} levelLabel={levelLabel} />}
 
-                  {tab === "todo" && a.status === "pending" && kpiCorrection(a) && (
+                  {diff.length > 0 ? (
+                    <table className="mt-3 w-full rounded-md bg-neutral-50 text-left text-xs">
+                      <thead>
+                        <tr className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                          <th className="px-3 py-1.5">{t("validation.sa.field", "Champ")}</th>
+                          <th className="px-3 py-1.5">{t("validation.sa.before", "Avant")}</th>
+                          <th className="px-3 py-1.5" aria-hidden="true" />
+                          <th className="px-3 py-1.5">{t("validation.sa.after", "Après")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {diff.map((row) => (
+                          <tr key={row.field} className="border-t border-border">
+                            <td className="px-3 py-1.5 text-tertiary">
+                              {t(row.labelKey, row.labelFallback)}
+                            </td>
+                            <td className="px-3 py-1.5 text-secondary">{row.before}</td>
+                            <td className="px-1 py-1.5" aria-hidden="true">
+                              →
+                            </td>
+                            <td className="px-3 py-1.5 font-semibold text-primary">{row.after}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-neutral-50 px-3 py-2 text-xs">
+                      <span className="text-tertiary">{t("validation.sa.before", "Avant")}</span>
+                      <span className="font-semibold text-primary">{d.before ?? "—"}</span>
+                      <span aria-hidden="true">→</span>
+                      <span className="text-tertiary">{t("validation.sa.after", "Après")}</span>
+                      <span className="font-semibold text-primary">
+                        {d.after ??
+                          (a.kind === "projet_delete" || a.kind === "chantier_delete"
+                            ? t("validation.sa.deleted", "Supprimé")
+                            : "—")}
+                      </span>
+                    </div>
+                  )}
+
+                  {tab === "todo" && decidable(a) && kpiCorrection(a) && (
                     <label className="mt-3 flex flex-wrap items-center gap-2 text-xs text-tertiary">
                       {t(
                         "validation.sa.adjustValue",
@@ -298,7 +360,7 @@ export function StrategicApprovalsPanel({
                     </label>
                   )}
 
-                  {tab === "todo" && a.status === "pending" && (
+                  {tab === "todo" && decidable(a) && (
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <input
                         type="text"
@@ -337,5 +399,76 @@ export function StrategicApprovalsPanel({
 
       {tab === "todo" && legacy}
     </div>
+  );
+}
+
+/** Stepper compact des paliers : « Étape 1 : Sponsor d'axe (Marie) ✓ — Étape 2 : Pilote (Paul)
+ *  en attente », palier courant surligné, paliers décidés avec qui/quand/commentaire. */
+function ChainStepper({
+  steps,
+  levelLabel,
+}: {
+  steps: ChainStepView[];
+  levelLabel: (level: StrategicLevel) => string;
+}) {
+  const { t } = useTranslation();
+  const stateText = (s: ChainStepView) =>
+    s.state === "approved"
+      ? "✓"
+      : s.state === "rejected"
+        ? t("validation.sa.step.rejected", "refusée")
+        : s.state === "current"
+          ? t("validation.sa.step.current", "en attente")
+          : s.state === "skipped"
+            ? t("validation.sa.step.skipped", "non atteinte")
+            : t("validation.sa.step.upcoming", "à venir");
+  return (
+    <ol
+      className="mt-3 flex flex-wrap items-stretch gap-2 text-xs"
+      aria-label={t("validation.sa.chain", "Chaîne de validation")}
+    >
+      {steps.map((s) => (
+        <li
+          key={s.index}
+          aria-current={s.state === "current" ? "step" : undefined}
+          className={`rounded-md border px-2.5 py-1.5 ${
+            s.state === "current"
+              ? "border-rag-amber bg-rag-amber-light"
+              : s.state === "approved"
+                ? "border-border bg-rag-green-light"
+                : s.state === "rejected"
+                  ? "border-border bg-rag-red-light"
+                  : "border-border bg-white text-tertiary"
+          }`}
+        >
+          <div>
+            <span className="font-semibold text-primary">
+              {t("validation.sa.step.label", "Étape")} {s.index}
+            </span>{" "}
+            : {levelLabel(s.level)}
+            {s.approverNames.length > 0 && ` (${s.approverNames.join(", ")})`}{" "}
+            <span
+              className={`font-semibold ${
+                s.state === "approved"
+                  ? "text-rag-green-dark"
+                  : s.state === "rejected"
+                    ? "text-rag-red"
+                    : s.state === "current"
+                      ? "text-rag-amber"
+                      : ""
+              }`}
+            >
+              {stateText(s)}
+            </span>
+          </div>
+          {s.decidedByName && (
+            <div className="mt-0.5 text-[11px] text-secondary">
+              {s.decidedByName} · {formatTimestamp(s.decidedAt)}
+              {s.comment && ` — « ${s.comment} »`}
+            </div>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 }

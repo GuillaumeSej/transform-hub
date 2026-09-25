@@ -30,7 +30,9 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
-import { canImportStrategicPlan, isReadOnlyUser } from "@/lib/roleProfiles";
+import { canImportStrategicPlan, isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
+import { hierarchyContextFor } from "@/lib/strategicApprovals";
+import { canDesignateAxisSponsor } from "@/lib/strategicFiche";
 import type { StrategicImportWrites } from "@/lib/strategicExcelImport";
 import type { Chantier, MilestoneId } from "@/types";
 
@@ -72,8 +74,8 @@ import type { Chantier, MilestoneId } from "@/types";
 
 export function StrategicAxesView() {
   const { user } = useRole();
-  const readOnly = isReadOnlyUser(user);
   const { activeProgramId, loading: programsLoading } = useActiveProgram();
+  const readOnly = isReadOnlyUser(user, activeProgramId, "strategic");
   const { t } = useTranslation();
   const router = useRouter();
   const [expandAllSignal, setExpandAllSignal] = useState(0);
@@ -363,6 +365,28 @@ export function StrategicAxesView() {
           stages={stages}
           confidentialityLevels={confidentialityLevels}
           submitLabel={t("strategicAxes.createAxis")}
+          // Sponsor d'axe : désigné par le pilote du plan / un admin uniquement.
+          canEditOwner={canDesignateAxisSponsor({
+            username: user?.username,
+            isAdmin: !!user && isAnyAdmin(user),
+            readOnly,
+            ctx: hierarchyContextFor(
+              "chantier_update",
+              { type: "axe", id: "" },
+              {
+                programId: activeProgramId,
+                axes: data.axes,
+                chantiers: data.chantiers,
+                chantierActions: data.chantierActions,
+                indicators: data.indicators,
+                users: data.users,
+              }
+            ),
+          })}
+          ownerTooltip={t(
+            "strategicFiche.rights.axisSponsor",
+            "Le sponsor d'axe est désigné par le pilote du plan (ou un administrateur)."
+          )}
           onCancel={() => setNewAxisOpen(false)}
           onSubmit={async (values: AxisFormValues) => {
             const created = await data.createAxis(values);

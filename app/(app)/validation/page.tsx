@@ -536,6 +536,7 @@ function StrategicValidationView({
     <StrategicApprovalsPanel
       api={sa}
       data={{ ...data, programId: activeProgramId }}
+      user={user}
       legacy={
         <div className="mt-4">
           <StrategicValidationTable

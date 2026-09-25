@@ -96,6 +96,52 @@ const fr: Record<string, string> = {
   "validation.sa.kind.projet_create": "Ajout de projet",
   "validation.sa.kind.projet_delete": "Suppression de projet",
   "validation.sa.kind.chantier_delete": "Suppression de chantier",
+  "validation.sa.kind.projet_update": "Modification de projet",
+  "validation.sa.kind.chantier_create": "Création de chantier",
+  "validation.sa.kind.chantier_update": "Modification de chantier",
+  "validation.sa.level.pilot": "Pilote",
+  "validation.sa.level.axisSponsor": "Sponsor d'axe",
+  "validation.sa.level.chantierSponsor": "Sponsor de chantier",
+  "validation.sa.level.projectOwner": "Responsable projet",
+  "validation.sa.level.contributor": "Contributeur",
+  "validation.sa.chain": "Chaîne de validation",
+  "validation.sa.then": "puis",
+  "validation.sa.step.label": "Étape",
+  "validation.sa.step.current": "en attente",
+  "validation.sa.step.rejected": "refusée",
+  "validation.sa.step.skipped": "non atteinte",
+  "validation.sa.step.upcoming": "à venir",
+  "validation.sa.field": "Champ",
+  "validation.sa.field.name": "Nom",
+  "validation.sa.field.description": "Description",
+  "validation.sa.field.start": "Date de début",
+  "validation.sa.field.end": "Date de fin",
+  "validation.sa.field.status": "Statut",
+  "validation.sa.field.owner": "Responsable projet",
+  "validation.sa.field.contributors": "Contributeurs",
+  "validation.sa.field.sponsor": "Sponsor",
+  "validation.sa.field.deliverables": "Livrables",
+  "validation.sa.field.prerequisites": "Prérequis",
+  "validation.sa.field.milestones": "Jalons / check-lists",
+  "validation.sa.field.customMilestoneActions": "Actions de jalon personnalisées",
+  "validation.sa.field.excludedMilestoneItems": "Actions de jalon retirées",
+  "validation.sa.field.budget": "Budget",
+  "validation.sa.field.consumedBudget": "Budget consommé",
+  "validation.sa.field.consumedFte": "ETP consommés",
+  "validation.sa.field.chantierWeightPct": "Poids dans le chantier (%)",
+  "validation.sa.field.chantierId": "Chantier de rattachement",
+  "validation.sa.field.indicatorId": "Indicateur",
+  "validation.sa.field.allocatedBudget": "Enveloppe budgétaire",
+  "validation.sa.field.successKpis": "KPI de succès",
+  "validation.sa.field.successCriteria": "Critères de succès",
+  "validation.sa.field.effort": "Grille d'effort",
+  "validation.sa.field.axisIds": "Axes de rattachement",
+  "validation.sa.field.stage": "Étape",
+  "validation.sa.field.dependencies": "Dépendances",
+  "validation.sa.field.pilote": "Sponsor de chantier",
+  "validation.sa.field.sponsorName": "Sponsor",
+  "validation.sa.field.responsibleRoles": "Rôles responsables",
+  "validation.sa.field.confidentialityLevel": "Confidentialité",
   "validation.sa.status.pending": "En attente",
   "validation.sa.status.approved": "Validée",
   "validation.sa.status.rejected": "Refusée",
@@ -149,16 +195,14 @@ const fr: Record<string, string> = {
   // Profils du Plan Stratégique (organigramme 3-5-15 : axes → chantiers)
   "roles.strategicLead.label": "Pilote du plan stratégique",
   "roles.strategicLead.short": "Pilote",
-  "roles.axisSponsor.label": "Commanditaire d'axe",
-  "roles.axisSponsor.short": "Commandit. axe",
-  "roles.chantierOwner.label": "Responsable de chantier",
-  "roles.chantierOwner.short": "Resp. chantier",
+  "roles.axisSponsor.label": "Sponsor d'axe",
+  "roles.axisSponsor.short": "Sponsor axe",
+  "roles.chantierOwner.label": "Sponsor de chantier",
+  "roles.chantierOwner.short": "Sponsor chantier",
   "roles.chantierContributor.label": "Responsable projet",
   "roles.chantierContributor.short": "Resp. projet",
-  "roles.internalComm.label": "Communication interne",
-  "roles.internalComm.short": "Com. interne",
-  "roles.budgetControl.label": "Contrôle de gestion",
-  "roles.budgetControl.short": "Contrôle gestion",
+  "roles.projetContributor.label": "Contributeur projet",
+  "roles.projetContributor.short": "Contrib. projet",
   // Membre du COMEX (round 25) : profil transverse, lecture seule, valable sur les DEUX pistes
   // (Plan Performance ET Plan Stratégique) — voir PERFORMANCE_ROLES/STRATEGIC_ROLES dans
   // types/index.ts.
@@ -1561,11 +1605,11 @@ const fr: Record<string, string> = {
   // Fiche détail d'un axe
   "strategicAxes.back": "Retour aux axes",
   "strategicAxes.notFound": "Axe introuvable.",
-  "strategicAxes.sponsorShort": "Commanditaire",
+  "strategicAxes.sponsorShort": "Sponsor",
   // Rôle unique (round 28) : suppression de `StrategicAxis.sponsorName`, `owner` EST désormais le
   // sponsor de l'axe (décision explicite : plus de duplication sponsor COMEX / responsable au
   // niveau axe, contrairement à Chantier.sponsorName/Chantier.pilote).
-  "strategicAxes.owner": "Commanditaire de l'axe",
+  "strategicAxes.owner": "Sponsor d'axe",
   "strategicAxes.editAxis": "Modifier l'axe",
   "strategicAxes.editAxisModalTitle": "Modifier l'axe",
   "strategicAxes.summaryTracked": "Indicateurs suivis",
@@ -1670,8 +1714,8 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.back": "Retour à l'axe",
   "strategicChantierDetail.notFound": "Chantier introuvable.",
   "strategicChantierDetail.successCriteria": "Critères de succès",
-  "strategicChantierDetail.sponsor": "Commanditaire",
-  "strategicChantierDetail.pilote": "Pilote",
+  "strategicChantierDetail.sponsor": "Sponsor COMEX",
+  "strategicChantierDetail.pilote": "Sponsor de chantier",
   "strategicChantierDetail.allocatedBudget": "Budget alloué",
   "strategicChantierDetail.allocatedBudgetBelowLeviers":
     "L'enveloppe du chantier ne peut pas être inférieure à la somme des budgets de ses projets.",
@@ -1798,7 +1842,7 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.transition.readyHint":
     "Le passage en {milestone} peut être demandé",
   "strategicChantierDetail.milestones.transition.waitingOwner":
-    "Le responsable du chantier doit confirmer le passage en {milestone}.",
+    "Le sponsor du chantier doit confirmer le passage en {milestone}.",
   "strategicChantierDetail.milestones.transition.confirm": "Confirmer le passage en {milestone}",
   "strategicChantierDetail.milestones.transition.refuse": "Refuser",
   "strategicChantierDetail.milestones.transition.cancel": "Annuler la demande",
@@ -1811,7 +1855,7 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.transition.request":
     "Demander la validation du passage en {milestone}",
   "strategicChantierDetail.milestones.transition.requestHint":
-    "Le responsable du chantier recevra la demande et devra confirmer le passage.",
+    "Le sponsor du chantier recevra la demande et devra confirmer le passage.",
   "strategicChantierDetail.milestones.transition.confirmed": "Passage de jalon confirmé",
   "strategicChantierDetail.milestones.transition.refuseOpen": "Refuser…",
   "strategicChantierDetail.milestones.transition.cancelOpen": "Annuler la demande…",
@@ -1834,7 +1878,7 @@ const fr: Record<string, string> = {
   "strategicChantierDetail.milestones.preview.restoreItem": "Réintégrer",
 
   "strategicChantierDetail.milestones.item.E0_A1": "Dépendances / prérequis satisfaits",
-  "strategicChantierDetail.milestones.item.E0_A2": "Clients / commanditaire identifiés",
+  "strategicChantierDetail.milestones.item.E0_A2": "Clients / sponsor identifiés",
   "strategicChantierDetail.milestones.item.E0_B1": "Enjeux formalisés",
   "strategicChantierDetail.milestones.item.E0_B2": "Objectifs et périmètre formalisés",
   "strategicChantierDetail.milestones.item.E0_C1": "Organisation et budget validés",
@@ -1870,7 +1914,7 @@ const fr: Record<string, string> = {
     "Conséquences : le projet et ses {jalons} jalon(s) seront supprimés. Action irréversible.",
   "strategicDelete.reason": "Motif de la suppression (facultatif)",
   "strategicDelete.approver.axis": "le responsable de l'axe",
-  "strategicDelete.approver.chantier": "le responsable du chantier",
+  "strategicDelete.approver.chantier": "le sponsor du chantier",
   "strategicDelete.approval.self":
     "Vous êtes {role} : la suppression sera appliquée immédiatement.",
   "strategicDelete.approval.needed":
@@ -1968,6 +2012,17 @@ const fr: Record<string, string> = {
     '"Code Axe" et "Code Chantier" sont tous les deux renseignés — un indicateur ne peut être rattaché qu\'à l\'un des deux',
   "strategicImport.msg.unknownValue": '{column} "{value}" inconnu(e) (attendu : {expected})',
   "strategicImport.msg.rolesRequired": '"Rôles responsables" est obligatoire (au moins un rôle)',
+  "strategicImport.msg.responsibleRequired":
+    '"Responsables saisie" est obligatoire (au moins une personne ; à défaut "Rôles responsables")',
+  "strategic.kpiResponsible.label": "Responsable(s) de saisie",
+  "strategic.kpiResponsible.hint":
+    "Au moins une personne nommée. Peuvent aussi saisir : le pilote du plan, le sponsor du chantier (KPI de chantier) ou de l'axe (KPI d'axe) et les administrateurs. Les membres du COMEX et les RH ne saisissent jamais.",
+  "strategic.kpiResponsible.add": "Ajouter un responsable…",
+  "strategic.kpiResponsible.remove": "Retirer {name}",
+  "strategic.kpiResponsible.legacyRoles":
+    "Rôles historiques (utilisés seulement tant qu'aucun responsable n'est nommé) :",
+  "strategic.kpiResponsible.legacySuffix": "(ancien, par rôle)",
+  "strategic.kpiResponsible.clearLegacy": "Retirer",
   "strategicImport.msg.unknownRole": 'Rôle "{value}" inconnu (attendu : {expected})',
   "strategicImport.msg.baselineNotNumber":
     '"Valeur initiale" non numérique ("{value}") : aucune mesure de référence créée',
@@ -2132,6 +2187,11 @@ const fr: Record<string, string> = {
   "kpi.qualitativeNote": "Observation de la période",
   "kpi.valueSubmittedForApproval": "Valeur soumise à validation du responsable du plan",
   "kpi.pendingValidation": "En attente de validation",
+  "kpi.pendingStep": "étape {current}/{total}",
+  "kpi.valueSubmittedChain": "Valeur soumise à validation : {chain}",
+  "kpi.willBeValidatedBy": "Sera validée par {chain}",
+  "kpi.fillResponsibles": "Responsable(s) de saisie",
+  "kpi.legacyByRole": "(ancien, par rôle)",
   "kpi.measurement.editTitle": "Corriger la mesure",
   "kpi.measurement.deleteTitle": "Supprimer la mesure",
   "kpi.measurement.deleteConfirm": "Supprimer la mesure de {period} ({value}) ?",
@@ -2149,14 +2209,12 @@ const fr: Record<string, string> = {
   "kpi.measurement.pendingCorrection": "Correction",
   "kpi.measurement.pendingDeletion": "Suppression",
   "kpi.measurement.route.edit.chantier":
-    "Votre correction sera soumise au responsable du chantier {name}.",
-  "kpi.measurement.route.edit.axis":
-    "Votre correction sera soumise au responsable de l'axe {name}.",
+    "Votre correction sera soumise au sponsor du chantier {name}.",
+  "kpi.measurement.route.edit.axis": "Votre correction sera soumise au sponsor de l'axe {name}.",
   "kpi.measurement.route.edit.plan": "Votre correction sera soumise au responsable du plan.",
   "kpi.measurement.route.delete.chantier":
-    "Votre suppression sera soumise au responsable du chantier {name}.",
-  "kpi.measurement.route.delete.axis":
-    "Votre suppression sera soumise au responsable de l'axe {name}.",
+    "Votre suppression sera soumise au sponsor du chantier {name}.",
+  "kpi.measurement.route.delete.axis": "Votre suppression sera soumise au sponsor de l'axe {name}.",
   "kpi.measurement.route.delete.plan": "Votre suppression sera soumise au responsable du plan.",
   "kpi.measurement.inform.axisPlan":
     "Le responsable de l'axe et le responsable du plan seront informés.",
@@ -2186,7 +2244,7 @@ const fr: Record<string, string> = {
   "strategicAxes.form.chantierNamePlaceholder": "Ex. Refonte du parcours client",
   "strategicAxes.form.parentAxes": "Axes de rattachement",
   "strategicAxes.form.noAxisAvailable": "Aucun axe disponible",
-  "strategicAxes.form.chantierOwner": "Responsable de chantier",
+  "strategicAxes.form.chantierOwner": "Sponsor de chantier",
   "strategicAxes.form.chantierDescriptionPlaceholder":
     "Ce que ce chantier regroupe comme actions concrètes.",
   "strategicAxes.form.unknownUser": "(non reconnu)",
@@ -3106,11 +3164,14 @@ const fr: Record<string, string> = {
   "strategicApprovals.phrase.kpiValue": "la valeur {value} ({period}) de l'indicateur « {name} »",
   "strategicApprovals.phrase.projetCreate": "l'ajout du projet « {name} »",
   "strategicApprovals.phrase.projetCreateChantier":
-    "l'ajout du projet « {name} » (validation du pilote de chantier)",
+    "l'ajout du projet « {name} » (validation du sponsor de chantier)",
   "strategicApprovals.phrase.projetCreateAxis":
-    "l'ajout du projet « {name} » (validation du responsable d'axe)",
+    "l'ajout du projet « {name} » (validation du sponsor d'axe)",
   "strategicApprovals.phrase.projetDelete": "la suppression du projet « {name} »",
   "strategicApprovals.phrase.chantierDelete": "la suppression du chantier « {name} »",
+  "strategicApprovals.phrase.projetUpdate": "la modification du projet « {name} » ({fields})",
+  "strategicApprovals.phrase.chantierUpdate": "la modification du chantier « {name} » ({fields})",
+  "strategicApprovals.phrase.chantierCreate": "la création du chantier « {name} »",
   // Motif du risque levier (lib/leverRiskText.ts), retour fiche levier, badge dépassement
   "risk.level.critical": "critique",
   "risk.level.high": "élevé",
@@ -3331,6 +3392,10 @@ const fr: Record<string, string> = {
   "me.item.projetCreateApproval": "Valider la création d'un projet",
   "me.item.projetDeleteApproval": "Valider la suppression d'un projet",
   "me.item.chantierDeleteApproval": "Valider la suppression d'un chantier",
+  "me.item.chantierCreateApproval": "Valider la création d'un chantier",
+  "me.item.projetUpdateApproval": "Valider une modification de projet",
+  "me.item.chantierUpdateApproval": "Valider une modification de chantier",
+  "me.item.approvalStep": "Étape {current}/{total}",
   "me.item.projetLate": "Projet en retard",
   "me.item.projetDue": "Échéance du projet",
   "me.item.measurementMissing": "Saisir la mesure {period}",
@@ -3342,7 +3407,7 @@ const fr: Record<string, string> = {
   "me.role.owner": "Responsable",
   "me.role.sponsor": "Sponsor",
   "me.role.axisSponsor": "Sponsor d'axe",
-  "me.role.pilote": "Pilote",
+  "me.role.pilote": "Sponsor de chantier",
   "me.role.programOwner": "Owner du programme",
   "me.role.cto": "CTO",
   "me.role.admin": "Administrateur",
@@ -3504,6 +3569,45 @@ const fr: Record<string, string> = {
   "adminHistory.company": "Entreprise",
   "adminHistory.accountTitle": "Actions sur les comptes utilisateurs",
   "adminHistory.accountEmpty": "Aucune action sur les comptes.",
+  "strategicFiche.chain.then": "puis",
+  "strategicFiche.chain.preview": "Sera validé par {chain}",
+  "strategicFiche.toast.applied": "Appliqué",
+  "strategicFiche.toast.pending": "Envoyé en validation : {chain}",
+  "strategicFiche.toast.partial":
+    "Appliqué en partie — le reste est envoyé en validation : {chain}",
+  "strategicFiche.toast.milestoneApplied": "Passage de jalon appliqué",
+  "strategicFiche.contributors.label": "Contributeurs",
+  "strategicFiche.contributors.none": "Aucun contributeur",
+  "strategicFiche.contributors.remove": "Retirer",
+  "strategicFiche.contributors.add": "+ Ajouter un contributeur",
+  "strategicFiche.pending.badge": "En attente de validation",
+  "strategicFiche.pending.badgeStep": "En attente de validation (étape {current}/{total})",
+  "strategicFiche.pending.waitingFor": "Chez {names}",
+  "strategicFiche.pending.proposedValue": "Valeur proposée : {value}",
+  "strategicFiche.pending.conflictTooltip":
+    "Une demande de validation est déjà en attente sur ce champ : attendez sa décision avant de le modifier à nouveau.",
+  "strategicFiche.pending.conflictTitle": "Déjà en attente de validation",
+  "strategicFiche.pending.chantierCreation": "Création en attente de validation",
+  "strategicFiche.draft.title": "Modifications non envoyées",
+  "strategicFiche.draft.conflict": "Déjà en attente de validation : {fields}",
+  "strategicFiche.draft.submit": "Envoyer en validation",
+  "strategicFiche.draft.discard": "Annuler les modifications",
+  "strategicFiche.draft.projetsCount": "{count} projets avec des modifications non envoyées",
+  "strategicFiche.draft.submitAll": "Tout envoyer",
+  "strategicFiche.draft.discardAll": "Tout annuler",
+  "strategicFiche.rights.projectOwner":
+    "Le responsable projet est désigné par le sponsor de chantier (ou au-dessus).",
+  "strategicFiche.rights.contributors":
+    "Les contributeurs sont désignés par le responsable projet (ou au-dessus).",
+  "strategicFiche.rights.chantierSponsor":
+    "Le sponsor de chantier est désigné par le pilote du plan (ou un administrateur).",
+  "strategicFiche.rights.axisSponsor":
+    "Le sponsor d'axe est désigné par le pilote du plan (ou un administrateur).",
+  "strategicFiche.rights.projetEdit":
+    "Seuls le responsable, les contributeurs du projet et les niveaux supérieurs peuvent le modifier.",
+  "strategicFiche.rights.readOnlyBadge": "Lecture seule",
+  "strategicFiche.delete.chain":
+    "{chain}. La suppression ne sera effective qu'après validation complète.",
 };
 
 export default fr;

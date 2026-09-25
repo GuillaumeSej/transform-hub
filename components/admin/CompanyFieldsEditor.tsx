@@ -90,19 +90,22 @@ export const OPERATIONAL_ROLES: { value: Role; labelKey: string; label: string }
     labelKey: "roles.strategicLead.label",
     label: "Pilote du plan stratégique",
   },
-  { value: "axis_sponsor", labelKey: "roles.axisSponsor.label", label: "Commanditaire d'axe" },
+  { value: "axis_sponsor", labelKey: "roles.axisSponsor.label", label: "Sponsor d'axe" },
   {
     value: "chantier_owner",
     labelKey: "roles.chantierOwner.label",
-    label: "Responsable de chantier",
+    label: "Sponsor de chantier",
   },
   {
     value: "chantier_contributor",
     labelKey: "roles.chantierContributor.label",
     label: "Responsable projet",
   },
-  { value: "internal_comm", labelKey: "roles.internalComm.label", label: "Communication interne" },
-  { value: "budget_control", labelKey: "roles.budgetControl.label", label: "Contrôle de gestion" },
+  {
+    value: "projet_contributor",
+    labelKey: "roles.projetContributor.label",
+    label: "Contributeur projet",
+  },
   { value: "comex_member", labelKey: "roles.comexMember.label", label: "Membre du COMEX" },
 ];
 

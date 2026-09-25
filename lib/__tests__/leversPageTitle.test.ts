@@ -138,3 +138,26 @@ describe("resolveLandingRoute — /me for operational profiles, dashboard for pi
     expect(resolveLandingRoute([])).toBe("/levers");
   });
 });
+
+describe("Plan Stratégique — rôles (décision PO)", () => {
+  const strategicIds = (role: string) =>
+    resolveUserNav(u(role))
+      .filter((i) => !i.programTypes || i.programTypes.includes("strategic"))
+      .map((i) => i.id);
+
+  it("removed roles internal_comm / budget_control are gone from the nav config", () => {
+    expect(Object.keys(roles)).not.toContain("internal_comm");
+    expect(Object.keys(roles)).not.toContain("budget_control");
+  });
+
+  it("projet_contributor has the same nav as chantier_contributor", () => {
+    expect(roles.projet_contributor.nav).toEqual(roles.chantier_contributor.nav);
+  });
+
+  it("hr on a strategic program: axes, Effectifs, Base ETP — no KPI, no validation", () => {
+    const ids = strategicIds("hr");
+    expect(ids).toEqual(expect.arrayContaining(["levers", "effectifs", "hr-etp", "me"]));
+    expect(ids).not.toContain("kpi");
+    expect(ids).not.toContain("validation");
+  });
+});

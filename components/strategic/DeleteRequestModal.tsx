@@ -20,7 +20,8 @@ export function DeleteRequestModal({
   name,
   projetCount,
   milestoneCount,
-  approvers,
+  approvers = [],
+  chainText,
   canApproveSelf,
   onConfirm,
 }: {
@@ -30,7 +31,11 @@ export function DeleteRequestModal({
   name: string;
   projetCount: number;
   milestoneCount: number;
-  approvers: string[];
+  /** LEGACY : approbateurs affichés quand `chainText` est absent. */
+  approvers?: string[];
+  /** « Sera validé par X puis Y » (chaîne de validation prévue, `sa.previewChain`) — prioritaire
+   *  sur `approvers`. */
+  chainText?: string;
   canApproveSelf: boolean;
   onConfirm: (reason: string) => Promise<void> | void;
 }) {
@@ -106,12 +111,17 @@ export function DeleteRequestModal({
               "strategicDelete.approval.self",
               "Vous êtes {role} : la suppression sera appliquée immédiatement."
             ).replace("{role}", approverRole)
-          : t(
-              "strategicDelete.approval.needed",
-              "Une approbation de {role} est requise ({names}). La suppression ne sera effective qu'après validation."
-            )
-              .replace("{role}", approverRole)
-              .replace("{names}", approvers.join(", "))}
+          : chainText
+            ? t(
+                "strategicFiche.delete.chain",
+                "{chain}. La suppression ne sera effective qu'après validation complète."
+              ).replace("{chain}", chainText)
+            : t(
+                "strategicDelete.approval.needed",
+                "Une approbation de {role} est requise ({names}). La suppression ne sera effective qu'après validation."
+              )
+                .replace("{role}", approverRole)
+                .replace("{names}", approvers.join(", "))}
       </p>
     </Modal>
   );

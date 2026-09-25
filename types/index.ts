@@ -3,19 +3,26 @@
  * de page via `lib/nav-config.ts`, profils d'utilisateur, `Indicator.responsibleRoles`,
  * `Chantier.responsibleRoles`).
  *
- * Les 6 premières valeurs sont les rôles historiques du Plan Performance. Les 6 suivantes portent
- * l'organigramme du Plan Stratégique (méthodologie 3-5-15, axes → chantiers) défini par le PO :
- *   - `strategic_lead`      : Pilote du plan stratégique (un seul par plan) — rend compte de
- *                             l'avancement global au COMEX, anime les instances de pilotage.
- *   - `axis_sponsor`        : Sponsor d'un axe — responsable de l'avancement et du budget de SON
- *                             axe, arbitre les propositions de ses responsables de chantier.
- *   - `chantier_owner`      : Responsable de chantier — garant de l'avancement et de la qualité de
- *                             SON chantier, plan de travail, risques, coûts/bénéfices.
- *   - `chantier_contributor`: Contributeur, exécute au sein d'un chantier.
- *   - `internal_comm`       : Communication interne — cadre et pilote la communication sur
- *                             l'avancement des chantiers.
- *   - `budget_control`      : Contrôle de gestion — consolidation des indicateurs et contrôle
- *                             budgétaire, en appui du pilote.
+ * Les 6 premières valeurs sont les rôles historiques du Plan Performance. Les suivantes portent
+ * l'organigramme du Plan Stratégique (axes → chantiers → projets), calqué sur la hiérarchie du
+ * Plan Transfo (CTO > responsable de chantier > responsable de levier) — décision PO, voir
+ * lib/strategicHierarchy.ts :
+ *   - `strategic_lead`      : Pilote du plan stratégique (équivalent du CTO) — seul rôle de
+ *                             pilotage du plan, rend compte au COMEX.
+ *   - `axis_sponsor`        : Sponsor d'axe (`StrategicAxis.owner`).
+ *   - `chantier_owner`      : Sponsor de chantier (`Chantier.pilote`) — libellé distinct du
+ *                             « Responsable de chantier » du Plan Transfo (rôle `sponsor`).
+ *   - `chantier_contributor`: Responsable projet (`ChantierAction.owner`) — id technique conservé.
+ *   - `projet_contributor`  : Contributeur projet (`ChantierAction.contributors`) — droits par
+ *                             projet portés par le projet lui-même ; même nav que le responsable
+ *                             projet.
+ * Les anciens rôles `internal_comm` (Communication interne) et `budget_control` (Contrôle de
+ * gestion), jamais outillés, ont été SUPPRIMÉS : un profil legacy qui les porte encore est lu comme
+ * `comex_member` (lecture seule, même programme) — voir `normalizeLegacyProfiles`
+ * (lib/roleProfiles.ts) et scripts/migrate-strategic-roles.js.
+ * `hr` (Directeur RH) est, comme `comex_member`, TRANSVERSE aux deux pistes : sur un programme
+ * stratégique il accède aux Effectifs, à la Base ETP (qu'il édite) et au plan en lecture seule
+ * (voir `isReadOnlyUser(user, programId)`).
  * Round 25 : le COMEX dispose désormais D'UN profil individuel connectable, `comex_member`
  * (lecture seule) — voir son commentaire ci-dessous. Le COMEX reste par ailleurs, comme avant, un
  * organe de gouvernance COLLECTIF : `comex_member` sert à donner à UN membre (ou son délégué/
@@ -55,8 +62,7 @@ export type Role =
   | "axis_sponsor"
   | "chantier_owner"
   | "chantier_contributor"
-  | "internal_comm"
-  | "budget_control"
+  | "projet_contributor"
   | "comex_member";
 
 /** Les 6 rôles historiques du Plan Performance, PLUS `program_sponsor`/`program_owner` (fondation
@@ -75,7 +81,9 @@ export const PERFORMANCE_ROLES: Role[] = [
   "comex_member",
 ];
 
-/** Les 6 rôles du Plan Stratégique (organigramme 3-5-15), PLUS `comex_member` (round 25).
+/** Les 5 rôles du Plan Stratégique, PLUS les rôles transverses `hr` (Directeur RH, « comme en
+ *  Transfo » — décision PO) et `comex_member` (round 25). `hr` suit exactement le même modèle
+ *  « présent dans les deux tableaux » que `comex_member` décrit ci-dessous.
  *
  * `comex_member` ("Membre du COMEX") est VOLONTAIREMENT présent dans `PERFORMANCE_ROLES` ET
  * `STRATEGIC_ROLES` : c'est le premier rôle transverse aux deux pistes (lecture seule sur les
@@ -98,8 +106,9 @@ export const STRATEGIC_ROLES: Role[] = [
   "axis_sponsor",
   "chantier_owner",
   "chantier_contributor",
-  "internal_comm",
-  "budget_control",
+  "projet_contributor",
+  // Transverses (présents aussi dans PERFORMANCE_ROLES) — voir `isCrossTrackRole`.
+  "hr",
   "comex_member",
 ];
 
@@ -1213,7 +1222,13 @@ export type ChantierAction = {
   chantierId: string;
   name: string;
   description?: string;
+  /** Responsable projet (`AuthUser.username`) — 1er niveau de validation des saisies de ses
+   *  contributeurs (voir lib/strategicHierarchy.ts). */
   owner?: string;
+  /** Contributeurs projet (`AuthUser.username`) : voient et saisissent sur le projet ; leurs
+   *  saisies sont validées par le responsable projet puis le sponsor de chantier. Désignés par le
+   *  responsable projet (ou au-dessus). Absent = aucun contributeur. */
+  contributors?: string[];
   /** Distinct de `owner` (qui exécute) : qui porte/arbitre l'action côté COMEX/direction. Round 4,
    *  demande PO (fiche chantier façon PERIAL). */
   sponsor?: string;
@@ -1376,11 +1391,15 @@ export type Indicator = {
   targetSchedule?: { period: string; value: number }[];
   direction?: IndicatorDirection;
   unit?: string;
-  /** Rôles autorisés à renseigner cet indicateur — au moins un attendu. Liste DIRECTE de rôles
-   *  (pas d'indirection par niveaux comme la confidentialité : c'est une autorisation, pas une
-   *  échelle ordonnée). */
+  /** LEGACY — rôles autorisés à renseigner cet indicateur. Lu par `canFillIndicator`
+   *  (lib/axisLogic.ts) UNIQUEMENT en repli quand aucun responsable nommé
+   *  (`additionalAuthorizedUserIds`) n'est désigné ; jamais pour `comex_member`/`hr`. Peut être
+   *  vide pour un indicateur créé avec la règle « responsables nommés ». */
   responsibleRoles: Role[];
-  /** Comptes individuels autorisés EN PLUS des rôles (username, voir AuthUser.username). */
+  /** Responsable(s) de SAISIE NOMMÉ(S) du KPI (usernames, voir AuthUser.username) — libellé
+   *  « Responsable(s) de saisie » dans l'UI. Nom de champ historique conservé (pas de migration).
+   *  Voir `canFillIndicator` : admin, pilote du programme, ces responsables, et le sponsor du
+   *  chantier (KPI de chantier) ou de l'axe (KPI d'axe) peuvent saisir. */
   additionalAuthorizedUserIds?: string[];
   /** Statut calculé automatiquement (dernière mesure vs objectif) — voir
    *  `lib/axisLogic.ts::computeIndicatorStatus`. */

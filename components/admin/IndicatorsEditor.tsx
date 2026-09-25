@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 import type {
   AuthUser,
   Indicator,
@@ -12,7 +12,8 @@ import type {
 } from "@/types";
 import { subscribeUsers, subscribeCompanies } from "@/lib/firestore/admin";
 import { saveIndicator } from "@/lib/firestore/indicators";
-import { computeIndicatorStatus } from "@/lib/axisLogic";
+import { canBeKpiResponsible, computeIndicatorStatus } from "@/lib/axisLogic";
+import { roles as roleDefinitions } from "@/lib/nav-config";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useToast } from "@/lib/hooks/useToast";
@@ -21,6 +22,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { AxisForm } from "@/components/strategic/AxisForm";
 import { ChantierForm } from "@/components/strategic/ChantierForm";
 import { Modal } from "@/components/shared/Modal";
+import { UserPicker } from "@/components/strategic/UserPicker";
 
 /**
  * Définition des indicateurs (KPI) d'UN programme stratégique. Mirroring de
@@ -41,74 +43,11 @@ import { Modal } from "@/components/shared/Modal";
  * définition d'un indicateur serait bloquée par une dépendance à un autre écran.
  */
 
-/** Rôles proposés comme responsables d'un indicateur. Liste volontairement DUPLIQUÉE ici (même
- *  convention que `OPERATIONAL_ROLES` dans `CompanyFieldsEditor.tsx` / `ALL_ROLES` dans
- *  `UsersPanel.tsx`) : chaque écran d'admin choisit son propre sous-ensemble de rôles, il n'y a
- *  pas de liste partagée à maintenir. `admin`/`admin_entreprise` en sont exclus : ils sont
- *  toujours autorisés par `canFillIndicator`, les proposer n'aurait aucun effet.
- *
- *  `comex_member` (round 25, transverse Performance/Stratégique — voir types/index.ts) en est
- *  ÉGALEMENT exclu, délibérément : c'est un profil lecture seule par conception ("qui peut
- *  RENSEIGNER cet indicateur" n'a pas de sens pour un rôle qui ne doit rien pouvoir éditer). Si un
- *  lot ultérieur assouplit ce caractère lecture seule pour certains cas d'usage, revoir cette
- *  exclusion à ce moment-là plutôt que d'anticiper ici. */
-const RESPONSIBLE_ROLES: { value: Role; shortKey: string; short: string; labelKey: string }[] = [
-  { value: "cto", shortKey: "roles.cto.short", short: "CTO", labelKey: "roles.cto.label" },
-  {
-    value: "sponsor",
-    shortKey: "roles.sponsor.short",
-    short: "Leader",
-    labelKey: "roles.sponsor.label",
-  },
-  { value: "lever", shortKey: "roles.lever.short", short: "PM", labelKey: "roles.lever.label" },
-  {
-    value: "finance",
-    shortKey: "roles.finance.short",
-    short: "Finance",
-    labelKey: "roles.finance.label",
-  },
-  { value: "hr", shortKey: "roles.hr.short", short: "RH", labelKey: "roles.hr.label" },
-  { value: "ops", shortKey: "roles.ops.short", short: "Ops", labelKey: "roles.ops.label" },
-  // Profils du Plan Stratégique (organigramme 3-5-15) : un indicateur peut désormais être confié
-  // au sponsor de l'axe ou au responsable du chantier concerné, pas seulement aux rôles
-  // transverses historiques.
-  {
-    value: "strategic_lead",
-    shortKey: "roles.strategicLead.short",
-    short: "Pilote",
-    labelKey: "roles.strategicLead.label",
-  },
-  {
-    value: "axis_sponsor",
-    shortKey: "roles.axisSponsor.short",
-    short: "Sponsor axe",
-    labelKey: "roles.axisSponsor.label",
-  },
-  {
-    value: "chantier_owner",
-    shortKey: "roles.chantierOwner.short",
-    short: "Resp. chantier",
-    labelKey: "roles.chantierOwner.label",
-  },
-  {
-    value: "chantier_contributor",
-    shortKey: "roles.chantierContributor.short",
-    short: "Contributeur",
-    labelKey: "roles.chantierContributor.label",
-  },
-  {
-    value: "internal_comm",
-    shortKey: "roles.internalComm.short",
-    short: "Com. interne",
-    labelKey: "roles.internalComm.label",
-  },
-  {
-    value: "budget_control",
-    shortKey: "roles.budgetControl.short",
-    short: "Contrôle gestion",
-    labelKey: "roles.budgetControl.label",
-  },
-];
+/* Responsables de saisie (décision PO) : chaque KPI a un ou des responsables NOMMÉS
+ * (`Indicator.additionalAuthorizedUserIds`, usernames) — voir `canFillIndicator`
+ * (lib/axisLogic.ts), seul point de vérité. L'ancienne attribution par RÔLE
+ * (`responsibleRoles`, qui donnait le droit à TOUS les détenteurs du rôle) n'est plus proposée :
+ * elle n'est qu'affichée (et effaçable) sur les indicateurs historiques qui la portent encore. */
 
 /** Libellés de fréquence de reporting — définis ici faute de référentiel partagé côté `lib/`
  *  (`IndicatorFrequency` est une union fermée de 4 valeurs, sans table de libellés). */
@@ -131,8 +70,10 @@ export type IndicatorFormState = {
   objectiveValue: string;
   direction: IndicatorDirection;
   unit: string;
+  /** LEGACY — conservé tel quel à l'édition, effaçable, plus jamais ajouté (voir plus haut). */
   responsibleRoles: Role[];
-  /** `AuthUser.username` (pas d'uid Firebase) — voir `canFillIndicator`. */
+  /** Responsables de saisie nommés — `AuthUser.username` (pas d'uid Firebase), voir
+   *  `canFillIndicator`. */
   additionalAuthorizedUserIds: string[];
   /** "" = aucun niveau (visible par tous) — voir `Company.confidentialityLevels` et
    *  `lib/leversLogic.ts` (même mécanisme que le Plan Performance). */
@@ -155,16 +96,15 @@ const EMPTY_FORM: IndicatorFormState = {
 };
 
 /** Champs obligatoires manquants, sous forme de clés de champ. Fonction pure (testable sans React)
- *  — l'appelant traduit les clés pour construire le message d'erreur. Règles alignées sur le reste
- *  de l'app : un indicateur sans rôle responsable ne pourrait être renseigné par personne, et un
- *  indicateur quantitatif sans valeur cible ne permettrait aucun calcul de statut
- *  (`computeIndicatorStatus`). */
+ *  — l'appelant traduit les clés pour construire le message d'erreur. Règles : au moins un
+ *  responsable de saisie NOMMÉ (décision PO), et un indicateur quantitatif sans valeur cible ne
+ *  permettrait aucun calcul de statut (`computeIndicatorStatus`). */
 export function missingIndicatorFields(form: IndicatorFormState): string[] {
   const missing: string[] = [];
   if (!form.name.trim()) missing.push("name");
   if (!form.axisId) missing.push("axis");
   if (!form.objective.trim()) missing.push("objective");
-  if (form.responsibleRoles.length === 0) missing.push("responsibleRoles");
+  if (form.additionalAuthorizedUserIds.length === 0) missing.push("responsibleUsers");
   if (form.kind === "quantitative" && !Number.isFinite(Number(form.objectiveValue.trim() || NaN))) {
     missing.push("objectiveValue");
   }
@@ -264,7 +204,7 @@ export function IndicatorsEditor({
     (editId !== null ||
       form.name.trim() !== "" ||
       form.objective.trim() !== "" ||
-      form.responsibleRoles.length > 0);
+      form.additionalAuthorizedUserIds.length > 0);
   useRegisterUnsavedChanges(`admin:indicators:${programId}`, formDirty);
 
   const axisChantiers = useMemo(
@@ -280,8 +220,8 @@ export function IndicatorsEditor({
         return t("adminIndicators.axis", "Axe de rattachement");
       case "objective":
         return t("adminIndicators.objective", "Objectif / seuil");
-      case "responsibleRoles":
-        return t("adminIndicators.responsibleRoles", "Rôles autorisés à renseigner");
+      case "responsibleUsers":
+        return t("strategic.kpiResponsible.label", "Responsable(s) de saisie");
       case "objectiveValue":
         return t("adminIndicators.objectiveValue", "Valeur cible");
       default:
@@ -314,23 +254,32 @@ export function IndicatorsEditor({
     setShowForm(true);
   };
 
-  const toggleRole = (role: Role) => {
+  const addResponsible = (username: string | undefined) => {
+    if (!username) return;
+    setForm((f) =>
+      f.additionalAuthorizedUserIds.includes(username)
+        ? f
+        : { ...f, additionalAuthorizedUserIds: [...f.additionalAuthorizedUserIds, username] }
+    );
+  };
+
+  const removeResponsible = (username: string) => {
     setForm((f) => ({
       ...f,
-      responsibleRoles: f.responsibleRoles.includes(role)
-        ? f.responsibleRoles.filter((r) => r !== role)
-        : [...f.responsibleRoles, role],
+      additionalAuthorizedUserIds: f.additionalAuthorizedUserIds.filter((u) => u !== username),
     }));
   };
 
-  const toggleUser = (username: string) => {
-    setForm((f) => ({
-      ...f,
-      additionalAuthorizedUserIds: f.additionalAuthorizedUserIds.includes(username)
-        ? f.additionalAuthorizedUserIds.filter((u) => u !== username)
-        : [...f.additionalAuthorizedUserIds, username],
-    }));
-  };
+  /** Comptes proposables (hors comex/RH, qui ne saisissent jamais) et pas déjà désignés. */
+  const responsibleCandidates = useMemo(
+    () =>
+      users.filter(
+        (u) =>
+          canBeKpiResponsible(u, programId) &&
+          !form.additionalAuthorizedUserIds.includes(u.username)
+      ),
+    [users, programId, form.additionalAuthorizedUserIds]
+  );
 
   const save = async () => {
     const missing = missingIndicatorFields(form);
@@ -422,10 +371,25 @@ export function IndicatorsEditor({
   const chantierName = (chantierId: string) =>
     chantiers.find((c) => c.id === chantierId)?.name ?? chantierId;
   const roleShort = (role: Role) => {
-    const def = RESPONSIBLE_ROLES.find((r) => r.value === role);
-    return def ? t(def.shortKey, def.short) : role;
+    const key = (roleDefinitions as Partial<Record<string, { short: string }>>)[role]?.short;
+    return key ? t(key, role) : role;
   };
-  const rolesSummary = (roles: Role[]) => roles.map(roleShort).join(", ") || "—";
+  const userLabel = (username: string) => {
+    const u = users.find((x) => x.username === username);
+    return u ? u.name || `${u.firstName} ${u.lastName}`.trim() || username : username;
+  };
+  /** Responsables nommés ; à défaut, rôles historiques marqués « (ancien) ». */
+  const responsiblesSummary = (indicator: Indicator) => {
+    const named = indicator.additionalAuthorizedUserIds ?? [];
+    if (named.length > 0) return named.map(userLabel).join(", ");
+    if (indicator.responsibleRoles.length > 0) {
+      return `${indicator.responsibleRoles.map(roleShort).join(", ")} ${t(
+        "strategic.kpiResponsible.legacySuffix",
+        "(ancien, par rôle)"
+      )}`;
+    }
+    return "—";
+  };
   const frequencyLabel = (frequency: IndicatorFrequency) => {
     const def = FREQUENCY_OPTIONS.find((f) => f.value === frequency);
     return def ? t(def.key, def.fallback) : frequency;
@@ -737,48 +701,42 @@ export function IndicatorsEditor({
             )}
           </div>
 
-          {/* Responsables : plusieurs rôles autorisés (multi-select), PLUS des comptes ajoutés au
-              cas par cas — voir `canFillIndicator` (lib/axisLogic.ts), seul point de vérité. */}
+          {/* Responsables de saisie NOMMÉS — voir `canFillIndicator` (lib/axisLogic.ts), seul point
+              de vérité. La valeur saisie suit ensuite le circuit de validation (sponsor d'axe puis
+              pilote), hors de cet écran. */}
           <div className="rounded-lg border border-border bg-bg-surface p-3">
             <span className="text-xs font-medium text-text-secondary">
-              {t("adminIndicators.responsibleRoles", "Rôles autorisés à renseigner")}
+              {t("strategic.kpiResponsible.label", "Responsable(s) de saisie")}
             </span>
             <p className="mt-1 text-xs text-text-secondary">
               {t(
-                "adminIndicators.responsibleRolesHint",
-                "Au moins un rôle est requis. Les administrateurs sont toujours autorisés, quel que soit ce choix."
+                "strategic.kpiResponsible.hint",
+                "Au moins une personne nommée. Peuvent aussi saisir : le pilote du plan, le sponsor du chantier (KPI de chantier) ou de l'axe (KPI d'axe) et les administrateurs. Les membres du COMEX et les RH ne saisissent jamais."
               )}
             </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {RESPONSIBLE_ROLES.map((role) => (
-                <button
-                  key={role.value}
-                  type="button"
-                  title={t(role.labelKey, role.short)}
-                  aria-pressed={form.responsibleRoles.includes(role.value)}
-                  onClick={() => toggleRole(role.value)}
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    form.responsibleRoles.includes(role.value)
-                      ? "bg-bp-coral text-white"
-                      : "border border-border text-text-secondary hover:bg-bg-elevated"
-                  }`}
-                >
-                  {t(role.shortKey, role.short)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-bg-surface p-3">
-            <span className="text-xs font-medium text-text-secondary">
-              {t("adminIndicators.additionalUsers", "Comptes additionnels autorisés")}
-            </span>
-            <p className="mt-1 text-xs text-text-secondary">
-              {t(
-                "adminIndicators.additionalUsersHint",
-                "Comptes autorisés en plus des rôles ci-dessus, au cas par cas."
-              )}
-            </p>
+            {form.additionalAuthorizedUserIds.length > 0 && (
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {form.additionalAuthorizedUserIds.map((username) => (
+                  <li
+                    key={username}
+                    className="flex items-center gap-1 rounded-full bg-bp-coral px-3 py-1 text-xs font-semibold text-white"
+                  >
+                    <span>{userLabel(username)}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeResponsible(username)}
+                      aria-label={t("strategic.kpiResponsible.remove", "Retirer {name}").replace(
+                        "{name}",
+                        userLabel(username)
+                      )}
+                      className="rounded-full hover:bg-white/20"
+                    >
+                      <X size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             {users.length === 0 ? (
               <p className="mt-2 text-xs text-text-secondary">
                 {t(
@@ -787,24 +745,32 @@ export function IndicatorsEditor({
                 )}
               </p>
             ) : (
-              <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
-                {users.map((u) => (
-                  <label
-                    key={u.username}
-                    className="flex items-center gap-2 text-xs text-text-primary"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={form.additionalAuthorizedUserIds.includes(u.username)}
-                      onChange={() => toggleUser(u.username)}
-                      className="h-4 w-4 rounded border-border accent-bp-coral"
-                    />
-                    <span>{u.name || `${u.firstName} ${u.lastName}`.trim()}</span>
-                    <code className="rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] text-text-secondary">
-                      {u.username}
-                    </code>
-                  </label>
-                ))}
+              <div className="mt-2 max-w-sm">
+                <UserPicker
+                  id="indicator-responsible-add"
+                  users={responsibleCandidates}
+                  value={undefined}
+                  onChange={addResponsible}
+                  placeholder={t("strategic.kpiResponsible.add", "Ajouter un responsable…")}
+                />
+              </div>
+            )}
+            {form.responsibleRoles.length > 0 && (
+              <div className="mt-3 rounded-md border border-dashed border-border p-2 text-xs text-text-secondary">
+                <span>
+                  {t(
+                    "strategic.kpiResponsible.legacyRoles",
+                    "Rôles historiques (utilisés seulement tant qu'aucun responsable n'est nommé) :"
+                  )}{" "}
+                  {form.responsibleRoles.map(roleShort).join(", ")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, responsibleRoles: [] }))}
+                  className="ml-2 font-semibold text-bp-coral hover:underline"
+                >
+                  {t("strategic.kpiResponsible.clearLegacy", "Retirer")}
+                </button>
               </div>
             )}
           </div>
@@ -893,12 +859,7 @@ export function IndicatorsEditor({
                 </td>
                 <td className="px-4 py-2.5 text-text-secondary">{objectiveSummary(indicator)}</td>
                 <td className="px-4 py-2.5 text-text-secondary">
-                  {rolesSummary(indicator.responsibleRoles)}
-                  {(indicator.additionalAuthorizedUserIds?.length ?? 0) > 0 && (
-                    <span className="ml-1 text-text-secondary">
-                      {` +${indicator.additionalAuthorizedUserIds?.length}`}
-                    </span>
-                  )}
+                  {responsiblesSummary(indicator)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-2.5 text-right">
                   <button
@@ -962,9 +923,7 @@ export function IndicatorsEditor({
               {kindLabel(indicator.kind)} · {frequencyLabel(indicator.frequency)}
             </div>
             <div className="mt-1 text-xs text-text-secondary">{objectiveSummary(indicator)}</div>
-            <div className="mt-1 text-xs text-text-secondary">
-              {rolesSummary(indicator.responsibleRoles)}
-            </div>
+            <div className="mt-1 text-xs text-text-secondary">{responsiblesSummary(indicator)}</div>
           </div>
         ))}
         {indicators.length === 0 && (

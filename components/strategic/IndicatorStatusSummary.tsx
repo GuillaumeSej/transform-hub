@@ -21,6 +21,7 @@ import {
   latestNumericMeasurement,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
+import type { IndicatorFillContext } from "@/lib/axisLogic";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
 import { IndicatorValueModal } from "@/components/strategic/IndicatorValueModal";
 import { useMeasurementCorrection } from "@/components/strategic/MeasurementCorrection";
@@ -589,10 +590,14 @@ export function BusinessKpiCards({
   updateMeasurement,
   deleteMeasurement,
   year = "all",
+  fillCtx,
 }: {
   /** Saisie de valeur (KPI marché, responsabilité CTO) : bouton affiché seulement si `user` ET
    *  `addMeasurement` sont fournis et que `canFillIndicatorValue` l'autorise. */
   user?: AuthUser | null;
+  /** Axes/chantiers du programme : reconnaît le sponsor d'axe comme saisisseur (voir
+   *  `IndicatorFillContext`, lib/axisLogic.ts). */
+  fillCtx?: IndicatorFillContext;
   addMeasurement?: (input: IndicatorValueInput) => Promise<unknown>;
   /** Correction / suppression d'une mesure publiée — actions affichées seulement si fournies et
    *  que `canFillIndicatorValue` l'autorise. */
@@ -642,6 +647,7 @@ export function BusinessKpiCards({
           updateMeasurement={updateMeasurement}
           deleteMeasurement={deleteMeasurement}
           year={year}
+          fillCtx={fillCtx}
         />
       ))}
     </div>
@@ -704,10 +710,12 @@ function BusinessKpiCard({
   updateMeasurement,
   deleteMeasurement,
   year,
+  fillCtx,
 }: {
   indicator: Indicator;
   measurements: IndicatorMeasurement[];
   labels: Required<BusinessKpiLabels>;
+  fillCtx?: IndicatorFillContext;
   user?: AuthUser | null;
   addMeasurement?: (input: IndicatorValueInput) => Promise<unknown>;
   updateMeasurement?: (id: string, patch: MeasurementEditPatch) => Promise<unknown>;
@@ -717,7 +725,7 @@ function BusinessKpiCard({
   const { t } = useTranslation();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [fillOpen, setFillOpen] = useState(false);
-  const canFill = !!user && !!addMeasurement && canFillIndicatorValue(indicator, user);
+  const canFill = !!user && !!addMeasurement && canFillIndicatorValue(indicator, user, fillCtx);
   // Année de la modale d'historique (sélecteur partagé `YearSegmentedControl`) — initialisée sur
   // l'année fournie par l'appelant (défaut : historique complet).
   const modalYear = useYearSelection(measurements, year);
@@ -733,6 +741,7 @@ function BusinessKpiCard({
     user,
     updateMeasurement,
     deleteMeasurement,
+    fillCtx,
   });
   const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
   const value =

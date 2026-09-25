@@ -5,6 +5,7 @@ import { canDecideMilestone } from "@/lib/axisLogic";
 import { canApproveLeverDeletion, isLeverSponsoredBy } from "@/lib/leversLogic";
 import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
 import { canDecideImpactRealized, isImpactRealizedPending } from "@/lib/impactStatus";
+import type { StrategicApproval } from "@/lib/strategicApprovals";
 import type {
   AuthUser,
   BeTrackData,
@@ -146,18 +147,29 @@ export type MilestoneApprovalQueueEntry = {
  * chantier (programme, pilote, axes), et aucun projet fantôme ne doit être présenté à
  * l'approbation. `axes` : nécessaire pour qu'un responsable d'axe voie les demandes des chantiers
  * SANS pilote (repli de la cascade, voir `canDecideMilestone`).
+ *
+ * `approvals` (optionnel, `useStrategicApprovals().approvals`) : les projets dont le jalon est
+ * porté par une demande `StrategicApproval` "milestone" EN ATTENTE sont EXCLUS — cette demande
+ * (validation à paliers N+1 puis N+2, lib/strategicApprovals.ts) apparaît déjà, au bon palier,
+ * dans `useStrategicApprovals().pending`. Sans cette exclusion, le pilote du chantier verrait ici
+ * une demande qui attend en réalité le sponsor d'axe (étape 2). Même exclusion que
+ * app/(app)/validation/page.tsx et lib/myWorkspace.ts. À passer par tout appelant (Topbar).
  */
 export function resolveMilestoneApprovalQueue(
   chantierActions: ChantierAction[],
   chantiers: Chantier[],
   user: AuthUser | null | undefined,
-  axes: Pick<StrategicAxis, "id" | "owner">[] = []
+  axes: Pick<StrategicAxis, "id" | "owner">[] = [],
+  approvals: Pick<StrategicApproval, "kind" | "status" | "targetId">[] = []
 ): MilestoneApprovalQueueEntry[] {
   if (!user) return [];
   const chantierById = new Map(chantiers.map((c) => [c.id, c]));
+  const covered = new Set(
+    approvals.filter((a) => a.kind === "milestone" && a.status === "pending").map((a) => a.targetId)
+  );
   const entries: MilestoneApprovalQueueEntry[] = [];
   for (const action of chantierActions) {
-    if (!action.milestoneApproval) continue;
+    if (!action.milestoneApproval || covered.has(action.id)) continue;
     const chantier = chantierById.get(action.chantierId);
     if (!chantier) continue;
     if (canDecideMilestone(chantier, user, axes)) {
@@ -177,11 +189,20 @@ export function useMilestoneApprovalQueue(
     chantiers: Chantier[];
     axes?: Pick<StrategicAxis, "id" | "owner">[];
   },
-  user: AuthUser | null | undefined
+  user: AuthUser | null | undefined,
+  /** Demandes stratégiques du programme — voir `resolveMilestoneApprovalQueue`. */
+  approvals?: Pick<StrategicApproval, "kind" | "status" | "targetId">[]
 ) {
   const queue = useMemo(
-    () => resolveMilestoneApprovalQueue(data.chantierActions, data.chantiers, user, data.axes),
-    [data.chantierActions, data.chantiers, data.axes, user]
+    () =>
+      resolveMilestoneApprovalQueue(
+        data.chantierActions,
+        data.chantiers,
+        user,
+        data.axes,
+        approvals ?? []
+      ),
+    [data.chantierActions, data.chantiers, data.axes, user, approvals]
   );
 
   return {

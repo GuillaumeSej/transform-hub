@@ -27,8 +27,19 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { isReadOnlyUser } from "@/lib/roleProfiles";
-import type { Indicator, IndicatorMeasurement } from "@/types";
+import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
+import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
+import { createChantierFlow, newChantierId, pendingApprovals } from "@/lib/strategicApprovalFlows";
+import { hierarchyContextFor, type ChantierCreateApprovalPayload } from "@/lib/strategicApprovals";
+import {
+  canDesignateAxisSponsor,
+  chainLabel,
+  chantierRights,
+  fillTemplate,
+  flowOutcomeMessage,
+} from "@/lib/strategicFiche";
+import { PendingApprovalBadge } from "@/components/strategic/PendingApprovalBadge";
+import type { Chantier, Indicator, IndicatorMeasurement } from "@/types";
 import { IndicatorMetaLine } from "@/components/strategic/IndicatorMetaLine";
 import {
   YearSegmentedControl,
@@ -64,8 +75,8 @@ import {
 
 export function AxisDetailClient() {
   const { user } = useRole();
-  const readOnly = isReadOnlyUser(user);
   const { activeProgramId } = useActiveProgram();
+  const readOnly = isReadOnlyUser(user, activeProgramId, "strategic");
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -73,6 +84,7 @@ export function AxisDetailClient() {
   const id = searchParams.get("id") ?? "";
 
   const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
+  const sa = useStrategicApprovalsApi();
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
   // Échelle de confidentialité de l'entreprise — pour le sélecteur des modales d'édition d'axe et
@@ -187,6 +199,63 @@ export function AxisDetailClient() {
 
   const macroIndicators = axisIndicators.filter((i) => !i.chantierId);
 
+  // ── Hiérarchie de validation (lib/strategicHierarchy.ts) ────────────────────────────────────
+  // Désignations : sponsor d'axe et sponsor de chantier réservés au pilote du plan / admin.
+  // Création de chantier : `createChantierFlow` (sponsor d'axe puis pilote), sauf chaîne vide.
+  const axisCtx = hierarchyContextFor(
+    "chantier_update",
+    { type: "axe", id: axis.id, name: axis.name },
+    {
+      programId: activeProgramId,
+      axes: data.axes,
+      chantiers: data.chantiers,
+      chantierActions: data.chantierActions,
+      indicators: data.indicators,
+      users: data.users,
+    }
+  );
+  const rightsInput = {
+    username: user?.username,
+    isAdmin: !!user && isAnyAdmin(user),
+    readOnly,
+    ctx: axisCtx,
+  };
+  const canEditAxisOwner = canDesignateAxisSponsor(rightsInput);
+  const canEditChantierPilote = chantierRights(rightsInput).canDesignateSponsor;
+  const designationTooltip = {
+    axisSponsor: t(
+      "strategicFiche.rights.axisSponsor",
+      "Le sponsor d'axe est désigné par le pilote du plan (ou un administrateur)."
+    ),
+    chantierSponsor: t(
+      "strategicFiche.rights.chantierSponsor",
+      "Le sponsor de chantier est désigné par le pilote du plan (ou un administrateur)."
+    ),
+  };
+  const chainJoiner = t("strategicFiche.chain.then", "puis");
+  /** Chantier complet (id stable) soumis à `createChantierFlow`. */
+  const buildChantier = (values: ChantierFormValues): Chantier => ({
+    dependencies: [],
+    ...values,
+    id: newChantierId(),
+    companyId: user?.companyId ?? "",
+    programId: activeProgramId ?? "",
+    createdAt: new Date().toISOString().slice(0, 10),
+    lastUpdate: new Date().toISOString().slice(0, 10),
+  });
+  const chantierCreatePreview = (values: ChantierFormValues) => {
+    if (!sa || values.axisIds.length === 0) return [];
+    const chantier = buildChantier(values);
+    return sa.previewChain(
+      "chantier_create",
+      { type: "axe", id: chantier.axisIds[0], name: chantier.name },
+      { chantier } satisfies ChantierCreateApprovalPayload
+    );
+  };
+  const pendingChantierCreations = pendingApprovals(sa?.approvals, "chantier_create").filter((a) =>
+    (a.payload as ChantierCreateApprovalPayload).chantier?.axisIds?.includes(axis.id)
+  );
+
   return (
     <div className="animate-fade-up">
       <button
@@ -234,6 +303,8 @@ export function AxisDetailClient() {
           stages={stages}
           confidentialityLevels={confidentialityLevels}
           submitLabel={t("common.save")}
+          canEditOwner={canEditAxisOwner}
+          ownerTooltip={designationTooltip.axisSponsor}
           onCancel={() => setEditAxisOpen(false)}
           onSubmit={async (values: AxisFormValues) => {
             await data.updateAxis(axis.id, values);
@@ -298,6 +369,20 @@ export function AxisDetailClient() {
         />
         <CardBody>
           <p className="mb-3 text-[11.5px] text-tertiary">{t("strategicAxes.ganttHint")}</p>
+          {pendingChantierCreations.map((a) => (
+            <div
+              key={a.id}
+              className="mb-2 flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1 text-xs text-text-secondary"
+            >
+              <span className="font-medium">
+                {(a.payload as ChantierCreateApprovalPayload).chantier?.name ?? a.targetName}
+              </span>
+              <span className="text-[10.5px] italic">
+                {t("strategicFiche.pending.chantierCreation", "Création en attente de validation")}
+              </span>
+              <PendingApprovalBadge approval={a} users={data.users} className="ml-auto" />
+            </div>
+          ))}
           <ChantierGantt
             chantiers={axisChantiers}
             actions={axisActions}
@@ -339,13 +424,49 @@ export function AxisDetailClient() {
           confidentialityLevels={confidentialityLevels}
           users={data.users}
           submitLabel={t("strategicAxes.createChantier")}
+          canEditPilote={canEditChantierPilote}
+          piloteTooltip={designationTooltip.chantierSponsor}
+          approvalHint={(values) => {
+            const chain = chainLabel(chantierCreatePreview(values), data.users, chainJoiner);
+            return chain
+              ? fillTemplate(t("strategicFiche.chain.preview", "Sera validé par {chain}"), {
+                  chain,
+                })
+              : "";
+          }}
           onCancel={() => setNewChantierOpen(false)}
           onSubmit={async (values: ChantierFormValues) => {
             try {
-              const created = await data.createChantier(values);
+              // Sponsor de chantier non désignable par l'acteur : jamais transmis.
+              const { pilote: requestedPilote, ...rest } = values;
+              const input: ChantierFormValues =
+                canEditChantierPilote && requestedPilote
+                  ? { ...rest, pilote: requestedPilote }
+                  : rest;
+              const preview = chantierCreatePreview(input);
+              let createdId: string | undefined;
+              const outcome = await createChantierFlow(sa, buildChantier(input), async () => {
+                const created = await data.createChantier(input);
+                createdId = created.id;
+              });
               setNewChantierOpen(false);
-              showToast(t("strategicAxes.chantierCreated"), created.name, "success");
-              openChantier(created.id);
+              if (outcome === "pending") {
+                const message = flowOutcomeMessage(
+                  { outcome },
+                  data.users,
+                  {
+                    applied: t("strategicFiche.toast.applied", "Appliqué"),
+                    pending: t("strategicFiche.toast.pending", "Envoyé en validation : {chain}"),
+                    partial: t("strategicFiche.toast.pending", "Envoyé en validation : {chain}"),
+                    joiner: chainJoiner,
+                  },
+                  preview
+                );
+                showToast(message ?? "", input.name, "success");
+                return;
+              }
+              showToast(t("strategicAxes.chantierCreated"), input.name, "success");
+              if (createdId) openChantier(createdId);
             } catch (error) {
               console.error("[betrack] échec de création du chantier :", error);
               showToast(

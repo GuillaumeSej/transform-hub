@@ -189,6 +189,38 @@ describe("auth — resolveAuthUserProfile", () => {
     await expect(promise).rejects.toThrow(/désactivé/);
   });
 
+  it("maps legacy removed strategic roles (internal_comm/budget_control) to comex_member on read", async () => {
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        username: "legacy",
+        profiles: [
+          { role: "internal_comm", programId: "s1" },
+          { role: "budget_control", programId: "s1" },
+          { role: "lever", programId: "p1" },
+        ],
+        name: "Legacy",
+        companyId: "c1",
+      }),
+    });
+    const { resolveAuthUserProfile } = await import("@/lib/auth");
+    const profile = await resolveAuthUserProfile("legacy.c1");
+    expect(profile.profiles).toEqual([
+      { role: "comex_member", programId: "s1" },
+      { role: "lever", programId: "p1" },
+    ]);
+  });
+
+  it("maps a legacy single-field role budget_control to comex_member", async () => {
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ username: "old", role: "budget_control", name: "Old", companyId: "c1" }),
+    });
+    const { resolveAuthUserProfile } = await import("@/lib/auth");
+    const profile = await resolveAuthUserProfile("old.c1");
+    expect(profile.profiles).toEqual([{ role: "comex_member" }]);
+  });
+
   it("throws an explicit error when no Firestore profile matches", async () => {
     getDoc.mockResolvedValue({ exists: () => false });
     const { resolveAuthUserProfile } = await import("@/lib/auth");

@@ -280,9 +280,9 @@ describe("countOnTrackAtRisk", () => {
 });
 
 describe("canFillIndicator", () => {
-  it("allows a user whose role is listed in responsibleRoles", () => {
-    const indicator = makeIndicator({ responsibleRoles: ["cto", "hr"] });
-    expect(canFillIndicator(indicator, { ...baseUser, profiles: [{ role: "hr" }] })).toBe(true);
+  it("allows a user whose role is listed in responsibleRoles (legacy fallback, no named responsible)", () => {
+    const indicator = makeIndicator({ responsibleRoles: ["cto", "ops"] });
+    expect(canFillIndicator(indicator, { ...baseUser, profiles: [{ role: "ops" }] })).toBe(true);
   });
 
   it("allows a user listed individually even when their role is not authorized", () => {
@@ -592,9 +592,9 @@ describe("resolveStrategicRoleForProgram", () => {
   });
 
   it("falls back to a global (programId-less) strategic profile when none matches the active program", () => {
-    const user = { profiles: [{ role: "internal_comm" as const }] };
-    expect(resolveStrategicRoleForProgram(user, "p1")).toBe("internal_comm");
-    expect(resolveStrategicRoleForProgram(user, "any-other-program")).toBe("internal_comm");
+    const user = { profiles: [{ role: "comex_member" as const }] };
+    expect(resolveStrategicRoleForProgram(user, "p1")).toBe("comex_member");
+    expect(resolveStrategicRoleForProgram(user, "any-other-program")).toBe("comex_member");
   });
 });
 
@@ -621,12 +621,7 @@ describe("resolveStrategicOwnershipScope", () => {
   });
 
   it("returns unrestricted for the strategic roles without named ownership", () => {
-    for (const role of [
-      "strategic_lead",
-      "internal_comm",
-      "budget_control",
-      "comex_member",
-    ] as const) {
+    for (const role of ["strategic_lead", "hr", "comex_member"] as const) {
       expect(
         resolveStrategicOwnershipScope({ username: "u1", profiles: [{ role }] }, "p1", [], [], [])
       ).toEqual({ mode: "unrestricted" });
@@ -1656,6 +1651,18 @@ describe("requestMilestoneApproval", () => {
         [action]
       )
     ).not.toThrow();
+  });
+
+  it("allows a project contributor to request the milestone passage", () => {
+    const action = actionReadyForE2({ owner: "owner1", contributors: ["contrib1"] });
+    expect(
+      requestMilestoneApproval(
+        action,
+        { username: "contrib1", isGlobalAdmin: false, isCompanyAdmin: false },
+        [],
+        [action]
+      ).requestedBy
+    ).toBe("contrib1");
   });
 
   it("throws for a user who is neither the project owner nor an admin", () => {

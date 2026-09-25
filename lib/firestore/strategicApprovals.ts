@@ -44,17 +44,33 @@ export async function saveStrategicApproval(approval: StrategicApproval): Promis
   await setDoc(doc(approvalsCol(), approval.id), stripUndefined(approval));
 }
 
-export type ApprovalDecisionPatch = Pick<
-  StrategicApproval,
-  "status" | "decidedBy" | "decidedByName" | "decidedAt" | "decisionComment"
-> &
-  Partial<Pick<StrategicApproval, "payload" | "informUsernames">>;
+export type ApprovalDecisionPatch = Pick<StrategicApproval, "status"> &
+  Partial<
+    Pick<
+      StrategicApproval,
+      | "decidedBy"
+      | "decidedByName"
+      | "decidedAt"
+      | "decisionComment"
+      | "payload"
+      | "informUsernames"
+      | "chain"
+      | "stepIndex"
+      | "approverRole"
+      | "approverUsername"
+      | "approverUsernames"
+    >
+  >;
 
 /** Enregistre la décision en transaction : refuse si la demande n'est plus "pending" (double
- *  décision concurrente). Renvoie la demande mise à jour. */
+ *  décision concurrente). Demande à paliers (`chain`) : `expectedStepIndex` = palier décidé —
+ *  refuse si un autre approbateur a déjà fait avancer la demande entre-temps. Le patch peut laisser
+ *  la demande "pending" (palier intermédiaire validé : `stepIndex` + `chain` + `approver*` mis à
+ *  jour). Renvoie la demande mise à jour. */
 export async function decideStrategicApproval(
   id: string,
-  patch: ApprovalDecisionPatch
+  patch: ApprovalDecisionPatch,
+  expectedStepIndex?: number
 ): Promise<StrategicApproval> {
   const ref = doc(approvalsCol(), id);
   return runTransaction(db, async (tx) => {
@@ -62,6 +78,9 @@ export async function decideStrategicApproval(
     if (!snap.exists()) throw new Error("Demande introuvable");
     const current = snap.data() as StrategicApproval;
     if (current.status !== "pending") throw new Error("Cette demande a déjà été traitée");
+    if (expectedStepIndex !== undefined && (current.stepIndex ?? 0) !== expectedStepIndex) {
+      throw new Error("Cette étape a déjà été validée par un autre approbateur");
+    }
     const next = stripUndefined({ ...current, ...patch });
     tx.set(ref, next);
     return next;

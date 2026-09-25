@@ -77,13 +77,18 @@ const PERSON_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }[] = 
     label: "Responsable projet",
   },
   {
+    value: "projet_contributor",
+    labelKey: "roles.projetContributor.label",
+    label: "Contributeur projet",
+  },
+  {
     value: "chantier_owner",
     labelKey: "roles.chantierOwner.label",
-    label: "Responsable de chantier",
+    label: "Sponsor de chantier",
   },
-  { value: "axis_sponsor", labelKey: "roles.axisSponsor.label", label: "Commanditaire d'axe" },
-  { value: "internal_comm", labelKey: "roles.internalComm.label", label: "Communication interne" },
-  { value: "budget_control", labelKey: "roles.budgetControl.label", label: "Contrôle de gestion" },
+  { value: "axis_sponsor", labelKey: "roles.axisSponsor.label", label: "Sponsor d'axe" },
+  { value: "comex_member", labelKey: "roles.comexMember.label", label: "Membre du COMEX" },
+  { value: "hr", labelKey: "roles.hr.label", label: "Directeur RH" },
   {
     value: "strategic_lead",
     labelKey: "roles.strategicLead.label",

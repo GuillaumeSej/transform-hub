@@ -113,7 +113,7 @@ export function ChantierStaffingEditor({
   const { showToast } = useToast();
   const { user } = useRole();
   const scoped = !!scopedToActionId;
-  const readOnly = isReadOnlyUser(user) || scoped;
+  const readOnly = isReadOnlyUser(user, programId, "strategic") || scoped;
   const focusActionId = !scoped ? focusRequest?.actionId : undefined;
 
   const { departmentNames } = useCompanyDepartments(companyId);

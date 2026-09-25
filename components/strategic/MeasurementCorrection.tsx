@@ -15,6 +15,7 @@ import {
   type MeasurementEditPatch,
 } from "@/lib/kpiHistory";
 import { deleteKpiValueFlow } from "@/lib/strategicApprovalFlows";
+import type { IndicatorFillContext } from "@/lib/axisLogic";
 import type { AuthUser, Indicator, IndicatorMeasurement } from "@/types";
 
 export type MeasurementCorrection = {
@@ -42,6 +43,7 @@ export function useMeasurementCorrection({
   user,
   updateMeasurement,
   deleteMeasurement,
+  fillCtx,
 }: {
   indicator: Indicator;
   /** TOUTES les mesures de l'indicateur (pas la sélection d'année) : doublons + baseline. */
@@ -49,6 +51,9 @@ export function useMeasurementCorrection({
   user: AuthUser | null | undefined;
   updateMeasurement?: (id: string, patch: MeasurementEditPatch) => Promise<unknown>;
   deleteMeasurement?: (id: string) => Promise<unknown>;
+  /** Axes/chantiers du programme : REQUIS pour reconnaître le sponsor d'axe/de chantier dans le
+   *  repli `canFillIndicatorValue` (hors contexte d'approbation). */
+  fillCtx?: IndicatorFillContext;
 }): MeasurementCorrection {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -59,7 +64,9 @@ export function useMeasurementCorrection({
   const [busy, setBusy] = useState(false);
 
   const route = sa && user ? sa.kpiCorrectionRoute(indicator) : null;
-  const allowed = route ? route.mode !== "forbidden" : canFillIndicatorValue(indicator, user);
+  const allowed = route
+    ? route.mode !== "forbidden"
+    : canFillIndicatorValue(indicator, user, fillCtx);
   const canCorrect = !!user && !!updateMeasurement && !!deleteMeasurement && allowed;
 
   const confirmDelete = async () => {

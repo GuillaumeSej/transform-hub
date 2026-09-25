@@ -169,15 +169,42 @@ service cloud.firestore {
     // même `username` humain d'exister une fois PAR entreprise, avec un compte Firebase Auth et un
     // mot de passe distincts, sans collision. `currentUsername()` (mal nommée historiquement, en
     // réalité "accountSlug courant") renvoie exactement cette même chaîne pour l'appelant.
+    //
+    // VERROU D'ÉLÉVATION (admin BearingPoint) : l'habilitation admin global (`isGlobalAdmin: true`,
+    // ou legacy `role: 'admin'`) ne peut être accordée, modifiée ou retirée QUE par un admin global.
+    // Un admin d'ENTREPRISE (isCompanyAdmin) ne peut, sur `adminUsers` :
+    //   - ni créer/mettre à jour un document qui porterait `isGlobalAdmin == true` ou `role == 'admin'`
+    //     (`carriesGlobalAdmin(request.resource.data)`) ;
+    //   - ni modifier/supprimer un document qui PORTE DÉJÀ cette habilitation
+    //     (`carriesGlobalAdmin(resource.data)`) — sinon il pourrait reprendre la main sur un compte
+    //     BearingPoint (changement de mot de passe legacy, suppression) ;
+    //   - ni déplacer un utilisateur vers une autre entreprise (companyId inchangé en update, et
+    //     création limitée à SA propre entreprise via `isCompanyAdmin(companyId cible)`) — ce qui
+    //     l'empêche aussi d'accorder `isCompanyAdmin` sur une autre entreprise : le flag n'a d'effet
+    //     que combiné au `companyId` du document, qui reste forcément le sien.
+    // Le super admin (isSuperAdmin) reste sans restriction. Même garde-fou côté admin-api
+    // (admin-api/src/lib/authz.ts::assertCanActOnTarget) et côté UI (UsersPanel ne propose la case
+    // « admin global » qu'à un admin global).
+    function carriesGlobalAdmin(data) {
+      return data.get('isGlobalAdmin', false) == true || data.get('role', '') == 'admin';
+    }
+
     match /adminUsers/{accountSlug} {
       allow read: if isSuperAdmin()
         || accountSlug == currentUsername()
         || belongsToCompany(docCompanyId(resource.data));
-      allow create: if isSuperAdmin() || isCompanyAdmin(docCompanyId(request.resource.data));
+      allow create: if isSuperAdmin()
+        || (isCompanyAdmin(docCompanyId(request.resource.data))
+            && request.resource.data.get('isGlobalAdmin', false) != true
+            && request.resource.data.get('role', '') != 'admin');
       allow update: if isSuperAdmin()
         || (isCompanyAdmin(docCompanyId(resource.data))
-            && docCompanyId(request.resource.data) == docCompanyId(resource.data));
-      allow delete: if isSuperAdmin() || isCompanyAdmin(docCompanyId(resource.data));
+            && docCompanyId(request.resource.data) == docCompanyId(resource.data)
+            && request.resource.data.get('isGlobalAdmin', false) != true
+            && request.resource.data.get('role', '') != 'admin'
+            && !carriesGlobalAdmin(resource.data));
+      allow delete: if isSuperAdmin()
+        || (isCompanyAdmin(docCompanyId(resource.data)) && !carriesGlobalAdmin(resource.data));
     }
 
     // ─── adminApiAuditLog/{id} — journal des actions sur les COMPTES (renommage, suppression,

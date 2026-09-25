@@ -9,7 +9,31 @@ type CallerProfile = {
   username: string;
   role: string;
   companyId: string | null;
+  /** Admin BearingPoint (global) — seul habilité à agir sur un compte lui-même admin global. */
+  isGlobalAdmin: boolean;
 };
+
+type TargetAccountData = { isGlobalAdmin?: boolean; role?: string } | undefined;
+
+/** Le document `adminUsers` cible porte-t-il l'habilitation admin BearingPoint (global) —
+ *  nouveau format `isGlobalAdmin` ou legacy `role: "admin"` ? */
+export function isGlobalAdminAccount(data: TargetAccountData): boolean {
+  return data?.isGlobalAdmin === true || data?.role === "admin";
+}
+
+/**
+ * Verrou d'élévation : un admin d'ENTREPRISE ne peut jamais agir (renommer, changer le mot de
+ * passe, supprimer, désactiver, générer un lien de réinitialisation) sur un compte admin global —
+ * sinon il pourrait prendre la main sur un compte BearingPoint. Seul un admin global le peut.
+ * Même garde-fou côté règles Firestore (firestore.rules, `adminUsers`).
+ */
+export function assertCanActOnTarget(caller: CallerProfile, targetData: TargetAccountData): void {
+  if (!caller.isGlobalAdmin && isGlobalAdminAccount(targetData)) {
+    throw Errors.forbidden(
+      "Seul un administrateur global peut agir sur un compte administrateur global."
+    );
+  }
+}
 
 /**
  * Verifies the caller's Firebase ID token, resolves their `adminUsers` profile (same slug logic
@@ -56,7 +80,13 @@ export async function authorizeAdminCaller(
     companyId?: string | null;
     isGlobalAdmin?: boolean;
     isCompanyAdmin?: boolean;
+    disabled?: boolean;
   };
+  // Un compte désactivé (flag `disabled`, voir routes/setUserDisabled.ts) ne peut plus rien
+  // administrer, même si son jeton Firebase n'a pas encore expiré.
+  if (data.disabled === true) {
+    throw Errors.forbidden("Ce compte est désactivé.");
+  }
   const role = data.role;
   const companyId = data.companyId ?? null;
 
@@ -76,5 +106,12 @@ export async function authorizeAdminCaller(
     );
   }
 
-  return { uid: decoded.uid, slug, username: data.username ?? slug, role: role ?? "", companyId };
+  return {
+    uid: decoded.uid,
+    slug,
+    username: data.username ?? slug,
+    role: role ?? "",
+    companyId,
+    isGlobalAdmin,
+  };
 }

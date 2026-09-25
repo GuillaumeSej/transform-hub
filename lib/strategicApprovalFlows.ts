@@ -3,8 +3,20 @@
  *
  * Chaque fonction reçoit une « porte » (`ApprovalGate`, = `useStrategicApprovals()` restreint à
  * `needsApproval` + `request`) : `null` (hors contexte stratégique) ⇒ comportement direct historique.
- * Si l'acteur est l'approbateur (`needsApproval` = false) l'action est appliquée directement ;
- * sinon une demande est créée et RIEN n'est écrit côté données publiées.
+ * Si la chaîne de validation de l'acteur est vide (`needsApproval` = false : admin, pilote du plan,
+ * modification libre) l'action est appliquée directement ; sinon UNE demande à paliers (N+1 puis
+ * N+2, voir lib/strategicApprovals.ts) est créée et RIEN n'est écrit côté données publiées.
+ *
+ * Quel flux pour quelle action UI :
+ *   saisie KPI                    → submitKpiValueFlow        (2 validations)
+ *   correction/suppression KPI    → editKpiValueFlow / deleteKpiValueFlow (+ sa.kpiCorrectionRoute)
+ *   demande de passage de jalon   → milestoneFlow             (2 validations)
+ *   édition de champs d'un projet → updateProjetFlow          (libre / 1 / 2 selon les champs)
+ *   édition de champs d'un chantier → updateChantierFlow      (idem)
+ *   désignation resp./contributeurs → updateProjetFlow({ owner } / { contributors })  (1 validation)
+ *   création de projet            → createProjetFlow          (2 validations)
+ *   suppression projet / chantier → deleteFlow                (2 validations)
+ *   création de chantier          → createChantierFlow        (2 validations)
  */
 import { requestMilestoneApproval as requestMilestoneApprovalLogic } from "@/lib/axisLogic";
 import {
@@ -15,14 +27,19 @@ import {
   type MeasurementEditPatch,
 } from "@/lib/kpiHistory";
 import type { KpiCorrectionRoute } from "@/lib/kpiCorrectionRouting";
-import type {
-  KpiValueApprovalPayload,
-  ProjetCreateApprovalPayload,
-  ProjetCreateStage,
-  StrategicApproval,
-  StrategicApprovalKind,
-  StrategicApprovalPayload,
-  StrategicApprovalTarget,
+import {
+  pendingApproversOf,
+  splitPatchByCategory,
+  type ChantierCreateApprovalPayload,
+  type GatedCategory,
+  type KpiValueApprovalPayload,
+  type PatchEntity,
+  type ProjetCreateApprovalPayload,
+  type ProjetCreateStage,
+  type StrategicApproval,
+  type StrategicApprovalKind,
+  type StrategicApprovalPayload,
+  type StrategicApprovalTarget,
 } from "@/lib/strategicApprovals";
 import type {
   AuthUser,
@@ -34,13 +51,13 @@ import type {
 } from "@/types";
 
 export type ApprovalGate = {
-  /** `stage` : uniquement significatif pour `"projet_create"` (double validation, voir l'en-tête
-   *  de `lib/strategicApprovals.ts`) — permet à `createProjetFlow` de tester séparément le palier
-   *  "chantier" (pilote) et le palier "axis" (responsable de l'axe). Ignoré pour les autres kinds. */
+  /** `stage` : LEGACY, ignoré. `payload` : requis pour "projet_update"/"chantier_update"
+   *  (catégorie) et "chantier_create" (axes) — voir `needsApproval` (lib/strategicApprovals.ts). */
   needsApproval: (
     kind: StrategicApprovalKind,
     target: StrategicApprovalTarget,
-    stage?: ProjetCreateStage
+    stage?: ProjetCreateStage,
+    payload?: StrategicApprovalPayload
   ) => boolean;
   request: (
     kind: StrategicApprovalKind,
@@ -99,10 +116,14 @@ export function pendingApprovals(
   );
 }
 
-/** « X » affichable de l'approbateur nominal d'une demande. */
+/** « X » affichable de l'approbateur ATTENDU (palier courant pour une demande à chaîne). */
 export function approverLabel(
-  a: Pick<StrategicApproval, "approverUsername" | "approverUsernames">
+  a: Pick<StrategicApproval, "approverUsername" | "approverUsernames"> &
+    Partial<Pick<StrategicApproval, "chain" | "stepIndex" | "status">>
 ): string {
+  if (a.chain?.length) {
+    return pendingApproversOf({ status: "pending", ...a } as StrategicApproval).join(", ");
+  }
   return a.approverUsername ?? a.approverUsernames[0] ?? "";
 }
 
@@ -254,31 +275,15 @@ export async function deleteFlow(
 }
 
 /**
- * Création d'un projet : DOUBLE validation séquentielle — pilote du chantier PUIS responsable de
- * l'axe (voir l'en-tête de `lib/strategicApprovals.ts`, section "Double validation de
- * projet_create") — ou création directe si l'acteur satisfait déjà les DEUX paliers (il en est un
- * des deux ET l'autre aussi, ou il est admin/strategic_lead).
+ * Création d'un projet : UNE demande `"projet_create"` à deux paliers (sponsor de chantier PUIS
+ * sponsor d'axe, l'auteur étant traité au moins comme responsable projet — voir
+ * lib/strategicApprovals.ts), ou création directe si la chaîne est vide (admin, pilote du plan,
+ * personne au-dessus). L'ancienne double demande enchaînée (`payload.stage`) n'est plus produite ;
+ * les demandes legacy déjà en base restent traitées par `useStrategicApprovals`.
  *
- * On ne demande QUE les paliers que l'acteur ne peut pas lui-même trancher :
- *  - s'il ne satisfait ni l'un ni l'autre : demande palier "chantier" (1er palier) — l'approbation
- *    du pilote enchaînera ensuite automatiquement la 2e demande, palier "axis"
- *    (`nextProjetCreateApproval`, appelé par `useStrategicApprovals.decide()`) ;
- *  - s'il EST déjà le pilote (ou qu'aucun palier "chantier" distinct n'existe, cascade vers l'axe
- *    quand le chantier n'a pas de pilote renseigné — voir `resolveApprover`) mais pas responsable
- *    d'axe : demande DIRECTEMENT le palier "axis", sans repasser par un palier "chantier" déjà
- *    implicitement satisfait par son propre geste de création ;
- *  - s'il satisfait les deux (ou admin/strategic_lead) : création immédiate, aucune demande.
- *
- * `staffing` (round 29) : lignes ETP bufferisées dans le formulaire de création
- * (`StaffingDraftTable.tsx`), déjà converties en `ChantierStaffing` avec `actionId` = `action.id`
- * (l'id pré-généré de ce même appel, voir `newProjetId` ci-dessous). Optionnel/par défaut vide :
- * tous les appelants existants (avant round 29) continuent de fonctionner sans rien changer.
- * Chemin direct : ignoré ici, c'est `createDirect` (fourni par l'appelant) qui les écrit — cette
- * fonction n'a pas accès à l'id RÉEL généré côté direct (`data.createChantierAction` génère le
- * sien, indépendant de `action.id`, voir le commentaire de tête de `newProjetId`). Chemin demande :
- * embarqué dans le payload, appliqué par `applyApprovedPayload` (`lib/strategicApprovals.ts`) une
- * fois la demande du palier "axis" approuvée, puisque `action.id` EST alors l'id définitif du
- * projet (le palier "chantier", lui, n'a jamais d'effet de création direct : voir cette fonction).
+ * `staffing` (round 29) : lignes ETP bufferisées dans le formulaire de création, `actionId` =
+ * `action.id`. Chemin direct : ignoré ici (c'est `createDirect` qui les écrit). Chemin demande :
+ * embarqué dans le payload, appliqué par `applyApprovedPayload` à la validation finale.
  */
 export async function createProjetFlow(
   gate: ApprovalGate | null | undefined,
@@ -296,26 +301,144 @@ export async function createProjetFlow(
     await createDirect();
     return "applied";
   }
-  const payloadFor = (stage: ProjetCreateStage): ProjetCreateApprovalPayload => ({
+  const payload: ProjetCreateApprovalPayload = {
     action,
-    stage,
     ...(staffing.length ? { staffing } : {}),
-  });
-  // Pas de pilote renseigné : `resolveApprover` fait déjà cascader le palier "chantier" vers
-  // l'axe (mêmes usernames) — démarrer directement au palier terminal "axis" évite de créer un
-  // premier palier qui résoudrait identique au second (comportement historique à un seul palier,
-  // inchangé quand le chantier n'a pas de pilote).
-  const firstStage: ProjetCreateStage = chantier.pilote ? "chantier" : "axis";
-  if (gate.needsApproval("projet_create", target, firstStage)) {
-    await gate.request("projet_create", target, payloadFor(firstStage));
-    return "pending";
-  }
-  if (firstStage === "chantier" && gate.needsApproval("projet_create", target, "axis")) {
-    await gate.request("projet_create", target, payloadFor("axis"));
+  };
+  if (gate.needsApproval("projet_create", target, undefined, payload)) {
+    await gate.request("projet_create", target, payload);
     return "pending";
   }
   await createDirect();
   return "applied";
+}
+
+/**
+ * Création d'un chantier : demande `"chantier_create"` (sponsor d'axe puis pilote du plan), ou
+ * création directe si la chaîne est vide (admin, pilote). `chantier` : complet, id déjà généré
+ * (voir `newChantierId`), `axisIds` non vide ; cible = son axe principal (`axisIds[0]`).
+ */
+export async function createChantierFlow(
+  gate: ApprovalGate | null | undefined,
+  chantier: Chantier,
+  createDirect: () => Promise<unknown>,
+  reason?: string
+): Promise<FlowOutcome> {
+  if (!gate) {
+    await createDirect();
+    return "applied";
+  }
+  const target: StrategicApprovalTarget = {
+    type: "axe",
+    id: chantier.axisIds[0],
+    name: chantier.name,
+  };
+  const payload: ChantierCreateApprovalPayload = { chantier };
+  if (gate.needsApproval("chantier_create", target, undefined, payload)) {
+    await gate.request("chantier_create", target, payload, reason?.trim() || undefined);
+    return "pending";
+  }
+  await createDirect();
+  return "applied";
+}
+
+/** Génère l'identifiant d'un chantier (création soumise à validation : id stable). */
+export function newChantierId(): string {
+  return `CH-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export type UpdateFlowResult<T> = {
+  /** "applied" : tout appliqué ; "pending" : tout soumis ; "partial" : une partie appliquée
+   *  (ex. libellé) et le reste soumis ; "noop" : rien de modifié. */
+  outcome: FlowOutcome | "partial" | "noop";
+  /** Champs appliqués directement (passés à `applyDirect`). */
+  applied: Partial<T>;
+  /** Demandes créées (une par catégorie soumise : pilotage / planning / désignation). */
+  requests: StrategicApproval[];
+};
+
+const GATED_ORDER: GatedCategory[] = ["pilotage", "planning", "designation"];
+
+async function updateEntityFlow<T extends { id: string; name: string }>(
+  entity: PatchEntity,
+  gate: ApprovalGate | null | undefined,
+  current: T,
+  patch: Partial<T>,
+  applyDirect: (patch: Partial<T>) => Promise<unknown>,
+  reason?: string
+): Promise<UpdateFlowResult<T>> {
+  if (!gate) {
+    if (Object.keys(patch).length === 0) return { outcome: "noop", applied: {}, requests: [] };
+    await applyDirect(patch);
+    return { outcome: "applied", applied: patch, requests: [] };
+  }
+  const split = splitPatchByCategory(entity, current, patch);
+  const kind: StrategicApprovalKind = entity === "projet" ? "projet_update" : "chantier_update";
+  const target: StrategicApprovalTarget = { type: entity, id: current.id, name: current.name };
+  const direct: Partial<T> = { ...split.free };
+  const toRequest: { category: GatedCategory; payload: StrategicApprovalPayload }[] = [];
+  for (const category of GATED_ORDER) {
+    const part = split[category];
+    const keys = Object.keys(part);
+    if (!keys.length) continue;
+    const before: Record<string, unknown> = {};
+    for (const k of keys) before[k] = (current as Record<string, unknown>)[k];
+    // Un champ VIDÉ (`undefined`) serait retiré à l'écriture Firestore (`stripUndefined`) et la
+    // demande approuvée ne l'effacerait jamais : on l'encode `null`, relu comme effacement par
+    // `applyApprovedPayload` (lib/strategicApprovals.ts).
+    const encoded: Record<string, unknown> = {};
+    for (const k of keys) {
+      const v = (part as Record<string, unknown>)[k];
+      encoded[k] = v === undefined ? null : v;
+    }
+    const payload = { patch: encoded, before, category } as unknown as StrategicApprovalPayload;
+    if (gate.needsApproval(kind, target, undefined, payload)) toRequest.push({ category, payload });
+    else Object.assign(direct, part);
+  }
+  const directKeys = Object.keys(direct);
+  if (!directKeys.length && !toRequest.length) {
+    return { outcome: "noop", applied: {}, requests: [] };
+  }
+  if (directKeys.length) await applyDirect(direct);
+  const requests: StrategicApproval[] = [];
+  for (const r of toRequest) requests.push(await gate.request(kind, target, r.payload, reason));
+  return {
+    outcome: requests.length ? (directKeys.length ? "partial" : "pending") : "applied",
+    applied: direct,
+    requests,
+  };
+}
+
+/**
+ * Modification de champs d'un PROJET selon les règles PO : champs libres (libellé, description,
+ * commentaires de livrables) appliqués directement ; dates/livrables/désignations → 1 validation
+ * (N+1) ; avancement déclaré (check-lists de jalon), budgets, consommés, poids → 2 validations.
+ * Une demande `"projet_update"` par catégorie non vide ; les catégories dont la chaîne est vide
+ * pour l'acteur (admin, pilote) sont appliquées directement avec les champs libres.
+ * `applyDirect(patch)` : écriture directe (ex. `data.updateChantierAction(id, patch)`).
+ * Désignation : vérifier `canDesignate` (lib/strategicHierarchy.ts) AVANT d'appeler ce flux.
+ */
+export function updateProjetFlow(
+  gate: ApprovalGate | null | undefined,
+  action: ChantierAction,
+  patch: Partial<ChantierAction>,
+  applyDirect: (patch: Partial<ChantierAction>) => Promise<unknown>,
+  reason?: string
+): Promise<UpdateFlowResult<ChantierAction>> {
+  return updateEntityFlow("projet", gate, action, patch, applyDirect, reason);
+}
+
+/** Pendant de `updateProjetFlow` pour un CHANTIER (`"chantier_update"`) : enveloppe, consommés,
+ *  critères de succès, grille d'effort, axes → 2 validations ; dépendances, pilote/sponsor/rôles →
+ *  1 validation ; nom/description/critère de succès texte → libres. */
+export function updateChantierFlow(
+  gate: ApprovalGate | null | undefined,
+  chantier: Chantier,
+  patch: Partial<Chantier>,
+  applyDirect: (patch: Partial<Chantier>) => Promise<unknown>,
+  reason?: string
+): Promise<UpdateFlowResult<Chantier>> {
+  return updateEntityFlow("chantier", gate, chantier, patch, applyDirect, reason);
 }
 
 /** Génère l'identifiant d'un projet (même format que `useStrategicData`). */

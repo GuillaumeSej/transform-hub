@@ -35,7 +35,12 @@ import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
-import { isAnyAdmin, isStrategicRole, assertValidProfiles } from "@/lib/roleProfiles";
+import {
+  isAnyAdmin,
+  isCrossTrackRole,
+  isStrategicRole,
+  assertValidProfiles,
+} from "@/lib/roleProfiles";
 import { resolveProgramType } from "@/lib/axisLogic";
 import { normalizeClearanceLevel } from "@/lib/confidentiality";
 import { inheritedRoleLevel } from "@/lib/confidentialityAdmin";
@@ -66,7 +71,7 @@ const PERFORMANCE_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }
   { value: "sponsor", labelKey: "roles.sponsor.label", label: "Responsable de chantier" },
   { value: "lever", labelKey: "roles.lever.label", label: "Responsable de levier" },
   { value: "finance", labelKey: "roles.finance.label", label: "Contrôleur financier" },
-  { value: "hr", labelKey: "roles.hr.label", label: "Directeur RH" },
+  // `hr` (Directeur RH) est désormais transverse : voir CROSS_TRACK_ROLE_OPTIONS.
   { value: "ops", labelKey: "roles.ops.label", label: "Responsable Opérations" },
   // Fondation vue consolidée multi-programmes (voir types/index.ts) : deux rôles Plan Performance
   // scopés PROGRAMME (pas workstream) — même visualisation qu'un CTO, mais restreints à leur
@@ -83,27 +88,31 @@ const PERFORMANCE_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }
   },
 ];
 
-/** Libellés FR des 6 profils du Plan Stratégique (organigramme 3-5-15) — les clés i18n `roles.*`
- *  correspondantes existent séparément pour la sidebar/topbar. */
+/** Libellés FR des profils du Plan Stratégique (pilote > sponsor d'axe > sponsor de chantier >
+ *  responsable projet > contributeur projet, voir lib/strategicHierarchy.ts) — les clés i18n
+ *  `roles.*` correspondantes existent séparément pour la sidebar/topbar. */
 const STRATEGIC_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }[] = [
   {
     value: "strategic_lead",
     labelKey: "roles.strategicLead.label",
     label: "Pilote du plan stratégique",
   },
-  { value: "axis_sponsor", labelKey: "roles.axisSponsor.label", label: "Commanditaire d'axe" },
+  { value: "axis_sponsor", labelKey: "roles.axisSponsor.label", label: "Sponsor d'axe" },
   {
     value: "chantier_owner",
     labelKey: "roles.chantierOwner.label",
-    label: "Responsable de chantier",
+    label: "Sponsor de chantier",
   },
   {
     value: "chantier_contributor",
     labelKey: "roles.chantierContributor.label",
     label: "Responsable projet",
   },
-  { value: "internal_comm", labelKey: "roles.internalComm.label", label: "Communication interne" },
-  { value: "budget_control", labelKey: "roles.budgetControl.label", label: "Contrôle de gestion" },
+  {
+    value: "projet_contributor",
+    labelKey: "roles.projetContributor.label",
+    label: "Contributeur projet",
+  },
 ];
 
 /** Rôle transverse (round 25) : contrairement aux 12 rôles ci-dessus, chacun strictement mono-
@@ -114,6 +123,7 @@ const STRATEGIC_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }[]
  *  listes produirait deux entrées de menu identiques et indiscernables l'une de l'autre. */
 const CROSS_TRACK_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }[] = [
   { value: "comex_member", labelKey: "roles.comexMember.label", label: "Membre du COMEX" },
+  { value: "hr", labelKey: "roles.hr.label", label: "Directeur RH" },
 ];
 
 /** Réunion des trois listes ci-dessus — sert uniquement à retrouver le libellé d'un `Role` donné
@@ -492,7 +502,10 @@ export function UsersPanel({
     // avant tout enregistrement (voir lib/roleProfiles.ts).
     const profiles: ProfileAssignment[] = form.profiles.filter((p) => p.role);
     try {
-      assertValidProfiles(profiles);
+      assertValidProfiles(
+        profiles,
+        Object.fromEntries(programs.map((p) => [p.id, resolveProgramType(p)]))
+      );
     } catch (err) {
       setErrorDialog({
         title: t("adminUsers.invalidProfilesTitle", "Profils invalides"),
@@ -1150,7 +1163,7 @@ export function UsersPanel({
                 // de retomber arbitrairement sur une seule des deux listes via
                 // isStrategicRole/isPerformanceRole (qui renvoient tous deux `true` pour ce rôle).
                 const rolePrograms =
-                  profile.role === "comex_member"
+                  profile.role && isCrossTrackRole(profile.role)
                     ? [...performancePrograms, ...strategicPrograms]
                     : isStrategicRole(profile.role)
                       ? strategicPrograms
@@ -1213,7 +1226,7 @@ export function UsersPanel({
                         className="flex-1 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                       >
                         <option value="">
-                          {profile.role === "comex_member"
+                          {isCrossTrackRole(profile.role)
                             ? t("adminUsers.allPrograms", "Tous les programmes")
                             : isStrategicRole(profile.role)
                               ? t(

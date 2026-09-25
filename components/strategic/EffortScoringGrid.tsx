@@ -44,13 +44,17 @@ const SCORES: EffortScore[] = [1, 2, 3, 4];
 export function EffortScoringGrid({
   value,
   onChange,
+  disabled = false,
 }: {
   value: ChantierEffort;
   onChange: (next: ChantierEffort) => void;
+  /** Lecture seule (pas de droit d'édition, ou modification déjà en attente de validation). */
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
 
   const setScore = (dimension: keyof ChantierEffort, score: EffortScore) => {
+    if (disabled) return;
     onChange({ ...value, [dimension]: score });
   };
 
@@ -91,12 +95,13 @@ export function EffortScoringGrid({
                       key={score}
                       type="button"
                       aria-pressed={isSelected}
+                      disabled={disabled}
                       onClick={() => setScore(dimension, score)}
                       className={`flex-1 px-2 py-1.5 text-center text-[10.5px] font-semibold leading-tight transition ${
                         isSelected
                           ? "bg-black text-white"
                           : "bg-white text-secondary hover:text-primary"
-                      }`}
+                      } disabled:cursor-not-allowed`}
                     >
                       {optionLabel}
                     </button>

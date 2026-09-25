@@ -1,4 +1,5 @@
 import type { AuthUser, ProfileAssignment, Role } from "@/types";
+import { normalizeLegacyProfiles } from "@/lib/roleProfiles";
 
 /**
  * Compatibilité round multi-profils : les documents `adminUsers` créés AVANT ce round portent un
@@ -16,7 +17,9 @@ function normalizeProfileFields(data: Record<string, unknown>): {
 } {
   if (Array.isArray(data.profiles)) {
     return {
-      profiles: data.profiles as ProfileAssignment[],
+      // Rôles stratégiques supprimés (internal_comm/budget_control) → comex_member, voir
+      // normalizeLegacyProfiles.
+      profiles: normalizeLegacyProfiles(data.profiles as ProfileAssignment[]),
       isGlobalAdmin: !!data.isGlobalAdmin,
       isCompanyAdmin: !!data.isCompanyAdmin,
     };
@@ -28,7 +31,7 @@ function normalizeProfileFields(data: Record<string, unknown>): {
     return { profiles: [], isGlobalAdmin: false, isCompanyAdmin: true };
   if (legacyRole)
     return {
-      profiles: [{ role: legacyRole as Role }],
+      profiles: normalizeLegacyProfiles([{ role: legacyRole as Role }]),
       isGlobalAdmin: false,
       isCompanyAdmin: false,
     };

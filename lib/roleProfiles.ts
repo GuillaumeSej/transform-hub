@@ -31,6 +31,45 @@ export function isStrategicRole(role: Role): boolean {
   return (STRATEGIC_ROLES as readonly string[]).includes(role);
 }
 
+/** Rôle TRANSVERSE aux deux pistes (présent à la fois dans `PERFORMANCE_ROLES` et
+ *  `STRATEGIC_ROLES`) : `comex_member` et `hr` (Directeur RH, décision PO « comme en Transfo »).
+ *  Un tel profil sans `programId` couvre les programmes des DEUX types. */
+export function isCrossTrackRole(role: Role): boolean {
+  return isPerformanceRole(role) && isStrategicRole(role);
+}
+
+/** Rôles du Plan Stratégique SUPPRIMÉS (décision PO : jamais outillés). Un profil legacy qui les
+ *  porte encore est relu comme `comex_member` (lecture seule) sur le MÊME programme. */
+export const LEGACY_REMOVED_STRATEGIC_ROLES: readonly string[] = [
+  "internal_comm",
+  "budget_control",
+];
+
+/**
+ * Normalisation à la LECTURE des profils stockés (lib/auth.ts, liste admin des utilisateurs) :
+ * `internal_comm`/`budget_control` → `comex_member` (même `programId`), puis dédoublonnage exact
+ * (rôle + programme) si l'utilisateur avait déjà ce profil COMEX. Les anciens comptes restent ainsi
+ * utilisables, en consultation seule, sans migration préalable ; la conversion en base se fait via
+ * scripts/migrate-strategic-roles.js (ou au prochain enregistrement du compte dans l'admin).
+ */
+export function normalizeLegacyProfiles(
+  profiles: readonly ProfileAssignment[]
+): ProfileAssignment[] {
+  const out: ProfileAssignment[] = [];
+  const seen = new Set<string>();
+  for (const profile of profiles) {
+    if (!profile || typeof profile.role !== "string") continue;
+    const role: Role = LEGACY_REMOVED_STRATEGIC_ROLES.includes(profile.role)
+      ? "comex_member"
+      : profile.role;
+    const key = `${role}|${profile.programId ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(profile.programId ? { role, programId: profile.programId } : { role });
+  }
+  return out;
+}
+
 /** Le PREMIER profil Plan Performance de l'utilisateur, s'il en a un — round multi-profils
  *  multi-programmes : un utilisateur peut désormais avoir PLUSIEURS profils Plan Performance
  *  (un par programme, voir `assertValidProfiles`). Ce raccourci singulier reste utile pour un
@@ -119,6 +158,10 @@ export function getActiveRole(
   return user.profiles[0].role;
 }
 
+/** Rôles qui ne donnent JAMAIS de droit d'édition sur les objets d'un plan : `comex_member`
+ *  partout ; `hr` sur le Plan Stratégique (il édite la Base ETP, mais consulte le plan). */
+const READ_ONLY_PLAN_ROLES: readonly Role[] = ["comex_member", "hr"];
+
 /**
  * L'utilisateur est-il cantonné à la LECTURE SEULE, tous profils confondus ? Round 25 (gate
  * d'édition COMEX) : `comex_member` ("Membre du COMEX", voir son commentaire dans types/index.ts)
@@ -136,12 +179,25 @@ export function getActiveRole(
  * métier — même court-circuit qu'`isAnyAdmin` partout ailleurs dans ce fichier.
  */
 export function isReadOnlyUser(
-  user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
+  user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined,
+  programId?: string | null,
+  programType?: ProgramType
 ): boolean {
   if (isAnyAdmin(user)) return false;
   const profiles = user?.profiles ?? [];
   if (profiles.length === 0) return false;
-  return profiles.every((p) => p.role === "comex_member");
+  // Sans programme : comportement historique (tous profils `comex_member`).
+  if (programId == null) return profiles.every((p) => p.role === "comex_member");
+  // Par programme (décision PO rôles Plan Stratégique) : seuls comptent les profils qui portent
+  // sur CE programme — rattachés à lui, ou "tous programmes" de la piste du programme (toute piste
+  // si `programType` n'est pas fourni). Lecture seule si l'utilisateur n'y a AUCUN profil, ou
+  // uniquement des profils `comex_member`/`hr`.
+  const relevant = profiles.filter((p) => {
+    if (p.programId) return p.programId === programId;
+    if (!programType) return true;
+    return programType === "strategic" ? isStrategicRole(p.role) : isPerformanceRole(p.role);
+  });
+  return relevant.every((p) => READ_ONLY_PLAN_ROLES.includes(p.role));
 }
 
 /**
@@ -169,9 +225,13 @@ export function getAuthorizedPrograms(
       allowedIds.add(profile.programId);
       continue;
     }
+    // Rôle transverse (`comex_member`, `hr`) sans programme : programmes des DEUX types.
+    // Correctif : `isStrategicRole` étant vrai pour ces rôles, un profil COMEX "tous programmes"
+    // ne voyait auparavant jamais les programmes Performance.
+    const cross = isCrossTrackRole(profile.role);
     const wantedType: ProgramType = isStrategicRole(profile.role) ? "strategic" : "performance";
     for (const program of companyPrograms) {
-      if (resolveProgramTypeLocal(program) === wantedType) allowedIds.add(program.id);
+      if (cross || resolveProgramTypeLocal(program) === wantedType) allowedIds.add(program.id);
     }
   }
   return companyPrograms.filter((p) => allowedIds.has(p.id));
@@ -190,12 +250,23 @@ export function getAuthorizedPrograms(
  * Utilisée par l'UI admin (UsersPanel) avant d'enregistrer — lève une erreur avec un message FR
  * directement affichable si violée.
  */
-export function assertValidProfiles(profiles: ProfileAssignment[]): void {
-  for (const [trackLabel, isTrackRole] of [
-    ["Plan Performance", isPerformanceRole],
-    ["Plan Stratégique", isStrategicRole],
+export function assertValidProfiles(
+  profiles: ProfileAssignment[],
+  /** Type des programmes par id (optionnel) : un profil TRANSVERSE (`comex_member`, `hr`) rattaché
+   *  à un programme précis ne compte alors que dans la piste de CE programme (sinon il compterait
+   *  dans les deux, et bloquerait à tort, ex., `hr` sur un programme Performance + `strategic_lead`
+   *  sur un programme Stratégique). Sans cette table, comportement historique (les deux pistes). */
+  programTypeById?: Record<string, ProgramType>
+): void {
+  for (const [trackLabel, isTrackRole, trackType] of [
+    ["Plan Performance", isPerformanceRole, "performance"],
+    ["Plan Stratégique", isStrategicRole, "strategic"],
   ] as const) {
-    const trackProfiles = profiles.filter((p) => isTrackRole(p.role));
+    const trackProfiles = profiles.filter((p) => {
+      if (!isTrackRole(p.role)) return false;
+      const knownType = p.programId ? programTypeById?.[p.programId] : undefined;
+      return !(isCrossTrackRole(p.role) && knownType && knownType !== trackType);
+    });
     if (trackProfiles.length <= 1) continue;
     if (trackProfiles.some((p) => !p.programId)) {
       throw new Error(

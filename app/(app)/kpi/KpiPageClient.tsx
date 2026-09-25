@@ -23,6 +23,7 @@ import {
   numberIndicators,
   resolveIndicatorOwner,
   resolveUserFullName,
+  type IndicatorFillContext,
 } from "@/lib/axisLogic";
 import {
   canFillIndicatorValue,
@@ -49,6 +50,7 @@ import { useToast } from "@/lib/hooks/useToast";
 import { PendingKpiValues } from "@/components/strategic/PendingKpiValues";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import { submitKpiValueFlow } from "@/lib/strategicApprovalFlows";
+import { chainPreviewText, LEVEL_FALLBACK, levelLabelKey } from "@/lib/strategicApprovalView";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { roles as roleDefinitions } from "@/lib/nav-config";
@@ -107,8 +109,15 @@ function IndicatorCard({
   number,
   highlighted,
   linkedChantiers,
+  users,
+  fillCtx,
 }: {
   indicator: Indicator;
+  /** Utilisateurs de l'entreprise : noms des responsables de saisie / des approbateurs. */
+  users: AuthUser[];
+  /** Axes/chantiers du programme — REQUIS pour reconnaître le sponsor d'axe/de chantier comme
+   *  saisisseur (`canFillIndicatorValue`). */
+  fillCtx: IndicatorFillContext;
   /** Mesures DE CET indicateur uniquement (déjà filtrées par l'appelant). */
   measurements: IndicatorMeasurement[];
   user: AuthUser | null;
@@ -135,7 +144,7 @@ function IndicatorCard({
   const router = useRouter();
   const sa = useStrategicApprovalsApi();
 
-  const canFill = canFillIndicatorValue(indicator, user);
+  const canFill = canFillIndicatorValue(indicator, user, fillCtx);
   const quantitative = indicator.kind === "quantitative";
   // Dernière mesure NUMÉRIQUE : statut/avancement ne doivent pas être masqués par un commentaire
   // seul saisi ensuite (voir `latestNumericMeasurement`).
@@ -147,6 +156,7 @@ function IndicatorCard({
     user,
     updateMeasurement,
     deleteMeasurement,
+    fillCtx,
   });
 
   // ── Année affichée — round "cible évolutive" : PER-INDICATEUR (plus un sélecteur global de
@@ -209,6 +219,23 @@ function IndicatorCard({
   // Une saisie en cours (mesure OU objectif) est une modification non enregistrée : la garde de
   // navigation doit la protéger comme n'importe quel formulaire de l'app.
   const measurementDirty = value.trim() !== "" || note.trim() !== "";
+
+  // « Sera validée par {sponsor d'axe} puis {pilote} » : chaîne qu'aurait une NOUVELLE valeur de
+  // l'utilisateur (vide = publiée directement). Période/valeur sans effet sur la chaîne d'un KPI.
+  const approvalPreview = (() => {
+    if (!sa || !canFill) return "";
+    const steps = sa.previewChain(
+      "kpi_value",
+      { type: "indicateur", id: indicator.id, name: indicator.name },
+      { period: period.trim() || currentPeriod(indicator.frequency) }
+    );
+    return chainPreviewText(
+      steps,
+      users,
+      (level) => t(levelLabelKey(level), LEVEL_FALLBACK[level]),
+      t("validation.sa.then", "puis")
+    );
+  })();
   useRegisterUnsavedChanges(
     `kpi:indicator:${indicator.id}`,
     canFill && (measurementDirty || editingObjective)
@@ -288,7 +315,12 @@ function IndicatorCard({
       setPeriod(currentPeriod(indicator.frequency));
       if (outcome === "pending") {
         showToast(
-          t("kpi.valueSubmittedForApproval", "Valeur soumise à validation du responsable du plan"),
+          approvalPreview
+            ? t("kpi.valueSubmittedChain", "Valeur soumise à validation : {chain}").replace(
+                "{chain}",
+                approvalPreview
+              )
+            : t("kpi.valueSubmittedForApproval", "Valeur soumise à validation"),
           indicator.name,
           "success"
         );
@@ -408,10 +440,18 @@ function IndicatorCard({
     }
   };
 
-  const authorizedRoles = indicator.responsibleRoles
-    .map((role) => t(roleDefinitions[role].short))
+  // Responsables de saisie NOMMÉS (`additionalAuthorizedUserIds`, source de vérité) ; les rôles
+  // (`responsibleRoles`) ne sont qu'un repli LEGACY, ignoré dès qu'un responsable est nommé.
+  const namedResponsibles = Array.from(
+    new Set((indicator.additionalAuthorizedUserIds ?? []).filter(Boolean))
+  )
+    .map((u) => resolveUserFullName(u, users) ?? u)
     .join(", ");
-  const additionalUsers = (indicator.additionalAuthorizedUserIds ?? []).join(", ");
+  const legacyRoles = namedResponsibles
+    ? ""
+    : (indicator.responsibleRoles ?? [])
+        .map((role) => (roleDefinitions[role] ? t(roleDefinitions[role].short) : role))
+        .join(", ");
 
   return (
     // Ancre DOM stable (round 10) : cible de `document.getElementById` pour le défilement/
@@ -727,13 +767,25 @@ function IndicatorCard({
                 )}
               </div>
 
-              <PendingKpiValues indicatorId={indicator.id} unit={indicator.unit} />
+              <PendingKpiValues indicatorId={indicator.id} unit={indicator.unit} users={users} />
 
               {/* Saisie d'une mesure — le cœur de la page. */}
               <div className="rounded-lg border border-border p-3">
                 <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                   <Plus size={13} /> {t("kpi.addMeasurement")}
                 </span>
+                <p className="mb-2 text-[11px] text-text-secondary">
+                  {t("kpi.fillResponsibles", "Responsable(s) de saisie")} :{" "}
+                  <span className="font-medium text-text-primary">{namedResponsibles || "—"}</span>
+                  {legacyRoles && (
+                    <span className="ml-1">
+                      · {legacyRoles}{" "}
+                      <span className="italic text-tertiary">
+                        {t("kpi.legacyByRole", "(ancien, par rôle)")}
+                      </span>
+                    </span>
+                  )}
+                </p>
 
                 {canFill ? (
                   <div className="space-y-2">
@@ -770,6 +822,14 @@ function IndicatorCard({
                       />
                     </label>
                     <p className="text-[11px] text-tertiary">{t("kpi.periodHint")}</p>
+                    {approvalPreview && (
+                      <p className="text-[11px] text-text-secondary">
+                        {t("kpi.willBeValidatedBy", "Sera validée par {chain}").replace(
+                          "{chain}",
+                          approvalPreview
+                        )}
+                      </p>
+                    )}
                     <Button
                       variant="primary"
                       size="sm"
@@ -784,14 +844,6 @@ function IndicatorCard({
                     <p className="flex items-center gap-1.5 font-medium">
                       <Lock size={12} /> {t("kpi.readOnly")}
                     </p>
-                    <p>
-                      {t("kpi.authorizedRoles")} : {authorizedRoles || "—"}
-                    </p>
-                    {additionalUsers && (
-                      <p>
-                        {t("kpi.authorizedUsers")} : {additionalUsers}
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
@@ -837,6 +889,8 @@ export function KpiPageClient() {
   // pas besoin d'un `Array.join(",")`). Le contrat `?indicator=<id>` (plus bas) n'est jamais touché.
   // Round multi-sélection : chaque paramètre porte 0..n valeurs (`?axis=a,b`, encodées — voir
   // `lib/filterUtils.ts` ; une ancienne URL `?axis=a` reste valide). Vide = pas de filtre.
+  // Contexte de `canFillIndicatorValue` : sans lui, sponsors d'axe/de chantier non reconnus.
+  const fillCtx = useMemo<IndicatorFillContext>(() => ({ axes, chantiers }), [axes, chantiers]);
   const axisParam = searchParams.get("axis");
   const chantierParam = searchParams.get("chantier");
   const ownerParam = searchParams.get("owner");
@@ -1189,6 +1243,8 @@ export function KpiPageClient() {
       number={indicatorNumbers.get(indicator.id)}
       highlighted={indicator.id === highlightedIndicatorId}
       linkedChantiers={chantiersByIndicatorId.get(indicator.id) ?? []}
+      users={companyUsers}
+      fillCtx={fillCtx}
     />
   );
 
@@ -1331,6 +1387,7 @@ export function KpiPageClient() {
               addMeasurement={addMeasurement}
               updateMeasurement={updateMeasurement}
               deleteMeasurement={deleteMeasurement}
+              fillCtx={fillCtx}
             />
           </CardBody>
         </Card>

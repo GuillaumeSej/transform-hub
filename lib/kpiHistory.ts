@@ -36,11 +36,15 @@ export function canFillIndicatorValue(
     Indicator,
     "axisId" | "chantierId" | "responsibleRoles" | "additionalAuthorizedUserIds" | "programId"
   >,
-  user: Parameters<typeof canFillIndicator>[1]
+  user: Parameters<typeof canFillIndicator>[1],
+  /** Axes/chantiers du programme — reconnaît le sponsor d'axe/de chantier (voir
+   *  `IndicatorFillContext`, lib/axisLogic.ts). */
+  ctx?: Parameters<typeof canFillIndicator>[2]
 ): boolean {
   return canFillIndicator(
     { ...indicator, responsibleRoles: effectiveResponsibleRoles(indicator) },
-    user
+    user,
+    ctx
   );
 }
 

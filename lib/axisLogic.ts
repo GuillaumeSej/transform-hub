@@ -4,11 +4,11 @@ import { effectiveDueDate } from "@/lib/deliverableState";
 import { comparePeriods, periodIsAfter, periodStartsOnOrBefore } from "@/lib/indicatorPeriod";
 import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import {
-  getStrategicProfile,
   getStrategicProfiles,
   hasAnyRole,
   hasRole,
   isAnyAdmin,
+  isStrategicRole,
 } from "@/lib/roleProfiles";
 import type {
   AuthUser,
@@ -26,6 +26,7 @@ import type {
   MilestoneChecklistItem,
   MilestoneCustomAction,
   MilestoneId,
+  ProfileAssignment,
   Program,
   ProgramType,
   Role,
@@ -479,37 +480,100 @@ export function countOnTrackAtRisk(
   return { total: indicators.length, onTrack, atRisk, noData };
 }
 
+/** Rôles qui ne saisissent JAMAIS de valeur de KPI (décision PO) : lecture seule sur le Plan
+ *  Stratégique, même désignés nommément ou listés dans un `responsibleRoles` historique. */
+export const KPI_NEVER_FILL_ROLES: readonly Role[] = ["comex_member", "hr"];
+
+/** Contexte hiérarchique facultatif de `canFillIndicator` : axes/chantiers du programme (au moins
+ *  ceux de l'indicateur) pour reconnaître le sponsor d'axe (`StrategicAxis.owner`) et le sponsor de
+ *  chantier (`Chantier.pilote`). Sans lui, ces deux sponsors ne sont PAS reconnus (seuls admin,
+ *  pilote, responsables nommés et repli `responsibleRoles` s'appliquent). */
+export type IndicatorFillContext = {
+  axes?: Pick<StrategicAxis, "id" | "owner">[];
+  chantiers?: Pick<Chantier, "id" | "pilote">[];
+};
+
+/** Responsables NOMMÉS de la saisie d'un KPI (`Indicator.additionalAuthorizedUserIds`, usernames),
+ *  dédoublonnés et sans valeur vide. */
+export function indicatorResponsibleUsernames(
+  indicator: Pick<Indicator, "additionalAuthorizedUserIds">
+): string[] {
+  return Array.from(
+    new Set((indicator.additionalAuthorizedUserIds ?? []).map((u) => u.trim()).filter(Boolean))
+  );
+}
+
 /**
  * Un utilisateur peut-il renseigner une mesure (et ajuster l'objectif/le seuil) de cet
  * indicateur ? Seul point de vérité pour ce contrôle — utilisé aussi bien pour griser le
- * formulaire de saisie que pour l'édition inline de l'objectif sur la page KPI.
+ * formulaire de saisie que pour l'édition inline de l'objectif sur la page KPI. Ne décide QUE
+ * « qui peut saisir » : le circuit de validation de la valeur saisie (sponsor d'axe puis pilote,
+ * `lib/strategicHierarchy.ts`) est géré ailleurs.
  *
- * Règle (voir plan, section "Responsable d'un indicateur") : le rôle de l'utilisateur est dans
- * `responsibleRoles`, OU son identifiant est listé dans `additionalAuthorizedUserIds` (comptes
- * ajoutés au cas par cas, en plus des rôles). admin/admin_entreprise sont toujours autorisés,
- * comme partout ailleurs dans l'app (voir `leversLogic.canUserViewLever`).
- *
- * Round 6, point 7 : le pilote (`strategic_lead`) peut en plus renseigner N'IMPORTE QUEL
- * indicateur de SON programme, même sans figurer dans `responsibleRoles`/
- * `additionalAuthorizedUserIds` — un `strategic_lead` sans `programId` (profil non rattaché à un
- * programme précis) est autorisé sur TOUS les programmes, cohérent avec `getAuthorizedPrograms`.
+ * Règle (décision PO — chaque KPI a un ou des responsables de saisie NOMMÉS) :
+ *  - admin / admin_entreprise : toujours ;
+ *  - `comex_member` et `hr` (rôle stratégique effectif sur le programme de l'indicateur) : jamais ;
+ *  - pilote (`strategic_lead`) du programme de l'indicateur (profil rattaché à CE programme, ou
+ *    profil « tous programmes ») ;
+ *  - les responsables nommés : `additionalAuthorizedUserIds` (champ réutilisé tel quel, libellé
+ *    « Responsable(s) de saisie » dans l'UI — pas de nouveau champ : il porte déjà exactement
+ *    « usernames autorisés à saisir », aucune migration de données) ;
+ *  - KPI de CHANTIER (`chantierId`) : le sponsor de ce chantier (`Chantier.pilote`) ;
+ *    KPI d'AXE (sans `chantierId`) : le sponsor de cet axe (`StrategicAxis.owner`) — nécessite
+ *    `ctx` (voir `IndicatorFillContext`).
+ *  - REPLI HISTORIQUE `responsibleRoles` : lu UNIQUEMENT quand l'indicateur n'a AUCUN responsable
+ *    nommé (indicateurs antérieurs à cette règle) — un rôle ne donne plus jamais le droit de saisie
+ *    à tous ses détenteurs dès qu'un responsable est désigné. Un rôle stratégique n'est compté que
+ *    sur un profil rattaché au programme de l'indicateur (ou « tous programmes »). À retirer une
+ *    fois tous les KPI dotés d'un responsable nommé.
  */
 export function canFillIndicator(
-  indicator: Pick<Indicator, "responsibleRoles" | "additionalAuthorizedUserIds" | "programId">,
+  indicator: Pick<
+    Indicator,
+    "responsibleRoles" | "additionalAuthorizedUserIds" | "programId" | "axisId" | "chantierId"
+  >,
   user:
-    Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin" | "username"> | null | undefined
+    Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin" | "username"> | null | undefined,
+  ctx?: IndicatorFillContext
 ): boolean {
   if (!user) return false;
   if (isAnyAdmin(user)) return true;
-  const strategicProfile = getStrategicProfile(user);
-  if (
-    strategicProfile?.role === "strategic_lead" &&
-    (!strategicProfile.programId || strategicProfile.programId === indicator.programId)
-  ) {
-    return true;
+  const role = resolveStrategicRoleForProgram(user, indicator.programId);
+  if (role && KPI_NEVER_FILL_ROLES.includes(role)) return false;
+  if (role === "strategic_lead") return true;
+
+  const named = indicatorResponsibleUsernames(indicator);
+  if (named.includes(user.username)) return true;
+
+  if (indicator.chantierId) {
+    const chantier = ctx?.chantiers?.find((c) => c.id === indicator.chantierId);
+    if (chantier?.pilote && chantier.pilote === user.username) return true;
+  } else {
+    const axis = ctx?.axes?.find((a) => a.id === indicator.axisId);
+    if (axis?.owner && axis.owner === user.username) return true;
   }
-  if (hasAnyRole(user, indicator.responsibleRoles)) return true;
-  return (indicator.additionalAuthorizedUserIds ?? []).includes(user.username);
+
+  if (named.length > 0) return false;
+  const legacyRoles = (indicator.responsibleRoles ?? []).filter(
+    (r) => !KPI_NEVER_FILL_ROLES.includes(r)
+  );
+  return (user.profiles ?? []).some(
+    (p) =>
+      legacyRoles.includes(p.role) &&
+      (!isStrategicRole(p.role) || !p.programId || p.programId === indicator.programId)
+  );
+}
+
+/** Un compte peut-il être désigné responsable de saisie d'un KPI de ce programme ? Tous, sauf ceux
+ *  dont le rôle stratégique effectif sur le programme est `comex_member`/`hr` (ils ne saisissent
+ *  jamais — voir `canFillIndicator`). Sert à filtrer le sélecteur de l'éditeur d'indicateurs. */
+export function canBeKpiResponsible(
+  user: Pick<AuthUser, "profiles"> | null | undefined,
+  programId: string | null | undefined
+): boolean {
+  if (!user) return false;
+  const role = resolveStrategicRoleForProgram(user, programId);
+  return !(role && KPI_NEVER_FILL_ROLES.includes(role));
 }
 
 /**
@@ -550,80 +614,100 @@ export function canManageChantier(
 // ─── Périmètre de visibilité par propriétaire nommé (round 25) ─────────────────────────────────
 
 /**
- * Rôle Plan Stratégique EFFECTIF de l'utilisateur pour UN programme précis — distinct de
- * `getStrategicProfile` (lib/roleProfiles.ts), qui renvoie le PREMIER profil stratégique trouvé
- * sans tenir compte du programme affiché. Nécessaire ici : `resolveStrategicOwnershipScope`
- * ci-dessous doit résoudre le bon rôle pour le programme ACTIF, faute de quoi un utilisateur
- * cumulant deux profils stratégiques sur deux programmes distincts (autorisé par
- * `assertValidProfiles`, lib/roleProfiles.ts) pourrait se voir appliquer le périmètre du MAUVAIS
- * programme (ex. traité comme "internal_comm" — non restreint — sur le programme A alors qu'il
- * est "axis_sponsor" — restreint — dessus, simplement parce que son profil B est listé en premier).
- *
- * Priorité : le profil dont `programId` correspond EXACTEMENT au programme actif ; à défaut, un
- * profil "tous programmes" (`programId` absent) ; à défaut, le premier profil stratégique
- * disponible (repli défensif, ne devrait pas survenir en pratique compte tenu des contraintes de
- * `assertValidProfiles`, mais évite de retourner `undefined` sur un utilisateur qui a bien un
- * profil stratégique, simplement sur un autre programme).
+ * Profil Plan Stratégique APPLICABLE à UN programme précis : celui dont `programId` correspond
+ * EXACTEMENT au programme ; à défaut, un profil « tous programmes » (`programId` absent). JAMAIS
+ * le profil d'un AUTRE programme — distinct de `getStrategicProfile` (lib/roleProfiles.ts), qui
+ * renvoie le premier profil trouvé sans tenir compte du programme affiché.
+ */
+export function strategicProfileForProgram(
+  user: Pick<AuthUser, "profiles"> | null | undefined,
+  programId: string | null | undefined
+): ProfileAssignment | undefined {
+  const profiles = getStrategicProfiles(user);
+  return (
+    profiles.find((p) => p.programId && p.programId === programId) ??
+    profiles.find((p) => !p.programId)
+  );
+}
+
+/**
+ * Rôle Plan Stratégique EFFECTIF de l'utilisateur pour UN programme précis (voir
+ * `strategicProfileForProgram`). Un utilisateur cumulant deux profils stratégiques sur deux
+ * programmes distincts (autorisé par `assertValidProfiles`) se voit toujours appliquer le rôle du
+ * programme ACTIF. `undefined` si aucun profil ne s'applique à ce programme — plus de repli sur
+ * « le premier profil disponible », qui pouvait appliquer le rôle d'un AUTRE programme (ex. pilote
+ * du programme B traité comme pilote du programme A).
  */
 export function resolveStrategicRoleForProgram(
   user: Pick<AuthUser, "profiles"> | null | undefined,
   programId: string | null | undefined
 ): Role | undefined {
-  const profiles = getStrategicProfiles(user);
-  const forProgram = profiles.find((p) => p.programId && p.programId === programId);
-  if (forProgram) return forProgram.role;
-  const global = profiles.find((p) => !p.programId);
-  if (global) return global.role;
-  return profiles[0]?.role;
+  return strategicProfileForProgram(user, programId)?.role;
+}
+
+/** Rôles stratégiques dont la visibilité est bornée par la hiérarchie NOMMÉE (voir
+ *  `resolveStrategicOwnershipScope`). */
+export const OWNERSHIP_SCOPED_ROLES: readonly Role[] = [
+  "axis_sponsor",
+  "chantier_owner",
+  "chantier_contributor",
+  "projet_contributor",
+];
+
+/** Rôles « projet » : la liste des projets ouvrables est TOUJOURS explicite pour eux. */
+const PROJECT_LEVEL_ROLES: readonly Role[] = ["chantier_contributor", "projet_contributor"];
+
+/** L'utilisateur est-il responsable (`owner`) ou contributeur (`contributors`) de ce projet ?
+ *  Les deux sont traités À L'IDENTIQUE pour la visibilité/l'ouverture du projet. */
+export function isProjetMember(
+  action: Pick<ChantierAction, "owner" | "contributors">,
+  username: string
+): boolean {
+  return action.owner === username || (action.contributors ?? []).includes(username);
 }
 
 /**
- * Périmètre de visibilité "propriétaire nommé" (round 25) — QUI voit QUOI dans le Plan
- * Stratégique, pour les 3 rôles à ownership nominatif (voir le plan, section RBAC) :
- *  - `axis_sponsor` : uniquement le(s) axe(s) dont il est `StrategicAxis.owner` (sponsor de l'axe — rôle unique, décision explicite : plus de duplication sponsor COMEX / responsable au niveau axe), plus tout ce qui
- *    en dépend (chantiers de ces axes, et — voir `indicators` de `useStrategicData.ts` — les
- *    indicateurs macro de ces axes et chantier-scopés de ces chantiers).
- *  - `chantier_owner` : uniquement le(s) chantier(s) dont il est `Chantier.pilote`. Les axes
- *    PARENTS de ces chantiers restent dans `axisIds` (pour que le nom/contexte de l'axe reste
- *    affichable — "pour orientation") mais ça ne donne PAS accès aux AUTRES chantiers de ce même
- *    axe : c'est `chantierIds`, jamais `axisIds`, qui borne la liste des chantiers visibles.
- *  - `chantier_contributor` : même granularité de VISIBILITÉ chantier que `chantier_owner`, mais
- *    résolue différemment — un contributeur n'a pas de champ "mon chantier" propre (`pilote` reste
- *    la notion du RESPONSABLE de chantier), donc un chantier est visible pour lui dès qu'AU MOINS
- *    UN de ses projets (`ChantierAction.owner`) lui appartient. En plus de ça, `clickableActionIds`
- *    restreint, DANS un chantier visible, les projets réellement OUVRABLES aux siens propres — les
- *    autres projets du même chantier restent dans `chantierIds` (donc affichés, ex. sur le Gantt/
- *    l'accordéon/le board E0→E4) mais l'appelant UI doit les rendre INERTES au clic plutôt que de
- *    les omettre (voir `ProgramRoadmap.tsx`/`AxisChantierProjetAccordion.tsx`/
- *    `ProjetMilestoneBoard.tsx`).
- *  - tout autre rôle stratégique (`strategic_lead`, `internal_comm`, `budget_control`,
- *    `comex_member`) et tout admin (`isGlobalAdmin`/`isCompanyAdmin`) : `"unrestricted"`, aucun
- *    filtrage — comportement historique inchangé.
+ * Périmètre de visibilité "propriétaire nommé" — QUI voit QUOI dans le Plan Stratégique, d'après
+ * la hiérarchie NOMMÉE (`lib/strategicHierarchy.ts`) : pilote > sponsor d'axe
+ * (`StrategicAxis.owner`) > sponsor de chantier (`Chantier.pilote`) > responsable projet
+ * (`ChantierAction.owner`) > contributeurs projet (`ChantierAction.contributors`).
  *
- * `axes`/`chantiers`/`chantierActions` sont attendus DÉJÀ scopés au programme actif (même
- * convention que `programRoadmap` ci-dessus) — cette fonction ne filtre jamais par `programId`
- * elle-même, seul `programId` (passé séparément) sert à résoudre le bon profil via
- * `resolveStrategicRoleForProgram`.
+ * Pour les rôles de `OWNERSHIP_SCOPED_ROLES` (`axis_sponsor`, `chantier_owner`,
+ * `chantier_contributor`, `projet_contributor`), le périmètre est l'UNION de ce que l'utilisateur
+ * détient nommément sur le programme — le rôle ne sert qu'à décider « restreint ou non » :
+ *  - axe dont il est sponsor : l'axe + TOUS ses chantiers (et tous leurs projets, ouvrables) ;
+ *  - chantier dont il est sponsor : le chantier (tous ses projets, ouvrables) + ses axes PARENTS
+ *    (contexte d'orientation seulement : `chantierIds`, jamais `axisIds`, borne les chantiers) ;
+ *  - projet dont il est responsable OU contributeur : le chantier parent devient visible (et ses
+ *    axes parents, pour contexte), ses AUTRES projets restent visibles mais NON ouvrables —
+ *    `clickableActionIds` liste alors exactement les projets ouvrables ; l'UI rend les autres
+ *    INERTES au clic plutôt que de les omettre (voir `ProgramRoadmap.tsx`/
+ *    `AxisChantierProjetAccordion.tsx`/`ProjetMilestoneBoard.tsx`).
+ * `clickableActionIds` est TOUJOURS fourni pour `chantier_contributor`/`projet_contributor`, et
+ * pour les autres rôles scopés uniquement si un chantier n'est visible QUE par un de ses projets
+ * (sinon `undefined` = tous les projets des chantiers visibles sont ouvrables).
  *
- * Un utilisateur `null`/`undefined` produit un périmètre `"scoped"` à VIDE (rien de visible)
- * plutôt que `"unrestricted"` : un appelant qui active le filtrage (voir `useStrategicData.ts`,
- * `filterActive`) sans utilisateur résolu (session en cours de déconnexion, par ex.) ne doit
- * jamais retomber sur "tout voir" par défaut.
+ * Un utilisateur doté de profils stratégiques mais d'AUCUN applicable au programme actif est
+ * traité comme scopé (seule sa position nommée compte). Tout autre rôle (`strategic_lead`,
+ * `comex_member`, `hr` — lecture complète —, …), un utilisateur sans aucun profil stratégique et
+ * tout admin : `"unrestricted"`.
+ *
+ * `axes`/`chantiers`/`chantierActions` sont attendus DÉJÀ scopés au programme actif — `programId`
+ * ne sert qu'à résoudre le bon profil (`resolveStrategicRoleForProgram`).
+ *
+ * Un utilisateur `null`/`undefined` produit un périmètre `"scoped"` à VIDE (rien de visible) :
+ * un appelant qui active le filtrage sans utilisateur résolu ne retombe jamais sur "tout voir".
  */
 export type StrategicOwnershipScope =
   | { mode: "unrestricted" }
   | {
       mode: "scoped";
-      /** Axes visibles — pour `axis_sponsor`, ses axes possédés ; pour `chantier_owner`/
-       *  `chantier_contributor`, les axes PARENTS de leurs chantiers visibles (contexte
-       *  d'orientation uniquement, ne donne accès à AUCUN autre chantier de cet axe). */
+      /** Axes visibles — axes sponsorisés, plus les axes PARENTS des chantiers visibles par un
+       *  chantier ou un projet (contexte d'orientation, ne donne accès à AUCUN autre chantier). */
       axisIds: Set<string>;
-      /** Chantiers visibles (voir le détail par rôle dans le doc-comment de la fonction). */
+      /** Chantiers visibles (voir le doc-comment de la fonction). */
       chantierIds: Set<string>;
-      /** Uniquement pour `chantier_contributor` : parmi les projets des chantiers visibles
-       *  ci-dessus, ceux réellement cliquables/ouvrables (les siens). `undefined` pour les deux
-       *  autres rôles scopés (`axis_sponsor`/`chantier_owner`) : TOUS les projets des chantiers
-       *  visibles sont cliquables pour eux, aucune restriction supplémentaire au niveau projet. */
+      /** Projets réellement ouvrables parmi ceux des chantiers visibles — `undefined` = tous. */
       clickableActionIds?: Set<string>;
     };
 
@@ -646,36 +730,41 @@ export function resolveStrategicOwnershipScope(
   if (isAnyAdmin(user)) return { mode: "unrestricted" };
 
   const role = resolveStrategicRoleForProgram(user, programId);
+  const scoped = role
+    ? OWNERSHIP_SCOPED_ROLES.includes(role)
+    : getStrategicProfiles(user).length > 0;
+  if (!scoped) return { mode: "unrestricted" };
 
-  if (role === "axis_sponsor") {
-    const axisIds = new Set(axes.filter((a) => a.owner === user.username).map((a) => a.id));
-    const chantierIds = new Set(
-      chantiers.filter((c) => c.axisIds.some((id) => axisIds.has(id))).map((c) => c.id)
-    );
-    return { mode: "scoped", axisIds, chantierIds };
+  const username = user.username;
+  const sponsoredAxisIds = new Set(axes.filter((a) => a.owner === username).map((a) => a.id));
+  // Chantiers visibles EN ENTIER (tous leurs projets ouvrables).
+  const fullChantierIds = new Set(
+    chantiers
+      .filter((c) => c.pilote === username || c.axisIds.some((id) => sponsoredAxisIds.has(id)))
+      .map((c) => c.id)
+  );
+  const memberActions = chantierActions.filter((a) => isProjetMember(a, username));
+
+  const chantierIds = new Set(fullChantierIds);
+  for (const a of memberActions) chantierIds.add(a.chantierId);
+
+  const axisIds = new Set(sponsoredAxisIds);
+  for (const c of chantiers) {
+    if (!chantierIds.has(c.id)) continue;
+    // Chantier visible via un axe sponsorisé : ses AUTRES axes parents ne sont pas ajoutés.
+    if (c.axisIds.some((id) => sponsoredAxisIds.has(id))) continue;
+    for (const id of c.axisIds) axisIds.add(id);
   }
 
-  if (role === "chantier_owner") {
-    const chantierIds = new Set(
-      chantiers.filter((c) => c.pilote === user.username).map((c) => c.id)
-    );
-    const axisIds = new Set(
-      chantiers.filter((c) => chantierIds.has(c.id)).flatMap((c) => c.axisIds)
-    );
-    return { mode: "scoped", axisIds, chantierIds };
-  }
-
-  if (role === "chantier_contributor") {
-    const ownActions = chantierActions.filter((a) => a.owner === user.username);
-    const chantierIds = new Set(ownActions.map((a) => a.chantierId));
-    const axisIds = new Set(
-      chantiers.filter((c) => chantierIds.has(c.id)).flatMap((c) => c.axisIds)
-    );
-    const clickableActionIds = new Set(ownActions.map((a) => a.id));
-    return { mode: "scoped", axisIds, chantierIds, clickableActionIds };
-  }
-
-  return { mode: "unrestricted" };
+  const projectOnly = Array.from(chantierIds).some((id) => !fullChantierIds.has(id));
+  const projectLevelRole = role !== undefined && PROJECT_LEVEL_ROLES.includes(role);
+  if (!projectLevelRole && !projectOnly) return { mode: "scoped", axisIds, chantierIds };
+  const clickableActionIds = new Set(
+    chantierActions
+      .filter((a) => fullChantierIds.has(a.chantierId) || isProjetMember(a, username))
+      .map((a) => a.id)
+  );
+  return { mode: "scoped", axisIds, chantierIds, clickableActionIds };
 }
 
 /**
@@ -1230,9 +1319,11 @@ export function requestMilestoneApproval(
   allChantiers: Chantier[],
   allActions: ChantierAction[]
 ): ChantierMilestoneApproval {
-  if (!isAnyAdmin(user) && action.owner !== user.username) {
+  // Responsable OU contributeur du projet (décision PO : les contributeurs saisissent sur leur
+  // projet ; leur demande passe ensuite par la chaîne responsable projet → sponsor de chantier).
+  if (!isAnyAdmin(user) && !isProjetMember(action, user.username)) {
     throw new Error(
-      `Seul le propriétaire du projet "${action.id}" (ou un admin) peut soumettre une demande de validation de jalon`
+      `Seuls le responsable et les contributeurs du projet "${action.id}" (ou un admin) peuvent soumettre une demande de validation de jalon`
     );
   }
   const currentMilestone = action.milestones?.currentMilestone ?? "E0";

@@ -37,6 +37,9 @@ export function ChantierForm({
   onCancel,
   submitLabel,
   compact = false,
+  canEditPilote = true,
+  piloteTooltip,
+  approvalHint,
 }: {
   initial?: Partial<ChantierFormValues>;
   /** Axes du programme — un chantier appartient désormais à UN OU PLUSIEURS axes (round 24, voir
@@ -59,6 +62,12 @@ export function ChantierForm({
   submitLabel?: string;
   /** Mise en page resserrée pour une création rapide inline (une colonne, pas de description). */
   compact?: boolean;
+  /** Désignation du sponsor de chantier (`pilote`) : réservée au pilote du plan / aux admins
+   *  (`canDesignate("chantierSponsor", …)`). `false` = lecture seule avec `piloteTooltip`. */
+  canEditPilote?: boolean;
+  piloteTooltip?: string;
+  /** Aperçu « Sera validé par X puis Y » calculé sur les valeurs courantes (vide = direct). */
+  approvalHint?: (values: ChantierFormValues) => string;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? "");
@@ -87,20 +96,23 @@ export function ChantierForm({
 
   const canSubmit = name.trim().length > 0 && axisIds.length > 0 && !submitting;
 
+  const buildValues = (): ChantierFormValues => ({
+    name: name.trim(),
+    // Clé OMISE (jamais `undefined`) quand le champ est vide : `setDoc` rejette toute valeur
+    // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
+    ...(description.trim() ? { description: description.trim() } : {}),
+    ...(confidentialityLevel ? { confidentialityLevel } : {}),
+    ...(pilote ? { pilote } : {}),
+    axisIds,
+    stage,
+  });
+  const hint = approvalHint && axisIds.length > 0 ? approvalHint(buildValues()) : "";
+
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      await onSubmit({
-        name: name.trim(),
-        // Clé OMISE (jamais `undefined`) quand le champ est vide : `setDoc` rejette toute valeur
-        // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
-        ...(description.trim() ? { description: description.trim() } : {}),
-        ...(confidentialityLevel ? { confidentialityLevel } : {}),
-        ...(pilote ? { pilote } : {}),
-        axisIds,
-        stage,
-      });
+      await onSubmit(buildValues());
     } finally {
       setSubmitting(false);
     }
@@ -195,6 +207,8 @@ export function ChantierForm({
             label={t("strategicAxes.form.chantierOwner", "Responsable de chantier")}
             placeholder={t("strategicAxes.unassigned", "Non assigné")}
             id="chantier-pilote"
+            disabled={!canEditPilote}
+            title={!canEditPilote ? piloteTooltip : undefined}
           />
         )}
       </div>
@@ -216,6 +230,12 @@ export function ChantierForm({
             )}
           />
         </div>
+      )}
+
+      {hint && (
+        <p className="rounded-md border border-rag-amber-light bg-rag-amber-light/30 px-2 py-1 text-[11.5px] font-medium text-text-secondary">
+          {hint}
+        </p>
       )}
 
       <div className="flex gap-2">

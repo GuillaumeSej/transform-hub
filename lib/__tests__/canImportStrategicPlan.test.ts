@@ -13,6 +13,8 @@ describe("canImportStrategicPlan", () => {
       "axis_sponsor",
       "chantier_owner",
       "chantier_contributor",
+      "projet_contributor",
+      "hr",
       "comex_member",
     ] as const) {
       expect(canImportStrategicPlan({}, role)).toBe(false);

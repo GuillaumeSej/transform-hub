@@ -150,43 +150,49 @@ describe("kpiResponsibles", () => {
   });
 });
 
-describe("routeKpiCorrection — table de routage", () => {
-  it("responsable de projet : DEMANDE au responsable du chantier, axe + plan informés à l'acceptation", () => {
+describe("routeKpiCorrection — règle PO : 2 validations (sponsor d'axe puis pilote)", () => {
+  const chainOf = (r: ReturnType<typeof routeKpiCorrection>) =>
+    r.mode === "request" ? r.chain.map((st) => [st.level, st.usernames]) : [];
+  it("responsable de projet : DEMANDE, sponsor d'axe puis pilote (plancher sponsor de chantier)", () => {
     const r = routeKpiCorrection(carl, indicator(), data());
     expect(r).toMatchObject({
       mode: "request",
       level: "projet",
-      approver: { level: "chantier", usernames: ["bob"], entityNames: ["Chantier 1"] },
-      informOnApproval: ["alice", "lea"],
-      informLevels: ["axis", "plan"],
+      approver: { level: "axis", usernames: ["alice"], entityNames: ["Axe 1"] },
+      informOnApproval: [],
+      informLevels: [],
     });
+    expect(chainOf(r)).toEqual([
+      ["axisSponsor", ["alice"]],
+      ["pilot", ["lea"]],
+    ]);
   });
-  it("responsable de chantier : DIRECTE, axe + plan informés", () => {
-    expect(routeKpiCorrection(bob, indicator(), data())).toEqual({
-      mode: "direct",
-      level: "chantier",
-      inform: ["alice", "lea"],
-      informLevels: ["axis", "plan"],
-    });
+  it("sponsor de chantier : ne corrige plus seul — même chaîne", () => {
+    const r = routeKpiCorrection(bob, indicator(), data());
+    expect(r.mode).toBe("request");
+    expect(chainOf(r)).toEqual([
+      ["axisSponsor", ["alice"]],
+      ["pilot", ["lea"]],
+    ]);
   });
-  it("responsable d'axe : DIRECTE, plan informé (KPI de chantier ET KPI macro de l'axe)", () => {
-    expect(routeKpiCorrection(alice, indicator(), data())).toMatchObject({
-      mode: "direct",
+  it("sponsor d'axe : validé par le pilote seul (KPI de chantier ET KPI macro de l'axe)", () => {
+    const r = routeKpiCorrection(alice, indicator(), data());
+    expect(r).toMatchObject({
+      mode: "request",
       level: "axis",
-      inform: ["lea"],
-      informLevels: ["plan"],
+      approver: { level: "plan", usernames: ["lea"], entityNames: [] },
     });
     const macro = indicator({ chantierId: undefined });
-    expect(routeKpiCorrection(alice, macro, data({ indicators: [macro] }))).toMatchObject({
-      mode: "direct",
-      inform: ["lea"],
-    });
+    expect(chainOf(routeKpiCorrection(alice, macro, data({ indicators: [macro] })))).toEqual([
+      ["pilot", ["lea"]],
+    ]);
   });
-  it("responsable du plan / admin : DIRECTE, personne d'informé", () => {
-    expect(routeKpiCorrection(lea, indicator(), data())).toMatchObject({
+  it("pilote du plan / admin : DIRECTE, personne d'informé", () => {
+    expect(routeKpiCorrection(lea, indicator(), data())).toEqual({
       mode: "direct",
       level: "plan",
       inform: [],
+      informLevels: [],
     });
     expect(routeKpiCorrection(admin, indicator(), data())).toMatchObject({
       mode: "direct",
@@ -197,31 +203,31 @@ describe("routeKpiCorrection — table de routage", () => {
     const other = user("olga", "strategic_lead", "P2");
     expect(routeKpiCorrection(other, indicator(), data()).mode).toBe("forbidden");
   });
-  it("saisisseur autorisé sans responsabilité (rôle de l'indicateur) : DEMANDE au chantier", () => {
-    expect(routeKpiCorrection(cto, indicator(), data())).toMatchObject({
-      mode: "request",
-      level: "none",
-      approver: { level: "chantier", usernames: ["bob"] },
-    });
+  it("saisisseur autorisé sans responsabilité (rôle de l'indicateur) : même chaîne", () => {
+    const r = routeKpiCorrection(cto, indicator(), data());
+    expect(r).toMatchObject({ mode: "request", level: "none", approver: { usernames: ["alice"] } });
   });
   it("aucun droit : interdit ; pas d'utilisateur : interdit", () => {
     expect(routeKpiCorrection(nobody, indicator(), data()).mode).toBe("forbidden");
     expect(routeKpiCorrection(null, indicator(), data()).mode).toBe("forbidden");
   });
-  it("cumul : pilote ET responsable d'axe → niveau le plus haut (axe)", () => {
+  it("cumul : pilote de chantier ET sponsor d'axe → niveau le plus haut (axe) → pilote seul", () => {
     const d = data({ chantiers: [chantier({ pilote: "alice" })] });
-    expect(routeKpiCorrection(alice, indicator(), d)).toMatchObject({
-      level: "axis",
-      inform: ["lea"],
-    });
+    const r = routeKpiCorrection(alice, indicator(), d);
+    expect(r.level).toBe("axis");
+    expect(chainOf(r)).toEqual([["pilot", ["lea"]]]);
   });
-  it("jamais l'acteur ni de doublon parmi les informés (lead = owner d'axe)", () => {
+  it("une même personne ne valide jamais deux paliers (lead = sponsor d'axe) : un seul palier", () => {
     const d = data({ axes: [axis({ owner: "lea" })] });
-    expect(routeKpiCorrection(bob, indicator(), d)).toMatchObject({ inform: ["lea"] });
+    expect(chainOf(routeKpiCorrection(bob, indicator(), d))).toEqual([["axisSponsor", ["lea"]]]);
   });
-  it("demande : préfère le chantier du projet du demandeur", () => {
+  it("KPI lié à un 2e axe via le chantier du demandeur : les deux sponsors peuvent valider le palier axe", () => {
     const d = data({
-      chantiers: [chantier(), chantier({ id: "CH2", pilote: "eve", name: "Chantier 2" })],
+      axes: [axis(), axis({ id: "AX2", owner: "dora", name: "Axe 2" })],
+      chantiers: [
+        chantier(),
+        chantier({ id: "CH2", axisIds: ["AX2"], pilote: "eve", name: "Chantier 2" }),
+      ],
       chantierActions: [
         action(),
         action({ id: "CA2", chantierId: "CH2", owner: "finn", indicatorId: "IND1" }),
@@ -230,17 +236,13 @@ describe("routeKpiCorrection — table de routage", () => {
     const finn = user("finn", "chantier_contributor");
     expect(routeKpiCorrection(finn, indicator(), d)).toMatchObject({
       mode: "request",
-      approver: { level: "chantier", usernames: ["eve"], entityNames: ["Chantier 2"] },
+      approver: { level: "axis", usernames: ["alice", "dora"], entityNames: ["Axe 1", "Axe 2"] },
     });
   });
-  it("repli : chantier sans pilote → responsable d'axe (plan seul informé) ; sans axe → plan", () => {
-    const d = data({ chantiers: [chantier({ pilote: undefined })] });
-    expect(routeKpiCorrection(carl, indicator(), d)).toMatchObject({
-      mode: "request",
-      approver: { level: "axis", usernames: ["alice"], entityNames: ["Axe 1"] },
-      informOnApproval: ["lea"],
-      informLevels: ["plan"],
-    });
+  it("niveaux vides sautés : sans sponsor d'axe → pilote seul", () => {
+    const d = data({ axes: [axis({ owner: undefined })] });
+    expect(chainOf(routeKpiCorrection(carl, indicator(), d))).toEqual([["pilot", ["lea"]]]);
+    // Legacy (demandes sans chaîne) : repli historique inchangé.
     const d2 = data({
       chantiers: [chantier({ pilote: undefined })],
       axes: [axis({ owner: undefined })],
@@ -285,17 +287,24 @@ describe("demande de correction (strategicApprovals)", () => {
       id: "SA1",
       now: "2026-03-10T10:00:00.000Z",
     });
-  it("adressée au pilote du chantier ; la saisie d'une NOUVELLE valeur reste au plan", () => {
-    expect(req()).toMatchObject({ approverRole: "chantier_owner", approverUsernames: ["bob"] });
+  it("chaîne snapshotée : sponsor d'axe puis pilote (resolveApprover legacy inchangé)", () => {
+    expect(req()).toMatchObject({
+      approverRole: "axis_sponsor",
+      approverUsernames: ["alice"],
+      stepIndex: 0,
+    });
+    expect(req().chain?.map((st) => st.usernames)).toEqual([["alice"], ["lea"]]);
     expect(resolveApprover("kpi_value", { type: "indicateur", id: "IND1" }, data()).role).toBe(
       "strategic_lead"
     );
   });
-  it("le pilote peut décider, le demandeur non ; alerte « À valider » pour le pilote", () => {
+  it("étape 1 : le sponsor d'axe seul (ni pilote de chantier, ni pilote du plan, ni demandeur)", () => {
     const a = req();
-    expect(canDecide(bob, a, data())).toBe(true);
+    expect(canDecide(alice, a, data())).toBe(true);
+    expect(canDecide(bob, a, data())).toBe(false);
+    expect(canDecide(lea, a, data())).toBe(false);
     expect(canDecide(carl, a, data())).toBe(false);
-    const alerts = buildApprovalAlerts([a], bob, data(), new Date("2026-03-11"));
+    const alerts = buildApprovalAlerts([a], alice, data(), new Date("2026-03-11"));
     expect(alerts.map((x) => x.id)).toEqual(["strategic-approval-SA1-todo"]);
   });
   it("acceptée : informés alertés (texte ancienne → nouvelle), pas le décideur ni le demandeur", () => {
@@ -391,10 +400,17 @@ describe("flux edit/delete avec routage", () => {
     };
     return g as typeof g & ApprovalGate;
   };
-  it("directe : applique puis informe (ancienne valeur dans le payload)", async () => {
+  it("route directe avec informés : applique puis informe (ancienne valeur dans le payload)", async () => {
     const g = gate();
     const update = vi.fn(async () => undefined);
-    const route = routeKpiCorrection(bob, indicator(), data());
+    // Route directe « avec information » construite à la main (plus produite par la règle en
+    // vigueur, mais le flux sait toujours la traiter).
+    const route = {
+      mode: "direct" as const,
+      level: "chantier" as const,
+      inform: ["alice", "lea"],
+      informLevels: ["axis" as const, "plan" as const],
+    };
     const out = await editKpiValueFlow(
       g,
       { id: "IND1", name: "KPI" },
@@ -469,7 +485,12 @@ describe("flux edit/delete avec routage", () => {
     const g = gate();
     g.notifyKpiCorrection.mockRejectedValueOnce(new Error("offline"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const route = routeKpiCorrection(bob, indicator(), data());
+    const route = {
+      mode: "direct" as const,
+      level: "chantier" as const,
+      inform: ["alice"],
+      informLevels: ["axis" as const],
+    };
     await expect(
       editKpiValueFlow(
         g,

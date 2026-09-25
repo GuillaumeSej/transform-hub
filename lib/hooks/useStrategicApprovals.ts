@@ -2,44 +2,48 @@
 
 /**
  * useStrategicApprovals — API de validation du Plan Stratégique (à brancher dans les écrans).
+ * Règles et modèle à PALIERS (N+1 puis N+2) : voir l'en-tête de lib/strategicApprovals.ts.
  *
  *   const sa = useStrategicApprovals({ user, companyId, programId, data: strategic });
  *   // `data` = ce que renvoie useStrategicData (axes, chantiers, chantierActions, indicators,
  *   //          measurements, users) — passé en paramètre pour ne pas ouvrir d'abonnement en double.
  *
- *   sa.pending   StrategicApproval[]  en attente ET décidables par l'utilisateur courant
+ *   sa.approvals StrategicApproval[]  toutes les demandes du programme (badges « en attente »)
+ *   sa.pending   StrategicApproval[]  en attente ET décidables MAINTENANT par l'utilisateur (palier
+ *                                     courant — l'approbateur de l'étape 2 ne voit la demande
+ *                                     qu'après l'étape 1) → badge Topbar = sa.pendingCount
  *   sa.mine      StrategicApproval[]  demandes émises par l'utilisateur (tous statuts)
  *   sa.history   StrategicApproval[]  demandes décidées visibles de l'utilisateur
  *   sa.alerts    Alert[]              alertes dérivées (à valider / en attente / décision)
- *   sa.pendingCount number
- *   sa.needsApproval(kind, target) => boolean
- *        true  → appeler sa.request(...) au lieu d'agir ; false → l'utilisateur EST l'approbateur
- *        (ou admin/strategic_lead) : appliquer l'action directement, sans demande.
+ *   sa.needsApproval(kind, target, stage?, payload?) => boolean
+ *        false → appliquer directement (admin, pilote du plan, catégorie libre) ; true → sa.request.
+ *        `payload` requis pour "projet_update"/"chantier_update" (catégorie) et "chantier_create".
+ *   sa.previewChain(kind, target, payload?) => ApprovalStep[]  « sera validé par X puis Y »
  *   sa.request(kind, target, payload, reason?) => Promise<StrategicApproval>
- *        kind    "milestone" | "kpi_value" | "projet_create" | "projet_delete" | "chantier_delete"
+ *        kind    "milestone" | "kpi_value" | "projet_create" | "projet_update" | "projet_delete"
+ *                | "chantier_create" | "chantier_update" | "chantier_delete"
  *        target  { type: "axe"|"chantier"|"projet"|"indicateur", id, name? }
- *        payload milestone      { targetMilestone, fromMilestone? }   target = projet
- *                kpi_value      { period, value?, note? }             target = indicateur
- *                projet_create  { action: ChantierAction (id déjà généré), stage? }
- *                                                                      target = chantier parent
- *                projet_delete  { name? }                             target = projet
- *                chantier_delete{ name? }                             target = chantier
- *        Écrit la demande + une entrée d'audit ; pour "milestone" pose aussi
- *        `ChantierAction.milestoneApproval` (marqueur "en attente" de l'UI existante).
- *   sa.approve(id, comment?) => Promise<void>   applique l'effet (jalon/KPI/création/suppression)
- *        "projet_create" DOUBLE validation (voir l'en-tête de `lib/strategicApprovals.ts`) :
- *        l'approbation du palier `stage: "chantier"` NE crée PAS le projet — elle enchaîne
- *        automatiquement la 2e demande (palier "axis", `nextProjetCreateApproval`), ou crée le
- *        projet directement si ce 2e palier s'avère inutile/indécidable (voir cette fonction).
- *        Seule l'approbation du palier "axis" (ou d'une demande sans `stage`, format d'avant cette
- *        fonctionnalité) crée réellement le projet.
- *        `adjust` (optionnel, correction KPI uniquement) : valeur AJUSTÉE par l'approbateur avant
- *        d'accepter ; à l'acceptation d'une correction KPI, les responsables supérieurs au
- *        décideur sont informés (`informUsernames`, voir lib/kpiCorrectionRouting.ts).
- *   sa.kpiCorrectionRoute(indicator) => KpiCorrectionRoute   directe / demande / interdite
+ *        payload milestone       { targetMilestone, fromMilestone? }          target = projet
+ *                kpi_value       { period, value?, note?, measurementId?, remove? }
+ *                                                                              target = indicateur
+ *                projet_create   { action: ChantierAction (id déjà généré), staffing? }
+ *                                                                              target = chantier parent
+ *                projet_update   { patch, before, category }                  target = projet
+ *                projet_delete   { name? }                                    target = projet
+ *                chantier_create { chantier: Chantier (id déjà généré) }      target = axe principal
+ *                chantier_update { patch, before, category }                  target = chantier
+ *                chantier_delete { name? }                                    target = chantier
+ *        Chaîne calculée et SNAPSHOTÉE à la création. Écrit la demande + une entrée d'audit ; pour
+ *        "milestone" pose aussi `ChantierAction.milestoneApproval` (marqueur "en attente").
+ *   sa.approve(id, comment?, adjust?) => Promise<void>
+ *        Valide le palier COURANT : palier intermédiaire → la demande passe au palier suivant (rien
+ *        n'est appliqué) ; dernier palier → effet appliqué (jalon/KPI/création/modification/
+ *        suppression). Demandes LEGACY (sans chaîne) : décision unique, et l'ancien enchaînement
+ *        "projet_create" palier "chantier" → "axis" (`nextProjetCreateApproval`) reste géré.
+ *        `adjust` (correction KPI uniquement) : valeur AJUSTÉE par l'approbateur.
+ *   sa.reject(id, comment)   => Promise<void>   commentaire OBLIGATOIRE ; clôt la demande
+ *   sa.kpiCorrectionRoute(indicator) => KpiCorrectionRoute   directe (pilote/admin) / demande / interdite
  *   sa.notifyKpiCorrection(target, payload, informUsernames) => enregistrement d'information
- *        d'une correction KPI appliquée directement (alerte aux responsables supérieurs)
- *   sa.reject(id, comment)   => Promise<void>   commentaire OBLIGATOIRE
  * Toutes les méthodes lèvent une Error (message FR) si non habilité / périmé / déjà traité.
  */
 
@@ -50,7 +54,7 @@ import {
   decideStrategicApproval,
 } from "@/lib/firestore/strategicApprovals";
 import { saveChantierAction, deleteChantierAction } from "@/lib/firestore/chantierActions";
-import { deleteChantier } from "@/lib/firestore/chantiers";
+import { deleteChantier, saveChantier } from "@/lib/firestore/chantiers";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { saveIndicator } from "@/lib/firestore/indicators";
 import {
@@ -73,9 +77,12 @@ import {
   buildApprovalAuditEntry,
   buildDirectKpiCorrectionRecord,
   canDecide,
+  decideApproval,
   needsApproval as needsApprovalLogic,
   nextProjetCreateApproval,
+  previewApprovalChain,
   type ApprovalEffects,
+  type ApprovalEvent,
   type KpiValueApprovalPayload,
   type ProjetCreateApprovalPayload,
   type ProjetCreateStage,
@@ -85,6 +92,7 @@ import {
   type StrategicApprovalPayload,
   type StrategicApprovalTarget,
 } from "@/lib/strategicApprovals";
+import type { ApprovalStep } from "@/lib/strategicHierarchy";
 import type { Alert, AuthUser } from "@/types";
 
 type ApprovalUser = Pick<
@@ -100,6 +108,7 @@ async function runEffects(effects: ApprovalEffects): Promise<void> {
   for (const id of effects.deleteMeasurementIds) await deleteIndicatorMeasurement(id);
   for (const i of effects.saveIndicators) await saveIndicator(i);
   for (const s of effects.saveStaffing) await saveChantierStaffing(s);
+  for (const c of effects.saveChantiers) await saveChantier(c);
 }
 
 export type UseStrategicApprovalsArgs = {
@@ -154,7 +163,7 @@ export function useStrategicApprovals({
   );
 
   const logAudit = useCallback(
-    (approval: StrategicApproval, event: "requested" | "approved" | "rejected") => {
+    (approval: StrategicApproval, event: ApprovalEvent) => {
       const entry = buildApprovalAuditEntry(approval, event, dataRef.current.users);
       appendAuditEntries(companyId, [entry]).catch((err) =>
         console.error("[betrack] audit validation stratégique :", err)
@@ -164,8 +173,21 @@ export function useStrategicApprovals({
   );
 
   const needsApproval = useCallback(
-    (kind: StrategicApprovalKind, target: StrategicApprovalTarget, stage?: ProjetCreateStage) =>
-      needsApprovalLogic(kind, user, target, dataRef.current, stage),
+    (
+      kind: StrategicApprovalKind,
+      target: StrategicApprovalTarget,
+      stage?: ProjetCreateStage,
+      payload?: StrategicApprovalPayload
+    ) => needsApprovalLogic(kind, user, target, dataRef.current, stage, payload),
+    [user]
+  );
+
+  const previewChain = useCallback(
+    (
+      kind: StrategicApprovalKind,
+      target: StrategicApprovalTarget,
+      payload?: StrategicApprovalPayload
+    ): ApprovalStep[] => previewApprovalChain(kind, user, target, payload, dataRef.current),
     [user]
   );
 
@@ -266,36 +288,67 @@ export function useStrategicApprovals({
           );
         }
       }
-      const decided: StrategicApproval = {
+      const base: StrategicApproval = {
         ...approval,
         ...(payloadPatch ? { payload: payloadPatch } : {}),
-        ...(informUsernames?.length ? { informUsernames } : {}),
-        status,
-        decidedBy: user.username,
-        decidedByName: user.name,
-        decidedAt,
-        decisionComment: comment?.trim() || undefined,
       };
-      // Effets d'abord : s'ils échouent (cible disparue, jalon périmé), la demande reste en attente.
-      // "projet_create" palier "chantier" : `applyApprovedPayload` ne crée RIEN pour ce palier (voir
-      // ce fichier) — le chaînage vers le palier "axis" (ou la création directe si ce 2e palier est
-      // inutile) se fait juste en dessous, une fois la décision persistée.
-      await runEffects(
-        status === "approved"
-          ? applyApprovedPayload(decided, dataRef.current)
-          : applyRejectedPayload(decided, dataRef.current)
-      );
-      const saved = await decideStrategicApproval(id, {
+      const { approval: decidedRaw, final } = decideApproval(
+        base,
+        user,
         status,
-        decidedBy: decided.decidedBy,
-        decidedByName: decided.decidedByName,
-        decidedAt,
-        decisionComment: decided.decisionComment,
-        ...(payloadPatch ? { payload: payloadPatch } : {}),
-        ...(informUsernames?.length ? { informUsernames } : {}),
-      });
+        comment,
+        decidedAt
+      );
+      // Informés (correction KPI) : seulement à la clôture approuvée, jamais les paliers de la
+      // chaîne (ils ont validé eux-mêmes).
+      const chainUsers = new Set((approval.chain ?? []).flatMap((st) => st.usernames));
+      const informees =
+        final && status === "approved"
+          ? (informUsernames ?? []).filter((u) => !chainUsers.has(u))
+          : [];
+      const decided: StrategicApproval = {
+        ...decidedRaw,
+        ...(informees.length ? { informUsernames: informees } : {}),
+      };
+      // Effets d'abord (clôture uniquement) : s'ils échouent (cible disparue, jalon/champ périmé),
+      // la demande reste en attente. Palier intermédiaire : aucun effet.
+      // LEGACY "projet_create" palier "chantier" : `applyApprovedPayload` ne crée RIEN pour ce
+      // palier — l'enchaînement vers le palier "axis" se fait juste en dessous.
+      if (final) {
+        await runEffects(
+          status === "approved"
+            ? applyApprovedPayload(decided, dataRef.current)
+            : applyRejectedPayload(decided, dataRef.current)
+        );
+      }
+      const saved = await decideStrategicApproval(
+        id,
+        {
+          status: decided.status,
+          decidedBy: decided.decidedBy,
+          decidedByName: decided.decidedByName,
+          decidedAt: decided.decidedAt,
+          decisionComment: decided.decisionComment,
+          ...(payloadPatch ? { payload: payloadPatch } : {}),
+          ...(informees.length ? { informUsernames: informees } : {}),
+          ...(decided.chain
+            ? {
+                chain: decided.chain,
+                stepIndex: decided.stepIndex,
+                approverRole: decided.approverRole,
+                approverUsername: decided.approverUsername,
+                approverUsernames: decided.approverUsernames,
+              }
+            : {}),
+        },
+        approval.chain?.length ? (approval.stepIndex ?? 0) : undefined
+      );
+      if (!final) {
+        logAudit(saved, "step_approved");
+        return;
+      }
       logAudit(saved, status);
-      if (status === "approved" && saved.kind === "projet_create") {
+      if (status === "approved" && saved.kind === "projet_create" && !saved.chain?.length) {
         const payload = saved.payload as ProjetCreateApprovalPayload;
         if (payload.stage === "chantier") {
           // Double validation (voir l'en-tête de lib/strategicApprovals.ts) : le pilote du chantier
@@ -342,6 +395,7 @@ export function useStrategicApprovals({
     pendingCount: buckets.pending.length,
     alerts,
     needsApproval,
+    previewChain,
     request,
     kpiCorrectionRoute,
     notifyKpiCorrection,

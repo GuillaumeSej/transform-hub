@@ -30,6 +30,9 @@ export function UserPicker({
   placeholder,
   label,
   id,
+  disabled = false,
+  title,
+  exclude,
 }: {
   users: AuthUser[];
   /** `AuthUser.username`, ou `undefined` pour "non assigné". */
@@ -42,6 +45,11 @@ export function UserPicker({
    *  (ex. une cellule de tableau RACI, où le contexte de la colonne suffit). */
   label?: string;
   id?: string;
+  /** Lecture seule (ex. désignation réservée à un niveau supérieur) — `title` explique pourquoi. */
+  disabled?: boolean;
+  title?: string;
+  /** Usernames à ne pas proposer (ex. déjà sélectionnés dans un sélecteur multiple). */
+  exclude?: string[];
 }) {
   const { t } = useTranslation();
   const knownValue = value ? users.some((u) => u.username === value) : true;
@@ -55,9 +63,11 @@ export function UserPicker({
       )}
       <select
         id={id}
+        disabled={disabled}
+        title={title}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value ? e.target.value : undefined)}
-        className={`${label ? "mt-1 " : ""}w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral`}
+        className={`${label ? "mt-1 " : ""}w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <option value="">{placeholder ?? t("strategicAxes.unassigned", "Non assigné")}</option>
         {!knownValue && value && (
@@ -65,11 +75,13 @@ export function UserPicker({
             {value} {t("strategicAxes.form.unknownUser", "(non reconnu)")}
           </option>
         )}
-        {users.map((u) => (
-          <option key={u.username} value={u.username}>
-            {u.name || `${u.firstName} ${u.lastName}`.trim()}
-          </option>
-        ))}
+        {users
+          .filter((u) => !exclude?.includes(u.username))
+          .map((u) => (
+            <option key={u.username} value={u.username}>
+              {u.name || `${u.firstName} ${u.lastName}`.trim()}
+            </option>
+          ))}
       </select>
     </div>
   );

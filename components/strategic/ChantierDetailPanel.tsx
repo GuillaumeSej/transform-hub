@@ -1,7 +1,7 @@
 "use client";
 
 import { DateInput } from "@/components/shared/DateInput";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -75,7 +75,7 @@ import {
   type ProgressBucket,
 } from "@/lib/axisLogic";
 import { EMPTY_BUDGET, rollupBudgets } from "@/lib/budgetRollup";
-import { aggregateLinkedKpis, readKpi, resolveDeleteApproval } from "@/lib/chantierKpis";
+import { aggregateLinkedKpis, readKpi } from "@/lib/chantierKpis";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import {
@@ -85,11 +85,37 @@ import {
   milestoneFlow,
   newProjetId,
   pendingApprovals,
+  updateChantierFlow,
+  updateProjetFlow,
+  type UpdateFlowResult,
 } from "@/lib/strategicApprovalFlows";
+import {
+  hierarchyContextFor,
+  isPendingOn,
+  stripUndefined,
+  type GatedCategory,
+  type StrategicApprovalKind,
+  type StrategicApprovalPayload,
+  type StrategicApprovalTarget,
+} from "@/lib/strategicApprovals";
+import {
+  chainLabel,
+  chantierRights,
+  conflictingFields,
+  directMilestoneAdvance,
+  displayName,
+  fillTemplate,
+  flowOutcomeMessage,
+  gatedCategoriesOf,
+  pendingRequestsOn,
+  projetRights,
+  type FlowResultLike,
+} from "@/lib/strategicFiche";
+import { MultiUserPicker } from "@/components/strategic/MultiUserPicker";
+import { PendingApprovalBadge } from "@/components/strategic/PendingApprovalBadge";
 import { cn } from "@/lib/utils";
 import { addDays, parseISO, todayISO } from "@/lib/dateUtils";
 import { subscribeCompanies } from "@/lib/firestore/admin";
-import { saveChantier } from "@/lib/firestore/chantiers";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
@@ -140,6 +166,7 @@ type ChantierActionFormValues = Pick<
   | "name"
   | "description"
   | "owner"
+  | "contributors"
   | "sponsor"
   | "start"
   | "end"
@@ -158,6 +185,7 @@ type ChantierActionFormValues = Pick<
 const CLEARABLE_PROJET_FIELDS: Partial<ChantierAction> = {
   description: undefined,
   owner: undefined,
+  contributors: undefined,
   sponsor: undefined,
   indicatorId: undefined,
   budget: undefined,
@@ -309,6 +337,63 @@ function normalizeDeliverables(raw: ChantierAction["deliverables"]): Deliverable
   );
 }
 
+/** Livrables tels que le formulaire projet les ÉCRIT (échéance effective pré-remplie, intitulé
+ *  rogné, sous-étapes à borne vide écartées, livrables sans intitulé ignorés) — partagé par le
+ *  submit du formulaire et par la détection « livrables inchangés » du mode édition (sans quoi une
+ *  simple normalisation d'un livrable historique partirait en demande de validation). */
+function parseFormDeliverables(list: Deliverable[]): Deliverable[] {
+  return list
+    .map((d) => ({
+      ...d,
+      label: d.label.trim(),
+      phases: d.phases.filter((p) => p.start.length > 0 && p.end.length > 0),
+    }))
+    .filter((d) => d.label.length > 0);
+}
+function formDeliverablesOf(raw: ChantierAction["deliverables"]): Deliverable[] {
+  return parseFormDeliverables(
+    normalizeDeliverables(raw).map((d) => {
+      const due = effectiveDueDate(d);
+      return due ? { ...d, dueDate: due } : d;
+    })
+  );
+}
+
+/** Prérequis tels que le formulaire les ÉCRIT : EXACTEMENT les clés pertinentes à leur `kind`,
+ *  lignes vides ignorées. */
+function parseFormPrerequisites(list: ActionPrerequisite[]): ActionPrerequisite[] {
+  return list.flatMap((p): ActionPrerequisite[] => {
+    if (p.kind === "action") {
+      return p.targetActionId
+        ? [{ id: p.id, kind: "action", targetActionId: p.targetActionId }]
+        : [];
+    }
+    const label = (p.label ?? "").trim();
+    return label ? [{ id: p.id, kind: "external", label, done: p.done ?? false }] : [];
+  });
+}
+
+/** Retire du patch d'édition les listes (livrables, prérequis) que le formulaire n'a fait que
+ *  NORMALISER sans réelle modification — évite une demande de validation « planning » fantôme. */
+function dropUnchangedFormLists(
+  action: ChantierAction,
+  patch: Partial<ChantierAction>
+): Partial<ChantierAction> {
+  const next = { ...patch };
+  const same = (a: unknown, b: unknown) =>
+    JSON.stringify(stripUndefined(a ?? [])) === JSON.stringify(stripUndefined(b ?? []));
+  if ("deliverables" in next && same(formDeliverablesOf(action.deliverables), next.deliverables)) {
+    delete next.deliverables;
+  }
+  if (
+    "prerequisites" in next &&
+    same(parseFormPrerequisites(action.prerequisites ?? []), next.prerequisites)
+  ) {
+    delete next.prerequisites;
+  }
+  return next;
+}
+
 /** Nom affiché d'un utilisateur, résolu par username — repli défensif sur le texte brut stocké : un
  *  `owner`/`sponsor` saisi en texte libre AVANT la conversion round 4 vers `UserPicker` (ou un
  *  utilisateur depuis retiré de l'entreprise) n'a pas de correspondance dans `users`, on l'affiche
@@ -321,6 +406,7 @@ function resolveUserLabel(username: string, users: AuthUser[]): string {
 type ChantierActionFormLabels = {
   name: string;
   owner: string;
+  contributors: string;
   sponsor: string;
   start: string;
   end: string;
@@ -610,6 +696,7 @@ function DeliverableDetailModal({
   labels,
   users,
   currentUsername,
+  readOnly = false,
   onClose,
   onPatch,
 }: {
@@ -625,6 +712,9 @@ function DeliverableDetailModal({
   };
   users: AuthUser[];
   currentUsername?: string;
+  /** Pas de droit d'édition sur le projet (ou champ en attente de validation) : échéance et case
+   *  « Fait » désactivées, ajout de commentaire masqué. */
+  readOnly?: boolean;
   onClose: () => void;
   onPatch: (patch: Partial<Deliverable>) => void;
 }) {
@@ -651,6 +741,7 @@ function DeliverableDetailModal({
         {labels.dueDate} <span className="text-bp-coral">*</span>
         <DateInput
           required
+          disabled={readOnly}
           className={INPUT_CLASS}
           value={effectiveDueDate(deliverable) ?? ""}
           // Échéance obligatoire : une saisie vidée n'est jamais écrite (pas de `undefined` envoyé
@@ -666,6 +757,7 @@ function DeliverableDetailModal({
           id={`deliverable-done-${deliverable.id}`}
           done={isDeliverableDone(deliverable)}
           label={labels.done}
+          disabled={readOnly}
           onChange={(done) => onPatch({ status: done ? "done" : "todo" })}
         />
         <span className="inline-flex items-center gap-1.5 text-[11.5px] text-secondary">
@@ -693,7 +785,7 @@ function DeliverableDetailModal({
             ))}
           </ul>
         )}
-        <div className="mt-2 flex gap-2">
+        <div className={cn("mt-2 flex gap-2", readOnly && "hidden")}>
           <input
             className={`${SMALL_INPUT_CLASS} mt-0 flex-1`}
             placeholder={labels.commentPlaceholder}
@@ -882,11 +974,29 @@ function ChantierActionForm({
   chantierAllocatedBudget,
   companyId,
   showStaffingDraft = false,
+  designation,
+  pendingField,
+  approvalHint,
   onSubmit,
   onCancel,
   labels,
 }: {
   initial?: Partial<ChantierActionFormValues>;
+  /** Droits de désignation (lib/strategicFiche.ts) : responsable projet (sponsor de chantier et
+   *  au-dessus) et contributeurs (responsable projet et au-dessus). Champ en lecture seule, avec
+   *  infobulle expliquant qui peut le modifier, quand le droit manque. Absent = tout éditable. */
+  designation?: {
+    canOwner: boolean;
+    canContributors: boolean;
+    ownerTooltip: string;
+    contributorsTooltip: string;
+  };
+  /** Champ déjà en attente de validation (édition) : badge rendu sous le champ, et champ
+   *  désactivé pour éviter une seconde demande conflictuelle. `null` = rien en attente. */
+  pendingField?: (field: keyof ChantierActionFormValues) => ReactNode | null;
+  /** Aperçu « Sera validé par X puis Y » calculé sur les valeurs courantes (vide = appliqué
+   *  directement). */
+  approvalHint?: (values: ChantierActionFormValues) => string;
   stages: MaturityStageConfig[];
   users: AuthUser[];
   /** Autres actions du MÊME chantier (l'action éditée exclue) — univers du sélecteur de prérequis
@@ -945,6 +1055,7 @@ function ChantierActionForm({
   const today = todayISO();
   const [name, setName] = useState(initial?.name ?? "");
   const [owner, setOwner] = useState<string | undefined>(initial?.owner);
+  const [contributors, setContributors] = useState<string[]>(initial?.contributors ?? []);
   const [sponsor, setSponsor] = useState<string | undefined>(initial?.sponsor);
   const [start, setStart] = useState(initial?.start ?? today);
   const [end, setEnd] = useState(initial?.end ?? addDays(today, 30));
@@ -1069,58 +1180,49 @@ function ChantierActionForm({
   const removeDeliverable = (id: string) =>
     setDeliverables((list) => list.filter((d) => d.id !== id));
 
+  /** Valeurs telles qu'écrites au submit (aussi utilisées pour l'aperçu de validation). */
+  const buildValues = (): ChantierActionFormValues => {
+    // Même esprit que l'ancien `.filter(Boolean)` sur les lignes : un livrable sans intitulé
+    // n'est pas écrit. Les `phases` historiques (legacy, plus éditables) sont conservées telles
+    // quelles — seule une sous-étape à borne vide est écartée, comme avant.
+    const parsedDeliverables = parseFormDeliverables(deliverables);
+    // Reconstruit chaque prérequis avec EXACTEMENT les clés pertinentes à son `kind` — jamais de
+    // clé `undefined` (voir note "clés OMISES" plus bas) : un prérequis "action" sans cible ou
+    // "external" sans libellé est simplement ignoré (ligne laissée vide par l'utilisateur).
+    const parsedPrerequisites = parseFormPrerequisites(prerequisites);
+    // Clés OMISES (jamais `undefined`) quand vides : `setDoc` rejette toute valeur `undefined`,
+    // voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx` — c'est la
+    // cause racine du bug "le formulaire ne fait rien" sur un champ optionnel laissé vide.
+    return {
+      name: name.trim(),
+      ...(description.trim() ? { description: description.trim() } : {}),
+      ...(owner ? { owner } : {}),
+      ...(contributors.length > 0 ? { contributors } : {}),
+      ...(sponsor ? { sponsor } : {}),
+      start,
+      end,
+      status,
+      ...(indicatorId ? { indicatorId } : {}),
+      ...(parsedBudget !== undefined && !Number.isNaN(parsedBudget)
+        ? { budget: parsedBudget }
+        : {}),
+      ...(parsedConsumedBudget !== undefined && !Number.isNaN(parsedConsumedBudget)
+        ? { consumedBudget: parsedConsumedBudget }
+        : {}),
+      ...(parsedDeliverables.length > 0 ? { deliverables: parsedDeliverables } : {}),
+      ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
+    };
+  };
+
+  const hint = approvalHint ? approvalHint(buildValues()) : "";
+  const pendingOf = (field: keyof ChantierActionFormValues) => pendingField?.(field) ?? null;
+
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      // Même esprit que l'ancien `.filter(Boolean)` sur les lignes : un livrable sans intitulé
-      // n'est pas écrit. Les `phases` historiques (legacy, plus éditables) sont conservées telles
-      // quelles — seule une sous-étape à borne vide est écartée, comme avant.
-      const parsedDeliverables = deliverables
-        .map((d) => ({
-          ...d,
-          label: d.label.trim(),
-          phases: d.phases.filter((p) => p.start.length > 0 && p.end.length > 0),
-        }))
-        .filter((d) => d.label.length > 0);
-
-      // Reconstruit chaque prérequis avec EXACTEMENT les clés pertinentes à son `kind` — jamais de
-      // clé `undefined` (voir note "clés OMISES" plus bas) : un prérequis "action" sans cible ou
-      // "external" sans libellé est simplement ignoré (ligne laissée vide par l'utilisateur).
-      const parsedPrerequisites: ActionPrerequisite[] = prerequisites.flatMap(
-        (p): ActionPrerequisite[] => {
-          if (p.kind === "action") {
-            return p.targetActionId
-              ? [{ id: p.id, kind: "action", targetActionId: p.targetActionId }]
-              : [];
-          }
-          const label = (p.label ?? "").trim();
-          return label ? [{ id: p.id, kind: "external", label, done: p.done ?? false }] : [];
-        }
-      );
-
-      // Clés OMISES (jamais `undefined`) quand vides : `setDoc` rejette toute valeur `undefined`,
-      // voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx` — c'est la
-      // cause racine du bug "le formulaire ne fait rien" sur un champ optionnel laissé vide.
       await onSubmit(
-        {
-          name: name.trim(),
-          ...(description.trim() ? { description: description.trim() } : {}),
-          ...(owner ? { owner } : {}),
-          ...(sponsor ? { sponsor } : {}),
-          start,
-          end,
-          status,
-          ...(indicatorId ? { indicatorId } : {}),
-          ...(parsedBudget !== undefined && !Number.isNaN(parsedBudget)
-            ? { budget: parsedBudget }
-            : {}),
-          ...(parsedConsumedBudget !== undefined && !Number.isNaN(parsedConsumedBudget)
-            ? { consumedBudget: parsedConsumedBudget }
-            : {}),
-          ...(parsedDeliverables.length > 0 ? { deliverables: parsedDeliverables } : {}),
-          ...(parsedPrerequisites.length > 0 ? { prerequisites: parsedPrerequisites } : {}),
-        },
+        buildValues(),
         staffingDraft,
         customMilestoneActionsDraft,
         excludedMilestoneItemsDraft
@@ -1151,20 +1253,43 @@ function ChantierActionForm({
             className={INPUT_CLASS}
           />
         </div>
-        <UserPicker
-          users={users}
-          value={owner}
-          onChange={setOwner}
-          label={`${labels.owner} ${labels.optional}`}
-          id="ca-owner"
-        />
-        <UserPicker
-          users={users}
-          value={sponsor}
-          onChange={setSponsor}
-          label={`${labels.sponsor} ${labels.optional}`}
-          id="ca-sponsor"
-        />
+        <div>
+          <UserPicker
+            users={users}
+            value={owner}
+            onChange={setOwner}
+            label={`${labels.owner} ${labels.optional}`}
+            id="ca-owner"
+            disabled={(designation ? !designation.canOwner : false) || !!pendingOf("owner")}
+            title={designation && !designation.canOwner ? designation.ownerTooltip : undefined}
+          />
+          {pendingOf("owner")}
+        </div>
+        <div>
+          <MultiUserPicker
+            users={users}
+            value={contributors}
+            onChange={setContributors}
+            label={`${labels.contributors} ${labels.optional}`}
+            id="ca-contributors"
+            disabled={
+              (designation ? !designation.canContributors : false) || !!pendingOf("contributors")
+            }
+            title={designation?.contributorsTooltip}
+          />
+          {pendingOf("contributors")}
+        </div>
+        <div>
+          <UserPicker
+            users={users}
+            value={sponsor}
+            onChange={setSponsor}
+            label={`${labels.sponsor} ${labels.optional}`}
+            id="ca-sponsor"
+            disabled={!!pendingOf("sponsor")}
+          />
+          {pendingOf("sponsor")}
+        </div>
         <div>
           <label className="text-xs font-medium text-secondary" htmlFor="ca-indicator">
             {labels.indicator} {labels.optional}
@@ -1172,6 +1297,7 @@ function ChantierActionForm({
           <select
             id="ca-indicator"
             value={indicatorId ?? ""}
+            disabled={!!pendingOf("indicatorId")}
             onChange={(e) => setIndicatorId(e.target.value || undefined)}
             className={INPUT_CLASS}
           >
@@ -1182,6 +1308,7 @@ function ChantierActionForm({
               </option>
             ))}
           </select>
+          {pendingOf("indicatorId")}
         </div>
         <div>
           <label className="text-xs font-medium text-secondary" htmlFor="ca-start">
@@ -1190,15 +1317,24 @@ function ChantierActionForm({
           <DateInput
             id="ca-start"
             value={start}
+            disabled={!!pendingOf("start")}
             onChange={(v) => setStart(v)}
             className={INPUT_CLASS}
           />
+          {pendingOf("start")}
         </div>
         <div>
           <label className="text-xs font-medium text-secondary" htmlFor="ca-end">
             {labels.end} <span className="text-bp-coral">*</span>
           </label>
-          <DateInput id="ca-end" value={end} onChange={(v) => setEnd(v)} className={INPUT_CLASS} />
+          <DateInput
+            id="ca-end"
+            value={end}
+            disabled={!!pendingOf("end")}
+            onChange={(v) => setEnd(v)}
+            className={INPUT_CLASS}
+          />
+          {pendingOf("end")}
         </div>
         <div>
           <label className="text-xs font-medium text-secondary" htmlFor="ca-budget">
@@ -1210,9 +1346,11 @@ function ChantierActionForm({
             type="number"
             inputMode="decimal"
             value={budgetInput}
+            disabled={!!pendingOf("budget")}
             onChange={(e) => setBudgetInput(e.target.value)}
             className={INPUT_CLASS}
           />
+          {pendingOf("budget")}
           {/* Information, pas un blocage (voir `budgetExceeds` ci-dessus) : le dépassement est
               possible, il sera simplement visible des responsables à la validation. */}
           {budgetExceeds && (
@@ -1233,9 +1371,11 @@ function ChantierActionForm({
             type="number"
             inputMode="decimal"
             value={consumedBudgetInput}
+            disabled={!!pendingOf("consumedBudget")}
             onChange={(e) => setConsumedBudgetInput(e.target.value)}
             className={INPUT_CLASS}
           />
+          {pendingOf("consumedBudget")}
           <BudgetVsActualBar
             className="mt-2"
             planned={parsedBudget !== undefined && !Number.isNaN(parsedBudget) ? parsedBudget : 0}
@@ -1379,7 +1519,19 @@ function ChantierActionForm({
         </div>
       </div>
 
+      {(pendingOf("deliverables") || pendingOf("prerequisites")) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {pendingOf("deliverables")}
+          {pendingOf("prerequisites")}
+        </div>
+      )}
+
       <div>
+        {hint && (
+          <p className="mb-2 rounded-md border border-rag-amber-light bg-rag-amber-light/30 px-2 py-1 text-[11.5px] font-medium text-secondary">
+            {hint}
+          </p>
+        )}
         <div className="flex gap-2">
           <Button variant="primary" size="sm" onClick={submit} disabled={!canSubmit}>
             {labels.submit}
@@ -1424,8 +1576,8 @@ export function ChantierDetailPanel({
   onClose: () => void;
 }) {
   const { user } = useRole();
-  const readOnly = isReadOnlyUser(user);
   const { activeProgram, activeProgramId } = useActiveProgram();
+  const readOnly = isReadOnlyUser(user, activeProgramId, "strategic");
   const { t, locale } = useTranslation();
   const { tooltip: deliverableTooltip, stateLabel: deliverableStateLabel } =
     useDeliverableStateText();
@@ -1439,16 +1591,128 @@ export function ChantierDetailPanel({
   /** Ferme le panneau PUIS navigue vers une page réellement différente (ex. la fiche d'axe) — le
    *  panneau ne doit pas rester ouvert « au-dessus » d'une page que l'utilisateur vient de quitter
    *  si jamais il revient en arrière (round 6, point 0). */
-  // ── Suppression soumise à approbation hiérarchique — handlers ISOLÉS, à rebrancher sur
-  // `lib/strategicApprovals.ts` par l'agent d'intégration (voir `submitDeleteApprovalRequest`).
-  // Approbateur : responsable de l'axe pour un chantier, responsable (pilote) du chantier pour un projet.
-  const deleteApproval = (target: { kind: "chantier" } | { kind: "projet"; actionId: string }) =>
-    resolveDeleteApproval(
-      target.kind === "chantier"
-        ? data.axes.filter((a) => chantier?.axisIds.includes(a.id)).map((a) => a.owner)
-        : [chantier?.pilote],
-      user?.username,
-      !!user && isAnyAdmin(user)
+  // ── Validation hiérarchique (lib/strategicHierarchy.ts, lib/strategicApprovals.ts) ───────────
+  // Toute modification d'un projet passe par `updateProjetFlow`, d'un chantier par
+  // `updateChantierFlow` : champs libres appliqués, pilotage → 2 validations, dates/livrables/
+  // désignations → 1 validation ; pilote/admin appliquent directement (chaîne vide). Les saisies
+  // « au fil de l'eau » (check-lists, prérequis, livrables, poids, champs du chantier) d'un acteur
+  // soumis à validation sont BUFFERISÉES dans un brouillon (`projetDrafts` / `chantierDraft`) puis
+  // envoyées en UNE demande par catégorie via la barre « Envoyer en validation » — jamais une
+  // demande par frappe.
+  const isAdmin = !!user && isAnyAdmin(user);
+  const approvalData = useMemo(
+    () => ({
+      programId: activeProgramId,
+      axes: data.axes,
+      chantiers: data.chantiers,
+      chantierActions: data.chantierActions,
+      indicators: data.indicators,
+      users: data.users,
+    }),
+    [activeProgramId, data.axes, data.chantiers, data.chantierActions, data.indicators, data.users]
+  );
+  const rightsFor = (action: ChantierAction) =>
+    projetRights({
+      username: user?.username,
+      isAdmin,
+      readOnly,
+      ctx: hierarchyContextFor("projet_update", { type: "projet", id: action.id }, approvalData),
+    });
+  const chainJoiner = t("strategicFiche.chain.then", "puis");
+  const chainOf = (steps: { usernames: string[] }[] | undefined) =>
+    chainLabel(steps, data.users, chainJoiner);
+  const previewTemplate = t("strategicFiche.chain.preview", "Sera validé par {chain}");
+  /** « Sera validé par X puis Y » d'une demande de ce kind (vide = appliqué directement). */
+  const previewChainText = (
+    kind: StrategicApprovalKind,
+    target: StrategicApprovalTarget,
+    payload?: StrategicApprovalPayload
+  ) => {
+    if (!sa) return "";
+    const label = chainOf(sa.previewChain(kind, target, payload));
+    return label ? fillTemplate(previewTemplate, { chain: label }) : "";
+  };
+  const categoryPayload = (category: GatedCategory) =>
+    ({ patch: {}, before: {}, category }) as unknown as StrategicApprovalPayload;
+  /** Même aperçu pour une modification de champs touchant ces catégories. */
+  const categoriesPreview = (
+    kind: "projet_update" | "chantier_update",
+    target: StrategicApprovalTarget,
+    categories: GatedCategory[]
+  ) => {
+    if (!sa) return "";
+    const labels = Array.from(
+      new Set(
+        categories
+          .map((c) => chainOf(sa.previewChain(kind, target, categoryPayload(c))))
+          .filter(Boolean)
+      )
+    );
+    return labels.length ? fillTemplate(previewTemplate, { chain: labels.join(" ; ") }) : "";
+  };
+  const categoryIsDirect = (
+    kind: "projet_update" | "chantier_update",
+    target: StrategicApprovalTarget,
+    category: GatedCategory
+  ) => !sa || !sa.needsApproval(kind, target, undefined, categoryPayload(category));
+  const toastOutcome = (
+    result: FlowResultLike,
+    subject: string,
+    fallbackChain?: { usernames: string[] }[]
+  ) => {
+    const message = flowOutcomeMessage(
+      result,
+      data.users,
+      {
+        applied: t("strategicFiche.toast.applied", "Appliqué"),
+        pending: t("strategicFiche.toast.pending", "Envoyé en validation : {chain}"),
+        partial: t(
+          "strategicFiche.toast.partial",
+          "Appliqué en partie — le reste est envoyé en validation : {chain}"
+        ),
+        joiner: chainJoiner,
+      },
+      fallbackChain
+    );
+    if (message) showToast(message, subject, "success");
+  };
+  /** Libellé lisible d'un champ (badges « en attente », conflits). */
+  const fieldLabel = (field: string): string => {
+    const keys: Record<string, [string, string]> = {
+      name: ["strategicAxes.actionName", "Nom"],
+      description: ["strategicAxes.actionDescription", "Description"],
+      owner: ["strategicAxes.actionOwner", "Responsable"],
+      contributors: ["strategicFiche.contributors.label", "Contributeurs"],
+      sponsor: ["strategicChantierDetail.sponsor", "Sponsor"],
+      start: ["strategicAxes.actionStart", "Début"],
+      end: ["strategicAxes.actionEnd", "Fin"],
+      deliverables: ["strategicAxes.deliverables", "Livrables"],
+      prerequisites: ["strategicChantierDetail.prerequisites.title", "Prérequis"],
+      milestones: ["strategicChantierDetail.milestones.title", "Jalons"],
+      customMilestoneActions: ["strategicChantierDetail.milestones.title", "Jalons"],
+      budget: ["strategicChantierDetail.actionForm.budgetLabel", "Budget"],
+      consumedBudget: ["strategicChantierDetail.actionForm.consumedBudgetLabel", "Consommé"],
+      chantierWeightPct: ["projetWeights.weight", "Poids (%)"],
+      indicatorId: ["strategicChantierDetail.indicatorSelect.label", "KPI"],
+      pilote: ["strategicChantierDetail.pilote", "Pilote"],
+      sponsorName: ["strategicChantierDetail.sponsor", "Sponsor"],
+      allocatedBudget: ["strategicChantierDetail.envelope", "Enveloppe du chantier"],
+      consumedFte: ["strategicChantierDetail.consumedFte", "ETP consommés"],
+      confidentialityLevel: [
+        "strategicChantierDetail.confidentialityLevel",
+        "Niveau de confidentialité",
+      ],
+      successKpis: ["strategicChantierDetail.successCriteria", "Critères de succès"],
+      effort: ["strategicChantierDetail.effort.title", "Grille d'effort"],
+    };
+    const entry = keys[field];
+    return entry ? t(entry[0], entry[1]) : field;
+  };
+  const conflictToast = (fields: string[]) =>
+    showToast(
+      t("strategicFiche.pending.conflictTitle", "Déjà en attente de validation"),
+      Array.from(new Set(fields.map(fieldLabel))).join(", "),
+      "error"
     );
 
   /** Handler `onRequestDeleteChantier` : suppression directe si l'utilisateur est l'approbateur,
@@ -1456,6 +1720,13 @@ export function ChantierDetailPanel({
   const onRequestDeleteChantier = async (reason: string) => {
     if (!chantier) return;
     try {
+      const preview = sa
+        ? sa.previewChain(
+            "chantier_delete",
+            { type: "chantier", id: chantier.id, name: chantier.name },
+            { name: chantier.name }
+          )
+        : [];
       const outcome = await deleteFlow(
         sa,
         "chantier",
@@ -1472,11 +1743,7 @@ export function ChantierDetailPanel({
       );
       setDeleteTarget(null);
       if (outcome === "pending") {
-        showToast(
-          t("strategicDelete.requestSent", "Demande d'approbation envoyée"),
-          chantier.name,
-          "success"
-        );
+        toastOutcome({ outcome }, chantier.name, preview);
         return;
       }
       showToast(t("strategicAxes.chantierDeleted"), chantier.name, "success");
@@ -1495,6 +1762,13 @@ export function ChantierDetailPanel({
     const action = chantierActions.find((a) => a.id === actionId);
     if (!action || !chantier) return;
     try {
+      const preview = sa
+        ? sa.previewChain(
+            "projet_delete",
+            { type: "projet", id: action.id, name: action.name },
+            { name: action.name }
+          )
+        : [];
       const outcome = await deleteFlow(
         sa,
         "projet",
@@ -1503,13 +1777,8 @@ export function ChantierDetailPanel({
         () => data.removeChantierAction(action.id)
       );
       setDeleteTarget(null);
-      showToast(
-        outcome === "pending"
-          ? t("strategicDelete.requestSent", "Demande d'approbation envoyée")
-          : t("strategicAxes.actionDeleted"),
-        action.name,
-        "success"
-      );
+      if (outcome === "pending") toastOutcome({ outcome }, action.name, preview);
+      else showToast(t("strategicAxes.actionDeleted"), action.name, "success");
     } catch (error) {
       showToast(
         t("leverDetail.approval.error", "Action impossible"),
@@ -1527,7 +1796,11 @@ export function ChantierDetailPanel({
   const pendingDeleteLabel = (a: { approverUsername?: string; approverUsernames: string[] }) =>
     t("strategicDelete.pendingBy", "Suppression en attente d'approbation de {approver}").replace(
       "{approver}",
-      approverLabel(a) || "—"
+      approverLabel(a)
+        .split(", ")
+        .filter(Boolean)
+        .map((u) => displayName(u, data.users))
+        .join(", ") || "—"
     );
 
   // ── Passage de jalon d'un projet (round "passage de jalon explicite") ─────────────────────────
@@ -1562,10 +1835,30 @@ export function ChantierDetailPanel({
   const requestMilestoneTransition = async (action: ChantierAction) => {
     try {
       if (!user) return;
+      const target = { type: "projet" as const, id: action.id, name: action.name };
+      const preview = sa ? sa.previewChain("milestone", target) : [];
       const outcome = await milestoneFlow(sa, action, user, data.chantiers, data.chantierActions);
-      if (outcome === "applied") {
-        await data.requestMilestoneApproval(action.id);
+      if (outcome === "pending") {
+        // Demande à paliers créée (le hook pose lui-même le marqueur `milestoneApproval`).
+        toastOutcome({ outcome }, action.name, preview);
+        return;
       }
+      if (canDecideMilestone(chantier ?? undefined, user, data.axes)) {
+        // Chaîne vide (admin / pilote du plan) : passage APPLIQUÉ directement — plus de marqueur
+        // « en attente » posé puis confirmé par soi-même (ancien chemin).
+        await data.updateChantierAction(
+          action.id,
+          directMilestoneAdvance(action, user, data.chantiers, data.chantierActions, data.axes)
+        );
+        showToast(
+          t("strategicFiche.toast.milestoneApplied", "Passage de jalon appliqué"),
+          action.name,
+          "success"
+        );
+        return;
+      }
+      // Hors contexte de validation stratégique (aucune porte) : marqueur historique.
+      await data.requestMilestoneApproval(action.id);
       showToast(
         t("leverDetail.approval.requested", "Demande de validation envoyée"),
         action.name,
@@ -1650,8 +1943,15 @@ export function ChantierDetailPanel({
   // documenté comme tel. Suit le même motif que `readOnly`/`isReadOnlyUser` déjà utilisé pour le
   // reste de cette fiche (lecture seule l'emporte toujours), affiné ici par la propriété nommée :
   // seul le pilote opérationnel de CE chantier précis, ou un admin, peut repondérer ses projets.
-  const canEditProjetWeights =
-    !readOnly && !!user && !!chantier && (isAnyAdmin(user) || chantier.pilote === user.username);
+  // Hiérarchie de validation : sponsor de chantier ET AU-DESSUS (sponsor d'axe, pilote du plan) —
+  // les poids étant du pilotage, la saisie d'un sponsor de chantier part en validation.
+  const cRights = chantierRights({
+    username: user?.username,
+    isAdmin,
+    readOnly,
+    ctx: hierarchyContextFor("chantier_update", { type: "chantier", id: chantierId }, approvalData),
+  });
+  const canEditProjetWeights = !!chantier && cRights.canEdit;
   // Round 24 : un chantier appartient désormais potentiellement à PLUSIEURS axes (`axisIds`) —
   // toutes les résolutions ci-dessous, dans l'ordre de `data.axes` (même convention que
   // `chantiersByAxis` ailleurs dans le code).
@@ -1809,6 +2109,10 @@ export function ChantierDetailPanel({
     mode: "create" | "edit";
     actionId?: string;
   } | null>(null);
+  /** Brouillons de saisie soumise à validation (voir `editProjet` / `editChantier`) : patchs non
+   *  encore envoyés, par projet, et pour le chantier. Affichés à la place des valeurs publiées. */
+  const [projetDrafts, setProjetDrafts] = useState<Record<string, Partial<ChantierAction>>>({});
+  const [chantierDraft, setChantierDraft] = useState<Partial<Chantier>>({});
   /** Suppression en deux temps (clic → « Confirmer »), plutôt qu'un `window.confirm()` natif —
    *  aucun autre écran de l'app n'utilise de dialogue natif. */
   const [deleteTarget, setDeleteTarget] = useState<
@@ -1994,150 +2298,236 @@ export function ChantierDetailPanel({
     );
   }
 
-  /** Écrit un patch de champs round 4 sur le chantier, protégé par try/catch + `showToast` (voir
-   *  constat transverse du plan — c'est la cause racine du bug "le formulaire ne fait rien"). Les
-   *  appelants suivent tous le même idiome : OMETTRE la clé plutôt que la valoir `undefined`. */
-  const updateChantierField = async (patch: Partial<Chantier>) => {
-    try {
-      await data.updateChantier(chantier.id, patch);
-    } catch (error) {
-      console.error("[betrack] échec d'enregistrement du chantier :", error);
-      showToast(
-        t("strategicAxes.chantierSaveErrorTitle"),
-        t("strategicAxes.chantierSaveError"),
-        "error"
-      );
-    }
+  // ── Écritures : TOUJOURS via les flux de validation (lib/strategicApprovalFlows.ts) ───────────
+  const chantierTarget: StrategicApprovalTarget = {
+    type: "chantier",
+    id: chantier.id,
+    name: chantier.name,
+  };
+  const projetTarget = (action: ChantierAction): StrategicApprovalTarget => ({
+    type: "projet",
+    id: action.id,
+    name: action.name,
+  });
+  const logSaveError = (error: unknown, what: "chantier" | "projet") => {
+    console.error(`[betrack] échec d'enregistrement (${what}) :`, error);
+    showToast(
+      t(
+        what === "chantier"
+          ? "strategicAxes.chantierSaveErrorTitle"
+          : "strategicAxes.actionSaveErrorTitle"
+      ),
+      error instanceof Error && error.message
+        ? error.message
+        : t(
+            what === "chantier"
+              ? "strategicAxes.chantierSaveError"
+              : "strategicAxes.actionSaveError"
+          ),
+      "error"
+    );
   };
 
-  /** Retire une clé optionnelle du chantier (ex. "Aucun" choisi dans le sélecteur de
-   *  confidentialité, budget alloué vidé) — cas particulier qui ne peut PAS passer par
-   *  `updateChantierField` : celle-ci fusionne un patch sur le document existant
-   *  (`{...existing, ...patch}`), et une clé valant explicitement `undefined` ferait échouer
-   *  `setDoc` (Firestore rejette toute valeur `undefined`). On écrit donc ici le document complet,
-   *  la clé simplement ABSENTE de l'objet. Restreint aux deux champs réellement effacables depuis
-   *  cette fiche (pas un `keyof Chantier` générique : les autres champs de `Chantier` sont
-   *  obligatoires, les en retirer casserait le type). */
-  const clearChantierField = async (
-    field: "confidentialityLevel" | "allocatedBudget" | "consumedBudget" | "consumedFte"
-  ) => {
-    try {
-      const rest = { ...chantier };
-      delete rest[field];
-      await saveChantier({ ...rest, lastUpdate: todayISO() });
-    } catch (error) {
-      console.error("[betrack] échec d'enregistrement du chantier :", error);
-      showToast(
-        t("strategicAxes.chantierSaveErrorTitle"),
-        t("strategicAxes.chantierSaveError"),
-        "error"
-      );
-    }
-  };
-
-  /** Écrit les jalons E0→E4 d'UN LEVIER (round 7 — déplacé depuis le chantier, voir
-   *  `ChantierAction.milestones`) — passe par `updateChantierAction`/`saveChantierAction`, jamais
-   *  `updateChantierField`/`updateChantier` : ce sont deux collections/documents distincts. */
-  const updateActionMilestones = async (actionId: string, nextState: ChantierMilestoneState) => {
-    try {
-      await data.updateChantierAction(actionId, { milestones: nextState });
-    } catch (error) {
-      console.error("[betrack] échec d'enregistrement des jalons du levier :", error);
-      showToast(
-        t("strategicAxes.actionSaveErrorTitle"),
-        t("strategicAxes.actionSaveError"),
-        "error"
-      );
-    }
-  };
-
-  /** Écrit les prérequis d'UN LEVIER depuis sa carte "Dépendances / Prérequis" (round 7) — auto-
-   *  sauvegarde immédiate à chaque changement (contrairement à `ChantierActionForm`, qui bufferise
-   *  jusqu'au submit) : TOUJOURS écrire le tableau complet, y compris vide, pour qu'une suppression
-   *  de la dernière ligne persiste réellement (`updateChantierAction` fusionne un patch sur le
-   *  document existant, une clé omise laisserait l'ancien tableau en place). */
-  const updateActionPrerequisites = async (actionId: string, next: ActionPrerequisite[]) => {
-    try {
-      await data.updateChantierAction(actionId, { prerequisites: next });
-    } catch (error) {
-      console.error("[betrack] échec d'enregistrement des prérequis du levier :", error);
-      showToast(
-        t("strategicAxes.actionSaveErrorTitle"),
-        t("strategicAxes.actionSaveError"),
-        "error"
-      );
-    }
-  };
-
-  /** Persiste `ProjetWeightsEditor.tsx`'s poids déclarés (round "projet weighting") — l'éditeur
-   *  fonctionne directement sur `chantierActions` (pas de buffer local, contrairement à
-   *  `ActionWeightsEditor`/`LeverForm` qui bufferisent jusqu'au submit du formulaire levier
-   *  ENTIER) : chaque saisie renvoie le tableau COMPLET des projets avec leur `chantierWeightPct`
-   *  à jour, on ne persiste QUE les projets dont la valeur a réellement changé, un par un (chaque
-   *  projet est un document Firestore distinct, contrairement aux actions d'un levier). `undefined`
-   *  (poids effacé, bouton "Non pondéré") est passé tel quel à `updateChantierAction`, qui sait
-   *  désormais correctement EFFACER le champ plutôt que d'échouer à l'écriture (voir son
-   *  commentaire ci-dessus). */
-  const updateProjetWeights = async (next: ChantierAction[]) => {
-    // Re-vérifie l'habilitation ICI, pas seulement via la prop `canEdit` de `ProjetWeightsEditor` —
-    // celle-ci ne fait que désactiver l'input côté rendu (attribut HTML `disabled`), qui ne protège
-    // pas contre un événement déclenché autrement sur le même input monté (devtools, extension...).
-    // Même garde que `canEditProjetWeights` ci-dessus ; échec silencieux (pas de throw) car cet
-    // appelant n'a pas de UI d'erreur dédiée pour un cas qui ne devrait jamais survenir en usage
-    // normal (le bouton est déjà désactivé) — voir `approveMilestoneGate` pour l'équivalent qui,
-    // lui, lève une erreur car appelé depuis une action utilisateur explicite (bouton "Approuver").
-    if (!canEditProjetWeights) return;
-    const changed = next.filter((a) => {
-      const before = chantierActions.find((b) => b.id === a.id);
-      return !!before && before.chantierWeightPct !== a.chantierWeightPct;
+  /** Projet tel qu'affiché : valeurs publiées + brouillon non envoyé. */
+  const effectiveAction = (action: ChantierAction): ChantierAction =>
+    projetDrafts[action.id] ? { ...action, ...projetDrafts[action.id] } : action;
+  const discardProjetDraft = (actionId: string) =>
+    setProjetDrafts((d) => {
+      const next = { ...d };
+      delete next[actionId];
+      return next;
     });
-    if (changed.length === 0) return;
+
+  /** Envoie un patch de projet via `updateProjetFlow` (refus si un champ modifié a déjà une demande
+   *  en attente). `quiet` : pas de toast « Appliqué » (saisie au fil de l'eau). `null` = refusé. */
+  const submitProjetPatch = async (
+    action: ChantierAction,
+    patch: Partial<ChantierAction>,
+    quiet = false
+  ): Promise<UpdateFlowResult<ChantierAction> | null> => {
+    const conflicts = conflictingFields(
+      sa?.approvals,
+      projetTarget(action),
+      "projet",
+      action,
+      patch
+    );
+    if (conflicts.length) {
+      conflictToast(conflicts);
+      return null;
+    }
+    const result = await updateProjetFlow(sa, action, patch, (p) =>
+      data.updateChantierAction(action.id, p)
+    );
+    if (!(quiet && result.outcome === "applied")) toastOutcome(result, action.name);
+    return result;
+  };
+
+  /** Saisie AU FIL DE L'EAU sur un projet (check-list, prérequis, livrable, poids…) : appliquée
+   *  tout de suite si l'acteur n'a besoin d'aucune validation pour ces champs (pilote, admin,
+   *  champs libres), sinon accumulée dans le brouillon du projet, envoyé par sa barre dédiée. */
+  const editProjet = (action: ChantierAction, patch: Partial<ChantierAction>) => {
+    if (!rightsFor(action).canEdit) return;
+    if (!projetDrafts[action.id]) {
+      const categories = gatedCategoriesOf("projet", action, patch);
+      if (categories.every((c) => categoryIsDirect("projet_update", projetTarget(action), c))) {
+        submitProjetPatch(action, patch, true).catch((error) => logSaveError(error, "projet"));
+        return;
+      }
+    }
+    setProjetDrafts((d) => ({ ...d, [action.id]: { ...d[action.id], ...patch } }));
+  };
+
+  const submitProjetDraft = async (action: ChantierAction) => {
+    const draft = projetDrafts[action.id];
+    if (!draft) return;
     try {
-      await Promise.all(
-        changed.map((a) =>
-          data.updateChantierAction(a.id, { chantierWeightPct: a.chantierWeightPct })
-        )
-      );
+      const result = await submitProjetPatch(action, draft);
+      if (result) discardProjetDraft(action.id);
     } catch (error) {
-      console.error("[betrack] échec d'enregistrement de la pondération des projets :", error);
-      showToast(
-        t("strategicAxes.actionSaveErrorTitle"),
-        t("strategicAxes.actionSaveError"),
-        "error"
-      );
+      logSaveError(error, "projet");
     }
   };
 
-  /** Patch UN livrable d'UN levier (statut, date d'échéance, ajout de commentaire — round <n>) —
-   *  même discipline d'auto-sauvegarde immédiate que `updateActionPrerequisites`/
-   *  `updateActionMilestones` ci-dessus : réécrit le tableau `deliverables` COMPLET du levier
-   *  (`updateChantierAction` fusionne un patch sur le document existant, pas de merge profond sur
-   *  un tableau). */
-  const updateDeliverable = async (
+  /** Chantier tel qu'affiché : valeurs publiées + brouillon non envoyé. */
+  const effectiveChantier: Chantier = { ...chantier, ...chantierDraft };
+
+  const submitChantierPatch = async (
+    patch: Partial<Chantier>,
+    quiet = false
+  ): Promise<UpdateFlowResult<Chantier> | null> => {
+    const conflicts = conflictingFields(sa?.approvals, chantierTarget, "chantier", chantier, patch);
+    if (conflicts.length) {
+      conflictToast(conflicts);
+      return null;
+    }
+    const result = await updateChantierFlow(sa, chantier, patch, (p) =>
+      data.updateChantier(chantier.id, p)
+    );
+    if (!(quiet && result.outcome === "applied")) toastOutcome(result, chantier.name);
+    return result;
+  };
+
+  /** Pendant de `editProjet` pour les champs du CHANTIER (le sponsor de chantier ne fait jamais
+   *  bouger son chantier seul : ses saisies de pilotage passent en brouillon puis en validation).
+   *  Une valeur `undefined` EFFACE le champ (le hook retire la clé avant `setDoc`). */
+  const updateChantierField = (patch: Partial<Chantier>) => {
+    if (!cRights.canEdit) return;
+    if (Object.keys(chantierDraft).length === 0) {
+      const categories = gatedCategoriesOf("chantier", chantier, patch);
+      if (categories.every((c) => categoryIsDirect("chantier_update", chantierTarget, c))) {
+        submitChantierPatch(patch, true).catch((error) => logSaveError(error, "chantier"));
+        return;
+      }
+    }
+    setChantierDraft((d) => ({ ...d, ...patch }));
+  };
+
+  const discardChantierDraft = () => {
+    setChantierDraft({});
+    setAllocatedBudgetInput(
+      chantier.allocatedBudget !== undefined ? String(chantier.allocatedBudget) : ""
+    );
+    setConsumedFteInput(chantier.consumedFte !== undefined ? String(chantier.consumedFte) : "");
+  };
+  const submitChantierDraft = async () => {
+    if (Object.keys(chantierDraft).length === 0) return;
+    try {
+      const result = await submitChantierPatch(chantierDraft);
+      if (result) setChantierDraft({});
+    } catch (error) {
+      logSaveError(error, "chantier");
+    }
+  };
+
+  /** Champ du chantier / d'un projet déjà en attente de validation. */
+  const chantierFieldPending = (field: string) => isPendingOn(sa?.approvals, chantierTarget, field);
+  const projetFieldPending = (action: ChantierAction, field: string) =>
+    isPendingOn(sa?.approvals, projetTarget(action), field);
+  const conflictTooltip = t(
+    "strategicFiche.pending.conflictTooltip",
+    "Une demande de validation est déjà en attente sur ce champ : attendez sa décision avant de le modifier à nouveau."
+  );
+
+  /** Barre « modifications non envoyées » d'un brouillon : aperçu de la chaîne, envoi, abandon. */
+  const renderDraftBar = (
+    hint: string,
+    onSubmit: () => void,
+    onDiscard: () => void,
+    conflicts: string[]
+  ) => (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-rag-amber bg-rag-amber-light/40 px-2.5 py-1.5 text-[11.5px]">
+      <span className="font-semibold text-primary">
+        {t("strategicFiche.draft.title", "Modifications non envoyées")}
+      </span>
+      {hint && <span className="text-secondary">· {hint}</span>}
+      {conflicts.length > 0 && (
+        <span className="font-semibold text-rag-red">
+          ·{" "}
+          {fillTemplate(
+            t("strategicFiche.draft.conflict", "Déjà en attente de validation : {fields}"),
+            { fields: Array.from(new Set(conflicts.map(fieldLabel))).join(", ") }
+          )}
+        </span>
+      )}
+      <span className="ml-auto flex gap-1.5">
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={onSubmit}
+          disabled={conflicts.length > 0}
+          title={conflicts.length > 0 ? conflictTooltip : undefined}
+        >
+          <Send size={12} /> {t("strategicFiche.draft.submit", "Envoyer en validation")}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onDiscard}>
+          {t("strategicFiche.draft.discard", "Annuler les modifications")}
+        </Button>
+      </span>
+    </div>
+  );
+
+  /** Écrit l'état de jalons (check-lists) d'UN projet — via `editProjet` (pilotage). */
+  const updateActionMilestones = (action: ChantierAction, nextState: ChantierMilestoneState) =>
+    editProjet(action, { milestones: nextState });
+
+  /** Écrit les prérequis d'UN projet depuis sa carte "Dépendances / Prérequis" — TOUJOURS le
+   *  tableau complet, y compris vide (une suppression de la dernière ligne doit persister). */
+  const updateActionPrerequisites = (action: ChantierAction, next: ActionPrerequisite[]) =>
+    editProjet(action, { prerequisites: next });
+
+  /** Poids déclarés des projets (`ProjetWeightsEditor`) : un patch par projet réellement modifié,
+   *  chacun via `editProjet` (pilotage : brouillon pour qui doit être validé). */
+  const updateProjetWeights = (next: ChantierAction[]) => {
+    // Re-vérifie l'habilitation ICI, pas seulement via la prop `canEdit` de l'éditeur.
+    if (!canEditProjetWeights) return;
+    for (const a of next) {
+      const stored = chantierActions.find((b) => b.id === a.id);
+      if (!stored) continue;
+      if (effectiveAction(stored).chantierWeightPct === a.chantierWeightPct) continue;
+      editProjet(stored, { chantierWeightPct: a.chantierWeightPct });
+    }
+  };
+
+  /** Patch UN livrable d'UN projet (statut, échéance, commentaire) — réécrit le tableau COMPLET
+   *  (`updateChantierAction` fusionne un patch, pas de merge profond sur un tableau). Commentaire
+   *  seul = libre ; échéance/statut = planning (1 validation). */
+  const updateDeliverable = (
     actionId: string,
     deliverableId: string,
     patch: Partial<Deliverable>
   ) => {
     const action = chantierActions.find((a) => a.id === actionId);
     if (!action) return;
-    const next = normalizeDeliverables(action.deliverables).map((d) =>
+    const next = normalizeDeliverables(effectiveAction(action).deliverables).map((d) =>
       d.id === deliverableId ? { ...d, ...patch } : d
     );
-    try {
-      await data.updateChantierAction(actionId, { deliverables: next });
-    } catch (error) {
-      console.error("[betrack] échec d'enregistrement du livrable :", error);
-      showToast(
-        t("strategicAxes.actionSaveErrorTitle"),
-        t("strategicAxes.actionSaveError"),
-        "error"
-      );
-    }
+    editProjet(action, { deliverables: next });
   };
 
-  /** Crée un NOUVEAU livrable sur un levier existant, depuis le formulaire "Ajouter un livrable"
-   *  de l'onglet "Timeline" (round <n>) — même discipline que `updateDeliverable` ci-dessus. */
-  const addDeliverable = async (
+  /** Crée un NOUVEAU livrable sur un projet existant (bouton "Ajouter un livrable" de l'onglet
+   *  "Timeline") — même discipline que `updateDeliverable`. */
+  const addDeliverable = (
     actionId: string,
     values: { label: string; dueDate: string; status: "done" | "todo" }
   ) => {
@@ -2150,23 +2540,89 @@ export function ChantierDetailPanel({
       dueDate: values.dueDate,
       status: values.status,
     };
-    const next = [...normalizeDeliverables(action.deliverables), newDeliverable];
-    try {
-      await data.updateChantierAction(actionId, { deliverables: next });
-      showToast(t("strategicAxes.actionUpdated"), values.label, "success");
-    } catch (error) {
-      console.error("[betrack] échec de création du livrable :", error);
-      showToast(
-        t("strategicAxes.actionSaveErrorTitle"),
-        t("strategicAxes.actionSaveError"),
-        "error"
-      );
-    }
+    editProjet(action, {
+      deliverables: [
+        ...normalizeDeliverables(effectiveAction(action).deliverables),
+        newDeliverable,
+      ],
+    });
+  };
+
+  /** Projets que l'utilisateur peut modifier (responsable, contributeur, et au-dessus). */
+  const editableActions = chantierActions.filter((a) => rightsFor(a).canEdit);
+  /** Création de projet : sponsor de chantier et au-dessus, ou responsable d'un projet du chantier
+   *  (la création part de toute façon en validation à 2 niveaux). */
+  const canCreateProjet =
+    !readOnly &&
+    !!user &&
+    (cRights.canEdit || chantierActions.some((a) => a.owner === user.username));
+  const draftedActions = chantierActions.filter((a) => projetDrafts[a.id]);
+  const whoCanTooltip = {
+    projectOwner: t(
+      "strategicFiche.rights.projectOwner",
+      "Le responsable projet est désigné par le sponsor de chantier (ou au-dessus)."
+    ),
+    contributors: t(
+      "strategicFiche.rights.contributors",
+      "Les contributeurs sont désignés par le responsable projet (ou au-dessus)."
+    ),
+    chantierSponsor: t(
+      "strategicFiche.rights.chantierSponsor",
+      "Le sponsor de chantier est désigné par le pilote du plan (ou un administrateur)."
+    ),
+    projetEdit: t(
+      "strategicFiche.rights.projetEdit",
+      "Seuls le responsable, les contributeurs du projet et les niveaux supérieurs peuvent le modifier."
+    ),
+  };
+
+  /** Badge « en attente de validation » d'un champ du chantier. */
+  const chantierPendingBadge = (field: string) => (
+    <PendingApprovalBadge
+      approvals={sa?.approvals}
+      target={chantierTarget}
+      field={field}
+      users={data.users}
+      className="mt-1"
+    />
+  );
+
+  /** Désignation au niveau chantier (sponsor, pilote) : éditable par le pilote du plan / un admin
+   *  seulement (`canDesignate`), lecture seule avec infobulle sinon. */
+  const renderChantierPerson = (field: "sponsorName" | "pilote", label: string, id: string) => {
+    const value = effectiveChantier[field];
+    const pending = chantierFieldPending(field);
+    const editable = cRights.canDesignateSponsor && !pending;
+    return (
+      <div>
+        {editable ? (
+          <UserPicker
+            users={data.users}
+            value={value}
+            onChange={(v) => updateChantierField({ [field]: v })}
+            label={label}
+            placeholder={t("strategicAxes.unassigned")}
+            id={id}
+          />
+        ) : (
+          <div
+            title={readOnly ? undefined : pending ? conflictTooltip : whoCanTooltip.chantierSponsor}
+          >
+            <span className="text-xs font-medium text-text-secondary">{label}</span>
+            <div className="mt-1.5 text-[14px] font-semibold text-primary">
+              {value ? resolveUserLabel(value, data.users) : t("strategicAxes.unassigned")}
+            </div>
+          </div>
+        )}
+        {chantierPendingBadge(field)}
+      </div>
+    );
   };
 
   const actionFormLabels: ChantierActionFormLabels = {
     name: t("strategicAxes.actionName"),
     owner: t("strategicAxes.actionOwner"),
+    contributors: t("strategicFiche.contributors.label", "Contributeurs"),
     sponsor: t("strategicChantierDetail.sponsor"),
     start: t("strategicAxes.actionStart"),
     end: t("strategicAxes.actionEnd"),
@@ -2209,10 +2665,63 @@ export function ChantierDetailPanel({
     cancel: t("common.cancel"),
   };
 
-  const editedAction =
+  const editedStored =
     actionForm?.mode === "edit"
       ? chantierActions.find((a) => a.id === actionForm.actionId)
       : undefined;
+  // Le formulaire d'édition part des valeurs AFFICHÉES (brouillon inclus).
+  const editedAction = editedStored ? effectiveAction(editedStored) : undefined;
+  const editedRights = editedStored ? rightsFor(editedStored) : undefined;
+  /** Droits de désignation, champs en attente et aperçu de validation du formulaire projet. */
+  const projetFormGating =
+    editedStored && editedRights
+      ? {
+          designation: {
+            canOwner: editedRights.canDesignateOwner,
+            canContributors: editedRights.canDesignateContributors,
+            ownerTooltip: whoCanTooltip.projectOwner,
+            contributorsTooltip: whoCanTooltip.contributors,
+          },
+          pendingField: (field: keyof ChantierActionFormValues) =>
+            projetFieldPending(editedStored, field) ? (
+              <PendingApprovalBadge
+                approvals={sa?.approvals}
+                target={projetTarget(editedStored)}
+                field={field}
+                users={data.users}
+                className="mt-1"
+              />
+            ) : null,
+          approvalHint: (values: ChantierActionFormValues) =>
+            categoriesPreview(
+              "projet_update",
+              projetTarget(editedStored),
+              gatedCategoriesOf(
+                "projet",
+                editedStored,
+                dropUnchangedFormLists(editedStored, {
+                  ...projetDrafts[editedStored.id],
+                  ...CLEARABLE_PROJET_FIELDS,
+                  ...values,
+                })
+              )
+            ),
+        }
+      : {
+          // Création : le responsable est désigné par le sponsor de chantier (ou au-dessus) ;
+          // sinon le créateur en est le responsable. Contributeurs libres (la création entière
+          // part en validation).
+          designation: {
+            canOwner: cRights.canDesignateProjectOwner,
+            canContributors: true,
+            ownerTooltip: whoCanTooltip.projectOwner,
+            contributorsTooltip: whoCanTooltip.contributors,
+          },
+          approvalHint: (values: ChantierActionFormValues) =>
+            previewChainText("projet_create", chantierTarget, {
+              action: { ...values, chantierId: chantier.id } as ChantierAction,
+            }),
+        };
 
   // ── Livrables — échéance unique + statut binaire (Fait / À faire, retard dérivé) ───────────
   const deliverableDoneLabel = t("strategicChantierDetail.deliverableState.done", "Fait");
@@ -2224,7 +2733,7 @@ export function ChantierDetailPanel({
     ? chantierActions.find((a) => a.id === openDeliverable.actionId)
     : undefined;
   const openDeliverableItem = openDeliverableAction
-    ? normalizeDeliverables(openDeliverableAction.deliverables).find(
+    ? normalizeDeliverables(effectiveAction(openDeliverableAction).deliverables).find(
         (d) => d.id === openDeliverable?.deliverableId
       )
     : undefined;
@@ -2312,51 +2821,50 @@ export function ChantierDetailPanel({
               }
             />
             <CardBody>
-              {chantier.description && (
-                <p className="mb-3 max-w-2xl text-[13px] text-secondary">{chantier.description}</p>
-              )}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {readOnly ? (
-                  <div>
-                    <span className="text-xs font-medium text-text-secondary">
-                      {t("strategicChantierDetail.sponsor")}
-                    </span>
-                    <div className="mt-1.5 text-[14px] font-semibold text-primary">
-                      {chantier.sponsorName
-                        ? resolveUserLabel(chantier.sponsorName, data.users)
-                        : t("strategicAxes.unassigned")}
-                    </div>
-                  </div>
-                ) : (
-                  <UserPicker
-                    users={data.users}
-                    value={chantier.sponsorName}
-                    onChange={(v) => updateChantierField(v ? { sponsorName: v } : {})}
-                    label={t("strategicChantierDetail.sponsor")}
-                    placeholder={t("strategicAxes.unassigned")}
-                    id="chantier-sponsor"
-                  />
+              {Object.keys(chantierDraft).length > 0 &&
+                renderDraftBar(
+                  categoriesPreview(
+                    "chantier_update",
+                    chantierTarget,
+                    gatedCategoriesOf("chantier", chantier, chantierDraft)
+                  ),
+                  () => void submitChantierDraft(),
+                  discardChantierDraft,
+                  conflictingFields(
+                    sa?.approvals,
+                    chantierTarget,
+                    "chantier",
+                    chantier,
+                    chantierDraft
+                  )
                 )}
-                {readOnly ? (
-                  <div>
-                    <span className="text-xs font-medium text-text-secondary">
-                      {t("strategicChantierDetail.pilote")}
+              {pendingRequestsOn(sa?.approvals, chantierTarget)
+                .filter((a) => a.kind === "chantier_update")
+                .map((a) => (
+                  <div key={a.id} className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <PendingApprovalBadge approval={a} users={data.users} />
+                    <span className="text-tertiary">
+                      {Object.keys((a.payload as { patch?: object }).patch ?? {})
+                        .map(fieldLabel)
+                        .join(", ")}
                     </span>
-                    <div className="mt-1.5 text-[14px] font-semibold text-primary">
-                      {chantier.pilote
-                        ? resolveUserLabel(chantier.pilote, data.users)
-                        : t("strategicAxes.unassigned")}
-                    </div>
                   </div>
-                ) : (
-                  <UserPicker
-                    users={data.users}
-                    value={chantier.pilote}
-                    onChange={(v) => updateChantierField(v ? { pilote: v } : {})}
-                    label={t("strategicChantierDetail.pilote")}
-                    placeholder={t("strategicAxes.unassigned")}
-                    id="chantier-pilote"
-                  />
+                ))}
+              {chantier.description && (
+                <p className="mb-3 mt-2 max-w-2xl text-[13px] text-secondary">
+                  {chantier.description}
+                </p>
+              )}
+              <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {renderChantierPerson(
+                  "sponsorName",
+                  t("strategicChantierDetail.sponsor"),
+                  "chantier-sponsor"
+                )}
+                {renderChantierPerson(
+                  "pilote",
+                  t("strategicChantierDetail.pilote"),
+                  "chantier-pilote"
                 )}
                 <div>
                   <span className="text-xs font-medium text-text-secondary">
@@ -2386,16 +2894,19 @@ export function ChantierDetailPanel({
                     type="number"
                     inputMode="decimal"
                     value={allocatedBudgetInput}
+                    disabled={!cRights.canEdit || chantierFieldPending("allocatedBudget")}
+                    title={chantierFieldPending("allocatedBudget") ? conflictTooltip : undefined}
                     onChange={(e) => setAllocatedBudgetInput(e.target.value)}
                     onBlur={() => {
                       const trimmed = allocatedBudgetInput.trim();
+                      const currentEnvelope = effectiveChantier.allocatedBudget;
                       if (trimmed === "") {
-                        if (chantier.allocatedBudget !== undefined)
-                          clearChantierField("allocatedBudget");
+                        if (currentEnvelope !== undefined)
+                          updateChantierField({ allocatedBudget: undefined });
                         return;
                       }
                       const parsed = Number(trimmed);
-                      if (Number.isNaN(parsed) || parsed === chantier.allocatedBudget) return;
+                      if (Number.isNaN(parsed) || parsed === currentEnvelope) return;
                       // Round 12 : validation SYMÉTRIQUE de celle du formulaire de levier — le budget
                       // du CHANTIER ne peut pas descendre sous la somme des budgets de ses leviers
                       // ACTUELS (`chantierActions`, pas ce qui est en cours de saisie dans un
@@ -2426,6 +2937,7 @@ export function ChantierDetailPanel({
                     }}
                     className={INPUT_CLASS}
                   />
+                  {chantierPendingBadge("allocatedBudget")}
                 </div>
                 {/* ── Budget alloué / consommé du chantier — LECTURE SEULE, somme de ses projets
                 (`rollupBudgets`, lib/budgetRollup.ts), même règle que dashboard/Effectifs. La saisie
@@ -2477,23 +2989,28 @@ export function ChantierDetailPanel({
                     type="number"
                     inputMode="decimal"
                     value={consumedFteInput}
+                    disabled={!cRights.canEdit || chantierFieldPending("consumedFte")}
+                    title={chantierFieldPending("consumedFte") ? conflictTooltip : undefined}
                     onChange={(e) => setConsumedFteInput(e.target.value)}
                     onBlur={() => {
                       const trimmed = consumedFteInput.trim();
+                      const currentFte = effectiveChantier.consumedFte;
                       if (trimmed === "") {
-                        if (chantier.consumedFte !== undefined) clearChantierField("consumedFte");
+                        if (currentFte !== undefined)
+                          updateChantierField({ consumedFte: undefined });
                         return;
                       }
                       const parsed = Number(trimmed);
-                      if (Number.isNaN(parsed) || parsed === chantier.consumedFte) return;
+                      if (Number.isNaN(parsed) || parsed === currentFte) return;
                       updateChantierField({ consumedFte: parsed });
                     }}
                     className={INPUT_CLASS}
                   />
+                  {chantierPendingBadge("consumedFte")}
                   <BudgetVsActualBar
                     className="mt-2"
                     planned={plannedFteTotal}
-                    consumed={chantier.consumedFte ?? 0}
+                    consumed={effectiveChantier.consumedFte ?? 0}
                     formatValue={(n) => `${formatFte(n)} ${t("staffing.fteUnit")}`}
                   />
                 </div>
@@ -2533,11 +3050,13 @@ export function ChantierDetailPanel({
                     <select
                       id="chantier-confidentiality"
                       className={INPUT_CLASS}
-                      value={chantier.confidentialityLevel ?? ""}
+                      value={effectiveChantier.confidentialityLevel ?? ""}
+                      disabled={!cRights.canEdit || chantierFieldPending("confidentialityLevel")}
+                      title={
+                        chantierFieldPending("confidentialityLevel") ? conflictTooltip : undefined
+                      }
                       onChange={(e) =>
-                        e.target.value
-                          ? updateChantierField({ confidentialityLevel: e.target.value })
-                          : clearChantierField("confidentialityLevel")
+                        updateChantierField({ confidentialityLevel: e.target.value || undefined })
                       }
                     >
                       <option value="">
@@ -2552,6 +3071,7 @@ export function ChantierDetailPanel({
                         </option>
                       ))}
                     </select>
+                    {chantierPendingBadge("confidentialityLevel")}
                   </div>
                 )}
               </div>
@@ -2565,25 +3085,27 @@ export function ChantierDetailPanel({
           <CardBody>
             <textarea
               value={successCriteria}
+              disabled={!cRights.canEdit}
               onChange={(e) => setSuccessCriteria(e.target.value)}
               onBlur={() => {
                 const trimmed = successCriteria.trim();
-                if (trimmed === (chantier.successCriteria ?? "").trim()) return;
-                updateChantierField(trimmed ? { successCriteria: trimmed } : {});
+                if (trimmed === (effectiveChantier.successCriteria ?? "").trim()) return;
+                updateChantierField({ successCriteria: trimmed || undefined });
               }}
               rows={3}
               placeholder={t("strategicChantierDetail.successCriteria.placeholder")}
               className={INPUT_CLASS}
             />
+            {chantierPendingBadge("successKpis")}
             <SuccessKpiList
-              value={chantier.successKpis ?? []}
+              value={effectiveChantier.successKpis ?? []}
               onChange={(next) => updateChantierField({ successKpis: next })}
               indicators={chantierAvailableIndicators}
               measurements={data.measurements}
               indicatorNumbers={indicatorNumbers}
               linkedKpis={linkedKpis}
               onOpenIndicator={(id) => navigateAway(`/kpi?indicator=${id}`)}
-              readOnly={readOnly}
+              readOnly={!cRights.canEdit || chantierFieldPending("successKpis")}
             />
           </CardBody>
         </Card>
@@ -2592,9 +3114,11 @@ export function ChantierDetailPanel({
         <Card>
           <CardHeader title={t("strategicChantierDetail.effort.title")} />
           <CardBody>
+            {chantierPendingBadge("effort")}
             <EffortScoringGrid
-              value={chantier.effort ?? {}}
+              value={effectiveChantier.effort ?? {}}
               onChange={(next) => updateChantierField({ effort: next })}
+              disabled={!cRights.canEdit || chantierFieldPending("effort")}
             />
           </CardBody>
         </Card>
@@ -2631,7 +3155,7 @@ export function ChantierDetailPanel({
                     />
                   </>
                 )}
-                {chantierActions.length > 0 && !readOnly && (
+                {editableActions.length > 0 && (
                   <Button variant="outline" size="sm" onClick={() => setAddDeliverableOpen(true)}>
                     <Plus size={12} /> {t("strategicAxes.addDeliverable")}
                   </Button>
@@ -2750,7 +3274,7 @@ export function ChantierDetailPanel({
             title={t("strategicAxes.chantierActions")}
             actions={
               !actionForm &&
-              !readOnly && (
+              canCreateProjet && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -2766,7 +3290,12 @@ export function ChantierDetailPanel({
               <div className="mb-3">
                 <ChantierActionForm
                   key={actionForm.actionId ?? "new"}
-                  initial={editedAction}
+                  initial={
+                    editedAction ??
+                    (cRights.canDesignateProjectOwner || !user
+                      ? undefined
+                      : { owner: user.username })
+                  }
                   stages={stages}
                   users={data.users}
                   otherActions={chantierActions.filter((a) => a.id !== actionForm.actionId)}
@@ -2776,6 +3305,7 @@ export function ChantierDetailPanel({
                   companyId={user?.companyId ?? ""}
                   showStaffingDraft={actionForm.mode === "create"}
                   labels={actionFormLabels}
+                  {...projetFormGating}
                   onCancel={() => setActionForm(null)}
                   onSubmit={async (
                     values,
@@ -2790,11 +3320,20 @@ export function ChantierDetailPanel({
                         // conservait l'ancienne valeur (impossible d'effacer une description, un
                         // budget, un KPI…). Le hook retire les clés `undefined` avant `setDoc`
                         // (écrasement intégral), ce qui supprime réellement le champ.
-                        await data.updateChantierAction(actionForm.actionId, {
-                          ...CLEARABLE_PROJET_FIELDS,
-                          ...values,
-                        });
-                        showToast(t("strategicAxes.actionUpdated"), values.name, "success");
+                        // Hiérarchie de validation : `updateProjetFlow` (libre / 1 / 2 validations
+                        // selon les champs), brouillon au fil de l'eau du projet inclus.
+                        const stored = chantierActions.find((a) => a.id === actionForm.actionId);
+                        if (!stored) return;
+                        const result = await submitProjetPatch(
+                          stored,
+                          dropUnchangedFormLists(stored, {
+                            ...projetDrafts[stored.id],
+                            ...CLEARABLE_PROJET_FIELDS,
+                            ...values,
+                          })
+                        );
+                        if (!result) return; // conflit : formulaire laissé ouvert
+                        discardProjetDraft(stored.id);
                       } else {
                         // `customMilestoneActions`/`excludedMilestoneItems` (round "aperçu jalons
                         // création" / "exclusion jalons création") ne sont ajoutés que si
@@ -2839,6 +3378,13 @@ export function ChantierDetailPanel({
                             { start: values.start, end: values.end }
                           )
                         );
+                        const createPreview = sa
+                          ? sa.previewChain(
+                              "projet_create",
+                              { type: "chantier", id: chantier.id, name: chantier.name },
+                              { action }
+                            )
+                          : [];
                         const outcome = await createProjetFlow(
                           sa,
                           chantier,
@@ -2880,16 +3426,11 @@ export function ChantierDetailPanel({
                           },
                           pendingStaffing
                         );
-                        showToast(
-                          outcome === "pending"
-                            ? t(
-                                "strategicAxes.actionCreationPending",
-                                "Projet soumis à validation du responsable de l'axe"
-                              )
-                            : t("strategicAxes.actionCreated"),
-                          values.name,
-                          "success"
-                        );
+                        if (outcome === "pending") {
+                          toastOutcome({ outcome }, values.name, createPreview);
+                        } else {
+                          showToast(t("strategicAxes.actionCreated"), values.name, "success");
+                        }
                       }
                       setActionForm(null);
                     } catch (error) {
@@ -2923,17 +3464,52 @@ export function ChantierDetailPanel({
                   </span>
                   <span className="ml-auto text-[10.5px]">
                     {t("strategicAxes.pendingCreation", "Création en attente de validation")}
-                    {approverLabel(a) ? ` — ${approverLabel(a)}` : ""}
                   </span>
+                  <PendingApprovalBadge approval={a} users={data.users} />
                 </div>
               ))}
+
+            {/* Brouillons non envoyés (saisies au fil de l'eau soumises à validation) : envoi
+                groupé — chaque projet garde aussi sa propre barre sur sa carte. */}
+            {draftedActions.length > 1 && (
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-rag-amber bg-rag-amber-light/40 px-2.5 py-1.5 text-[11.5px]">
+                <span className="font-semibold text-primary">
+                  {fillTemplate(
+                    t(
+                      "strategicFiche.draft.projetsCount",
+                      "{count} projets avec des modifications non envoyées"
+                    ),
+                    { count: draftedActions.length }
+                  )}
+                </span>
+                <span className="ml-auto flex gap-1.5">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      void (async () => {
+                        for (const a of draftedActions) await submitProjetDraft(a);
+                      })();
+                    }}
+                  >
+                    <Send size={12} /> {t("strategicFiche.draft.submitAll", "Tout envoyer")}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setProjetDrafts({})}>
+                    {t("strategicFiche.draft.discardAll", "Tout annuler")}
+                  </Button>
+                </span>
+              </div>
+            )}
 
             {chantierActions.length > 0 && (
               <div className="mb-3">
                 <ProjetWeightsEditor
-                  actions={chantierActions}
+                  actions={chantierActions.map(effectiveAction)}
                   onChange={updateProjetWeights}
-                  canEdit={canEditProjetWeights}
+                  canEdit={
+                    canEditProjetWeights &&
+                    !chantierActions.some((a) => projetFieldPending(a, "chantierWeightPct"))
+                  }
                 />
               </div>
             )}
@@ -2947,7 +3523,13 @@ export function ChantierDetailPanel({
                 {chantierActions.map((action) => {
                   const isFocused = action.id === effectiveFocusActionId;
                   const isOpen = openLeviers.has(action.id);
-                  const actionDeliverables = normalizeDeliverables(action.deliverables);
+                  // Droits sur CE projet (responsable, contributeurs et au-dessus) et valeurs
+                  // affichées = publiées + brouillon non envoyé.
+                  const rights = rightsFor(action);
+                  const eff = effectiveAction(action);
+                  const draft = projetDrafts[action.id];
+                  const deliverablesPending = projetFieldPending(action, "deliverables");
+                  const actionDeliverables = normalizeDeliverables(eff.deliverables);
                   const startInfo = canStartAction(
                     action,
                     data.chantierActions,
@@ -2956,7 +3538,7 @@ export function ChantierDetailPanel({
                   // Défaut défensif pour un levier créé avant l'introduction des jalons E0→E4 (round
                   // 5, déplacé au levier round 7) — ou jamais encore touché : "encore à E0, rien de
                   // répondu". N'est écrit en base qu'à la première interaction réelle.
-                  const actionMilestones: ChantierMilestoneState = action.milestones ?? {
+                  const actionMilestones: ChantierMilestoneState = eff.milestones ?? {
                     currentMilestone: "E0",
                     passedMilestones: [],
                     checklists: {},
@@ -3074,6 +3656,14 @@ export function ChantierDetailPanel({
                                   {resolveUserLabel(action.sponsor, data.users)}
                                 </span>
                               )}
+                              {(action.contributors?.length ?? 0) > 0 && (
+                                <span>
+                                  · {t("strategicFiche.contributors.label", "Contributeurs")} :{" "}
+                                  {action
+                                    .contributors!.map((u) => resolveUserLabel(u, data.users))
+                                    .join(", ")}
+                                </span>
+                              )}
                             </div>
                             {startInfo.blocked && (
                               <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber">
@@ -3086,16 +3676,27 @@ export function ChantierDetailPanel({
                         </button>
                         {!readOnly && (
                           <div className="flex shrink-0 items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setActionForm({ mode: "edit", actionId: action.id });
-                                openLevier(action.id);
-                              }}
-                            >
-                              <Pencil size={12} /> {t("strategicAxes.editAction")}
-                            </Button>
+                            {rights.canEdit && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setActionForm({ mode: "edit", actionId: action.id });
+                                  openLevier(action.id);
+                                }}
+                              >
+                                <Pencil size={12} /> {t("strategicAxes.editAction")}
+                              </Button>
+                            )}
+                            {!rights.canEdit && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10.5px] text-tertiary"
+                                title={whoCanTooltip.projetEdit}
+                              >
+                                <Lock size={10} />{" "}
+                                {t("strategicFiche.rights.readOnlyBadge", "Lecture seule")}
+                              </span>
+                            )}
                             {pendingProjetDelete(action.id) ? (
                               <span
                                 className="inline-flex items-center gap-1 rounded-full bg-rag-amber-light px-2 py-0.5 text-[10.5px] font-semibold text-rag-amber"
@@ -3105,19 +3706,59 @@ export function ChantierDetailPanel({
                                 {pendingDeleteLabel(pendingProjetDelete(action.id)!)}
                               </span>
                             ) : null}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={!!pendingProjetDelete(action.id)}
-                              onClick={() =>
-                                setDeleteTarget({ kind: "projet", actionId: action.id })
-                              }
-                            >
-                              <Trash2 size={12} /> {t("common.delete")}
-                            </Button>
+                            {rights.canDelete && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={!!pendingProjetDelete(action.id)}
+                                onClick={() =>
+                                  setDeleteTarget({ kind: "projet", actionId: action.id })
+                                }
+                              >
+                                <Trash2 size={12} /> {t("common.delete")}
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
+
+                      {/* ── Demandes de validation en attente sur ce projet (étape x/2) ── */}
+                      {pendingRequestsOn(sa?.approvals, projetTarget(action))
+                        .filter((a) => a.kind === "projet_update" || a.kind === "milestone")
+                        .map((a) => (
+                          <div
+                            key={a.id}
+                            className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]"
+                          >
+                            <PendingApprovalBadge approval={a} users={data.users} />
+                            <span className="text-tertiary">
+                              {a.kind === "milestone"
+                                ? fieldLabel("milestones")
+                                : Object.keys((a.payload as { patch?: object }).patch ?? {})
+                                    .map(fieldLabel)
+                                    .join(", ")}
+                            </span>
+                          </div>
+                        ))}
+
+                      {/* ── Brouillon non envoyé (saisies soumises à validation) ── */}
+                      {draft &&
+                        renderDraftBar(
+                          categoriesPreview(
+                            "projet_update",
+                            projetTarget(action),
+                            gatedCategoriesOf("projet", action, draft)
+                          ),
+                          () => void submitProjetDraft(action),
+                          () => discardProjetDraft(action.id),
+                          conflictingFields(
+                            sa?.approvals,
+                            projetTarget(action),
+                            "projet",
+                            action,
+                            draft
+                          )
+                        )}
 
                       {/* ── Passage de jalon (round "passage de jalon explicite") : dès que la
                         check-list du jalon courant est à 100 % — ou qu'une demande est en cours —
@@ -3202,7 +3843,17 @@ export function ChantierDetailPanel({
 
                           <div className="mt-3 rounded-lg border border-border bg-neutral-50/50 p-3">
                             <div className="flex flex-wrap items-baseline justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide text-tertiary">
-                              <span>{t("strategicAxes.deliverables")}</span>
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                {t("strategicAxes.deliverables")}
+                                <PendingApprovalBadge
+                                  approvals={sa?.approvals}
+                                  target={projetTarget(action)}
+                                  field="deliverables"
+                                  users={data.users}
+                                  showValue={false}
+                                  className="normal-case tracking-normal"
+                                />
+                              </span>
                               <DeliverableCountsSummary
                                 deliverables={actionDeliverables}
                                 labels={deliverableCountLabels}
@@ -3264,7 +3915,7 @@ export function ChantierDetailPanel({
                                         id={`levier-${action.id}-deliverable-${d.id}-done`}
                                         done={isDeliverableDone(d)}
                                         label={deliverableDoneLabel}
-                                        disabled={readOnly}
+                                        disabled={!rights.canEdit || deliverablesPending}
                                         onChange={(done) =>
                                           updateDeliverable(action.id, d.id, {
                                             status: done ? "done" : "todo",
@@ -3407,18 +4058,23 @@ export function ChantierDetailPanel({
                                 }
                                 autoFlags={currentMilestoneAutoFlags}
                                 customActions={
-                                  action.customMilestoneActions?.[
-                                    actionMilestones.currentMilestone
-                                  ] ?? []
+                                  eff.customMilestoneActions?.[actionMilestones.currentMilestone] ??
+                                  []
                                 }
                                 excludedItemIds={
-                                  action.excludedMilestoneItems?.[
-                                    actionMilestones.currentMilestone
-                                  ] ?? []
+                                  eff.excludedMilestoneItems?.[actionMilestones.currentMilestone] ??
+                                  []
                                 }
                                 users={data.users}
+                                // Avancement déclaré = PILOTAGE (2 validations) : droits projet
+                                // requis, et aucune seconde demande tant qu'une est en attente.
+                                readOnly={
+                                  !rights.canEdit ||
+                                  projetFieldPending(action, "milestones") ||
+                                  projetFieldPending(action, "customMilestoneActions")
+                                }
                                 onChange={(nextItems) => {
-                                  updateActionMilestones(action.id, {
+                                  updateActionMilestones(action, {
                                     currentMilestone: actionMilestones.currentMilestone,
                                     passedMilestones: actionMilestones.passedMilestones,
                                     checklists: {
@@ -3438,11 +4094,10 @@ export function ChantierDetailPanel({
                                     id: `CUSTOM-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
                                     label,
                                   };
-                                  const existing =
-                                    action.customMilestoneActions?.[milestoneId] ?? [];
-                                  data.updateChantierAction(action.id, {
+                                  const existing = eff.customMilestoneActions?.[milestoneId] ?? [];
+                                  editProjet(action, {
                                     customMilestoneActions: {
-                                      ...action.customMilestoneActions,
+                                      ...eff.customMilestoneActions,
                                       [milestoneId]: [...existing, newAction],
                                     },
                                   });
@@ -3450,15 +4105,15 @@ export function ChantierDetailPanel({
                                 onRemoveCustomAction={(id) => {
                                   const milestoneId = actionMilestones.currentMilestone;
                                   const remaining = (
-                                    action.customMilestoneActions?.[milestoneId] ?? []
+                                    eff.customMilestoneActions?.[milestoneId] ?? []
                                   ).filter((a) => a.id !== id);
-                                  const nextByMilestone = { ...action.customMilestoneActions };
+                                  const nextByMilestone = { ...eff.customMilestoneActions };
                                   if (remaining.length > 0) {
                                     nextByMilestone[milestoneId] = remaining;
                                   } else {
                                     delete nextByMilestone[milestoneId];
                                   }
-                                  data.updateChantierAction(action.id, {
+                                  editProjet(action, {
                                     customMilestoneActions: nextByMilestone,
                                   });
                                 }}
@@ -3501,11 +4156,21 @@ export function ChantierDetailPanel({
                               </div>
                             )}
                             <PrerequisitesEditor
-                              value={action.prerequisites ?? []}
+                              value={eff.prerequisites ?? []}
                               otherActions={chantierActions.filter((a) => a.id !== action.id)}
                               labels={actionFormLabels}
-                              onChange={(next) => updateActionPrerequisites(action.id, next)}
-                              readOnly={readOnly}
+                              onChange={(next) => updateActionPrerequisites(action, next)}
+                              readOnly={
+                                !rights.canEdit || projetFieldPending(action, "prerequisites")
+                              }
+                            />
+                            <PendingApprovalBadge
+                              approvals={sa?.approvals}
+                              target={projetTarget(action)}
+                              field="prerequisites"
+                              users={data.users}
+                              showValue={false}
+                              className="mt-1.5"
                             />
                           </div>
                         </>
@@ -3534,7 +4199,7 @@ export function ChantierDetailPanel({
       </div>
 
       {/* ── Suppression du chantier — reste HORS onglets, action globale au chantier ─────────── */}
-      {!readOnly && (
+      {cRights.canEdit && (
         <div className="mt-4 border-t border-border pt-3">
           <Button
             variant="ghost"
@@ -3569,16 +4234,29 @@ export function ChantierDetailPanel({
           milestoneCount={
             (deleteTarget.kind === "chantier" ? chantierActions.length : 1) * MILESTONE_ORDER.length
           }
-          approvers={deleteApproval(deleteTarget).approvers}
+          // Chaîne de validation prévue (« Sera validé par X puis Y ») — remplace l'ancienne liste
+          // d'approbateurs `resolveDeleteApproval`.
+          chainText={previewChainText(
+            deleteTarget.kind === "chantier" ? "chantier_delete" : "projet_delete",
+            deleteTarget.kind === "chantier"
+              ? chantierTarget
+              : { type: "projet", id: deleteTarget.actionId },
+            {
+              name:
+                deleteTarget.kind === "chantier"
+                  ? chantier.name
+                  : (chantierActions.find((a) => a.id === deleteTarget.actionId)?.name ?? ""),
+            }
+          )}
           canApproveSelf={
             sa
               ? !sa.needsApproval(
                   deleteTarget.kind === "chantier" ? "chantier_delete" : "projet_delete",
                   deleteTarget.kind === "chantier"
-                    ? { type: "chantier", id: chantier.id, name: chantier.name }
+                    ? chantierTarget
                     : { type: "projet", id: deleteTarget.actionId }
                 )
-              : deleteApproval(deleteTarget).canApproveSelf
+              : true
           }
           onConfirm={(reason) =>
             deleteTarget.kind === "chantier"
@@ -3603,6 +4281,11 @@ export function ChantierDetailPanel({
           }}
           users={data.users}
           currentUsername={user?.username}
+          readOnly={
+            !openDeliverableAction ||
+            !rightsFor(openDeliverableAction).canEdit ||
+            projetFieldPending(openDeliverableAction, "deliverables")
+          }
           onClose={() => setOpenDeliverable(null)}
           onPatch={(patch) =>
             updateDeliverable(openDeliverable.actionId, openDeliverable.deliverableId, patch)
@@ -3611,7 +4294,7 @@ export function ChantierDetailPanel({
       )}
       {addDeliverableOpen && (
         <AddDeliverableForm
-          actions={chantierActions}
+          actions={editableActions.filter((a) => !projetFieldPending(a, "deliverables"))}
           labels={{
             title: t("strategicAxes.addDeliverable"),
             leverSelect: t("strategicChantierDetail.deliverableForm.leverSelect"),
@@ -3622,8 +4305,8 @@ export function ChantierDetailPanel({
             cancel: t("common.cancel"),
           }}
           onCancel={() => setAddDeliverableOpen(false)}
-          onSubmit={async (actionId, values) => {
-            await addDeliverable(actionId, values);
+          onSubmit={(actionId, values) => {
+            addDeliverable(actionId, values);
             setAddDeliverableOpen(false);
           }}
         />

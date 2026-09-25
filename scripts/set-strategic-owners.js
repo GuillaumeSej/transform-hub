@@ -50,10 +50,10 @@ const stratProfile = (u) =>
         "axis_sponsor",
         "chantier_owner",
         "strategic_lead",
-        "internal_comm",
-        "budget_control",
         "comex_member",
         "chantier_contributor",
+        "projet_contributor",
+        "hr",
       ].includes(p.role) &&
       (!p.programId || p.programId === PROGRAM_ID)
   );

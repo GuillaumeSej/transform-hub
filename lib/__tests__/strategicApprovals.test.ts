@@ -206,8 +206,8 @@ describe("resolveApprover", () => {
 
 describe("needsApproval", () => {
   const t = { type: "projet" as const, id: "CA1" };
-  it("l'approbateur agit directement", () => {
-    expect(needsApproval("milestone", users[2], t, data())).toBe(false);
+  it("le sponsor de chantier ne passe plus seul un jalon (2 validations au-dessus de lui)", () => {
+    expect(needsApproval("milestone", users[2], t, data())).toBe(true);
   });
   it("le contributeur passe par une demande", () => {
     expect(needsApproval("milestone", users[3], t, data())).toBe(true);
@@ -227,9 +227,13 @@ describe("needsApproval", () => {
     expect(
       needsApproval("chantier_delete", users[2], { type: "chantier", id: "CH1" }, data())
     ).toBe(true);
+    // Le sponsor d'axe lui-même : validé par le pilote du plan.
     expect(
       needsApproval("chantier_delete", users[1], { type: "chantier", id: "CH1" }, data())
-    ).toBe(false);
+    ).toBe(true);
+    expect(needsApproval("chantier_delete", lead, { type: "chantier", id: "CH1" }, data())).toBe(
+      false
+    );
   });
   it("acteur absent -> demande", () => {
     expect(needsApproval("kpi_value", null, { type: "indicateur", id: "IND1" }, data())).toBe(true);

@@ -59,7 +59,8 @@ import type {
  * valeur existante (upsert non destructif). Réimporter le même fichier = 0 création, 0 mise à jour.
  * L'export (`buildStrategicPlanExportWorkbook`) produit le même format : aller-retour = 0 changement.
  *
- * Personnes (Owner d'axe, Pilote de chantier, Owner/Sponsor de projet) : la visibilité
+ * Personnes (Owner d'axe, Pilote de chantier, Owner/Sponsor/Contributeurs de projet, Responsables
+ * de saisie d'un indicateur) : la visibilité
  * (`lib/axisLogic.ts`) et le routage des validations comparent ces champs au `username`. Chaque
  * cellule est donc rapprochée des comptes de l'entreprise (`options.users`) par identifiant,
  * e-mail (synthétique ou partie locale) ou nom affiché (insensible casse/accents) et REMPLACÉE par
@@ -114,6 +115,8 @@ export const STRATEGIC_ACTION_IMPORT_HEADERS = [
   "Budget",
   "Budget consommé",
   "Poids dans le chantier (%)",
+  // Facultatif : contributeurs projet (`ChantierAction.contributors`), rapprochés comme l'Owner.
+  "Contributeurs (séparés par ;)",
 ] as const;
 
 /** Livrable = ÉCHÉANCE (une seule date). Compatibilité : un ancien fichier aux colonnes
@@ -134,7 +137,11 @@ export const STRATEGIC_INDICATOR_IMPORT_HEADERS = [
   "Valeur initiale",
   "Sens",
   "Unité",
+  // LEGACY (droit de saisie par rôle) : lu seulement si aucun "Responsables saisie" — voir
+  // `canFillIndicator`, lib/axisLogic.ts.
   "Rôles responsables (séparés par ;)",
+  // Responsables de saisie NOMMÉS (`Indicator.additionalAuthorizedUserIds`), rapprochés comme l'Owner.
+  "Responsables saisie (séparés par ;)",
 ] as const;
 
 export const STRATEGIC_STAFFING_IMPORT_HEADERS = [
@@ -204,8 +211,7 @@ const ALL_ROLES: Role[] = [
   "axis_sponsor",
   "chantier_owner",
   "chantier_contributor",
-  "internal_comm",
-  "budget_control",
+  "projet_contributor",
 ];
 
 const norm = (s: string) => normalizeHeaderKey(s);
@@ -257,6 +263,8 @@ export const STRATEGIC_IMPORT_MESSAGES = {
     '"Code Axe" et "Code Chantier" sont tous les deux renseignés — un indicateur ne peut être rattaché qu\'à l\'un des deux',
   unknownValue: '{column} "{value}" inconnu(e) (attendu : {expected})',
   rolesRequired: '"Rôles responsables" est obligatoire (au moins un rôle)',
+  responsibleRequired:
+    '"Responsables saisie" est obligatoire (au moins une personne ; à défaut "Rôles responsables")',
   unknownRole: 'Rôle "{value}" inconnu (attendu : {expected})',
   baselineNotNumber:
     '"Valeur initiale" non numérique ("{value}") : aucune mesure de référence créée',
@@ -498,6 +506,18 @@ function stageLabels(stages: MaturityStageConfig[]): string {
 
 // ---------- Personnes ----------
 
+/** Découpe une cellule multi-personnes ("a; b, c") en valeurs non vides, sans doublon. */
+export function splitPersonList(raw: string): string[] {
+  return Array.from(
+    new Set(
+      raw
+        .split(/[;,]/)
+        .map((v) => v.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 /** Clé de rapprochement d'une personne (casse, accents, espaces). */
 export function normalizePersonKey(value: string): string {
   return norm(value);
@@ -696,18 +716,26 @@ export function applyPeopleMapping(
 ): StrategicImportWrites {
   if (mapping.size === 0) return writes;
   const map = (v: string | undefined) => (v ? (mapping.get(norm(v)) ?? v) : v);
+  const mapList = (list: string[]) =>
+    Array.from(new Set(list.map((v) => mapping.get(norm(v)) ?? v)));
   return {
     ...writes,
     axes: writes.axes.map((a) => (a.owner ? { ...a, owner: map(a.owner) } : a)),
     chantiers: writes.chantiers.map((c) => (c.pilote ? { ...c, pilote: map(c.pilote) } : c)),
     actions: writes.actions.map((a) =>
-      a.owner || a.sponsor
+      a.owner || a.sponsor || a.contributors?.length
         ? {
             ...a,
             ...(a.owner ? { owner: map(a.owner) } : {}),
             ...(a.sponsor ? { sponsor: map(a.sponsor) } : {}),
+            ...(a.contributors?.length ? { contributors: mapList(a.contributors) } : {}),
           }
         : a
+    ),
+    indicators: writes.indicators.map((i) =>
+      i.additionalAuthorizedUserIds?.length
+        ? { ...i, additionalAuthorizedUserIds: mapList(i.additionalAuthorizedUserIds) }
+        : i
     ),
   };
 }
@@ -773,7 +801,11 @@ const SHEET_SPECS: Record<SheetKey, SheetSpec> = {
   actions: {
     label: "Projets",
     headers: STRATEGIC_ACTION_IMPORT_HEADERS,
-    aliases: { "Poids dans le chantier": "Poids dans le chantier (%)" },
+    aliases: {
+      "Poids dans le chantier": "Poids dans le chantier (%)",
+      Contributeurs: "Contributeurs (séparés par ;)",
+      Contributeur: "Contributeurs (séparés par ;)",
+    },
     required: ["Code", "Code Chantier", "Nom", "Date début", "Date fin"],
   },
   livrables: {
@@ -786,8 +818,15 @@ const SHEET_SPECS: Record<SheetKey, SheetSpec> = {
   indicateurs: {
     label: "Indicateurs",
     headers: STRATEGIC_INDICATOR_IMPORT_HEADERS,
-    aliases: { "Rôles responsables": "Rôles responsables (séparés par ;)" },
-    required: ["Nom", "Type", "Fréquence", "Objectif", "Rôles responsables (séparés par ;)"],
+    aliases: {
+      "Rôles responsables": "Rôles responsables (séparés par ;)",
+      "Responsable saisie": "Responsables saisie (séparés par ;)",
+      "Responsables saisie": "Responsables saisie (séparés par ;)",
+      "Responsable de saisie": "Responsables saisie (séparés par ;)",
+      "Responsables de saisie": "Responsables saisie (séparés par ;)",
+    },
+    // "Rôles responsables" n'est plus obligatoire : au moins une personne OU un rôle par ligne.
+    required: ["Nom", "Type", "Fréquence", "Objectif"],
     requiredOneOf: ["Code Axe", "Code Chantier"],
   },
   etp: {
@@ -1037,6 +1076,22 @@ export function validateStrategicImportRows(
     const value = text(sheet, rowNumber, row, column);
     if (value === null) return null;
     return value ? people.resolve(value, sheet, rowNumber) : undefined;
+  };
+
+  /** Liste de personnes séparées par ";" ou "," — chacune rapprochée comme `person` (non
+   *  rapprochée = conservée en texte + avertissement `personNotLinked`/`personAmbiguous`).
+   *  Dédoublonnée ; `undefined` si la cellule est vide, `null` si elle est en erreur. */
+  const personList = (
+    sheet: StrategicImportSheet,
+    rowNumber: number,
+    row: Record<string, unknown>,
+    column: string
+  ): string[] | undefined | null => {
+    const value = text(sheet, rowNumber, row, column, { max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH });
+    if (value === null) return null;
+    if (!value) return undefined;
+    const resolved = splitPersonList(value).map((v) => people.resolve(v, sheet, rowNumber));
+    return resolved.length > 0 ? Array.from(new Set(resolved)) : undefined;
   };
 
   const dupCheck = (
@@ -1435,12 +1490,15 @@ export function validateStrategicImportRows(
     if (owner === null) continue;
     const sponsor = person(sheet, rowNumber, row, "Sponsor");
     if (sponsor === null) continue;
+    const contributors = personList(sheet, rowNumber, row, "Contributeurs (séparés par ;)");
+    if (contributors === null) continue;
 
     const fields = defined({
       name,
       description,
       owner,
       sponsor,
+      contributors,
       start,
       end,
       status,
@@ -1626,14 +1684,17 @@ export function validateStrategicImportRows(
     });
     if (objective === null) continue;
 
+    const responsibleUsers = personList(
+      sheet,
+      rowNumber,
+      row,
+      "Responsables saisie (séparés par ;)"
+    );
+    if (responsibleUsers === null) continue;
     const roleTokens = str(row["Rôles responsables (séparés par ;)"])
       .split(";")
       .map((r) => r.trim())
       .filter(Boolean);
-    if (roleTokens.length === 0) {
-      err(sheet, rowNumber, "rolesRequired");
-      continue;
-    }
     const responsibleRoles: Role[] = [];
     let invalidRole: string | undefined;
     for (const token of roleTokens) {
@@ -1684,6 +1745,16 @@ export function validateStrategicImportRows(
       name,
       (e) => e.axisId === axisId && (e.chantierId ?? undefined) === chantierId
     );
+    // Au moins une personne nommée OU un rôle (legacy) — dans le fichier ou déjà sur l'existant.
+    const hasResponsible =
+      (responsibleUsers?.length ?? 0) > 0 ||
+      responsibleRoles.length > 0 ||
+      (match?.entity.additionalAuthorizedUserIds?.length ?? 0) > 0 ||
+      (match?.entity.responsibleRoles?.length ?? 0) > 0;
+    if (!hasResponsible) {
+      err(sheet, rowNumber, "responsibleRequired");
+      continue;
+    }
 
     const fields = defined({ name, kind, frequency, objective, objectiveValue, direction, unit });
     const newBaseline = (indicatorId: string): IndicatorMeasurement | undefined =>
@@ -1710,7 +1781,10 @@ export function validateStrategicImportRows(
         ...fields,
         axisId: keepAxis ? existing.axisId : axisId,
         ...(chantierId ? { chantierId } : {}),
-        responsibleRoles,
+        // Cellule vide = valeur existante conservée (upsert non destructif).
+        responsibleRoles:
+          responsibleRoles.length > 0 ? responsibleRoles : existing.responsibleRoles,
+        ...(responsibleUsers ? { additionalAuthorizedUserIds: responsibleUsers } : {}),
         ...(match.by === "id" ? {} : { importCode: code || undefined }),
       };
       if (!chantierId && merged.chantierId) {
@@ -1770,6 +1844,7 @@ export function validateStrategicImportRows(
             : {}),
         ...(unit ? { unit } : {}),
         responsibleRoles,
+        ...(responsibleUsers ? { additionalAuthorizedUserIds: responsibleUsers } : {}),
         status: "on_track",
         ...(code ? { importCode: code } : {}),
         createdAt: today,
@@ -1983,7 +2058,10 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
     'Facultatifs : Description/Pilote/Owner/Sponsor, budgets (>= 0), poids (0 à 100), "Étape de maturité" (vide = 1re étape du programme), "Valeur initiale" des Indicateurs (mesure de référence datée de la période précédente), feuilles Livrables et ETP.',
   ],
   [
-    "Owner/Pilote/Sponsor : saisissez l'identifiant BeTrack, l'e-mail ou le « Prénom Nom » d'un compte existant. Un nom inconnu est conservé en texte et proposé à la création de compte.",
+    "Owner/Pilote/Sponsor : saisissez l'identifiant BeTrack, l'e-mail ou le « Prénom Nom » d'un compte existant. Un nom inconnu est conservé en texte, signalé en avertissement et proposé à la création de compte.",
+  ],
+  [
+    'Projets : "Contributeurs" (facultatif) = plusieurs personnes séparées par ; ou ,. Indicateurs : "Responsables saisie" = personne(s) nommée(s) autorisée(s) à saisir les valeurs (au moins une, ou à défaut un rôle dans "Rôles responsables", ancien mode).',
   ],
   ["Longueurs maximales : 200 caractères pour un nom, 5000 pour une description."],
   [""],
@@ -2083,6 +2161,7 @@ export const STRATEGIC_ACTION_EXAMPLE_ROWS = [
     30000,
     8000,
     50,
+    "Claire Fontaine; Nicolas Petit",
   ],
   [
     "ACT2",
@@ -2098,6 +2177,7 @@ export const STRATEGIC_ACTION_EXAMPLE_ROWS = [
     45000,
     0,
     60,
+    "",
   ],
   [
     "ACT3",
@@ -2112,6 +2192,7 @@ export const STRATEGIC_ACTION_EXAMPLE_ROWS = [
     20000,
     "",
     50,
+    "",
   ],
 ];
 
@@ -2133,7 +2214,8 @@ export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [
     96.8,
     "Plus haut vaut mieux",
     "%",
-    "cto;strategic_lead",
+    "",
+    "Isabelle Roy",
   ],
   [
     "KPI2",
@@ -2147,7 +2229,8 @@ export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [
     25,
     "Plus haut vaut mieux",
     "%",
-    "chantier_owner;strategic_lead",
+    "",
+    "Marc Dubois",
   ],
   [
     // Indicateur qualitatif : "Valeur cible"/"Sens"/"Valeur initiale" vides.
@@ -2162,7 +2245,8 @@ export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [
     "",
     "",
     "",
-    "strategic_lead",
+    "",
+    "Karim Haddad",
   ],
 ];
 
@@ -2269,6 +2353,7 @@ export function buildStrategicPlanExportWorkbook(
         num(a.budget),
         num(a.consumedBudget),
         num(a.chantierWeightPct),
+        (a.contributors ?? []).join(";"),
       ]),
       livrables: data.actions.flatMap((a) =>
         (a.deliverables ?? []).map((d) => [codeOf(a), d.label, d.dueDate ?? ""])
@@ -2286,6 +2371,7 @@ export function buildStrategicPlanExportWorkbook(
         i.direction ? DIRECTION_LABEL[i.direction] : "",
         i.unit ?? "",
         (i.responsibleRoles ?? []).join(";"),
+        (i.additionalAuthorizedUserIds ?? []).join(";"),
       ]),
       etp: (data.staffing ?? []).map((s) => [
         chantierCode.get(s.chantierId) ?? s.chantierId,

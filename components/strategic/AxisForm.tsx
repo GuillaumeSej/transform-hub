@@ -30,6 +30,8 @@ export function AxisForm({
   onCancel,
   submitLabel,
   compact = false,
+  canEditOwner = true,
+  ownerTooltip,
 }: {
   /** Utilisateurs de l'entreprise, pour le `UserPicker` du responsable — même prop que
    *  `ChantierDetailPanel`/`ChantierAction` (voir `data.users`, `lib/hooks/useStrategicData.ts`). */
@@ -48,6 +50,11 @@ export function AxisForm({
   submitLabel?: string;
   /** Mise en page resserrée pour une création rapide inline (une colonne, pas de description). */
   compact?: boolean;
+  /** Désignation du sponsor d'axe (`owner`) : réservée au pilote du plan / aux admins
+   *  (`canDesignate("axisSponsor", …)`, lib/strategicHierarchy.ts). `false` = lecture seule, avec
+   *  `ownerTooltip` expliquant qui peut la modifier. Défaut `true` (appelants historiques). */
+  canEditOwner?: boolean;
+  ownerTooltip?: string;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? "");
@@ -106,8 +113,10 @@ export function AxisForm({
           users={users}
           value={owner}
           onChange={setOwner}
-          label={t("strategicAxes.owner", "Commanditaire de l'axe")}
+          label={t("strategicAxes.owner", "Sponsor d'axe")}
           id="axis-owner"
+          disabled={!canEditOwner}
+          title={!canEditOwner ? ownerTooltip : undefined}
         />
         <div>
           <label className="text-xs font-medium text-text-secondary" htmlFor="axis-stage">

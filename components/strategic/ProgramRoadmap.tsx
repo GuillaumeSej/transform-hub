@@ -357,7 +357,7 @@ export function ProgramRoadmap({
                       </span>
                       {axisGroup.axis.owner && (
                         <span className="truncate text-[10.5px] text-tertiary">
-                          · {t("strategicAxes.sponsorShort", "Commanditaire")} :{" "}
+                          · {t("strategicAxes.sponsorShort", "Sponsor d'axe")} :{" "}
                           {axisSponsorLabel(axisGroup.axis, users)}
                         </span>
                       )}

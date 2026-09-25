@@ -62,6 +62,8 @@ import {
 } from "@/lib/axisLogic";
 import {
   bucketApprovals,
+  approvalStepInfo,
+  pendingApproversOf,
   type MilestoneApprovalPayload,
   type StrategicApproval,
 } from "@/lib/strategicApprovals";
@@ -543,7 +545,10 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
       return chantier ? `${chantier.name} · ${action.name}` : action.name;
     };
 
-    // 5. Demandes de validation stratégiques. Nominal = parmi `approverUsernames`.
+    // 5. Demandes de validation stratégiques. Nominal = parmi les approbateurs du palier COURANT
+    //    (`pendingApproversOf` : chaîne N+1 puis N+2 ; legacy : `approverUsernames`). Un
+    //    approbateur de l'étape 2 ne voit la demande qu'une fois l'étape 1 validée ; « bloqué chez »
+    //    nomme le(s) approbateur(s) de l'étape en cours.
     const decidableIds = new Set(
       bucketApprovals(approvals, user, approvalData).pending.map((a) => a.id)
     );
@@ -561,16 +566,31 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
           return t("me.item.projetDeleteApproval", "Valider la suppression d'un projet");
         case "chantier_delete":
           return t("me.item.chantierDeleteApproval", "Valider la suppression d'un chantier");
+        case "chantier_create":
+          return t("me.item.chantierCreateApproval", "Valider la création d'un chantier");
+        case "projet_update":
+          return t("me.item.projetUpdateApproval", "Valider une modification de projet");
+        case "chantier_update":
+          return t("me.item.chantierUpdateApproval", "Valider une modification de chantier");
       }
     };
     for (const a of approvals) {
-      const nominal = a.approverUsernames.includes(user.username);
+      const currentApprovers = pendingApproversOf(a);
+      const nominal = currentApprovers.includes(user.username);
+      const info = approvalStepInfo(a);
+      const step =
+        info && info.total > 1
+          ? tf("me.item.approvalStep", "Étape {current}/{total}", {
+              current: info.current,
+              total: info.total,
+            })
+          : "";
       const waitingDays = daysSince(a.requestedAt, today);
       const action = a.targetType === "projet" ? actionById.get(a.targetId) : undefined;
       const base = {
         source: "strategicApproval" as const,
         plan: "strategic" as const,
-        title: approvalTitle(a),
+        title: step ? `${approvalTitle(a)} · ${step}` : approvalTitle(a),
         context: action ? projetContext(action) : (a.targetName ?? a.targetId),
         waitingDays,
         href: VALIDATION_HREF,
@@ -589,7 +609,11 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
           id: `blockedValidation:strategic:${a.id}`,
           source: "blockedValidation",
           severity: "warning",
-          waitingOn: a.approverUsername ?? a.approverUsernames[0] ?? a.approverRole,
+          waitingOn: currentApprovers.length
+            ? currentApprovers
+                .map((u) => approvalData.users.find((x) => x.username === u)?.name || u)
+                .join(", ")
+            : a.approverRole,
         });
       }
     }
@@ -688,7 +712,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
       const responsible =
         owner === user.username ||
         (indicator.additionalAuthorizedUserIds ?? []).includes(user.username);
-      if (!responsible || !canFillIndicatorValue(indicator, user)) continue;
+      if (!responsible || !canFillIndicatorValue(indicator, user, { axes, chantiers })) continue;
       const period = missingMeasurementPeriod(indicator, measurements, today);
       if (!period) continue;
       todo.push({

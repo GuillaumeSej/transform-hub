@@ -7,9 +7,15 @@ import {
   latestMeasurement,
 } from "@/lib/axisLogic";
 import { samePeriod } from "@/lib/indicatorPeriod";
-import { kpiCorrectionApprover } from "@/lib/kpiCorrectionRouting";
+import { kpiCorrectionApprover, kpiHierarchyContext } from "@/lib/kpiCorrectionRouting";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
+import {
+  approvalChain,
+  type ApprovalStep,
+  type HierarchyContext,
+  type StrategicLevel,
+} from "@/lib/strategicHierarchy";
 import type {
   Alert,
   AuditEntry,
@@ -28,7 +34,49 @@ import type {
  * Validation stratégique — modèle + logique PURE (aucun accès Firestore/React ici ; la persistance
  * est dans lib/firestore/strategicApprovals.ts, l'API React dans lib/hooks/useStrategicApprovals.ts).
  *
- * Qui valide quoi :
+ * ═══ API POUR L'UI (modèle à CHAÎNE, règles PO « données de pilotage ») ═══════════════════════
+ * Hiérarchie (lib/strategicHierarchy.ts) : pilote du plan > sponsor d'axe > sponsor de chantier
+ *   > responsable projet > contributeurs. Une demande est validée par les niveaux AU-DESSUS de son
+ *   auteur, dans l'ordre (N+1 puis N+2), niveaux vides sautés, jamais par l'auteur.
+ *
+ *   Nombre de validations (`requiredValidations`, `KIND_VALIDATIONS`, `fieldCategory`) :
+ *    - 2 (pilotage) : kpi_value (auteur traité au moins comme sponsor de chantier → sponsor d'axe
+ *      puis pilote), milestone, projet_create / projet_delete (auteur au moins responsable projet →
+ *      sponsor de chantier puis sponsor d'axe), chantier_create / chantier_delete (auteur au moins
+ *      sponsor de chantier → sponsor d'axe puis pilote), projet_update / chantier_update de
+ *      catégorie "pilotage" (avancement déclaré = check-lists de jalon, budget, consommé, poids du
+ *      projet dans le chantier, grille d'effort, enveloppe…) ;
+ *    - 1 (N+1) : projet_update / chantier_update de catégorie "planning" (dates, livrables :
+ *      échéance/statut/ajout/retrait, dépendances…) ou "designation" (responsable, contributeurs,
+ *      sponsor, pilote) ;
+ *    - 0 (libre) : libellés, descriptions, commentaires (dont commentaires de livrables).
+ *
+ *   Chaîne SNAPSHOTÉE à la création (`StrategicApproval.chain` + `stepIndex`) : elle ne bouge plus
+ *   si les responsables changent ensuite. Décideurs d'un palier : l'un de `chain[stepIndex]
+ *   .usernames`, ou un ADMIN (contournement, comme le Plan Transfo — y compris quand tous les
+ *   usernames du palier ont disparu/été désactivés : un admin débloque toujours). Le pilote ne
+ *   décide QUE son propre palier (plus d'escalade strategic_lead sur les demandes à chaîne).
+ *   Personne — admin compris — ne décide sa propre demande ; une personne ayant déjà validé un
+ *   palier ne valide pas le suivant (hors admin). Un refus à n'importe quel palier CLÔT la demande.
+ *   Chaîne vide (auteur pilote, personne au-dessus) ou auteur ADMIN → application directe.
+ *
+ *   Côté UI :
+ *    - avant d'agir : `sa.needsApproval(kind, target, undefined, payload)` (hook) — false ⇒
+ *      appliquer directement ; true ⇒ `sa.request(kind, target, payload, reason?)`. Les flux
+ *      prêts à l'emploi de lib/strategicApprovalFlows.ts font ce choix eux-mêmes (préférés) ;
+ *    - « sera validé par X puis Y » : `previewApprovalChain(kind, actor, target, payload, data)` ;
+ *    - édition de champs : `splitPatchByCategory(entity, before, patch)` / `fieldCategory(...)`
+ *      / `requiredValidations(category)` ;
+ *    - badges « en attente » : `pendingOn(approvals, target, field?)` / `isPendingOn(...)` ;
+ *      « étape x/2 » : `approvalStepInfo(approval)` / `stepLabel(approval)` ; qui doit agir :
+ *      `pendingApproversOf(approval)` ; droit de décider : `canDecide` / `canDecideStep` ;
+ *    - décision : `sa.approve(id, comment?)` / `sa.reject(id, comment)` — le hook fait avancer le
+ *      palier (`decideApproval`) et n'applique l'effet qu'à la DERNIÈRE validation.
+ *   Demandes d'AVANT ce modèle (sans `chain`) : relues et décidées avec l'ancien comportement
+ *   (approbateur unique `approverUsernames`, escalade strategic_lead, admin), voir ci-dessous.
+ * ═════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Ancien modèle (demandes SANS `chain`, conservé pour relecture) — qui valide quoi :
  *  - "milestone"       passage de jalon d'un projet      → responsable (pilote) du CHANTIER
  *  - "kpi_value"       valeur KPI renseignée             → responsable du plan (strategic_lead)
  *                      CORRECTION/SUPPRESSION d'une mesure (`payload.measurementId`) → responsable
@@ -67,15 +115,30 @@ import type {
  */
 
 export type StrategicApprovalKind =
-  "milestone" | "kpi_value" | "projet_create" | "projet_delete" | "chantier_delete";
+  | "milestone"
+  | "kpi_value"
+  | "projet_create"
+  | "projet_update"
+  | "projet_delete"
+  | "chantier_create"
+  | "chantier_update"
+  | "chantier_delete";
 
 export const STRATEGIC_APPROVAL_KINDS: StrategicApprovalKind[] = [
   "milestone",
   "kpi_value",
   "projet_create",
+  "projet_update",
   "projet_delete",
+  "chantier_create",
+  "chantier_update",
   "chantier_delete",
 ];
+
+/** Catégorie d'une modification (règles PO) : "pilotage" = 2 validations, "planning" et
+ *  "designation" = 1 validation (N+1), "free" = aucune. */
+export type ValidationCategory = "pilotage" | "planning" | "designation" | "free";
+export type GatedCategory = Exclude<ValidationCategory, "free">;
 
 export type StrategicApprovalTargetType = "axe" | "chantier" | "projet" | "indicateur";
 export type StrategicApprovalStatus = "pending" | "approved" | "rejected";
@@ -124,11 +187,43 @@ export type ProjetCreateApprovalPayload = {
   stage?: ProjetCreateStage;
 };
 export type DeleteApprovalPayload = { name?: string };
+/** Modification de champs d'un projet (target = projet). `patch` ne contient que des champs d'UNE
+ *  même `category` (voir `splitPatchByCategory`) ; `before` = valeurs de ces champs au moment de la
+ *  demande — à l'approbation finale, un champ modifié entre-temps rend la demande PÉRIMÉE. */
+export type ProjetUpdateApprovalPayload = {
+  patch: Partial<ChantierAction>;
+  before: Partial<ChantierAction>;
+  category: GatedCategory;
+};
+/** Idem pour un chantier (target = chantier). */
+export type ChantierUpdateApprovalPayload = {
+  patch: Partial<Chantier>;
+  before: Partial<Chantier>;
+  category: GatedCategory;
+};
+/** Création de chantier (target = axe de rattachement principal, `chantier.axisIds[0]`) :
+ *  `chantier` complet, id déjà généré (application idempotente). */
+export type ChantierCreateApprovalPayload = { chantier: Chantier };
 export type StrategicApprovalPayload =
   | MilestoneApprovalPayload
   | KpiValueApprovalPayload
   | ProjetCreateApprovalPayload
+  | ProjetUpdateApprovalPayload
+  | ChantierUpdateApprovalPayload
+  | ChantierCreateApprovalPayload
   | DeleteApprovalPayload;
+
+/** Un palier de la chaîne de validation, snapshoté à la demande. `decided*` renseignés quand le
+ *  palier a été validé (ou refusé : le refus clôt la demande). */
+export type ApprovalChainStep = {
+  level: StrategicLevel;
+  usernames: string[];
+  decidedBy?: string;
+  decidedByName?: string;
+  decidedAt?: string;
+  decision?: "approved" | "rejected";
+  decisionComment?: string;
+};
 
 export type StrategicApproval = {
   id: string;
@@ -159,6 +254,12 @@ export type StrategicApproval = {
   direct?: boolean;
   /** Responsables à INFORMER de l'action appliquée (alerte « Valeur KPI corrigée … »). */
   informUsernames?: string[];
+  /** Chaîne de validation (modèle à paliers, voir l'en-tête). ABSENTE = demande d'avant ce modèle
+   *  (approbateur unique, comportement historique). `approverRole`/`approverUsername`/
+   *  `approverUsernames` reflètent toujours le palier COURANT (compat des lecteurs existants). */
+  chain?: ApprovalChainStep[];
+  /** Index du palier courant dans `chain` (0 par défaut). */
+  stepIndex?: number;
 };
 
 /** Ce que la résolution d'approbateur a besoin de connaître du plan (déjà scopé programme). */
@@ -234,7 +335,8 @@ function strategicLeadUsernames(programId: string | undefined, data: StrategicAp
     .map((u) => u.username);
 }
 
-/** Approbateur attendu pour une demande de ce `kind` sur cette cible (voir en-tête du fichier).
+/** LEGACY (demandes sans `chain`, et repli défensif de `buildApproval` quand la chaîne calculée
+ *  est vide) — approbateur UNIQUE attendu pour une demande de ce `kind` sur cette cible.
  *  `stage` : UNIQUEMENT significatif pour `"projet_create"` (double validation, voir l'en-tête) —
  *  `"chantier"` résout le pilote du chantier (repli cascade vers l'axe), `"axis"` (ou absent, pour
  *  rester identique au comportement d'avant cette fonctionnalité) résout le responsable de l'axe.
@@ -286,8 +388,11 @@ export function resolveApprover(
     }
     case "milestone":
     case "projet_delete":
+    case "projet_update":
       return chantierLevel();
     case "chantier_delete":
+    case "chantier_update":
+    case "chantier_create":
       return axisLevel();
     case "projet_create":
       // Double validation (voir l'en-tête) : palier "chantier" = pilote (repli axe/lead) ; palier
@@ -298,6 +403,264 @@ export function resolveApprover(
   }
 }
 
+// ─── Classification des modifications (règles PO) ──────────────────────────────────────────
+
+/** Nombre de validations requis par catégorie. */
+export function requiredValidations(category: ValidationCategory): 0 | 1 | 2 {
+  return category === "pilotage" ? 2 : category === "free" ? 0 : 1;
+}
+
+/** Catégorie de chaque champ d'un PROJET. Champs techniques (`id`, `companyId`,
+ *  `milestoneApproval` — posé par le flux de jalon) : jamais modifiables par une demande, retirés
+ *  des patchs. Champ inconnu (ajouté plus tard au modèle) : "planning" par défaut (1 validation —
+ *  ni libre par accident, ni bloqué à 2). */
+const PROJET_FIELD_CATEGORY: Record<string, ValidationCategory> = {
+  name: "free",
+  description: "free",
+  // Pilotage : avancement déclaré (check-lists de jalon, actions ajoutées/retirées qui changent
+  // l'avancement et la porte de passage), budgets, consommés, poids dans l'avancement du chantier,
+  // rattachement (déplacer un projet change la hiérarchie qui le valide).
+  milestones: "pilotage",
+  customMilestoneActions: "pilotage",
+  excludedMilestoneItems: "pilotage",
+  budget: "pilotage",
+  consumedBudget: "pilotage",
+  consumedFte: "pilotage",
+  chantierWeightPct: "pilotage",
+  chantierId: "pilotage",
+  // Planning : dates, livrables (échéance/statut — voir `deliverablesCategory`), prérequis…
+  start: "planning",
+  end: "planning",
+  deliverables: "planning",
+  prerequisites: "planning",
+  status: "planning",
+  indicatorId: "planning",
+  // Désignations.
+  owner: "designation",
+  contributors: "designation",
+  sponsor: "designation",
+};
+const PROJET_INTERNAL_FIELDS = new Set(["id", "companyId", "milestoneApproval"]);
+
+/** Catégorie de chaque champ d'un CHANTIER (même règle par défaut). Le chantier n'a pas de stade
+ *  propre (avancement dérivé de ses projets) : ce qui le « fait bouger » — enveloppe, consommés,
+ *  critères de succès atteints, grille d'effort, axes — est du pilotage, jamais modifiable seul par
+ *  le sponsor de chantier. */
+const CHANTIER_FIELD_CATEGORY: Record<string, ValidationCategory> = {
+  name: "free",
+  description: "free",
+  successCriteria: "free",
+  allocatedBudget: "pilotage",
+  consumedBudget: "pilotage",
+  consumedFte: "pilotage",
+  successKpis: "pilotage",
+  effort: "pilotage",
+  axisIds: "pilotage",
+  stage: "pilotage",
+  milestones: "pilotage",
+  dependencies: "planning",
+  pilote: "designation",
+  sponsorName: "designation",
+  responsibleRoles: "designation",
+  confidentialityLevel: "designation",
+};
+const CHANTIER_INTERNAL_FIELDS = new Set([
+  "id",
+  "companyId",
+  "programId",
+  "createdAt",
+  "lastUpdate",
+]);
+
+export type PatchEntity = "projet" | "chantier";
+
+function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(stripUndefined(a) ?? null) === JSON.stringify(stripUndefined(b) ?? null);
+}
+
+/** Livrables : seuls les commentaires/libellés ont changé → libre ; sinon (échéance, statut,
+ *  ajout, retrait) → planning. */
+function deliverablesCategory(before: unknown, after: unknown): ValidationCategory {
+  const strip = (list: unknown) =>
+    (Array.isArray(list) ? list : []).map((d: Record<string, unknown>) => {
+      const { comments: _c, label: _l, ...rest } = d ?? {};
+      void _c;
+      void _l;
+      return rest;
+    });
+  return sameValue(strip(before), strip(after)) ? "free" : "planning";
+}
+
+/** Catégorie d'UN champ modifié (`before`/`after` : valeurs du champ, pour les livrables). */
+export function fieldCategory(
+  entity: PatchEntity,
+  field: string,
+  before?: unknown,
+  after?: unknown
+): ValidationCategory {
+  if (entity === "projet" && field === "deliverables") return deliverablesCategory(before, after);
+  const table = entity === "projet" ? PROJET_FIELD_CATEGORY : CHANTIER_FIELD_CATEGORY;
+  return table[field] ?? "planning";
+}
+
+/** Nombre de validations pour un changement de champ (raccourci UI). */
+export function requiredValidationsForField(
+  entity: PatchEntity,
+  field: string,
+  before?: unknown,
+  after?: unknown
+): 0 | 1 | 2 {
+  return requiredValidations(fieldCategory(entity, field, before, after));
+}
+
+export type SplitPatch<T> = Record<ValidationCategory, Partial<T>>;
+
+/**
+ * Répartit un patch par catégorie, en ne gardant que les champs RÉELLEMENT modifiés par rapport à
+ * `before` (et jamais les champs techniques). L'UI applique `free` directement et soumet chaque
+ * autre partie non vide (voir `updateProjetFlow` / `updateChantierFlow`).
+ */
+export function splitPatchByCategory<T extends object>(
+  entity: PatchEntity,
+  before: T,
+  patch: Partial<T>
+): SplitPatch<T> {
+  const out: SplitPatch<T> = { pilotage: {}, planning: {}, designation: {}, free: {} };
+  const internal = entity === "projet" ? PROJET_INTERNAL_FIELDS : CHANTIER_INTERNAL_FIELDS;
+  for (const [key, value] of Object.entries(patch)) {
+    if (internal.has(key)) continue;
+    const prev = (before as Record<string, unknown>)[key];
+    if (sameValue(prev, value)) continue;
+    const cat = fieldCategory(entity, key, prev, value);
+    (out[cat] as Record<string, unknown>)[key] = value;
+  }
+  return out;
+}
+
+/** Nombre de validations requis par kind (hors *_update, qui dépendent de la catégorie). */
+export const KIND_VALIDATIONS: Record<StrategicApprovalKind, 1 | 2> = {
+  milestone: 2,
+  kpi_value: 2,
+  projet_create: 2,
+  projet_update: 2,
+  projet_delete: 2,
+  chantier_create: 2,
+  chantier_update: 2,
+  chantier_delete: 2,
+};
+
+/** Niveau plancher de l'auteur par kind (voir `approvalChain`) : un KPI est traité comme saisi au
+ *  moins par un sponsor de chantier ; créer/supprimer un projet relève au moins du responsable
+ *  projet ; créer/supprimer un chantier au moins du sponsor de chantier. */
+const KIND_FLOOR: Partial<Record<StrategicApprovalKind, StrategicLevel>> = {
+  kpi_value: "chantierSponsor",
+  projet_create: "projectOwner",
+  projet_delete: "projectOwner",
+  chantier_create: "chantierSponsor",
+  chantier_delete: "chantierSponsor",
+};
+
+function validationCount(
+  kind: StrategicApprovalKind,
+  payload: StrategicApprovalPayload | undefined
+): 0 | 1 | 2 {
+  if (kind === "projet_update" || kind === "chantier_update") {
+    const category = (payload as ProjetUpdateApprovalPayload | undefined)?.category ?? "pilotage";
+    return requiredValidations(category);
+  }
+  return KIND_VALIDATIONS[kind];
+}
+
+// ─── Chaîne de validation ───────────────────────────────────────────────────────────────────
+
+function axesOf(axisIds: string[] | undefined, data: StrategicApprovalData): StrategicAxis[] {
+  return (axisIds ?? [])
+    .map((id) => data.axes.find((a) => a.id === id))
+    .filter((a): a is StrategicAxis => !!a);
+}
+
+/**
+ * Contexte hiérarchique (lib/strategicHierarchy.ts) d'une demande : axe(s), chantier, projet et
+ * pilotes du programme de la cible. Projet création : `projet` absent (le futur responsable ne
+ * valide pas la création de son propre projet). KPI : voir `kpiHierarchyContext`.
+ */
+export function hierarchyContextFor(
+  kind: StrategicApprovalKind,
+  target: StrategicApprovalTarget,
+  data: StrategicApprovalData,
+  payload?: StrategicApprovalPayload,
+  requestedBy?: string
+): HierarchyContext {
+  const programId = resolveTargetProgramId(target, data);
+  const pilots = strategicLeadUsernames(programId, data);
+  if (kind === "kpi_value" || target.type === "indicateur") {
+    const indicator = data.indicators.find((i) => i.id === target.id);
+    if (!indicator) return { pilots };
+    return kpiHierarchyContext(indicator, { ...data, programId }, requestedBy);
+  }
+  if (kind === "chantier_create") {
+    const created = (payload as ChantierCreateApprovalPayload | undefined)?.chantier;
+    const axisIds = created?.axisIds?.length ? created.axisIds : [target.id];
+    const axes = axesOf(axisIds, data);
+    return { axis: axes[0] ?? null, axes, pilots };
+  }
+  if (target.type === "axe") {
+    const axes = axesOf([target.id], data);
+    return { axis: axes[0] ?? null, axes, pilots };
+  }
+  const chantier = chantierOfTarget(target, data);
+  const axes = axesOf(chantier?.axisIds, data);
+  const projet =
+    target.type === "projet" && kind !== "projet_create"
+      ? (data.chantierActions.find((a) => a.id === target.id) ?? null)
+      : null;
+  return { axis: axes[0] ?? null, axes, chantier: chantier ?? null, projet, pilots };
+}
+
+/**
+ * Chaîne de validation d'une demande de `author` (paliers N+1 puis N+2 selon le kind/la
+ * catégorie). Vide ⇒ application directe : auteur ADMIN, catégorie libre, ou personne au-dessus
+ * (le pilote du plan). Utiliser pour l'aperçu « sera validé par X puis Y » (`previewApprovalChain`).
+ */
+export function computeApprovalChain(
+  kind: StrategicApprovalKind,
+  author: Pick<Actor, "username"> & Partial<Actor>,
+  target: StrategicApprovalTarget,
+  data: StrategicApprovalData,
+  payload?: StrategicApprovalPayload
+): ApprovalStep[] {
+  if (isAnyAdmin(author as Actor)) return [];
+  const count = validationCount(kind, payload);
+  if (count === 0) return [];
+  const ctx = hierarchyContextFor(kind, target, data, payload, author.username);
+  return approvalChain(author.username, ctx, count, KIND_FLOOR[kind]);
+}
+
+/** Alias UI : paliers qu'aurait une demande de `actor` (vide = application directe). */
+export function previewApprovalChain(
+  kind: StrategicApprovalKind,
+  actor: Actor | null | undefined,
+  target: StrategicApprovalTarget,
+  payload: StrategicApprovalPayload | undefined,
+  data: StrategicApprovalData
+): ApprovalStep[] {
+  if (!actor) return [];
+  return computeApprovalChain(kind, actor, target, data, payload);
+}
+
+/** Rôle affiché d'un niveau (compat `approverRole`). */
+const LEVEL_ROLE: Record<StrategicLevel, Role> = {
+  pilot: "strategic_lead",
+  axisSponsor: "axis_sponsor",
+  chantierSponsor: "chantier_owner",
+  projectOwner: "chantier_contributor",
+  contributor: "chantier_contributor",
+};
+
+export function levelRole(level: StrategicLevel): Role {
+  return LEVEL_ROLE[level];
+}
+
 function isLeadOfProgram(user: Actor | null | undefined, programId: string | undefined): boolean {
   return (
     !!user &&
@@ -306,7 +669,7 @@ function isLeadOfProgram(user: Actor | null | undefined, programId: string | und
   );
 }
 
-/** L'utilisateur est-il un approbateur légitime de ce type de demande (hors règle d'auto-décision) ? */
+/** LEGACY : l'utilisateur est-il un approbateur légitime (hors règle d'auto-décision) ? */
 function isApproverFor(
   user: Actor | null | undefined,
   approver: ResolvedApprover,
@@ -319,30 +682,80 @@ function isApproverFor(
 }
 
 /**
- * L'acteur doit-il passer par une demande ? `false` s'il est lui-même l'approbateur (ou admin, ou
- * strategic_lead du programme) : l'action est alors appliquée directement. `stage` : voir
- * `resolveApprover` — ne concerne que `"projet_create"`, permet à l'appelant (`createProjetFlow`)
- * de tester séparément le palier "chantier" et le palier "axis" de la double validation.
+ * L'acteur doit-il passer par une demande ? `false` ⇒ appliquer directement : acteur ADMIN, ou
+ * chaîne vide (catégorie libre, ou personne au-dessus de lui — le pilote du plan). `payload` :
+ * nécessaire pour `projet_update`/`chantier_update` (catégorie) et `chantier_create` (axes) ;
+ * ignoré sinon. `stage` : LEGACY (ancienne double validation de `projet_create` par demandes
+ * enchaînées), ignoré — le modèle à chaîne couvre les deux paliers dans UNE demande.
  */
 export function needsApproval(
   kind: StrategicApprovalKind,
   actor: Actor | null | undefined,
   target: StrategicApprovalTarget,
   data: StrategicApprovalData,
-  stage?: ProjetCreateStage
+  stage?: ProjetCreateStage,
+  payload?: StrategicApprovalPayload
 ): boolean {
+  void stage;
   if (!actor) return true;
-  const approver = resolveApprover(kind, target, data, stage);
-  return !isApproverFor(actor, approver, resolveTargetProgramId(target, data));
+  if (isAnyAdmin(actor)) return false;
+  return computeApprovalChain(kind, actor, target, data, payload).length > 0;
 }
 
-/** `user` peut-il approuver/refuser cette demande (encore en attente) ? */
+/** Palier courant (demande à chaîne), sinon `undefined`. */
+export function currentStep(approval: StrategicApproval): ApprovalChainStep | undefined {
+  if (!approval.chain?.length) return undefined;
+  return approval.chain[Math.min(approval.stepIndex ?? 0, approval.chain.length - 1)];
+}
+
+/** Usernames qui doivent agir MAINTENANT (palier courant ; legacy : `approverUsernames`). Vide
+ *  pour une demande close. Sert à « bloqué chez … », « en attente de … ». */
+export function pendingApproversOf(approval: StrategicApproval): string[] {
+  if (approval.status !== "pending") return [];
+  const step = currentStep(approval);
+  if (step) return step.usernames;
+  return approval.approverUsernames?.length
+    ? approval.approverUsernames
+    : approval.approverUsername
+      ? [approval.approverUsername]
+      : [];
+}
+
+/** Paliers déjà validés (demande à chaîne). */
+function priorDeciders(approval: StrategicApproval): string[] {
+  const idx = approval.stepIndex ?? 0;
+  return (approval.chain ?? [])
+    .slice(0, idx)
+    .map((s) => s.decidedBy)
+    .filter((u): u is string => !!u);
+}
+
+/**
+ * Demande à chaîne : `user` peut-il décider le palier COURANT ? L'un des usernames du palier, ou un
+ * admin ; jamais le demandeur (admin compris) ; jamais une personne ayant déjà validé un palier
+ * précédent (sauf admin). Pas d'escalade strategic_lead : le pilote ne décide que SON palier.
+ */
+export function canDecideStep(
+  user: Actor | null | undefined,
+  approval: StrategicApproval
+): boolean {
+  if (!user || approval.status !== "pending" || !approval.chain?.length) return false;
+  if (approval.requestedBy === user.username) return false;
+  if (isAnyAdmin(user)) return true;
+  if (priorDeciders(approval).includes(user.username)) return false;
+  return currentStep(approval)?.usernames.includes(user.username) ?? false;
+}
+
+/** `user` peut-il approuver/refuser cette demande (encore en attente) — palier courant pour une
+ *  demande à chaîne (`canDecideStep`), règle historique sinon (approbateur, strategic_lead du
+ *  programme, admin — admin pouvant même décider sa propre demande legacy). */
 export function canDecide(
   user: Actor | null | undefined,
   approval: StrategicApproval,
   data: StrategicApprovalData
 ): boolean {
   if (!user || approval.status !== "pending") return false;
+  if (approval.chain?.length) return canDecideStep(user, approval);
   if (isAnyAdmin(user)) return true;
   if (approval.requestedBy === user.username) return false;
   const stage =
@@ -358,6 +771,75 @@ export function canDecide(
   );
   const usernames = Array.from(new Set([...resolved.usernames, ...approval.approverUsernames]));
   return isApproverFor(user, { ...resolved, usernames }, approval.programId);
+}
+
+export type ApprovalStepInfo = {
+  /** Palier courant, 1-based (= total quand la demande est close après validation complète). */
+  current: number;
+  total: number;
+  level?: StrategicLevel;
+  usernames: string[];
+};
+
+/** « Étape x/n » d'une demande à chaîne ; `undefined` pour une demande legacy (pas d'étapes). */
+export function approvalStepInfo(approval: StrategicApproval): ApprovalStepInfo | undefined {
+  if (!approval.chain?.length) return undefined;
+  const total = approval.chain.length;
+  const idx = Math.min(approval.stepIndex ?? 0, total - 1);
+  return {
+    current: idx + 1,
+    total,
+    level: approval.chain[idx].level,
+    usernames: approval.status === "pending" ? approval.chain[idx].usernames : [],
+  };
+}
+
+/** Libellé court « Étape 1/2 » (vide pour une demande legacy ou à un seul palier). */
+export function stepLabel(approval: StrategicApproval): string {
+  const info = approvalStepInfo(approval);
+  if (!info || info.total < 2) return "";
+  return `Étape ${info.current}/${info.total}`;
+}
+
+/** Champs concernés par une demande EN ATTENTE (pour les badges « en attente » par champ). */
+function pendingFields(approval: StrategicApproval): string[] {
+  switch (approval.kind) {
+    case "projet_update":
+    case "chantier_update":
+      return Object.keys((approval.payload as ProjetUpdateApprovalPayload).patch ?? {});
+    case "milestone":
+      return ["milestones"];
+    default:
+      return [];
+  }
+}
+
+/**
+ * Demandes EN ATTENTE sur une cible (et, si `field` est donné, sur ce champ précis : les
+ * `*_update` qui le modifient, `milestone` pour "milestones"). Les suppressions portent sur toute
+ * la cible (renvoyées quel que soit `field`). Une création de projet cible son CHANTIER parent.
+ */
+export function pendingOn(
+  approvals: StrategicApproval[] | undefined,
+  target: Pick<StrategicApprovalTarget, "type" | "id">,
+  field?: string
+): StrategicApproval[] {
+  return (approvals ?? []).filter((a) => {
+    if (a.status !== "pending" || a.targetType !== target.type || a.targetId !== target.id) {
+      return false;
+    }
+    if (field === undefined) return true;
+    if (a.kind === "projet_delete" || a.kind === "chantier_delete") return true;
+    return pendingFields(a).includes(field);
+  });
+}
+
+export function isPendingOn(
+  approvals: StrategicApproval[] | undefined,
+  target: Pick<StrategicApprovalTarget, "type" | "id">,
+  field?: string
+): boolean {
+  return pendingOn(approvals, target, field).length > 0;
 }
 
 // ─── Construction ───────────────────────────────────────────────────────────────────────────
@@ -379,6 +861,15 @@ export function stripUndefined<T>(value: T): T {
   return value;
 }
 
+/**
+ * Construit une demande (non persistée). Modèle à CHAÎNE par défaut : la chaîne est calculée
+ * depuis le demandeur (`computeApprovalChain`) et SNAPSHOTÉE (`chain`, `stepIndex: 0`), les champs
+ * `approver*` reflétant le 1er palier. `chain` explicite : utilisé tel quel ; `chain: null` ⇒
+ * demande LEGACY à approbateur unique (`resolveApprover`) — réservé aux demandes enchaînées de
+ * l'ancien modèle (`nextProjetCreateApproval`) et aux enregistrements d'information.
+ * Repli défensif : si la chaîne calculée est VIDE (l'appelant aurait dû appliquer directement,
+ * voir `needsApproval`), la demande est construite en legacy plutôt que sans décideur.
+ */
 export function buildApproval(input: {
   kind: StrategicApprovalKind;
   target: StrategicApprovalTarget;
@@ -386,11 +877,41 @@ export function buildApproval(input: {
   reason?: string;
   companyId: string;
   programId: string;
-  requester: Pick<AuthUser, "username" | "name">;
+  /** Le demandeur ; ses drapeaux admin (s'ils sont fournis) comptent : admin ⇒ chaîne vide. */
+  requester: Pick<AuthUser, "username" | "name"> &
+    Partial<Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin">>;
   data: StrategicApprovalData;
   id?: string;
   now?: string;
+  chain?: ApprovalStep[] | null;
 }): StrategicApproval {
+  const chain =
+    input.chain === null
+      ? []
+      : (input.chain ??
+        computeApprovalChain(input.kind, input.requester, input.target, input.data, input.payload));
+  if (chain.length) {
+    return stripUndefined({
+      id: input.id ?? newApprovalId(),
+      companyId: input.companyId,
+      programId: input.programId,
+      kind: input.kind,
+      targetType: input.target.type,
+      targetId: input.target.id,
+      targetName: input.target.name,
+      payload: input.payload,
+      requestedBy: input.requester.username,
+      requestedByName: input.requester.name,
+      requestedAt: input.now ?? new Date().toISOString(),
+      approverRole: levelRole(chain[0].level),
+      approverUsername: chain[0].usernames[0],
+      approverUsernames: chain[0].usernames,
+      status: "pending" as const,
+      reason: input.reason?.trim() || undefined,
+      chain: chain.map((s) => ({ level: s.level, usernames: [...s.usernames] })),
+      stepIndex: 0,
+    });
+  }
   const stage =
     input.kind === "projet_create"
       ? (input.payload as ProjetCreateApprovalPayload).stage
@@ -447,6 +968,7 @@ export function buildDirectKpiCorrectionRecord(input: {
     data: input.data,
     id: input.id,
     now,
+    chain: null,
   });
   return stripUndefined({
     ...base,
@@ -516,6 +1038,73 @@ export function kpiCorrectionNoticeText(
   };
 }
 
+// ─── Décision (palier) ──────────────────────────────────────────────────────────────────────
+
+export type ApprovalDecisionResult = {
+  /** La demande après décision (à persister). */
+  approval: StrategicApproval;
+  /** true ⇒ la demande est CLOSE (dernier palier validé, ou refus) : appliquer les effets
+   *  (`applyApprovedPayload` / `applyRejectedPayload`). false ⇒ palier suivant, rien à appliquer. */
+  final: boolean;
+};
+
+/**
+ * Décision PURE d'un palier (ne vérifie PAS le droit : appeler `canDecide` avant).
+ *  - Demande à chaîne : le palier courant est horodaté (`decidedBy`…). Refus ⇒ demande close
+ *    "rejected". Validation d'un palier intermédiaire ⇒ `stepIndex + 1`, `approver*` = palier
+ *    suivant, statut toujours "pending". Validation du dernier palier ⇒ "approved".
+ *  - Demande legacy : décision unique (comportement historique).
+ * Les champs `decidedBy`/`decidedAt`/`decisionComment` de la demande ne sont posés qu'à la clôture.
+ */
+export function decideApproval(
+  approval: StrategicApproval,
+  decider: Pick<AuthUser, "username" | "name">,
+  status: "approved" | "rejected",
+  comment?: string,
+  now: string = new Date().toISOString()
+): ApprovalDecisionResult {
+  const decisionComment = comment?.trim() || undefined;
+  const closed = (): StrategicApproval =>
+    stripUndefined({
+      ...approval,
+      status,
+      decidedBy: decider.username,
+      decidedByName: decider.name,
+      decidedAt: now,
+      decisionComment,
+    });
+  if (!approval.chain?.length) return { approval: closed(), final: true };
+  const idx = Math.min(approval.stepIndex ?? 0, approval.chain.length - 1);
+  const chain = approval.chain.map((s, i) =>
+    i === idx
+      ? stripUndefined({
+          ...s,
+          decidedBy: decider.username,
+          decidedByName: decider.name,
+          decidedAt: now,
+          decision: status,
+          decisionComment,
+        })
+      : s
+  );
+  const isLast = idx === approval.chain.length - 1;
+  if (status === "rejected" || isLast) {
+    return { approval: { ...closed(), chain, stepIndex: idx }, final: true };
+  }
+  const next = chain[idx + 1];
+  return {
+    approval: stripUndefined({
+      ...approval,
+      chain,
+      stepIndex: idx + 1,
+      approverRole: levelRole(next.level),
+      approverUsername: next.usernames[0],
+      approverUsernames: next.usernames,
+    }),
+    final: false,
+  };
+}
+
 // ─── Effets ─────────────────────────────────────────────────────────────────────────────────
 
 /** Écritures à exécuter (par le hook) pour appliquer une décision. Idempotentes (ids stables). */
@@ -531,6 +1120,8 @@ export type ApprovalEffects = {
    *  approuvée porte un `payload.staffing` (voir `ProjetCreateApprovalPayload`). Vide dans tous les
    *  autres cas, y compris pour les demandes d'avant round 29. */
   saveStaffing: ChantierStaffing[];
+  /** Chantiers à écrire — `"chantier_create"` / `"chantier_update"` approuvés. */
+  saveChantiers: Chantier[];
 };
 
 function emptyEffects(): ApprovalEffects {
@@ -542,7 +1133,23 @@ function emptyEffects(): ApprovalEffects {
     deleteMeasurementIds: [],
     saveIndicators: [],
     saveStaffing: [],
+    saveChantiers: [],
   };
+}
+
+/** Un champ modifié par la demande a changé depuis (valeur actuelle ≠ `before`) → périmée. */
+function assertNotStale(current: object, before: object | undefined, patch: object): void {
+  if (!before) return;
+  for (const key of Object.keys(patch)) {
+    if (!(key in before)) continue;
+    const now = (current as Record<string, unknown>)[key];
+    const then = (before as Record<string, unknown>)[key];
+    if (!sameValue(now, then)) {
+      throw new Error(
+        `Le champ « ${key} » a été modifié depuis la demande : demande périmée, à refaire`
+      );
+    }
+  }
 }
 
 function withoutMilestoneApproval(action: ChantierAction): ChantierAction {
@@ -706,8 +1313,8 @@ export function applyApprovedPayload(
     }
     case "projet_create": {
       const payload = approval.payload as ProjetCreateApprovalPayload;
-      if (payload.stage === "chantier") {
-        // Palier 1/2 (pilote du chantier) : pas de création ici — `useStrategicApprovals.decide()`
+      if (payload.stage === "chantier" && !approval.chain?.length) {
+        // LEGACY — palier 1/2 (pilote du chantier) : pas de création ici — `useStrategicApprovals.decide()`
         // enchaîne juste après sur `nextProjetCreateApproval` (2e demande, palier "axis"), ou crée
         // directement si ce palier s'avère inutile (voir cette fonction). Voir l'en-tête du fichier.
         return effects;
@@ -736,6 +1343,49 @@ export function applyApprovedPayload(
       for (const a of data.chantierActions) {
         if (a.chantierId === approval.targetId) effects.deleteActionIds.push(a.id);
       }
+      return effects;
+    }
+    case "projet_update": {
+      const action = data.chantierActions.find((a) => a.id === approval.targetId);
+      if (!action) throw new Error("Projet introuvable : il a peut-être été supprimé");
+      const { patch, before } = approval.payload as ProjetUpdateApprovalPayload;
+      assertNotStale(action, before, patch);
+      const next = { ...action };
+      for (const key of Object.keys(patch)) {
+        if (PROJET_INTERNAL_FIELDS.has(key)) continue;
+        // `null` = champ vidé par le demandeur (voir updateEntityFlow) → effacement.
+        const value = (patch as Record<string, unknown>)[key];
+        (next as Record<string, unknown>)[key] = value === null ? undefined : value;
+      }
+      effects.saveActions.push(stripUndefined(next));
+      return effects;
+    }
+    case "chantier_update": {
+      const chantier = data.chantiers.find((c) => c.id === approval.targetId);
+      if (!chantier) throw new Error("Chantier introuvable : il a peut-être été supprimé");
+      const { patch, before } = approval.payload as ChantierUpdateApprovalPayload;
+      assertNotStale(chantier, before, patch);
+      const next = { ...chantier };
+      for (const key of Object.keys(patch)) {
+        if (CHANTIER_INTERNAL_FIELDS.has(key)) continue;
+        // `null` = champ vidé par le demandeur (voir updateEntityFlow) → effacement.
+        const value = (patch as Record<string, unknown>)[key];
+        (next as Record<string, unknown>)[key] = value === null ? undefined : value;
+      }
+      const decidedAt = approval.decidedAt ?? new Date().toISOString();
+      effects.saveChantiers.push(stripUndefined({ ...next, lastUpdate: decidedAt.slice(0, 10) }));
+      return effects;
+    }
+    case "chantier_create": {
+      const { chantier } = approval.payload as ChantierCreateApprovalPayload;
+      if (!chantier.axisIds?.some((id) => data.axes.some((a) => a.id === id))) {
+        throw new Error("Axe introuvable : il a peut-être été supprimé");
+      }
+      effects.saveChantiers.push({
+        ...chantier,
+        companyId: approval.companyId,
+        programId: chantier.programId || approval.programId,
+      });
       return effects;
     }
   }
@@ -802,6 +1452,7 @@ export function nextProjetCreateApproval(
       name: approval.requestedByName ?? approval.requestedBy,
     },
     data,
+    chain: null,
   });
 }
 
@@ -874,6 +1525,22 @@ export function describeApproval(
         after: `${action.start} → ${action.end}`,
       };
     }
+    case "projet_update":
+    case "chantier_update": {
+      const p = approval.payload as ProjetUpdateApprovalPayload;
+      const keys = Object.keys(p.patch ?? {});
+      const fmt = (src: Record<string, unknown> | undefined) =>
+        keys.map((k) => `${k} : ${formatFieldValue(src?.[k])}`).join(" ; ");
+      return {
+        subject,
+        before: fmt(p.before as Record<string, unknown>),
+        after: fmt(p.patch as Record<string, unknown>),
+      };
+    }
+    case "chantier_create": {
+      const { chantier } = approval.payload as ChantierCreateApprovalPayload;
+      return { subject: chantier?.name || subject, after: chantier?.name || subject };
+    }
     default: {
       const p = approval.payload as DeleteApprovalPayload;
       return { subject: p.name ?? subject, before: p.name ?? subject };
@@ -881,9 +1548,21 @@ export function describeApproval(
   }
 }
 
+/** Valeur de champ lisible (description avant/après d'une modification). */
+function formatFieldValue(v: unknown): string {
+  if (v === undefined || v === null || v === "") return "—";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
+  if (Array.isArray(v)) {
+    if (v.every((x) => typeof x === "string")) return v.join(", ") || "—";
+    return `${v.length} élément(s)`;
+  }
+  return "(modifié)";
+}
+
 // ─── Audit ──────────────────────────────────────────────────────────────────────────────────
 
-export type ApprovalEvent = "requested" | "approved" | "rejected";
+/** `"step_approved"` : un palier INTERMÉDIAIRE validé (la demande reste en attente du suivant). */
+export type ApprovalEvent = "requested" | "approved" | "rejected" | "step_approved";
 
 function displayName(
   username: string | undefined,
@@ -942,7 +1621,25 @@ function verbPhrase(approval: StrategicApproval, pastTense: boolean): string {
       return pastTense
         ? `a supprimé le chantier « ${name} »`
         : `la suppression du chantier « ${name} »`;
+    case "projet_update":
+      return pastTense
+        ? `a modifié le projet « ${name} » (${updateFieldsText(approval)})`
+        : `la modification du projet « ${name} » (${updateFieldsText(approval)})`;
+    case "chantier_update":
+      return pastTense
+        ? `a modifié le chantier « ${name} » (${updateFieldsText(approval)})`
+        : `la modification du chantier « ${name} » (${updateFieldsText(approval)})`;
+    case "chantier_create": {
+      const created = (approval.payload as ChantierCreateApprovalPayload).chantier?.name ?? name;
+      return pastTense
+        ? `a créé le chantier « ${created} »`
+        : `la création du chantier « ${created} »`;
+    }
   }
+}
+
+function updateFieldsText(approval: StrategicApproval): string {
+  return Object.keys((approval.payload as ProjetUpdateApprovalPayload).patch ?? {}).join(", ");
 }
 
 type NestedText = { key: string; fallback: string; vars: Record<string, string | number> };
@@ -1010,6 +1707,26 @@ function nounPhraseI18n(approval: StrategicApproval): NestedText {
         fallback: "la suppression du chantier « {name} »",
         vars: { name },
       };
+    case "projet_update":
+      return {
+        key: k + "projetUpdate",
+        fallback: "la modification du projet « {name} » ({fields})",
+        vars: { name, fields: updateFieldsText(approval) },
+      };
+    case "chantier_update":
+      return {
+        key: k + "chantierUpdate",
+        fallback: "la modification du chantier « {name} » ({fields})",
+        vars: { name, fields: updateFieldsText(approval) },
+      };
+    case "chantier_create":
+      return {
+        key: k + "chantierCreate",
+        fallback: "la création du chantier « {name} »",
+        vars: {
+          name: (approval.payload as ChantierCreateApprovalPayload).chantier?.name ?? name,
+        },
+      };
   }
 }
 
@@ -1028,10 +1745,35 @@ export function buildApprovalAuditEntry(
   const base = { ts: ts ?? new Date().toISOString().slice(0, 16).replace("T", " ") };
   const entity = approval.targetId;
   const field = `validation:${approval.kind}`;
+  const step = stepLabel(approval);
+  const stepSuffix = step ? ` (${step.toLowerCase()})` : "";
+  const currentApprovers = () => {
+    const names = pendingApproversOf(approval).map((u) => displayName(u, users));
+    return names.length ? names.join(" ou ") : approval.approverRole;
+  };
+  if (event === "step_approved") {
+    // `approval` = état APRÈS décision : le palier validé est celui qui précède `stepIndex`.
+    const idx = Math.max(0, (approval.stepIndex ?? 1) - 1);
+    const validated = approval.chain?.[idx];
+    const by = displayName(validated?.decidedBy, users, validated?.decidedByName);
+    const total = approval.chain?.length ?? 1;
+    const c = validated?.decisionComment ? ` (${validated.decisionComment})` : "";
+    return {
+      ...base,
+      user: by,
+      action: "approval_approved",
+      entity,
+      field,
+      old: "pending",
+      new: `${by} a validé (étape ${idx + 1}/${total}) ${verbPhrase(approval, false)} demandé(e) par ${requester} — en attente de ${currentApprovers()}${c}`,
+    };
+  }
   if (event === "requested") {
-    const approver = approval.approverUsername
-      ? displayName(approval.approverUsername, users)
-      : approval.approverRole;
+    const approver = approval.chain?.length
+      ? `${currentApprovers()}${stepSuffix}`
+      : approval.approverUsername
+        ? displayName(approval.approverUsername, users)
+        : approval.approverRole;
     return {
       ...base,
       user: requester,
@@ -1144,9 +1886,16 @@ export function buildApprovalAlerts(
         });
       }
       if (a.requestedBy === user.username) {
-        const approver = a.approverUsername
-          ? displayName(a.approverUsername, data.users)
-          : a.approverRole;
+        // Demande à chaîne : les approbateurs du palier COURANT (+ « étape x/n »).
+        const current = a.chain?.length
+          ? pendingApproversOf(a).map((u) => displayName(u, data.users))
+          : [];
+        const step = stepLabel(a);
+        const approver = current.length
+          ? `${current.join(" ou ")}${step ? ` (${step.toLowerCase()})` : ""}`
+          : a.approverUsername
+            ? displayName(a.approverUsername, data.users)
+            : a.approverRole;
         alerts.push({
           ...common,
           id: `strategic-approval-${a.id}-wait`,
@@ -1217,12 +1966,13 @@ export function buildApprovalAlerts(
 // ─── Sélecteurs ─────────────────────────────────────────────────────────────────────────────
 
 export type ApprovalBuckets = {
-  /** En attente ET que l'utilisateur peut décider. */
+  /** En attente ET que l'utilisateur peut décider MAINTENANT (palier courant d'une demande à
+   *  chaîne — un approbateur de l'étape 2 ne la voit qu'une fois l'étape 1 validée). */
   pending: StrategicApproval[];
   /** Demandes émises par l'utilisateur, tous statuts, récentes d'abord. */
   mine: StrategicApproval[];
-  /** Demandes décidées visibles de l'utilisateur (émises, décidées par lui, ou tout pour un
-   *  admin/strategic_lead), récentes d'abord. */
+  /** Demandes décidées visibles de l'utilisateur (émises, décidées par lui — y compris un palier
+   *  d'une demande à chaîne —, ou tout pour un admin/strategic_lead), récentes d'abord. */
   history: StrategicApproval[];
 };
 
@@ -1246,6 +1996,7 @@ export function bucketApprovals(
         (seesAll ||
           a.requestedBy === user.username ||
           a.decidedBy === user.username ||
+          (a.chain ?? []).some((st) => st.decidedBy === user.username) ||
           (a.informUsernames ?? []).includes(user.username))
     )
     .sort(byRecent);

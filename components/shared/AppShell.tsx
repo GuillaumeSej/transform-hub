@@ -100,7 +100,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   // `approvalQueue`, pas de garde `isStrategic` explicite — `strategic.chantierActions` est déjà
   // structurellement vide hors mode stratégique (voir `useStrategicData` ci-dessus, `companyId`
   // passé à `null`), donc cette file est naturellement vide en mode Plan Performance.
-  const milestoneApprovalQueue = useMilestoneApprovalQueue(strategic, user);
   // Validation stratégique (lib/strategicApprovals.ts) : alertes dérivées + badge de la sidebar.
   // Neutralisé hors mode stratégique (`companyId` null → aucun abonnement).
   const strategicApprovals = useStrategicApprovals({
@@ -109,6 +108,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     programId: activeProgramId,
     data: strategic,
   });
+  // Demandes "milestone" à paliers EXCLUES de la file historique : elles sont déjà comptées, au
+  // palier COURANT de l'utilisateur, dans `strategicApprovals.pending` / ses alertes « à valider »
+  // (un approbateur de l'étape 2 ne les voit qu'après l'étape 1).
+  const milestoneApprovalQueue = useMilestoneApprovalQueue(
+    strategic,
+    user,
+    strategicApprovals.approvals
+  );
 
   const strategicNotifications = useMemo(() => {
     const alerts: Alert[] = [];

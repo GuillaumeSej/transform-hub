@@ -1,7 +1,7 @@
 import type { Auth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 import { Router } from "express";
-import { authorizeAdminCaller } from "../lib/authz";
+import { assertCanActOnTarget, authorizeAdminCaller } from "../lib/authz";
 import { normalizeUsername, usernameToSyntheticEmail, accountSlug } from "../lib/authLogic";
 import { deleteUserSchema } from "../lib/validation";
 import { ApiError, Errors, errorBody } from "../lib/errors";
@@ -20,6 +20,11 @@ export function deleteUserRouter(auth: Auth, db: Firestore): Router {
       const companyId = parsed.data.companyId ?? null;
 
       const caller = await authorizeAdminCaller(auth, db, req.headers.authorization, companyId);
+      const targetSnap = await db
+        .collection("adminUsers")
+        .doc(accountSlug(username, companyId))
+        .get();
+      assertCanActOnTarget(caller, targetSnap.data());
 
       const email = usernameToSyntheticEmail(username, companyId);
 

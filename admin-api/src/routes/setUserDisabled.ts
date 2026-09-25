@@ -1,7 +1,7 @@
 import type { Auth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 import { Router } from "express";
-import { authorizeAdminCaller } from "../lib/authz";
+import { assertCanActOnTarget, authorizeAdminCaller } from "../lib/authz";
 import { normalizeUsername, usernameToSyntheticEmail, accountSlug } from "../lib/authLogic";
 import { setUserDisabledSchema } from "../lib/validation";
 import { ApiError, Errors, errorBody } from "../lib/errors";
@@ -43,6 +43,7 @@ export function setUserDisabledRouter(auth: Auth, db: Firestore): Router {
       if (!snap.exists) {
         throw Errors.notFound(`Profil Firestore introuvable pour "${username}".`);
       }
+      assertCanActOnTarget(caller, snap.data());
 
       if (disabled && companyId) {
         const companySnap = await db
