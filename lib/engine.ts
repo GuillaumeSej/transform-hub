@@ -23,7 +23,7 @@ import {
 } from "@/lib/hierarchyLogic";
 import { STATUS_CYCLE, STATUS_LEVEL, STATUS_SHORT_LABEL } from "@/lib/status-config";
 import type { LeverStatus } from "@/types";
-import { impactStartDateOf, impactStatusOf } from "@/lib/impactStatus";
+import { impactStartDateOf, isGainImpact, isImpactRealized } from "@/lib/impactStatus";
 import { impactDatesOf } from "@/lib/impactKinds";
 import { isActiveMovement } from "@/lib/workforceLogic";
 
@@ -150,17 +150,6 @@ export function leverActionProgress(lever: Pick<Lever, "actions">): number {
   return Math.round(total);
 }
 
-/** Fraction (0-1) du plan du levier considérée comme réalisée : avancement des actions ; sans
- *  action, 1 si livré sinon 0. N'est PLUS utilisée par `realizedSavings`/`realizedGrossSavings`/
- *  `realizedFte` (round 6 — voir `impactsRealizedNet`, sommée impact par impact plutôt qu'au
- *  prorata de l'avancement du plan d'action) ; reste utilisée par `pnlImpactDetailed` pour la
- *  répartition du réalisé par compte P&L (portée volontairement inchangée pour ce round). */
-function realizationFraction(lever: Lever): number {
-  if (lever.status === "delivered") return 1;
-  if ((lever.actions ?? []).length === 0) return 0;
-  return leverActionProgress(lever) / 100;
-}
-
 /** Gains bruts / OPEX récurrent / ETP RÉALISÉS À DATE, sommés directement depuis le statut de
  *  chaque impact (`impactStatusOf` : explicite si l'utilisateur a coché/décoché "Réalisé", sinon
  *  dérivé de la date de début) — PAS au prorata de l'avancement du plan d'action. C'est ce qui
@@ -172,13 +161,14 @@ function realizationFraction(lever: Lever): number {
  *  net (jamais dans le "net", règle métier constante — voir `leverImpactTotals`). */
 function impactsRealizedNet(
   impacts: LeverImpact[],
+  leverStatus?: Lever["status"],
   today: Date = new Date()
 ): { gross: number; opexRec: number; fte: number } {
   let gross = 0;
   let opexRec = 0;
   let fte = 0;
   for (const imp of impacts) {
-    if (impactStatusOf(imp, today) === "planned") continue; // pas encore réalisé
+    if (!isImpactRealized(imp, leverStatus, today)) continue; // règle unique, voir impactStatus.ts
     if (imp.type === "saving") {
       if (imp.gainRecurrence !== "oneoff") gross += imp.amount;
       if (imp.fteCount) fte += imp.fteCount;
@@ -232,7 +222,7 @@ function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): nu
 export function realizedSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   if (lever.impacts && lever.impacts.length > 0) {
-    const { gross, opexRec } = impactsRealizedNet(lever.impacts);
+    const { gross, opexRec } = impactsRealizedNet(lever.impacts, lever.status);
     return round2(gross - opexRec);
   }
   return doneActionImpactsTotal(lever, "net");
@@ -242,7 +232,7 @@ export function realizedSavings(lever: Lever): number {
 export function realizedGrossSavings(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   if (lever.impacts && lever.impacts.length > 0) {
-    return impactsRealizedNet(lever.impacts).gross;
+    return impactsRealizedNet(lever.impacts, lever.status).gross;
   }
   return doneActionImpactsTotal(lever, "gross");
 }
@@ -342,7 +332,7 @@ export function displayedProgressPct(lever: Lever): number {
 export function realizedFte(lever: Lever): number {
   if (lever.status === "cancelled") return 0;
   if (lever.impacts && lever.impacts.length > 0) {
-    return impactsRealizedNet(lever.impacts).fte;
+    return impactsRealizedNet(lever.impacts, lever.status).fte;
   }
   return Math.round(doneActionImpactsTotal(lever, "fte") * 10) / 10;
 }
@@ -532,17 +522,25 @@ function impactSignedAmount(imp: LeverImpact): number | null {
   return -imp.amount;
 }
 
+/** Montant signé d'une ligne d'impact selon la règle du NET (gain +, coût −) : gains récurrents,
+ *  départs/recrutements ETP et OPEX récurrent uniquement ; `null` pour le CAPEX, l'OPEX one-off
+ *  et les gains one-off — même périmètre que le réalisé net (`impactsRealizedNet`), pour que le
+ *  widget P&L et les autres écrans parlent du même réalisé (audit C4). */
+function impactNetSignedAmount(imp: LeverImpact): number | null {
+  if (imp.type === "saving") return imp.gainRecurrence === "oneoff" ? null : imp.amount;
+  if (imp.type === "fte") return imp.fteDirection === "hire" ? -imp.amount : imp.amount;
+  return imp.nature === "opex_rec" ? -imp.amount : null;
+}
+
 export const UNALLOCATED_ACCOUNT_ID = "__unallocated__";
 
 /** Impact P&L détaillé : plan vs réalisé par compte, ventilé par période.
  *
- *  - **Plan** : pour chaque levier/sous-levier, `lockedPlan.netSavings ?? netSavings` est
- *    comptabilisé au mois de sa date de fin prévue (`end`). Si le levier a des sous-leviers,
- *    chaque sous-levier est ventilé séparément (sur sa propre date de fin).
- *  - **Réalisé** : pour chaque levier/sous-levier en M5 (delivered), `netSavings` est
- *    comptabilisé au mois de `deliveredDate` (date de passage en M5). Les leviers non M5
- *    ne comptent pas dans le réalisé P&L.
- *  - Si aucun filtre de période, les totaux couvrent tout l'exercice.
+ *  - **Plan** : chaque impact du levier selon la règle du NET (gains récurrents − OPEX
+ *    récurrent ; CAPEX et one-off exclus), à la date de l'impact (sinon fin du levier).
+ *  - **Réalisé** : les mêmes impacts, seulement s'ils comptent dans le réalisé
+ *    (`isImpactRealized`, même règle que `realizedSavings`), à la date de l'impact bornée à
+ *    aujourd'hui. Le total réalisé toutes périodes = réalisé du programme (audit C4).
  *
  *  Comptes P&L : si `hierarchyLevels` contient un niveau `semantic === "pnl"` avec des
  *  `hierarchyNodes` (domaine "financial") configurés pour ce niveau, ce sont CES nœuds qui
@@ -559,7 +557,8 @@ export function pnlImpactDetailed(
   data: BeTrackData,
   periodFilter?: PnlPeriodFilter,
   hierarchyNodes?: HierarchyNode[],
-  hierarchyLevels?: HierarchyLevelDef[]
+  hierarchyLevels?: HierarchyLevelDef[],
+  today: Date = new Date()
 ): PnlDetailedPoint[] {
   const active = data.levers.filter((l) => l.status !== "cancelled");
 
@@ -611,25 +610,28 @@ export function pnlImpactDetailed(
 
   for (const lever of active) {
     const hierarchyAccount = resolveLeverAccount(lever);
-    // Modèle actuel : impacts portés par le levier (gains one-off exclus : jamais dans le P&L
-    // annualisé). Plan à la date de gain (sinon fin du levier) ; réalisé au prorata de
-    // l'avancement des actions, à la date de livraison (sinon fin du levier).
+    // Modèle actuel : impacts portés par le levier, règle du NET (gains récurrents − OPEX
+    // récurrent ; CAPEX et one-off exclus). Plan à la date de l'impact (sinon fin du levier) ;
+    // réalisé = impacts qui comptent dans le réalisé (`isImpactRealized`, MÊME règle que
+    // `realizedSavings`, audit C4), à la date de l'impact bornée à aujourd'hui — jamais au
+    // prorata de l'avancement des actions ni dans une période future.
     if (lever.impacts && lever.impacts.length > 0) {
-      const frac = realizationFraction(lever);
+      const todayIso = today.toISOString().slice(0, 10);
       for (const impact of lever.impacts) {
-        const signed = impactSignedAmount(impact);
+        const signed = impactNetSignedAmount(impact);
         if (signed === null) continue;
         const account =
           resolveImpactAccount(impact) ??
           hierarchyAccount ??
           (impact.pnlMap || lever.pnlMap) ??
           UNALLOCATED_ACCOUNT_ID;
-        const planDate = impact.gainDate ?? impact.capexDeploymentDate ?? lever.end;
+        const planDate = impactStartDateOf(impact) ?? lever.end;
         if (!periodFilter || dateMatchesPeriod(planDate, periodFilter)) addPlan(account, signed);
-        if (frac > 0) {
-          const realDate = lever.deliveredDate ?? lever.end;
+        if (isImpactRealized(impact, lever.status, today)) {
+          const rawDate = impactStartDateOf(impact) ?? lever.deliveredDate ?? lever.end;
+          const realDate = rawDate > todayIso ? todayIso : rawDate;
           if (!periodFilter || dateMatchesPeriod(realDate, periodFilter)) {
-            addRealized(account, signed * frac);
+            addRealized(account, signed);
           }
         }
       }
@@ -1399,24 +1401,20 @@ export type SavingsSeriesPoint = {
   gap: SavingsSeriesGap;
 };
 
-/** Un levier est "en retard" au sens de l'écart de trajectoire (S-curve/Finance) SI ET SEULEMENT SI
- *  au moins un de ses impacts a une date de début déjà passée sans être marqué "Réalisé"/"En cours" —
- *  un vrai retard d'EXÉCUTION des impacts chiffrés, pas un proxy sur les actions ou la date de fin du
- *  levier. Distinct de `underperformers`/`isActionLate` (retard du PLAN D'ACTION, utilisé par les
- *  alertes et le KPI "Leviers à risque") : ici on regarde si l'argent/l'ETP attendu à telle date a
- *  effectivement été constaté comme réalisé, indépendamment du statut des actions. */
+/** « Gains en retard » (Finance, écart de trajectoire) : le levier a au moins un impact de GAIN
+ *  dont la date est passée et qui ne compte PAS dans le réalisé (`isImpactRealized` — même règle
+ *  que le réalisé, décision audit 2026-09-24, C4) : un impact ne peut donc plus être à la fois
+ *  réalisé et en retard. Notion distincte des « Actions en retard » (`underperformers` /
+ *  `isActionLate` : retard du PLAN D'ACTION, utilisé par les alertes et le KPI « Leviers à
+ *  risque »). */
 function isLeverLate(lever: Lever, today: Date): boolean {
   if (lever.status === "delivered" || lever.status === "cancelled") return false;
   return leverImpactsOf(lever).some((imp) => {
-    // Explicitement confirmé réalisé/en cours → jamais en retard, quelle que soit la date. On
-    // regarde `imp.status` DIRECTEMENT plutôt que `impactStatusOf` : celle-ci dérive un statut
-    // "réalisé" par défaut dès qu'une date est passée et qu'aucun statut n'a été saisi (pratique
-    // pour l'affichage des données historiques, mais l'inverse de ce qu'il faut ici — un impact
-    // jamais confirmé et dont la date est dépassée doit compter comme en retard, pas comme réalisé).
-    if (imp.status === "done" || imp.status === "ongoing") return false;
+    if (!isGainImpact(imp)) return false;
     const start = impactStartDateOf(imp) ?? lever.end;
     const d = new Date(start);
-    return !Number.isNaN(d.getTime()) && d.getTime() < today.getTime();
+    if (Number.isNaN(d.getTime()) || d.getTime() >= today.getTime()) return false;
+    return !isImpactRealized(imp, lever.status, today, lever.end);
   });
 }
 
@@ -1832,8 +1830,12 @@ export function impactTrajectory(
       const gainMi = monthIndexOf(imp.gainDate ?? lever.end);
       const costMi = monthIndexOf(imp.capexDeploymentDate ?? imp.capexStartDate ?? lever.start);
       const isGain = imp.type === "saving" || (imp.type === "fte" && imp.fteDirection !== "hire");
-      const planned =
-        impactStatusOf(imp, today, isGain ? (imp.gainDate ?? lever.end) : undefined) === "planned";
+      const planned = !isImpactRealized(
+        imp,
+        lever.status,
+        today,
+        isGain ? (imp.gainDate ?? lever.end) : undefined
+      );
       if (imp.type === "fte") {
         const count = imp.fteCount ?? 0;
         fteEvents.push(

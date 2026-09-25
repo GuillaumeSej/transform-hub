@@ -1219,7 +1219,7 @@ export function LeverDetailClientPerformance() {
               <span className="text-rag-red">
                 {/* Retard calculé (engine.isActionLate) : statut "delayed" manuel OU date de fin
                     dépassée sans être "done" — pas seulement le flag manuel, voir lib/engine.ts. */}
-                {t("leverDetail.late", "En retard")} :{" "}
+                {t("leverDetail.lateActions", "Actions en retard")} :{" "}
                 {actions.filter((a) => engine.isActionLate(a)).length}
               </span>
               <span className="ml-auto font-bold text-primary">

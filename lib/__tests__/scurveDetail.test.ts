@@ -19,7 +19,7 @@ describe("gapEntriesAt — pas de dérive d'arrondi vs la courbe globale (bug li
     ({
       id,
       ws: "W1",
-      status: "on_track",
+      status: "in_progress",
       start: "2026-01-01",
       end: "2026-03-01",
       netSavings,

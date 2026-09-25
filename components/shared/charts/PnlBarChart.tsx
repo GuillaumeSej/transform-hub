@@ -46,6 +46,7 @@ export function PnlBarChart({
   const { t } = useTranslation();
   const resolvedLabelPlan = labelPlan ?? t("chart.pnl.plan", "Plan");
   const resolvedLabelRealized = labelRealized ?? t("chart.pnl.realized", "Réalisé");
+  const resolvedLabelRemaining = t("chart.pnl.remaining", "Reste à faire");
   // Référence stable tant que le contenu ne change pas : un tableau recréé à chaque rendu relançait
   // l'animation d'entrée des barres (Recharts 3 anime sur changement de référence de `data`).
   const chartData = useStableValue(
@@ -96,7 +97,30 @@ export function PnlBarChart({
           tickLine={false}
           width={yAxisWidth}
         />
-        <Tooltip formatter={(value) => `€${Number(value).toFixed(1)}M`} />
+        {/* Infobulle explicite : la barre grise est le RESTE À FAIRE (plan − réalisé), pas le plan
+            lui-même — l'ancienne infobulle l'affichait sous le libellé « Plan » (audit FIN-10). */}
+        <Tooltip
+          content={({ active, payload }) => {
+            const point = payload?.[0]?.payload as
+              (PnlBarPoint & { remaining: number }) | undefined;
+            if (!active || !point) return null;
+            const fmt = (v: number) => `€${v.toFixed(1)}M`;
+            return (
+              <div className="rounded-md border border-border bg-white px-3 py-2 text-xs shadow-sm">
+                <div className="mb-1 font-semibold text-primary">{point.account}</div>
+                <div>
+                  {resolvedLabelPlan} : {fmt(point.plan)}
+                </div>
+                <div>
+                  {resolvedLabelRealized} : {fmt(point.realized)}
+                </div>
+                <div className="text-tertiary">
+                  {resolvedLabelRemaining} : {fmt(point.remaining)}
+                </div>
+              </div>
+            );
+          }}
+        />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         <Bar
           dataKey="realized"
@@ -107,7 +131,7 @@ export function PnlBarChart({
         />
         <Bar
           dataKey="remaining"
-          name={resolvedLabelPlan}
+          name={resolvedLabelRemaining}
           stackId="a"
           fill="rgba(168,154,147,0.3)"
           radius={[0, 4, 4, 0]}

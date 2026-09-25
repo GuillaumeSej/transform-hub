@@ -5,7 +5,13 @@ import { ShieldCheck } from "lucide-react";
 import { displayMilestoneId } from "@/lib/axisLogic";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
-import { useApprovalQueue, useMilestoneApprovalQueue } from "@/lib/hooks/useApprovalQueue";
+import {
+  useApprovalQueue,
+  useMilestoneApprovalQueue,
+  useRealizedApprovalQueue,
+} from "@/lib/hooks/useApprovalQueue";
+import { decideImpactRealized } from "@/lib/impactStatus";
+import { fmtCurr } from "@/lib/engine";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
@@ -16,7 +22,7 @@ import { STATUS_SHORT_LABEL } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { StageBadge } from "@/components/shared/StageBadge";
-import type { AuthUser } from "@/types";
+import type { AuthUser, Lever } from "@/types";
 
 function formatTimestamp(ts: string): string {
   try {
@@ -43,9 +49,10 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
   const router = useRouter();
   const data = useBeTrackData(user?.companyId ?? null, user);
   const { queue } = useApprovalQueue(data, user);
+  const { queue: realizedQueue } = useRealizedApprovalQueue(data, user);
   const { showToast } = useToast();
 
-  if (queue.length === 0) {
+  if (queue.length === 0 && realizedQueue.length === 0) {
     return (
       <Card>
         <CardBody>
@@ -57,98 +64,203 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
     );
   }
 
+  /** Décision finance sur un impact coché « Réalisé » (même règle que l'onglet Impact de la fiche,
+   *  `decideImpactRealized`) : validé → compte dans le réalisé ; rejeté → repasse non réalisé. */
+  const decideRealized = (lever: Lever, impactId: string, decision: "approved" | "rejected") => {
+    const next = (lever.impacts ?? []).map((imp) =>
+      imp.id === impactId ? { ...imp, ...decideImpactRealized(imp, decision, user) } : imp
+    );
+    data.updateLever(lever.id, { impacts: next });
+    showToast(
+      decision === "approved"
+        ? t("validation.realized.approved", "Réalisé validé")
+        : t("validation.realized.rejected", "Réalisé rejeté"),
+      lever.name,
+      "success"
+    );
+  };
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-white">
-      <table className="w-full text-left text-xs">
-        <thead>
-          <tr className="border-b border-border bg-neutral-50 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-            <th className="px-4 py-2.5">{t("validation.lever", "Levier")}</th>
-            <th className="px-4 py-2.5">{t("validation.gate", "Étape")}</th>
-            <th className="px-4 py-2.5">{t("validation.workstream", "Chantier")}</th>
-            <th className="px-4 py-2.5">{t("validation.requestedBy", "Demandé par")}</th>
-            <th className="px-4 py-2.5">{t("validation.requestedAt", "Demandé le")}</th>
-            <th className="px-4 py-2.5" />
-          </tr>
-        </thead>
-        <tbody>
-          {queue.map((lever) => {
-            const ws = data.workstreams.find((w) => w.id === lever.ws);
-            const targetStatus = lever.approval?.targetStatus;
-            return (
-              <tr
-                key={lever.id}
-                className="cursor-pointer border-b border-border last:border-0 hover:bg-neutral-50"
-                onClick={() => router.push(`/levers/detail?id=${lever.id}`)}
-              >
-                <td className="px-4 py-3">
-                  <div className="font-mono text-[10px] text-tertiary">{lever.code}</div>
-                  <div className="font-semibold text-primary">{lever.name}</div>
-                </td>
-                <td className="px-4 py-3">
-                  {targetStatus && (
-                    <StageBadge status={targetStatus} label={STATUS_SHORT_LABEL[targetStatus]} />
-                  )}
-                </td>
-                <td className="px-4 py-3 text-secondary">{ws?.name ?? "—"}</td>
-                <td className="px-4 py-3 text-secondary">{lever.approval?.requestedBy ?? "—"}</td>
-                <td className="px-4 py-3 text-secondary">
-                  {lever.approval ? formatTimestamp(lever.approval.requestedAt) : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        try {
-                          data.approveLeverGate(lever.id);
-                          showToast(
-                            t("leverDetail.approval.approved", "Demande approuvée"),
-                            lever.name,
-                            "success"
-                          );
-                        } catch (err) {
-                          showToast(
-                            t("leverDetail.approval.error", "Action impossible"),
-                            err instanceof Error ? err.message : String(err),
-                            "error"
-                          );
-                        }
-                      }}
-                    >
-                      {t("leverDetail.approval.approve", "Approuver")}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        try {
-                          data.rejectLeverApproval(lever.id);
-                          showToast(
-                            t("leverDetail.approval.rejected", "Demande de validation rejetée"),
-                            lever.name,
-                            "success"
-                          );
-                        } catch (err) {
-                          showToast(
-                            t("leverDetail.approval.error", "Action impossible"),
-                            err instanceof Error ? err.message : String(err),
-                            "error"
-                          );
-                        }
-                      }}
-                    >
-                      {t("leverDetail.approval.reject", "Rejeter")}
-                    </Button>
-                  </div>
-                </td>
+    <div className="flex flex-col gap-6">
+      {realizedQueue.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold text-primary">
+            {t("validation.realized.title", "Réalisés à valider")} · {realizedQueue.length}
+          </h2>
+          <p className="text-xs text-secondary">
+            {t(
+              "validation.realized.intro",
+              "Gains ou coûts cochés « Réalisé » par les porteurs : ils ne comptent dans le réalisé qu'une fois validés."
+            )}
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-border bg-white">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border bg-neutral-50 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                  <th className="px-4 py-2.5">{t("validation.lever", "Levier")}</th>
+                  <th className="px-4 py-2.5">{t("validation.realized.impact", "Impact")}</th>
+                  <th className="px-4 py-2.5 text-right">
+                    {t("validation.realized.amount", "Montant")}
+                  </th>
+                  <th className="px-4 py-2.5">{t("validation.requestedBy", "Demandé par")}</th>
+                  <th className="px-4 py-2.5">{t("validation.requestedAt", "Demandé le")}</th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {realizedQueue.map(({ lever, impact }) => (
+                  <tr
+                    key={`${lever.id}-${impact.id}`}
+                    className="cursor-pointer border-b border-border last:border-0 hover:bg-neutral-50"
+                    onClick={() => router.push(`/levers/detail?id=${lever.id}`)}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-mono text-[10px] text-tertiary">{lever.code}</div>
+                      <div className="font-semibold text-primary">{lever.name}</div>
+                    </td>
+                    <td className="px-4 py-3 text-secondary">{impact.label}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-primary">
+                      {impact.type === "cost" ? "−" : ""}
+                      {fmtCurr(impact.amount)}
+                    </td>
+                    <td className="px-4 py-3 text-secondary">
+                      {impact.realizedApproval?.requestedBy ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-secondary">
+                      {impact.realizedApproval?.requestedAt
+                        ? formatTimestamp(impact.realizedApproval.requestedAt)
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            decideRealized(lever, impact.id, "approved");
+                          }}
+                        >
+                          {t("impactsEditor.approve", "Valider")}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            decideRealized(lever, impact.id, "rejected");
+                          }}
+                        >
+                          {t("impactsEditor.reject", "Rejeter")}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+      {queue.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-border bg-white">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-border bg-neutral-50 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                <th className="px-4 py-2.5">{t("validation.lever", "Levier")}</th>
+                <th className="px-4 py-2.5">{t("validation.gate", "Étape")}</th>
+                <th className="px-4 py-2.5">{t("validation.workstream", "Chantier")}</th>
+                <th className="px-4 py-2.5">{t("validation.requestedBy", "Demandé par")}</th>
+                <th className="px-4 py-2.5">{t("validation.requestedAt", "Demandé le")}</th>
+                <th className="px-4 py-2.5" />
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {queue.map((lever) => {
+                const ws = data.workstreams.find((w) => w.id === lever.ws);
+                const targetStatus = lever.approval?.targetStatus;
+                return (
+                  <tr
+                    key={lever.id}
+                    className="cursor-pointer border-b border-border last:border-0 hover:bg-neutral-50"
+                    onClick={() => router.push(`/levers/detail?id=${lever.id}`)}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-mono text-[10px] text-tertiary">{lever.code}</div>
+                      <div className="font-semibold text-primary">{lever.name}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {targetStatus && (
+                        <StageBadge
+                          status={targetStatus}
+                          label={STATUS_SHORT_LABEL[targetStatus]}
+                        />
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-secondary">{ws?.name ?? "—"}</td>
+                    <td className="px-4 py-3 text-secondary">
+                      {lever.approval?.requestedBy ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-secondary">
+                      {lever.approval ? formatTimestamp(lever.approval.requestedAt) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            try {
+                              data.approveLeverGate(lever.id);
+                              showToast(
+                                t("leverDetail.approval.approved", "Demande approuvée"),
+                                lever.name,
+                                "success"
+                              );
+                            } catch (err) {
+                              showToast(
+                                t("leverDetail.approval.error", "Action impossible"),
+                                err instanceof Error ? err.message : String(err),
+                                "error"
+                              );
+                            }
+                          }}
+                        >
+                          {t("leverDetail.approval.approve", "Approuver")}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            try {
+                              data.rejectLeverApproval(lever.id);
+                              showToast(
+                                t("leverDetail.approval.rejected", "Demande de validation rejetée"),
+                                lever.name,
+                                "success"
+                              );
+                            } catch (err) {
+                              showToast(
+                                t("leverDetail.approval.error", "Action impossible"),
+                                err instanceof Error ? err.message : String(err),
+                                "error"
+                              );
+                            }
+                          }}
+                        >
+                          {t("leverDetail.approval.reject", "Rejeter")}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
