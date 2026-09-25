@@ -217,7 +217,7 @@ const fr: Record<string, string> = {
   "dashboard.kpi.reforecast": "Réactualisé",
   "dashboard.kpi.plan": "Planifié initial",
   "dashboard.kpi.leversAtRiskTooltip":
-    "Le total compte chaque levier une seule fois (1 catégorie déclenchée = à risque, 2+ = critique). Les 3 catégories ci-dessous ne sont pas exclusives : un même levier peut être compté dans plusieurs à la fois (ex. en retard ET en surcoût), donc leur somme est normalement supérieure au total affiché.",
+    "Leviers dont le risque (badge de la bibliothèque) est Moyen ou plus — les mêmes que « À surveiller » et « Alertes critiques » dans la matrice Santé des initiatives. Le risque se calcule sur le montant et l'ancienneté des alertes rouges/orange ouvertes (une alerte résolue ne compte plus). Barre : orange = à surveiller (Moyen), rouge = critiques (Élevé ou Critique).",
   "dashboard.kpi.fteImpactedTooltip":
     'Somme des ETP estimés au niveau des leviers (planification), à ne pas confondre avec le suivi RH réel (voir Tableau de bord RH). "X / Y postes supprimés" ne compte que les départs forcés réalisés/planifiés suivis dans le module RH — un SOUS-ENSEMBLE de cet impact ETP global, pas une décomposition complète.',
   "dashboard.widgets.portfolioFunnel": "Avancement des leviers",

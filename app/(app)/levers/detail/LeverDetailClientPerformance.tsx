@@ -574,6 +574,7 @@ export function LeverDetailClientPerformance() {
           // "Modifier le levier" ci-dessus), choix assumé et documenté ici plutôt qu'inventer un
           // rôle qui n'existe pas.
           canEditWorkstreamWeight={!readOnly}
+          computedRisk={leverRiskAssessment.level}
           submitLabel={t("leverDetail.saveChanges", "Enregistrer les modifications")}
           onCancel={() => setEditOpen(false)}
           onSubmit={(values: LeverFormValues) => {

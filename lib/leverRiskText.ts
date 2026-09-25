@@ -16,6 +16,22 @@ function fill(template: string, vars: Record<string, string | number>): string {
   return Object.entries(vars).reduce((s, [k, v]) => s.split(`{${k}}`).join(String(v)), template);
 }
 
+/** Libellé d'un niveau de risque dans la langue active, avec majuscule (« Critique ») — badge,
+ *  filtre « Risque » de la bibliothèque, recherche et dimension « Risque » du tableau croisé
+ *  (les mêmes valeurs, pour que le clic du dashboard retombe sur le filtre). */
+export function riskLevelLabel(t: Translate, level: RiskLevel): string {
+  const label = t(`risk.level.${level}`, LEVEL_FALLBACK[level]);
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/** Rang de sévérité (tri « Risque décroissant » : critique > élevé > moyen > faible). */
+export const RISK_SORT_RANK: Record<RiskLevel, number> = {
+  critical: 3,
+  high: 2,
+  medium: 1,
+  low: 0,
+};
+
 /** Motif du niveau de risque d'un levier (`engine.computeLeverRisk`) dans la langue active, montants
  *  au format compact de la devise du programme. */
 export function leverRiskReasonText(t: Translate, assessment: LeverRiskAssessment): string {

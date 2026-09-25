@@ -136,6 +136,9 @@ export interface PivotContext {
   hierarchyNodes?: HierarchyNode[];
   hierarchyLevels?: HierarchyLevelDef[];
   statusLabel?: (status: LeverStatus) => string;
+  /** Libellé du risque CALCULÉ d'un levier (alertes ouvertes, `engine.computeLeverRisk`) — le
+   *  champ stocké `Lever.risk` est figé à l'import et n'est plus lu (audit C6). */
+  riskLabel?: (lever: Lever) => string;
 }
 
 export interface DimensionDef {
@@ -187,7 +190,11 @@ export const DIMENSION_REGISTRY: DimensionDef[] = [
     fallbackLabel: GEOGRAPHY_FALLBACK_LABEL,
   },
   { key: "function", label: "Fonction", getValue: (l) => l.function || FALLBACK_LABEL },
-  { key: "risk", label: "Risque", getValue: (l) => l.risk || FALLBACK_LABEL },
+  {
+    key: "risk",
+    label: "Risque",
+    getValue: (l, ctx) => (ctx.riskLabel ? ctx.riskLabel(l) : FALLBACK_LABEL),
+  },
   {
     key: "status",
     label: "Statut",

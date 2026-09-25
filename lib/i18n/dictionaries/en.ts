@@ -189,7 +189,7 @@ const en: Record<string, string> = {
   "dashboard.kpi.reforecast": "Reforecast",
   "dashboard.kpi.plan": "Plan",
   "dashboard.kpi.leversAtRiskTooltip":
-    "The total counts each initiative only once (1 triggered category = at risk, 2+ = critical). The 3 categories below are not mutually exclusive: the same initiative can be counted in several at once (e.g. late AND over cost), so their sum is normally higher than the displayed total.",
+    'Initiatives whose risk (library badge) is Medium or above — the same as "To watch" and "Critical alerts" in the Initiative health matrix. Risk is computed from the amount and age of open red/amber alerts (a resolved alert no longer counts). Bar: orange = to watch (Medium), red = critical (High or Critical).',
   "dashboard.kpi.fteImpactedTooltip":
     'Sum of the FTEs estimated at initiative level (planning), not to be confused with actual HR tracking (see HR Dashboard). "X / Y positions eliminated" only counts the completed/planned forced departures tracked in the HR module — a SUBSET of this overall FTE impact, not a complete breakdown.',
   "dashboard.widgets.portfolioFunnel": "Initiative Progress",

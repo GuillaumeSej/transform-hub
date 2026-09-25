@@ -7,7 +7,6 @@ import {
   leverProgressPct,
   workstreamProgressPct,
   realizedFte,
-  worstRisk,
   stageCounts,
   sankeyData,
   sankeyChronology,
@@ -340,21 +339,6 @@ describe("engine — realizedFte", () => {
       ],
     };
     expect(realizedFte(lever)).toBe(-6);
-  });
-});
-
-describe("engine — worstRisk", () => {
-  it("returns low for empty array", () => {
-    expect(worstRisk([])).toBe("low");
-  });
-
-  it("returns the worst risk from a list", () => {
-    const levers = [
-      { ...baseLever, risk: "low" as const },
-      { ...baseLever, id: "L002", risk: "critical" as const },
-      { ...baseLever, id: "L003", risk: "medium" as const },
-    ];
-    expect(worstRisk(levers)).toBe("critical");
   });
 });
 
@@ -1045,35 +1029,6 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
       ],
     });
     expect(programSummary(data).engagedCosts).toBe(3);
-  });
-
-  it("riskCostOverrun and riskSavingsCut compare reforecast vs lockedPlan", () => {
-    const plan = { grossSavings: 10, netSavings: 8, opexOneOff: 1, opexRec: 0.5, capex: 2 };
-    const data = makeData({
-      levers: [
-        // Surcoût : reforecast coûts (5) > plan (3)
-        {
-          ...baseLever,
-          id: "L001",
-          lockedPlan: plan,
-          reforecast: { ...plan, capex: 4 },
-        },
-        // Savings réduits : reforecast net (6) < plan (8)
-        {
-          ...baseLever,
-          id: "L002",
-          lockedPlan: plan,
-          reforecast: { ...plan, netSavings: 6 },
-        },
-        // Ni l'un ni l'autre
-        { ...baseLever, id: "L003", lockedPlan: plan, reforecast: { ...plan } },
-        // Sans reforecast → jamais compté
-        { ...baseLever, id: "L004", lockedPlan: plan },
-      ],
-    });
-    const s = programSummary(data);
-    expect(s.riskCostOverrun).toBe(1);
-    expect(s.riskSavingsCut).toBe(1);
   });
 
   it("suppressions aggregate FTE of 'Départ forcé' movements, realized = status Réalisé", () => {

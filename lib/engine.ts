@@ -402,11 +402,6 @@ export function realizedFte(lever: Lever): number {
   return Math.round(doneActionImpactsTotal(lever, "fte") * 10) / 10;
 }
 
-export function worstRisk(levers: Lever[]): RiskLevel {
-  const order: Record<RiskLevel, number> = { critical: 4, high: 3, medium: 2, low: 1 };
-  return levers.reduce<RiskLevel>((w, l) => (order[l.risk] > order[w] ? l.risk : w), "low");
-}
-
 /** Coûts d'implémentation d'un levier (CAPEX + OPEX one-off), hors OPEX récurrent. */
 function implementationCosts(snapshot: { capex: number; opexOneOff: number }): number {
   return snapshot.capex + snapshot.opexOneOff;
@@ -494,46 +489,8 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     0
   );
 
-  // Catégories de risque dérivées EN DIRECT des mêmes signaux que le système d'alertes
-  // (`underperformers`/écart CAPEX/écart savings), plutôt que du champ déclaratif `Lever.risk` —
-  // ce dernier n'est jamais recalculé/persisté ailleurs dans l'app (reste figé à sa valeur d'import),
-  // alors que le reste de l'UI (liste des leviers, fiche détail) recalcule le risque à la volée via
-  // `computeLeverRisk`/`generateAlerts`. `atRisk`/`critical`/`onTrack` sont donc désormais dérivés du
-  // NOMBRE de catégories de risque déclenchées par chaque levier (0 = onTrack, 1 = atRisk, 2+ =
-  // critical), pour rester cohérents avec le détail affiché sous la carte KPI plutôt que de montrer
-  // un total déconnecté. `riskDelay` utilise `underperformers` (retard du plan d'action — le SEUL
-  // mécanisme de détection de retard utilisé par les alertes), pas l'ancienne heuristique
-  // progression attendue/`lever.progress` brut, abandonnée partout ailleurs.
-  const lateLeverIds = new Set(underperformers(data).map((l) => l.id));
-  const costOverrunLeverIds = new Set(
-    active
-      .filter(
-        (l) =>
-          reforecastSnapshotOf(l) &&
-          l.lockedPlan &&
-          implementationCosts(reforecastSnapshotOf(l)!) > implementationCosts(l.lockedPlan)
-      )
-      .map((l) => l.id)
-  );
-  const savingsCutLeverIds = new Set(
-    active
-      .filter(
-        (l) =>
-          l.lockedPlan && l.reforecast && displayedReforecastNet(l).value < l.lockedPlan.netSavings
-      )
-      .map((l) => l.id)
-  );
-  const riskDelay = active.filter((l) => lateLeverIds.has(l.id)).length;
-  const riskCostOverrun = costOverrunLeverIds.size;
-  const riskSavingsCut = savingsCutLeverIds.size;
-  const riskCategoryCount = new Map<string, number>();
-  const bumpRisk = (id: string) => riskCategoryCount.set(id, (riskCategoryCount.get(id) ?? 0) + 1);
-  lateLeverIds.forEach(bumpRisk);
-  costOverrunLeverIds.forEach(bumpRisk);
-  savingsCutLeverIds.forEach(bumpRisk);
-  const atRisk = active.filter((l) => riskCategoryCount.get(l.id) === 1).length;
-  const critical = active.filter((l) => (riskCategoryCount.get(l.id) ?? 0) >= 2).length;
-  const onTrack = active.filter((l) => !riskCategoryCount.has(l.id)).length;
+  // Leviers « à risque » : PAS ici — ils dépendent des alertes ouvertes (résolutions comprises),
+  // voir `leverHealthCounts` (lib/leverHealth.ts, décision audit C6 : une seule source, les alertes).
 
   // Suppressions de postes (mouvements RH type "Départ forcé" — départs contraints /
   // licenciements, distincts de l'attrition volontaire), en ETP. Scopés aux mouvements ACTIFS
@@ -563,17 +520,11 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     // Somme de flottants (0,1 + 0,2 = 0,30000000000000004) : arrondi au dixième d'ETP.
     fteImpact: Math.round(fteImpact * 10) / 10,
     leverCount: active.length,
-    onTrack,
-    atRisk,
-    critical,
     delivered: data.levers.filter((l) => l.status === "delivered").length,
     reforecastTarget: Math.round(reforecastTarget * 10) / 10,
     plannedCosts: Math.round(plannedCosts * 10) / 10,
     engagedCosts: Math.round(engagedCosts * 10) / 10,
     reforecastCosts: Math.round(reforecastCosts * 10) / 10,
-    riskDelay,
-    riskCostOverrun,
-    riskSavingsCut,
     suppressionsPlanned: Math.round(suppressionsPlanned * 10) / 10,
     suppressionsRealized: Math.round(suppressionsRealized * 10) / 10,
   };
@@ -599,7 +550,6 @@ export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSu
     opex: Math.round(opex * 10) / 10,
     leverCount: levers.length,
     avgProgress: workstreamProgressPct(levers, wsId) ?? 0,
-    worstRisk: levers.length ? worstRisk(levers) : "low",
   };
 }
 
@@ -921,8 +871,8 @@ function fmtRiskAmount(amount: number): string {
   return formatCompactCurrency(amount, { locale: "fr", maximumFractionDigits: 0 });
 }
 
-/** Risque d'un levier dérivé des alertes qui lui sont liées (Alert.scope === leverId, non
- * résolues), segmenté par cumul de montant à risque (valeur absolue de Alert.impactEur) selon les
+/** Risque d'un levier dérivé des alertes de risque qui lui sont liées (Alert.scope === leverId,
+ * rouges/orange, non résolues), segmenté par cumul de montant à risque (valeur absolue de Alert.impactEur) selon les
  * seuils de l'entreprise (ou les seuils par défaut). Un levier sans alerte chiffrée est "low".
  * Remplace la saisie manuelle de Lever.risk : c'est la nouvelle source de vérité, "vivante" — elle
  * évolue avec les alertes plutôt que d'être figée à la main.
@@ -945,7 +895,11 @@ export function computeLeverRisk(
   }[] = DEFAULT_RISK_THRESHOLDS,
   today: Date = new Date()
 ): LeverRiskAssessment {
-  const scoped = alerts.filter((a) => a.scope === leverId && !a.resolved);
+  // Seules les alertes de RISQUE (rouge / orange) comptent : une alerte verte (bonne nouvelle) ou
+  // bleue (information) ne fait pas monter le risque — même règle que la matrice Santé (audit C6).
+  const scoped = alerts.filter(
+    (a) => a.scope === leverId && !a.resolved && (a.type === "red" || a.type === "amber")
+  );
   const total = scoped
     .filter((a) => typeof a.impactEur === "number")
     .reduce((s, a) => s + Math.abs(a.impactEur ?? 0), 0);

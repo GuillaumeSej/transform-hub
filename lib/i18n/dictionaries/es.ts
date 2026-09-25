@@ -187,7 +187,7 @@ const es: Record<string, string> = {
   "dashboard.kpi.reforecast": "Reprevisión",
   "dashboard.kpi.plan": "Plan",
   "dashboard.kpi.leversAtRiskTooltip":
-    "El total cuenta cada palanca una sola vez (1 categoría activada = en riesgo, 2+ = crítica). Las 3 categorías siguientes no son excluyentes: una misma palanca puede contarse en varias a la vez (p. ej. con retraso Y con sobrecoste), por lo que su suma suele ser superior al total mostrado.",
+    "Palancas cuyo riesgo (distintivo de la biblioteca) es Medio o superior — las mismas que «En vigilancia» y «Alertas críticas» en la matriz de salud. El riesgo se calcula a partir del importe y la antigüedad de las alertas rojas/naranjas abiertas (una alerta resuelta ya no cuenta). Barra: naranja = vigilancia (Medio), rojo = críticas (Alto o Crítico).",
   "dashboard.kpi.fteImpactedTooltip":
     "Suma de los ETC estimados a nivel de palancas (planificación), no confundir con el seguimiento real de RRHH (ver Panel de RRHH). «X / Y puestos suprimidos» solo cuenta las salidas forzadas realizadas/planificadas registradas en el módulo de RRHH: un SUBCONJUNTO de este impacto global en ETC, no un desglose completo.",
   "dashboard.widgets.portfolioFunnel": "Avance de palancas",

@@ -24,6 +24,8 @@ export const LEVER_SEARCH_FIELDS = [
   "entity",
   /** Nom du programme (colonne affichée en vue multi-programmes uniquement). */
   "programName",
+  /** Niveau de risque traduit, tel qu'affiché par le badge (« Critique »). */
+  "riskLabel",
 ] as const;
 
 export type LeverSearchField = (typeof LEVER_SEARCH_FIELDS)[number];

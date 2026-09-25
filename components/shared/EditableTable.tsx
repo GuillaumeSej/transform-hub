@@ -20,6 +20,9 @@ export type ColumnDef<T> = {
   /** `false` = pas de filtre multi-sélection auto dans la barre du tableau pour cette colonne. */
   filterable?: boolean;
   sortable?: boolean;
+  /** Valeur de tri, quand l'ordre alphabétique du champ ne convient pas (sévérité d'un risque,
+   *  ordre des stades…). Défaut : `row[key]`. */
+  sortValue?: (row: T) => number | string;
   align?: "left" | "right" | "center";
   render?: (row: T) => React.ReactNode;
   width?: string;
@@ -122,9 +125,11 @@ export function EditableTable<T extends { id: string }>({
       rows = rows.filter((row) => matchesFilter(String(row[key as keyof T]), value));
     });
     if (sort) {
+      const sortCol = columns.find((c) => c.key === sort.key);
+      const valueOf = (row: T) => (sortCol?.sortValue ? sortCol.sortValue(row) : row[sort.key]);
       rows = [...rows].sort((a, b) => {
-        const av = a[sort.key];
-        const bv = b[sort.key];
+        const av = valueOf(a);
+        const bv = valueOf(b);
         const cmp =
           typeof av === "number" && typeof bv === "number"
             ? av - bv

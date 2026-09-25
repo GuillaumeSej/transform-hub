@@ -1518,9 +1518,6 @@ export type ProgramSummary = {
   opex: number;
   fteImpact: number;
   leverCount: number;
-  onTrack: number;
-  atRisk: number;
-  critical: number;
   delivered: number;
   /** Cible réactualisée : Σ reforecast.netSavings ?? lockedPlan.netSavings ?? netSavings —
    *  même logique de repli que la courbe "Réactualisé" de la S-curve (sCurve3). */
@@ -1528,18 +1525,10 @@ export type ProgramSummary = {
   /** Coûts d'implémentation plan initial : Σ lockedPlan.(capex + opexOneOff), repli sur les
    *  valeurs courantes tant que le plan n'est pas figé (avant L3). OPEX récurrent exclu. */
   plannedCosts: number;
-  /** Coûts engagés à date : Σ (capex + opexOneOff) × progress% — ASSUMPTION : engagement
-   *  proportionnel à l'avancement, cohérent avec realizedSavings(). */
+  /** Coûts engagés à date : lignes de coût Invest engagées (`engine.leverEngagedInvestCost`). */
   engagedCosts: number;
   /** Coûts réactualisés : Σ reforecast.(capex + opexOneOff) ?? plan. */
   reforecastCosts: number;
-  /** Nb de leviers en retard planning (progression réelle < attendue de plus de 10 pts,
-   *  même seuil que underperformers()). */
-  riskDelay: number;
-  /** Nb de leviers dont les coûts réactualisés dépassent le plan initial. */
-  riskCostOverrun: number;
-  /** Nb de leviers dont les savings réactualisés sont inférieurs au plan initial. */
-  riskSavingsCut: number;
   /** Suppressions de postes prévues (Σ ETP des mouvements RH type "Départ forcé"). */
   suppressionsPlanned: number;
   /** Suppressions de postes réalisées (statut "Réalisé"). */
@@ -1560,5 +1549,4 @@ export type WorkstreamSummary = {
   opex: number;
   leverCount: number;
   avgProgress: number;
-  worstRisk: RiskLevel;
 };

@@ -5,12 +5,14 @@ import { Button } from "@/components/shared/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { STATUS_LABEL } from "@/lib/status-config";
 import type { LifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
+import { riskLevelLabel } from "@/lib/leverRiskText";
 import {
   subscribeCompanies,
   subscribeHierarchyNodes,
   subscribePrograms,
 } from "@/lib/firestore/admin";
 import type {
+  RiskLevel,
   BeTrackData,
   HierarchyLevelDef,
   Company,
@@ -130,6 +132,7 @@ export function LeverForm({
   onCancel,
   submitLabel,
   canEditWorkstreamWeight = false,
+  computedRisk,
 }: {
   data: BeTrackData;
   /** Résolution des libellés de statut selon le référentiel de l'entreprise (facultatif, retombe
@@ -155,6 +158,10 @@ export function LeverForm({
    *  explicitement, y compris à la création (où le pilote du workstream n'a pas encore de raison
    *  d'intervenir — le champ se règle ensuite depuis la fiche détail). */
   canEditWorkstreamWeight?: boolean;
+  /** Risque CALCULÉ du levier (alertes ouvertes, `engine.computeLeverRisk`), affiché en lecture
+   *  seule — le champ stocké `Lever.risk`, figé à l'import, n'est plus montré (audit LEV-13).
+   *  Absent (création) : le champ n'est pas affiché. */
+  computedRisk?: RiskLevel;
 }) {
   const { t } = useTranslation();
   const [submitting, setSubmitting] = useState(false);
@@ -759,9 +766,13 @@ export function LeverForm({
             ))}
           </select>
         </Field>
-        <Field label={t("leverForm.risk")}>
-          <div className={`${inputClass} bg-neutral-100 text-tertiary`}>{values.risk}</div>
-        </Field>
+        {computedRisk && (
+          <Field label={t("leverForm.risk")}>
+            <div className={`${inputClass} bg-neutral-100 text-tertiary`}>
+              {riskLevelLabel(t, computedRisk)}
+            </div>
+          </Field>
+        )}
       </div>
 
       <SectionTitle>{t("leverForm.sectionImpact", "Impact")}</SectionTitle>

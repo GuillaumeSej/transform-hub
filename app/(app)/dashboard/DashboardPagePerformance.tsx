@@ -57,7 +57,13 @@ import { DEPENDENCY_TYPE_META } from "@/lib/status-config";
 import { dependencyMilestoneLabel } from "@/lib/dependencyLabels";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { paginateDashboardItems } from "@/lib/dashboardPagination";
-import { groupLeversByHealthDimension, type LeverHealthDimension } from "@/lib/leverHealth";
+import {
+  groupLeversByHealthDimension,
+  leverHealthCounts,
+  type LeverHealthDimension,
+} from "@/lib/leverHealth";
+import { generateAlerts } from "@/lib/alertEngine";
+import { riskLevelLabel } from "@/lib/leverRiskText";
 import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/shared/Avatar";
 import { SCurveChart, type SCurvePoint } from "@/components/shared/charts/SCurveChart";
@@ -510,6 +516,21 @@ export function DashboardPagePerformance() {
         return true;
       }),
     [allAlerts, scopedLeverIds, scopedWorkstreamIds, data]
+  );
+
+  // Risque des leviers (KPI « Leviers à risque » + matrice « Santé des initiatives ») : alertes
+  // ouvertes NON ciblées — même source que le badge Risque de la bibliothèque et de la fiche
+  // (décision audit C6) ; `allAlerts` est filtré sur les destinataires de l'utilisateur courant.
+  const riskAlerts = useMemo(() => generateAlerts(data), [data]);
+  const healthCounts = useMemo(
+    () => leverHealthCounts(filteredLevers, riskAlerts, company?.riskThresholds),
+    [filteredLevers, riskAlerts, company?.riskThresholds]
+  );
+
+  const riskLabelOf = useCallback(
+    (l: Lever) =>
+      riskLevelLabel(t, engine.computeLeverRisk(l.id, riskAlerts, company?.riskThresholds).level),
+    [t, riskAlerts, company?.riskThresholds]
   );
 
   const healthLabels = {
@@ -1051,7 +1072,15 @@ export function DashboardPagePerformance() {
         // dépendances, AUTO-DEP-*, sont déjà générées par `generateAlerts` et donc déjà comprises
         // dans `filteredAlerts` — ne pas les rajouter une 2e fois via `depAlerts`, sous peine de
         // double comptage). `depAlerts` reste utilisé séparément pour sa propre section ci-dessous.
-        const totalAtRisk = filteredAlerts.length;
+        // Badge « N leviers en alerte » : nombre de LEVIERS distincts ayant une alerte de risque
+        // (rouge/orange) dans la liste (audit DASH-08) — pas le nombre d'alertes (plusieurs par
+        // levier, alertes de chantier), ni les alertes vertes/bleues (information) : en vue « À
+        // traiter », même chiffre que le KPI « Leviers à risque ».
+        const totalAtRisk = new Set(
+          filteredAlerts
+            .filter((a) => (a.type === "red" || a.type === "amber") && data.getLeverById(a.scope))
+            .map((a) => a.scope)
+        ).size;
         const criticalCount = alertCounts.red + depAlerts.filter((a) => a.delayDays > 30).length;
         const depSeverity = (days: number) => {
           if (days > 30) return { label: t("dep.blocking"), cls: "bg-rag-red-light text-rag-red" };
@@ -1497,6 +1526,7 @@ export function DashboardPagePerformance() {
                 programs,
                 hierarchyLevels,
                 hierarchyNodes,
+                riskLabel: riskLabelOf,
               }) as engine.Marimekko2DColumn[])
           : [];
         return renderWidgetShell(
@@ -1565,6 +1595,7 @@ export function DashboardPagePerformance() {
                     programs,
                     hierarchyLevels,
                     hierarchyNodes,
+                    riskLabel: riskLabelOf,
                   }) as engine.Marimekko2DColumn[]
                 ).map((col) => ({ label: col.label, realized: col.totalSavings, target: 0 }))
               : (
@@ -1572,6 +1603,7 @@ export function DashboardPagePerformance() {
                     programs,
                     hierarchyLevels,
                     hierarchyNodes,
+                    riskLabel: riskLabelOf,
                   }) as PivotRow[]
                 ).map((row) => ({ label: row.label, realized: row.value, target: 0 }))
           : [];
@@ -1652,6 +1684,7 @@ export function DashboardPagePerformance() {
                   programs,
                   hierarchyLevels,
                   hierarchyNodes,
+                  riskLabel: riskLabelOf,
                 }) as PivotRow[]
               ).map((row) => ({ name: row.label, value: row.value }))
           : [];
@@ -1842,7 +1875,7 @@ export function DashboardPagePerformance() {
         const groups = groupLeversByHealthDimension(
           filteredData.levers,
           dimension,
-          scopedAlerts,
+          riskAlerts,
           data.workstreams,
           company?.riskThresholds
         );
@@ -1996,23 +2029,24 @@ export function DashboardPagePerformance() {
           }
           onClick={() => goToLevers({ f_status: lifecycle.label("delivered") })}
         />
-        {/* 4. Leviers à risque — barre segmentée par catégorie (délais / surcoûts / savings) */}
+        {/* 4. Leviers à risque — même source que la matrice « Santé des initiatives » (alertes
+            ouvertes, audit C6) : à surveiller (orange) + critiques (rouge). */}
         <KPICard
           label={t("dashboard.kpi.leversAtRisk")}
-          value={String(summary.atRisk + summary.critical)}
+          value={String(healthCounts.watch + healthCounts.critical)}
           icon={TriangleAlert}
           accent="amber"
           infoTooltip={t(
             "dashboard.kpi.leversAtRiskTooltip",
-            "Le total compte chaque levier une seule fois (1 catégorie déclenchée = à risque, 2+ = critique). Les 3 catégories ci-dessous ne sont pas exclusives : un même levier peut être compté dans plusieurs à la fois (ex. en retard ET en surcoût), donc leur somme est normalement supérieure au total affiché."
+            "Leviers « À surveiller » ou « Alertes critiques » dans la matrice Santé des initiatives : calculé à partir des alertes ouvertes de chaque levier (une alerte résolue ne compte plus). Barre : orange = à surveiller, rouge = critiques."
           )}
+          sub={`${healthCounts.critical} ${t("dashboard.widgets.healthCritical").toLowerCase()} · ${healthCounts.watch} ${t("dashboard.widgets.healthWatch").toLowerCase()}`}
           barSegments={(() => {
-            const totalRisk = summary.riskDelay + summary.riskCostOverrun + summary.riskSavingsCut;
-            if (totalRisk === 0) return [];
+            const total = healthCounts.onTrack + healthCounts.watch + healthCounts.critical;
+            if (total === 0) return [];
             return [
-              { pct: (summary.riskDelay / totalRisk) * 100, className: "bg-rag-amber" },
-              { pct: (summary.riskCostOverrun / totalRisk) * 100, className: "bg-rag-red" },
-              { pct: (summary.riskSavingsCut / totalRisk) * 100, className: "bg-bp-warm-brown" },
+              { pct: (healthCounts.watch / total) * 100, className: "bg-rag-amber" },
+              { pct: (healthCounts.critical / total) * 100, className: "bg-rag-red" },
             ];
           })()}
           onClick={() => goToLevers({})}

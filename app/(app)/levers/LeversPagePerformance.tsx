@@ -43,7 +43,7 @@ import { matchesFilter } from "@/lib/filterUtils";
 import { matchesLeverSearch } from "@/lib/leverSearch";
 import { leversPageTitleKey } from "@/lib/nav-config";
 import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
-import { leverRiskReasonText } from "@/lib/leverRiskText";
+import { leverRiskReasonText, RISK_SORT_RANK, riskLevelLabel } from "@/lib/leverRiskText";
 
 type LeverRow = Lever & {
   realized: number;
@@ -62,6 +62,8 @@ type LeverRow = Lever & {
   /** Motif du niveau de risque (`engine.computeLeverRisk(...).reason`) — affiché en tooltip sur
    *  le badge de la colonne "Risque", `risk` (hérité de `Lever`) restant le niveau seul. */
   riskReason: string;
+  /** Niveau de risque traduit (recherche plein texte). */
+  riskLabel: string;
 };
 
 export function LeversPagePerformance() {
@@ -443,7 +445,8 @@ export function LeversPagePerformance() {
         label: t("leverForm.risk", "Risque"),
         // Recalculé depuis les alertes (voir engine.computeLeverRisk), pas la valeur stockée —
         // les options proposées doivent refléter le risque réellement affiché.
-        getValue: (l) => engine.computeLeverRisk(l.id, alerts, riskThresholds).level,
+        getValue: (l) =>
+          riskLevelLabel(t, engine.computeLeverRisk(l.id, alerts, riskThresholds).level),
       },
       // Maturité : PAS de colonne-filtre en vue Table (retiré) ; conservé pour Kanban/Arborescence
       // et pour la compatibilité des liens du dashboard (`f_status`, voir plus bas).
@@ -549,6 +552,7 @@ export function LeversPagePerformance() {
       ...l,
       risk: riskAssessment.level,
       riskReason: leverRiskReasonText(t, riskAssessment),
+      riskLabel: riskLevelLabel(t, riskAssessment.level),
       realized: engine.realizedSavings(l),
       reforecastNet: engine.displayedReforecastNet(l).value,
       progressPct: engine.leverProgressPct(l),
@@ -703,6 +707,8 @@ export function LeversPagePerformance() {
       key: "statusLabel",
       label: t("levers.columnMaturity"),
       filterable: false, // filtre Maturité retiré en vue Table
+      // Tri dans l'ordre du cycle de vie, pas alphabétique (audit LEV-11).
+      sortValue: (r) => data.leverStatuses.indexOf(r.status),
       type: "select",
       options: data.leverStatuses.map((s) => lifecycle.label(s)),
       mobile: "secondary",
@@ -714,6 +720,8 @@ export function LeversPagePerformance() {
       // affichage lecture seule, plus d'édition manuelle possible.
       key: "risk",
       label: t("leverForm.risk", "Risque"),
+      // Tri par sévérité (critique > élevé > moyen > faible), pas alphabétique (audit LEV-11).
+      sortValue: (r) => RISK_SORT_RANK[r.risk],
       mobile: "secondary",
       width: "110px",
       render: (r) => <StatusBadge risk={r.risk} reason={r.riskReason} />,

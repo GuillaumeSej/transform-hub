@@ -21,6 +21,7 @@ import {
   filterProgramScopedLevers,
 } from "@/lib/leversLogic";
 import { generateAlerts } from "@/lib/alertEngine";
+import { leverHealthCounts } from "@/lib/leverHealth";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 type Row = Lever & {
@@ -90,6 +91,9 @@ export default function WorkstreamsPage() {
   // Risque RECALCULÉ depuis les alertes (`engine.computeLeverRisk`, même source que la bibliothèque
   // des leviers et la fiche levier) — pas le champ stocké `Lever.risk`, figé à l'import.
   const alerts = useMemo(() => generateAlerts(data), [data]);
+  // Compteurs de santé : même source et mêmes libellés que la matrice « Santé des initiatives »
+  // du dashboard (alertes ouvertes, audit C6).
+  const healthCounts = leverHealthCounts(visibleLevers, alerts, company?.riskThresholds);
 
   const rows: Row[] = visibleLevers.map((l) => {
     const cancelled = l.status === "cancelled";
@@ -216,18 +220,18 @@ export default function WorkstreamsPage() {
           sub={`${reforecastPct}% ${t("workstreams.vsReforecast", "de la cible réactualisée")}`}
         />
         <Kpi
-          label={t("workstreams.kpi.onTrack", "Dans les temps")}
-          value={String(summary.onTrack)}
+          label={t("dashboard.widgets.healthOnTrack", "Dans les temps")}
+          value={String(healthCounts.onTrack)}
           tone="green"
         />
         <Kpi
-          label={t("workstreams.kpi.atRisk", "À risque")}
-          value={String(summary.atRisk)}
+          label={t("dashboard.widgets.healthWatch", "À surveiller")}
+          value={String(healthCounts.watch)}
           tone="amber"
         />
         <Kpi
-          label={t("workstreams.kpi.critical", "Critique")}
-          value={String(summary.critical)}
+          label={t("dashboard.widgets.healthCritical", "Alertes critiques")}
+          value={String(healthCounts.critical)}
           tone="red"
         />
       </div>

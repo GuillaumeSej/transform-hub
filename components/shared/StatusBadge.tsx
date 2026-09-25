@@ -1,5 +1,7 @@
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import { riskLevelLabel } from "@/lib/leverRiskText";
 import type { RiskLevel } from "@/types";
 
 const STYLES: Record<RiskLevel, string> = {
@@ -27,11 +29,12 @@ export function StatusBadge({
   reason?: string;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const badge = (
     <span
       title={reason}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize",
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
         STYLES[risk],
         className
       )}
@@ -43,7 +46,7 @@ export function StatusBadge({
           "bg-bp-deep-red": risk === "critical",
         })}
       />
-      {risk}
+      {riskLevelLabel(t, risk)}
     </span>
   );
 

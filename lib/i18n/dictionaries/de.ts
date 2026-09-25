@@ -186,7 +186,7 @@ const de: Record<string, string> = {
   "dashboard.kpi.reforecast": "Neuprognose",
   "dashboard.kpi.plan": "Plan",
   "dashboard.kpi.leversAtRiskTooltip":
-    "Die Summe zählt jeden Hebel nur einmal (1 ausgelöste Kategorie = gefährdet, 2+ = kritisch). Die 3 Kategorien unten schließen sich nicht gegenseitig aus: Ein Hebel kann in mehreren gleichzeitig gezählt werden (z. B. verspätet UND Mehrkosten), daher ist ihre Summe normalerweise höher als die angezeigte Gesamtzahl.",
+    "Hebel mit Risiko (Badge der Bibliothek) Mittel oder höher — dieselben wie „Beobachten“ und „Kritische Warnungen“ in der Gesundheitsmatrix. Das Risiko ergibt sich aus Betrag und Alter der offenen roten/orangen Warnungen (eine gelöste Warnung zählt nicht mehr). Balken: orange = beobachten (Mittel), rot = kritisch (Hoch oder Kritisch).",
   "dashboard.kpi.fteImpactedTooltip":
     "Summe der auf Hebelebene geschätzten VZÄ (Planung), nicht zu verwechseln mit der tatsächlichen HR-Verfolgung (siehe HR-Dashboard). „X / Y abgebaute Stellen“ zählt nur die im HR-Modul verfolgten realisierten/geplanten Zwangsaustritte — eine TEILMENGE dieser gesamten VZÄ-Auswirkung, keine vollständige Aufschlüsselung.",
   "dashboard.widgets.portfolioFunnel": "Hebel-Fortschritt",

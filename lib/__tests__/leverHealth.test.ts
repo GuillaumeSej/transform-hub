@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeLeverHealth, groupLeversByHealthDimension } from "@/lib/leverHealth";
+import {
+  computeLeverHealth,
+  leverHealthCounts,
+  groupLeversByHealthDimension,
+} from "@/lib/leverHealth";
 import type { Alert, Lever, Workstream } from "@/types";
 
 function lever(overrides: Partial<Lever> = {}): Lever {
@@ -65,13 +69,23 @@ describe("leverHealth", () => {
     ).toBe("cancelled");
   });
 
-  it("uses active red and amber alerts", () => {
-    expect(computeLeverHealth(lever(), [alert({ type: "red", impactEur: 0 })]).health).toBe(
-      "critical"
-    );
-    expect(computeLeverHealth(lever(), [alert({ type: "amber", impactEur: 0 })]).health).toBe(
-      "watch"
-    );
+  it("derives health from the risk badge level, not the colour of a single alert (audit C6)", () => {
+    const thresholds = [
+      { level: "critical" as const, minAmount: 100_000 },
+      { level: "medium" as const, minAmount: 10_000 },
+      { level: "low" as const, minAmount: 0 },
+    ];
+    expect(
+      computeLeverHealth(lever(), [alert({ type: "amber", impactEur: -200_000 })], thresholds)
+        .health
+    ).toBe("critical");
+    expect(
+      computeLeverHealth(lever(), [alert({ type: "red", impactEur: -20_000 })], thresholds).health
+    ).toBe("watch");
+    // Petite alerte rouge sous le seuil : badge « Faible » → « Dans les temps ».
+    expect(
+      computeLeverHealth(lever(), [alert({ type: "red", impactEur: -5_000 })], thresholds).health
+    ).toBe("onTrack");
   });
 
   it("uses computeLeverRisk with company thresholds", () => {
@@ -103,6 +117,31 @@ describe("leverHealth", () => {
     ).toBe("onTrack");
   });
 
+  it("counts non-cancelled levers by health (dashboard KPI « Leviers à risque », audit C6)", () => {
+    const levers = [
+      lever({ id: "L1" }),
+      lever({ id: "L2" }),
+      lever({ id: "L3" }),
+      lever({ id: "L4", status: "cancelled" }),
+    ];
+    const thresholds = [
+      { level: "critical" as const, minAmount: 100_000 },
+      { level: "medium" as const, minAmount: 10_000 },
+      { level: "low" as const, minAmount: 0 },
+    ];
+    const alerts = [
+      alert({ scope: "L1", type: "red", impactEur: -200_000 }),
+      alert({ id: "a2", scope: "L2", type: "amber", impactEur: -20_000 }),
+      alert({ id: "a3", scope: "L3", type: "red", impactEur: -200_000, resolved: true }),
+      alert({ id: "a4", scope: "L4", type: "red", impactEur: -200_000 }),
+    ];
+    expect(leverHealthCounts(levers, alerts, thresholds)).toEqual({
+      onTrack: 1,
+      watch: 1,
+      critical: 1,
+    });
+  });
+
   it("groups by workstream, actual country and function", () => {
     const levers = [
       lever({ id: "L1", ws: "WS1", country: "France", geography: "Europe", function: "Finance" }),
@@ -122,5 +161,17 @@ describe("leverHealth", () => {
     expect(
       groupLeversByHealthDimension(levers, "function", [], workstreams).map((g) => g.label)
     ).toEqual(["Finance", "IT"]);
+  });
+});
+
+describe("computeLeverRisk — alertes de risque uniquement (audit C6)", () => {
+  it("une alerte verte ou bleue ne fait pas monter le badge Risque", async () => {
+    const { computeLeverRisk } = await import("@/lib/engine");
+    expect(computeLeverRisk("L1", [alert({ type: "green", impactEur: 2_000_000 })]).level).toBe(
+      "low"
+    );
+    expect(computeLeverRisk("L1", [alert({ type: "red", impactEur: -2_000_000 })]).level).not.toBe(
+      "low"
+    );
   });
 });
