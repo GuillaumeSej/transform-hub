@@ -1,5 +1,5 @@
 /**
- * BeTrack admin-api — privileged Firebase Auth admin operations (rename/delete a user account)
+ * BeTrack admin-api — privileged Firebase Auth admin operations (rename/delete/disable a user account, password reset links)
  * that the statically-exported Next.js client cannot safely perform.
  *
  * PORTABILITY: this is a plain, framework-light Express app. All configuration comes from env
@@ -16,6 +16,8 @@ import { requestLogger } from "./lib/requestLogger";
 import { adminActionLimiter } from "./lib/rateLimit";
 import { renameUserRouter } from "./routes/renameUser";
 import { deleteUserRouter } from "./routes/deleteUser";
+import { setUserDisabledRouter } from "./routes/setUserDisabled";
+import { passwordResetLinkRouter } from "./routes/passwordResetLink";
 
 function main() {
   const { auth, db } = initFirebaseAdmin();
@@ -32,6 +34,8 @@ function main() {
 
   app.use("/admin", adminActionLimiter, renameUserRouter(auth, db));
   app.use("/admin", adminActionLimiter, deleteUserRouter(auth, db));
+  app.use("/admin", adminActionLimiter, setUserDisabledRouter(auth, db));
+  app.use("/admin", adminActionLimiter, passwordResetLinkRouter(auth, db));
 
   // CORS errors thrown by the origin callback, and any other uncaught error, land here rather
   // than crashing the process or leaking a stack trace to the client.

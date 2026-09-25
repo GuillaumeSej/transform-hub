@@ -221,15 +221,34 @@ export function Sidebar({
         </div>
       )}
 
-      <div
+      {/* Bloc utilisateur → « Mon profil » (/profile, accessible à tout utilisateur connecté —
+          voir la liste blanche dans AppShell.tsx). Lien réel (clavier, clic milieu) via
+          GuardedLink pour la garde « modifications non enregistrées », comme les items de nav ;
+          `onNavigate` referme le drawer mobile. */}
+      <GuardedLink
+        href="/profile"
+        onClick={onNavigate}
+        aria-current={pathname === "/profile" ? "page" : undefined}
+        aria-label={
+          collapsed
+            ? [t("profile.title", "Mon profil"), user?.name].filter(Boolean).join(" · ")
+            : undefined
+        }
         className={cn(
-          "flex items-center border-t border-white/[0.08] py-3.5",
-          collapsed ? "justify-center px-0" : "gap-2.5 px-4"
+          "flex items-center border-l-2 border-t border-l-transparent border-t-white/[0.08] py-3.5 transition hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white",
+          collapsed ? "justify-center px-0" : "gap-2.5 px-4",
+          pathname === "/profile" && "border-l-bp-coral bg-white/[0.08]"
         )}
         title={
           collapsed
-            ? [user?.name, displayRole ? t(displayRole.label) : null].filter(Boolean).join(" · ")
-            : undefined
+            ? [
+                user?.name,
+                displayRole ? t(displayRole.label) : null,
+                t("profile.title", "Mon profil"),
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : t("profile.open", "Voir mon profil")
         }
       >
         <Avatar
@@ -246,7 +265,7 @@ export function Sidebar({
             )}
           </div>
         )}
-      </div>
+      </GuardedLink>
     </aside>
   );
 }

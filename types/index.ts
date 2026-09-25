@@ -156,6 +156,13 @@ export type AuthUser = {
    *  `Company.directions`). Contraint à la liste de l'entreprise via un `<select>`, jamais du texte
    *  libre, pour que le filtre par direction matche réellement une valeur existante. */
   direction?: string;
+  /** E-mail de contact RÉEL de l'utilisateur (affiché sur « Mon profil », saisi par l'admin
+   *  d'entreprise). Distinct de l'e-mail SYNTHÉTIQUE Firebase Auth dérivé de `username`
+   *  (`usernameToSyntheticEmail`, lib/auth.ts), qui reste l'identifiant technique de connexion. */
+  email?: string;
+  /** Compte désactivé par un admin (connexion refusée, compte conservé pour l'historique).
+   *  Absent/false = actif. */
+  disabled?: boolean;
 };
 
 // Cycle de vie unique d'un levier, affiché partout en L1-L5 (voir lib/status-config.ts) :

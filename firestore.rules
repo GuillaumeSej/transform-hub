@@ -148,10 +148,15 @@ service cloud.firestore {
       allow read: if canReadCompanyScoped(companyId);
       // Création/suppression d'entreprise : admin global uniquement (voir nav-config.ts,
       // /admin/companies réservé au rôle "admin"). Édition des paramètres (fyStart, hiérarchie,
-      // échelle de confidentialité...) : admin global OU admin de CETTE entreprise (le hub
-      // /admin/companies/detail est accessible à admin_entreprise pour sa propre entreprise).
+      // matrice d'habilitation `roleClearance`...) : admin global OU admin de CETTE entreprise —
+      // SAUF l'échelle `confidentialityLevels`, définie par BearingPoint (admin global) lors de la
+      // mise en place : un admin d'entreprise ne décide que QUI accède à quel niveau
+      // (`roleClearance`, onglet Confidentialité de /admin/users), jamais l'échelle elle-même.
       allow create, delete: if isSuperAdmin();
-      allow update: if isSuperAdmin() || isCompanyAdmin(companyId);
+      allow update: if isSuperAdmin()
+        || (isCompanyAdmin(companyId)
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                  .hasAny(['confidentialityLevels']));
     }
 
     // ─── adminUsers/{username} — porte AuthUser.password en clair (voir types/index.ts) : LA
@@ -173,6 +178,15 @@ service cloud.firestore {
         || (isCompanyAdmin(docCompanyId(resource.data))
             && docCompanyId(request.resource.data) == docCompanyId(resource.data));
       allow delete: if isSuperAdmin() || isCompanyAdmin(docCompanyId(resource.data));
+    }
+
+    // ─── adminApiAuditLog/{id} — journal des actions sur les COMPTES (renommage, suppression,
+    // désactivation, lien de réinitialisation), écrit EXCLUSIVEMENT par admin-api (firebase-admin,
+    // qui contourne ces règles). Lecture : admin global (tout) ou admin de l'entreprise concernée
+    // (page /admin/history, requête filtrée sur companyId). Aucune écriture client. ─────────────
+    match /adminApiAuditLog/{entryId} {
+      allow read: if isSuperAdmin() || isCompanyAdmin(docCompanyId(resource.data));
+      allow write: if false;
     }
 
     // ─── programs/{id} ─────────────────────────────────────────────────────────────────────────

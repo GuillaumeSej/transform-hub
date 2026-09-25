@@ -93,6 +93,16 @@ export async function saveCompanyHierarchyLevels(
   await updateDoc(doc(companiesCol(), companyId), { [field]: levels ?? [] });
 }
 
+/** Écrit UNIQUEMENT `Company.roleClearance` (onglet « Confidentialité » de l'admin d'entreprise) :
+ *  `updateDoc` ciblé, jamais `saveCompany` (setDoc complet) — firestore.rules interdit à un admin
+ *  d'entreprise de modifier `confidentialityLevels`, défini par BearingPoint. */
+export async function saveCompanyRoleClearance(
+  companyId: string,
+  roleClearance: NonNullable<Company["roleClearance"]>
+): Promise<void> {
+  await updateDoc(doc(companiesCol(), companyId), { roleClearance });
+}
+
 export async function deleteCompany(id: string): Promise<void> {
   await deleteDoc(doc(companiesCol(), id));
   await deleteDoc(doc(collection(db, "companyDirectory"), id));
@@ -291,6 +301,52 @@ export async function saveUser(user: AuthUser): Promise<void> {
 
 export async function deleteUser(username: string, companyId?: string | null): Promise<void> {
   await deleteDoc(doc(usersCol(), accountSlug(username, companyId)));
+}
+
+/** Pose/retire le flag `disabled` d'un profil (mise à jour CIBLÉE, jamais un setDoc du document
+ *  entier). C'est ce flag que lib/auth.ts:resolveAuthUserProfile lit pour refuser la connexion :
+ *  UsersPanel l'écrit d'abord directement (effet immédiat même si admin-api est injoignable), puis
+ *  admin-api (`/admin/set-user-disabled`) synchronise le flag Firebase Auth et journalise. */
+export async function setUserDisabledFlag(
+  username: string,
+  companyId: string | null,
+  disabled: boolean
+): Promise<void> {
+  await updateDoc(doc(usersCol(), accountSlug(username, companyId)), { disabled });
+}
+
+/** Entrée du journal `adminApiAuditLog` (écrit exclusivement par admin-api, voir
+ *  admin-api/src/lib/audit.ts) — actions sur les COMPTES (renommage, suppression, désactivation,
+ *  lien de réinitialisation), distinctes du journal métier `leverMeta/{companyId}__auditLog`. */
+export type AccountAuditEntry = {
+  id: string;
+  ts: string;
+  action: string;
+  actorUsername: string;
+  targetOldUsername: string;
+  targetNewUsername?: string;
+  companyId: string | null;
+};
+
+/** `companyId` null = admin global (tout le journal) ; sinon SCOPÉ CÔTÉ SERVEUR à l'entreprise
+ *  (requis par firestore.rules : un admin d'entreprise ne lit que les entrées de la sienne). */
+export function subscribeAccountAudit(
+  cb: (entries: AccountAuditEntry[]) => void,
+  companyId?: string | null
+): Unsubscribe {
+  const col = collection(db, "adminApiAuditLog");
+  const scoped = companyId ? query(col, where("companyId", "==", companyId)) : col;
+  return onSnapshot(
+    scoped,
+    (snap) => {
+      cb(
+        snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<AccountAuditEntry, "id">) }))
+          .sort((a, b) => b.ts.localeCompare(a.ts))
+      );
+    },
+    onListenerError("adminApiAuditLog")
+  );
 }
 
 // --- Seed: ensure test company + test users exist in Firestore ---

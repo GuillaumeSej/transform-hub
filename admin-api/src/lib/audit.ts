@@ -20,7 +20,7 @@ import type { Firestore } from "firebase-admin/firestore";
  */
 export type AdminApiAuditEntry = {
   ts: string;
-  action: "rename_user" | "delete_user";
+  action: "rename_user" | "delete_user" | "disable_user" | "enable_user" | "password_reset_link";
   actorUsername: string;
   actorUid: string;
   targetOldUsername: string;

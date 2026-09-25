@@ -4,7 +4,8 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import type { Role, RiskLevel } from "@/types";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { levelBelow, normalizeClearanceLevel } from "@/lib/confidentiality";
+import { normalizeClearanceLevel } from "@/lib/confidentiality";
+import { ConfidentialityLevelsEditor } from "@/components/admin/ConfidentialityLevelsEditor";
 
 function riskLevels(
   t: (key: string, fallback?: string) => string
@@ -145,37 +146,17 @@ export const DEFAULT_COMPANY_FORM: CompanyFormState = {
 export function CompanyFieldsEditor({
   value,
   onChange,
+  levelUsage,
 }: {
   value: CompanyFormState;
   onChange: (patch: Partial<CompanyFormState>) => void;
+  /** Nb d'éléments/habilitations référençant chaque niveau de confidentialité (avertissement au
+   *  retrait/renommage, voir ConfidentialityLevelsEditor). Absent = aucun avertissement. */
+  levelUsage?: Record<string, number>;
 }) {
   const { t } = useTranslation();
   const RISK_LEVELS = riskLevels(t);
-  const [newLevel, setNewLevel] = useState("");
   const [newDirection, setNewDirection] = useState("");
-
-  const addLevel = () => {
-    const level = newLevel.trim();
-    if (!level || value.confidentialityLevels.includes(level)) return;
-    onChange({ confidentialityLevels: [...value.confidentialityLevels, level] });
-    setNewLevel("");
-  };
-
-  const removeLevel = (level: string) => {
-    // Un rôle habilité au niveau supprimé est rétrogradé au niveau immédiatement inférieur (il
-    // conserve l'accès à tout ce qu'il voyait déjà sous ce niveau), plutôt que de perdre tout accès.
-    const levels = value.confidentialityLevels;
-    const nextClearance: Partial<Record<Role, string>> = {};
-    for (const [role, stored] of Object.entries(value.roleClearance)) {
-      const current = normalizeClearanceLevel(stored, levels);
-      const next = current === level ? levelBelow(level, levels) : current;
-      if (next) nextClearance[role as Role] = next;
-    }
-    onChange({
-      confidentialityLevels: levels.filter((l) => l !== level),
-      roleClearance: nextClearance,
-    });
-  };
 
   const addDirection = () => {
     const direction = newDirection.trim();
@@ -324,61 +305,12 @@ export function CompanyFieldsEditor({
           </div>
         </div>
 
-        <div>
-          <label className="text-xs font-medium text-text-secondary">
-            {t(
-              "adminCompanyFields.confidentialityLevelsLabel",
-              "Niveaux de confidentialité (du moins au plus restreint)"
-            )}
-          </label>
-          {value.confidentialityLevels.length === 0 && (
-            <p className="mt-1 rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
-              {t(
-                "adminCompanyFields.confidentialityEmpty",
-                "La confidentialité n'est pas encore activée pour cette entreprise. Ajoutez un premier niveau ci-dessous (ex. Public, Confidentiel) pour pouvoir restreindre l'accès à certains leviers par rôle ou par utilisateur."
-              )}
-            </p>
-          )}
-          <div className="mt-1 flex flex-wrap gap-2">
-            {value.confidentialityLevels.map((level) => (
-              <span
-                key={level}
-                className="flex items-center gap-1 rounded-full bg-bg-surface border border-border px-2.5 py-1 text-xs text-text-primary"
-              >
-                {level}
-                <button
-                  type="button"
-                  aria-label={t("common.remove", "Retirer")}
-                  title={t("common.remove", "Retirer")}
-                  onClick={() => removeLevel(level)}
-                  className="text-text-secondary hover:text-rag-red"
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div className="mt-2 flex gap-2">
-            <input
-              value={newLevel}
-              onChange={(e) => setNewLevel(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addLevel();
-                }
-              }}
-              placeholder={t("adminCompanyFields.newLevelPlaceholder", "Ex : Confidentiel")}
-              className="w-full max-w-xs rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
-            />
-            <button
-              onClick={addLevel}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-surface"
-            >
-              {t("adminCompanyFields.addLevel", "Ajouter le niveau")}
-            </button>
-          </div>
-        </div>
+        <ConfidentialityLevelsEditor
+          levels={value.confidentialityLevels}
+          roleClearance={value.roleClearance}
+          usage={levelUsage}
+          onChange={(patch) => onChange(patch)}
+        />
 
         <div>
           <label className="text-xs font-medium text-text-secondary">

@@ -37,6 +37,7 @@ const CRUMBS: Record<string, string> = {
   "/hr/etp": "nav.hrEtp",
   "/operations": "nav.operationsModule",
   "/validation": "nav.validation",
+  "/profile": "profile.title",
 };
 
 /** Fil d'ariane des routes PARTAGÉES entre les deux types de programme : `/levers` sert aussi le

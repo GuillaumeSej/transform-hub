@@ -19,3 +19,18 @@ export const deleteUserSchema = z.object({
 });
 
 export type DeleteUserBody = z.infer<typeof deleteUserSchema>;
+
+export const setUserDisabledSchema = z.object({
+  username: z.string().trim().min(1),
+  companyId: companyIdSchema,
+  disabled: z.boolean(),
+});
+
+export type SetUserDisabledBody = z.infer<typeof setUserDisabledSchema>;
+
+export const passwordResetLinkSchema = z.object({
+  username: z.string().trim().min(1),
+  companyId: companyIdSchema,
+});
+
+export type PasswordResetLinkBody = z.infer<typeof passwordResetLinkSchema>;

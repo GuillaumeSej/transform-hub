@@ -106,8 +106,23 @@ export default function AdminCompaniesPage() {
   };
 
   const remove = async (id: string) => {
+    const name = companies.find((c) => c.id === id)?.name ?? id;
+    if (
+      !window.confirm(
+        t(
+          "adminCompanies.deleteConfirm",
+          "Supprimer définitivement l'entreprise « {name} » ? Cette action est irréversible."
+        ).replace("{name}", name)
+      )
+    )
+      return;
     await deleteCompany(id);
   };
+
+  // Réservé au global admin (création/suppression d'espaces clients) : AppShell bloque déjà la
+  // route pour tout autre profil (absente de leur nav, voir lib/nav-config.ts) — ceinture +
+  // bretelles, même garde que le hub de détail (CompanyDetailClient).
+  if (!user?.isGlobalAdmin) return null;
 
   return (
     <div className="space-y-6">

@@ -3,17 +3,32 @@
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import { matchesFilter } from "@/lib/filterUtils";
 import { useEffect, useState } from "react";
-import { Users, Plus, Pencil, Trash2 } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, KeyRound, Power, Copy, Mail } from "lucide-react";
 import type { AuthUser, Role, Company, Program, ProfileAssignment } from "@/types";
 import {
   subscribeUsers,
   saveUser,
   subscribeCompanies,
   subscribePrograms,
+  setUserDisabledFlag,
 } from "@/lib/firestore/admin";
 import { isFirebaseErrorCode, usernameToSyntheticEmail } from "@/lib/auth";
 import { withSecondaryAuth, getAuthInstance } from "@/lib/firebase";
-import { renameUser, deleteUserAccount, AdminApiError } from "@/lib/adminApi";
+import {
+  renameUser,
+  deleteUserAccount,
+  setUserDisabled,
+  generatePasswordResetLink,
+  AdminApiError,
+} from "@/lib/adminApi";
+import {
+  isValidContactEmail,
+  disableBlockReason,
+  filterUsersByStatus,
+  buildPasswordResetMailto,
+  generateRandomPassword,
+  type UserStatusFilter,
+} from "@/lib/userAccountAdmin";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
@@ -23,6 +38,7 @@ import { Button } from "@/components/shared/Button";
 import { isAnyAdmin, isStrategicRole, assertValidProfiles } from "@/lib/roleProfiles";
 import { resolveProgramType } from "@/lib/axisLogic";
 import { normalizeClearanceLevel } from "@/lib/confidentiality";
+import { inheritedRoleLevel } from "@/lib/confidentialityAdmin";
 
 /** Longueur minimale du mot de passe — DOIT rester alignée sur la politique de Firebase Auth
  *  (aucune autre règle par défaut ; un mot de passe plus court est rejeté avec `auth/weak-password`
@@ -164,6 +180,11 @@ export type UserFormInput = {
    *  admin global n'a jamais de `companyId` (voir round multi-profils, `AuthUser.isGlobalAdmin`). */
   isGlobalAdmin: boolean;
   companyId: string;
+  /** Mot de passe exigé ? Vrai par défaut (compatibilité) ; UsersPanel passe `false` sauf en
+   *  création avec « Définir un mot de passe initial » — en édition le mot de passe n'est plus
+   *  jamais affiché ni saisi par l'admin, et en création par lien l'utilisateur le définit
+   *  lui-même (voir save()). */
+  requirePassword?: boolean;
 };
 
 /**
@@ -173,8 +194,8 @@ export type UserFormInput = {
  *  - Identifiant : toujours requis.
  *  - Nom affiché OU Prénom + Nom : l'un des deux doit être renseigné (le second sert de repli à
  *    l'écriture du champ `name`, voir save()).
- *  - Mot de passe : toujours requis — pré-rempli à "test" par défaut, mais ne doit pas pouvoir
- *    être vidé puis enregistré.
+ *  - Mot de passe : requis seulement si `requirePassword` (défaut true) — création avec mot de
+ *    passe initial saisi par l'admin.
  *  - Entreprise : requise seulement quand le champ est affiché, càd compte non-admin-global ET
  *    aucun `fixedCompanyId` imposé par le contexte (scope du hub `/admin/companies/detail`, ou
  *    admin_entreprise limité à sa propre entreprise sur la page globale).
@@ -190,7 +211,7 @@ export function missingRequiredFields(
   if (!form.name.trim() && !`${form.firstName} ${form.lastName}`.trim()) {
     missing.push("Nom affiché (ou Prénom + Nom)");
   }
-  if (!form.password.trim()) missing.push("Mot de passe");
+  if (form.requirePassword !== false && !form.password.trim()) missing.push("Mot de passe");
   if (!form.isGlobalAdmin && !fixedCompanyId && !form.companyId.trim()) {
     missing.push("Entreprise");
   }
@@ -204,7 +225,15 @@ export function missingRequiredFields(
  * `/admin/users`, avec son propre filtre entreprise et sa scop admin_entreprise). Seule source de
  * vérité pour ce CRUD — ne pas dupliquer la logique ailleurs.
  */
-export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {}) {
+export function UsersPanel({
+  scopeCompanyId,
+  createCompanyAdminSignal = 0,
+}: {
+  scopeCompanyId?: string;
+  /** Incrémenter pour ouvrir le formulaire de création avec « Admin entreprise » pré-coché
+   *  (étape 2 de la mise en place, bouton de CompanyDetailClient). */
+  createCompanyAdminSignal?: number;
+} = {}) {
   const { t } = useTranslation();
   const { isCompanyAdmin: viewerIsCompanyAdmin, user } = useRole();
   const { showToast } = useToast();
@@ -250,7 +279,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     isGlobalAdmin: false,
     isCompanyAdmin: false,
     companyId: "",
-    password: "test",
+    /** Création uniquement, et seulement en mode "manual" — jamais pré-rempli avec le mot de
+     *  passe d'un compte existant, jamais enregistré dans Firestore (voir save()). */
+    password: "",
+    /** Création : "link" (recommandé) = compte créé avec un mot de passe aléatoire jamais
+     *  affiché, puis lien de réinitialisation à transmettre ; "manual" = mot de passe initial
+     *  temporaire saisi par l'admin (démo / admin-api indisponible). */
+    passwordMode: "link" as "link" | "manual",
+    /** E-mail de contact RÉEL (optionnel) — distinct de l'e-mail synthétique Firebase Auth. */
+    email: "",
     clearanceMode: "inherit" as ClearanceMode,
     clearanceLevel: "",
     /** Direction/service métier de rattachement (round 4, filtres Plan Stratégique) — contrainte
@@ -283,10 +320,28 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   // l'identifiant a RÉELLEMENT été modifié pendant cette session d'édition (pas juste comparé à
   // l'état courant du formulaire, qui ne dit rien sur ce qui a changé). `null` en mode création.
   const [originalUsername, setOriginalUsername] = useState<string | null>(null);
-  // Idem pour le mot de passe : en édition, le champ est pré-rempli avec le mot de passe RÉEL de
-  // l'utilisateur (pas un défaut factice) — on ne veut envoyer `newPassword` au backend que si
-  // l'admin l'a explicitement modifié pendant cette édition, jamais renvoyer la valeur inchangée.
-  const [passwordTouched, setPasswordTouched] = useState(false);
+  // Flag `disabled` du compte en cours d'édition : saveUser() fait un setDoc du document ENTIER,
+  // il faut donc le reporter pour qu'une simple édition ne réactive pas un compte désactivé.
+  const [editingDisabled, setEditingDisabled] = useState(false);
+  // Le mot de passe n'est plus éditable ici (ni affiché) : un changement passe par l'action
+  // « Réinitialiser le mot de passe » (lien à usage unique, l'admin ne voit jamais le mot de passe).
+
+  // Filtre par statut (actif / désactivé) de la table.
+  const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("all");
+  // Lien de réinitialisation généré par admin-api, affiché dans une modale (copie / mailto).
+  const [resetLinkDialog, setResetLinkDialog] = useState<{
+    username: string;
+    displayName: string;
+    email?: string;
+    link: string;
+    isNewAccount: boolean;
+  } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  // Confirmation avant désactivation / réactivation.
+  const [disableConfirm, setDisableConfirm] = useState<{
+    user: AuthUser;
+    disabled: boolean;
+  } | null>(null);
 
   // Erreurs "prominentes" (mot de passe invalide, profils invalides, échec de renommage/suppression
   // côté backend) — affichées dans une modale centrée plutôt qu'un simple toast, pour qu'un admin
@@ -298,7 +353,6 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
   const [renameConfirm, setRenameConfirm] = useState<{
     newUser: AuthUser;
     oldUsername: string;
-    isPasswordOnly?: boolean;
   } | null>(null);
   // Confirmation obligatoire avant une suppression (déclenchée par le bouton corbeille).
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -313,8 +367,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     PASSWORD_TOO_SHORT_MESSAGE
   ).replace("{n}", String(MIN_PASSWORD_LENGTH));
   const unknownError = t("adminUsers.unknownError", "Erreur inconnue");
+  // Seul cas où l'admin saisit un mot de passe : création en mode « mot de passe initial ».
+  const passwordRequired = editIdx === null && form.passwordMode === "manual";
   const passwordError =
-    (form.password ?? "").length < MIN_PASSWORD_LENGTH ? passwordTooShortMessage : null;
+    passwordRequired && (form.password ?? "").length < MIN_PASSWORD_LENGTH
+      ? passwordTooShortMessage
+      : null;
+  const emailError = isValidContactEmail(form.email)
+    ? null
+    : t("adminUsers.emailInvalid", "Adresse e-mail invalide (ex. prenom.nom@entreprise.com).");
 
   // Le formulaire utilisateur est "dirty" dès qu'il est ouvert avec au moins un champ utile
   // rempli. En mode édition (editIdx != null), il est dirty tant qu'il est ouvert — on n'a pas
@@ -328,10 +389,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       form.name.trim() !== "");
   useRegisterUnsavedChanges(`admin:users:${fixedCompanyId ?? "global"}`, userFormDirty);
 
-  const startCreate = () => {
+  const startCreate = (preset?: { isCompanyAdmin?: boolean }) => {
     setEditIdx(null);
     setOriginalUsername(null);
-    setPasswordTouched(false);
+    setEditingDisabled(false);
     setForm({
       username: "",
       firstName: "",
@@ -339,20 +400,26 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       name: "",
       profiles: [],
       isGlobalAdmin: false,
-      isCompanyAdmin: false,
+      isCompanyAdmin: preset?.isCompanyAdmin ?? false,
       companyId: fixedCompanyId ?? companies[0]?.id ?? "",
-      password: "test",
+      password: "",
+      passwordMode: "link",
+      email: "",
       clearanceMode: "inherit",
       clearanceLevel: "",
       direction: "",
     });
     setShowForm(true);
   };
+  useEffect(() => {
+    if (createCompanyAdminSignal > 0) startCreate({ isCompanyAdmin: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- déclenché par le seul signal
+  }, [createCompanyAdminSignal]);
 
   const startEdit = (u: AuthUser, idx: number) => {
     setEditIdx(idx);
     setOriginalUsername(u.username);
-    setPasswordTouched(false);
+    setEditingDisabled(u.disabled === true);
     setForm({
       username: u.username,
       firstName: u.firstName ?? "",
@@ -362,7 +429,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       isGlobalAdmin: !!u.isGlobalAdmin,
       isCompanyAdmin: !!u.isCompanyAdmin,
       companyId: u.companyId ?? companies[0]?.id ?? "",
-      password: u.password ?? "",
+      // Jamais pré-rempli avec le mot de passe (legacy, en clair) du compte existant.
+      password: "",
+      passwordMode: "link",
+      email: u.email ?? "",
       clearanceMode: clearanceModeOf(u.confidentialityClearance),
       clearanceLevel: clearanceLevelOf(
         u.confidentialityClearance,
@@ -383,6 +453,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         password: form.password,
         isGlobalAdmin: form.isGlobalAdmin,
         companyId: form.companyId,
+        requirePassword: passwordRequired,
       },
       fixedCompanyId
     );
@@ -407,6 +478,13 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       });
       return;
     }
+    if (emailError) {
+      setErrorDialog({
+        title: t("adminUsers.emailInvalidTitle", "E-mail invalide"),
+        messages: [emailError],
+      });
+      return;
+    }
 
     // Profils métier saisis via la liste répétable ci-dessous — filtrer les lignes en cours de
     // saisie sans rôle choisi (une ligne vide ajoutée par "+ Ajouter" mais pas encore remplie ne
@@ -427,7 +505,10 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
     const companyId = form.isGlobalAdmin ? null : (fixedCompanyId ?? form.companyId);
     const newUser: AuthUser = {
       username: normalizedUsername,
-      password: form.password,
+      // Le mot de passe vit exclusivement dans Firebase Auth : plus jamais recopié en clair dans
+      // le document Firestore (champ legacy `AuthUser.password`, vidé au prochain enregistrement —
+      // aucun flux de connexion ne le lit, voir lib/auth.ts:signInUser).
+      password: "",
       profiles,
       isGlobalAdmin: form.isGlobalAdmin,
       isCompanyAdmin: form.isCompanyAdmin,
@@ -445,28 +526,23 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       // explicitement `undefined`, et setDoc remplace le document entier, donc omettre la clé ici
       // efface bien un `direction` précédemment enregistré si l'admin repasse à "Non renseigné".
       ...(form.direction.trim() !== "" ? { direction: form.direction.trim() } : {}),
+      // Même précaution (clé omise si vide) pour l'e-mail de contact et le flag de désactivation,
+      // ce dernier reporté depuis le compte édité (setDoc remplace le document entier).
+      ...(form.email.trim() !== "" ? { email: form.email.trim() } : {}),
+      ...(editIdx !== null && editingDisabled ? { disabled: true } : {}),
     };
 
     const isEditingExisting = editIdx !== null && originalUsername !== null;
     const usernameChanged = isEditingExisting && normalizedUsername !== originalUsername;
 
-    // Renommer un utilisateur existant, OU changer son mot de passe, touche Firebase Auth
-    // (l'identifiant technique en dépend, voir usernameToSyntheticEmail ; le mot de passe est un
-    // attribut du compte Auth, jamais du document Firestore) : ça ne peut pas être un simple
-    // setDoc Firestore, ça doit passer par le backend admin — et ça exige une confirmation
-    // explicite avant d'agir (voir renameConfirm plus bas, résolu par
-    // confirmRename()/l'annulation de la modale). Router aussi un changement de mot de passe SEUL
-    // (username inchangé) par ce même chemin : avant, un tel changement passait par le simple
-    // saveUser() Firestore ci-dessous et ne touchait donc jamais le vrai mot de passe de connexion
-    // — ce backend tolère en plus les comptes sans compte Firebase Auth (ex. les "owners"
-    // créés par script, sélectionnables mais jamais connectés) en leur créant leur premier compte
-    // Auth au lieu d'échouer.
-    if (isEditingExisting && (usernameChanged || passwordTouched)) {
-      setRenameConfirm({
-        newUser,
-        oldUsername: originalUsername!,
-        isPasswordOnly: !usernameChanged,
-      });
+    // Renommer un utilisateur existant touche Firebase Auth (l'identifiant technique en dépend,
+    // voir usernameToSyntheticEmail) : ça ne peut pas être un simple setDoc Firestore, ça doit
+    // passer par le backend admin — et ça exige une confirmation explicite avant d'agir (voir
+    // renameConfirm plus bas, résolu par confirmRename()/l'annulation de la modale). Le mot de
+    // passe, lui, ne se change plus ici : action « Réinitialiser le mot de passe » (lien à usage
+    // unique, qui crée aussi le compte Auth des "owners" créés par script sans compte de connexion).
+    if (isEditingExisting && usernameChanged) {
+      setRenameConfirm({ newUser, oldUsername: originalUsername! });
       return;
     }
 
@@ -488,16 +564,34 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
       return;
     }
 
-    // Création d'un nouvel utilisateur — comportement inchangé.
+    // Création d'un nouvel utilisateur.
     try {
       // Crée le compte Firebase Auth correspondant AVANT d'écrire le profil Firestore — sur une
       // instance Auth SECONDAIRE (voir withSecondaryAuth dans lib/firebase.ts), jamais sur
       // l'instance principale : createUserWithEmailAndPassword connecte automatiquement le
       // navigateur en tant que ce nouvel utilisateur, ce qui déconnecterait l'admin de sa propre
       // session s'il l'appelait sur l'instance principale.
-      await createAuthAccount(normalizedUsername, form.password, newUser.companyId ?? null);
+      // Mode "link" (par défaut) : mot de passe aléatoire jamais affiché ni communiqué, puis lien
+      // de réinitialisation immédiatement proposé à l'admin — l'utilisateur définit lui-même son
+      // mot de passe. Mode "manual" : mot de passe initial temporaire saisi par l'admin (démo, ou
+      // admin-api indisponible), jamais stocké dans Firestore.
+      const initialPassword =
+        form.passwordMode === "manual" ? form.password : generateRandomPassword();
+      await createAuthAccount(normalizedUsername, initialPassword, newUser.companyId ?? null);
       await saveUser(newUser);
       setShowForm(false);
+      if (form.passwordMode === "link") {
+        await openResetLink(newUser, true);
+      } else {
+        showToast(
+          t("adminUsers.createdTitle", "Utilisateur créé"),
+          t(
+            "adminUsers.createdManualBody",
+            "Le compte « {username} » a été créé avec le mot de passe initial saisi. Invitez l'utilisateur à le changer depuis « Mon profil »."
+          ).replace("{username}", normalizedUsername),
+          "success"
+        );
+      }
     } catch (err) {
       if (isFirebaseErrorCode(err, "auth/weak-password")) {
         setErrorDialog({
@@ -540,7 +634,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
 
   const confirmRename = async () => {
     if (!renameConfirm) return;
-    const { newUser, oldUsername, isPasswordOnly } = renameConfirm;
+    const { newUser, oldUsername } = renameConfirm;
     setRenameConfirm(null);
     try {
       const idToken = await getAdminIdToken();
@@ -548,30 +642,153 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         oldUsername,
         newUsername: newUser.username,
         companyId: newUser.companyId ?? null,
-        newPassword: passwordTouched ? newUser.password : undefined,
       });
       // subscribeUsers() est un onSnapshot Firestore : le renommage écrit par le backend admin
       // (nouveau document, ancien supprimé) redéclenche l'abonnement tout seul — rien à refaire ici.
       setShowForm(false);
       showToast(
-        isPasswordOnly
-          ? t("adminUsers.passwordChangedTitle", "Mot de passe modifié")
-          : t("adminUsers.renamedTitle", "Utilisateur renommé"),
-        isPasswordOnly
-          ? t(
-              "adminUsers.passwordChangedBody",
-              "Le mot de passe du compte « {username} » a été mis à jour."
-            ).replace("{username}", oldUsername)
-          : t("adminUsers.renamedBody", "Le compte « {old} » a été renommé en « {new} ».")
-              .replace("{old}", oldUsername)
-              .replace("{new}", newUser.username),
+        t("adminUsers.renamedTitle", "Utilisateur renommé"),
+        t("adminUsers.renamedBody", "Le compte « {old} » a été renommé en « {new} ».")
+          .replace("{old}", oldUsername)
+          .replace("{new}", newUser.username),
         "success"
       );
     } catch (err) {
       setErrorDialog({
-        title: isPasswordOnly
-          ? t("adminUsers.passwordChangeFailed", "Échec du changement de mot de passe")
-          : t("adminUsers.renameFailed", "Échec du renommage"),
+        title: t("adminUsers.renameFailed", "Échec du renommage"),
+        messages: [adminApiErrorMessage(err)],
+      });
+    }
+  };
+
+  /**
+   * Demande à admin-api un lien de réinitialisation À USAGE UNIQUE et l'affiche dans une modale
+   * (copie / mailto) — l'admin ne voit ni ne choisit jamais le mot de passe. Pourquoi pas un envoi
+   * par Firebase : les e-mails Firebase Auth sont SYNTHÉTIQUES (`…@betrack.local`, voir
+   * lib/auth.ts:usernameToSyntheticEmail) et ne reçoivent aucun courrier ; le lien est donc remis
+   * à l'admin, qui le transmet (mailto vers l'e-mail de contact réel s'il est renseigné).
+   * `isNewAccount` : appelé juste après une création en mode "link".
+   */
+  async function openResetLink(u: AuthUser, isNewAccount = false): Promise<void> {
+    try {
+      const idToken = await getAdminIdToken();
+      const link = await generatePasswordResetLink(idToken, {
+        username: u.username,
+        companyId: u.companyId ?? null,
+      });
+      setLinkCopied(false);
+      setResetLinkDialog({
+        username: u.username,
+        displayName: u.name,
+        email: u.email,
+        link,
+        isNewAccount,
+      });
+    } catch (err) {
+      setErrorDialog({
+        title: t("adminUsers.resetLinkFailed", "Échec de la génération du lien"),
+        messages: [
+          adminApiErrorMessage(err),
+          ...(isNewAccount
+            ? [
+                t(
+                  "adminUsers.resetLinkFailedNewAccount",
+                  "Le compte a bien été créé. Générez le lien plus tard avec l'action « Réinitialiser le mot de passe »."
+                ),
+              ]
+            : []),
+        ],
+      });
+    }
+  }
+
+  const copyResetLink = async () => {
+    if (!resetLinkDialog) return;
+    try {
+      await navigator.clipboard.writeText(resetLinkDialog.link);
+      setLinkCopied(true);
+    } catch {
+      showToast(
+        t("adminUsers.copyFailed", "Copie impossible"),
+        t("adminUsers.copyFailedBody", "Sélectionnez le lien et copiez-le manuellement."),
+        "error"
+      );
+    }
+  };
+
+  /** Clic sur l'action désactiver/réactiver : garde-fous (soi-même, dernier admin d'entreprise
+   *  actif) vérifiés ici pour l'UI, puis confirmation. admin-api refait ces contrôles. */
+  const requestToggleDisabled = (u: AuthUser) => {
+    const disabling = u.disabled !== true;
+    if (disabling) {
+      const reason = disableBlockReason(u, users, user);
+      if (reason) {
+        setErrorDialog({
+          title: t("adminUsers.disableBlockedTitle", "Désactivation impossible"),
+          messages: [
+            reason === "self"
+              ? t(
+                  "adminUsers.disableBlockedSelf",
+                  "Vous ne pouvez pas désactiver votre propre compte."
+                )
+              : t(
+                  "adminUsers.disableBlockedLastAdmin",
+                  "Impossible de désactiver le dernier administrateur actif de l'entreprise. Désignez d'abord un autre administrateur."
+                ),
+          ],
+        });
+        return;
+      }
+    }
+    setDisableConfirm({ user: u, disabled: disabling });
+  };
+
+  const confirmToggleDisabled = async () => {
+    if (!disableConfirm) return;
+    const { user: target, disabled } = disableConfirm;
+    setDisableConfirm(null);
+    const params = { username: target.username, companyId: target.companyId ?? null, disabled };
+    try {
+      try {
+        // Voie normale : admin-api met à jour Firebase Auth ET Firestore, et journalise.
+        const idToken = await getAdminIdToken();
+        await setUserDisabled(idToken, params);
+      } catch (err) {
+        // admin-api injoignable / non configuré : on pose quand même le flag Firestore, qui suffit
+        // à bloquer la connexion (lib/auth.ts:resolveAuthUserProfile) — avec un avertissement.
+        // Toute autre erreur (droits, dernier admin...) est un refus métier : on n'écrit rien.
+        if (
+          err instanceof AdminApiError &&
+          (err.code === "network_error" || err.code === "not_configured")
+        ) {
+          await setUserDisabledFlag(params.username, params.companyId, disabled);
+          showToast(
+            t("adminUsers.disablePartialTitle", "Statut mis à jour partiellement"),
+            t(
+              "adminUsers.disablePartialBody",
+              "Le statut a été enregistré dans l'application, mais le compte de connexion n'a pas pu être synchronisé ({error}). Réessayez plus tard."
+            ).replace("{error}", err.message),
+            "error"
+          );
+          return;
+        }
+        throw err;
+      }
+      showToast(
+        disabled
+          ? t("adminUsers.disabledTitle", "Utilisateur désactivé")
+          : t("adminUsers.enabledTitle", "Utilisateur réactivé"),
+        (disabled
+          ? t("adminUsers.disabledBody", "Le compte « {username} » ne peut plus se connecter.")
+          : t("adminUsers.enabledBody", "Le compte « {username} » peut de nouveau se connecter.")
+        ).replace("{username}", target.username),
+        "success"
+      );
+    } catch (err) {
+      setErrorDialog({
+        title: disabled
+          ? t("adminUsers.disableFailed", "Échec de la désactivation")
+          : t("adminUsers.enableFailed", "Échec de la réactivation"),
         messages: [adminApiErrorMessage(err)],
       });
     }
@@ -678,7 +895,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
           </h1>
         </div>
         <button
-          onClick={startCreate}
+          onClick={() => startCreate()}
           className="flex items-center gap-1.5 rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
         >
           <Plus size={14} /> {t("common.add", "Ajouter")}
@@ -706,7 +923,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             </button>
             <button
               onClick={save}
-              disabled={passwordError !== null}
+              disabled={passwordError !== null || emailError !== null}
               className="rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t("common.save", "Enregistrer")}
@@ -715,7 +932,9 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         }
       >
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          {/* `grid-flow-row-dense` : le bloc mot de passe (pleine largeur, création uniquement) ne
+              laisse pas de trou à côté du champ e-mail. */}
+          <div className="grid grid-flow-row-dense grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-text-secondary">
                 {t("adminUsers.fieldUsername", "Identifiant")}{" "}
@@ -775,24 +994,79 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             </div>
             <div>
               <label className="text-xs font-medium text-text-secondary">
-                {t("adminUsers.fieldPassword", "Mot de passe")}{" "}
-                <span className="text-rag-red">*</span>
+                {t("adminUsers.fieldEmail", "E-mail de contact (optionnel)")}
               </label>
               <input
-                value={form.password}
-                onChange={(e) => {
-                  setForm((f) => ({ ...f, password: e.target.value }));
-                  setPasswordTouched(true);
-                }}
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 className={`mt-1 w-full rounded-lg border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral ${
-                  passwordError ? "border-rag-red" : "border-border"
+                  emailError ? "border-rag-red" : "border-border"
                 }`}
-                placeholder="test"
-                required
-                aria-invalid={passwordError !== null}
+                placeholder={t("adminUsers.emailPlaceholder", "prenom.nom@entreprise.com")}
+                aria-invalid={emailError !== null}
               />
-              {passwordError && <p className="mt-1 text-xs text-rag-red">{passwordError}</p>}
+              {emailError && <p className="mt-1 text-xs text-rag-red">{emailError}</p>}
             </div>
+            {/* Mot de passe : jamais affiché ni modifiable pour un compte existant (action
+                « Réinitialiser le mot de passe » dans la table). En création, lien d'activation
+                par défaut ; mot de passe initial temporaire en option (démo / admin-api absent). */}
+            {editIdx === null && (
+              <div className="col-span-2 rounded-lg border border-border bg-bg-surface p-3">
+                <span className="text-xs font-medium text-text-secondary">
+                  {t("adminUsers.fieldPassword", "Mot de passe")}
+                </span>
+                <div className="mt-1.5 space-y-1.5">
+                  <label className="flex items-start gap-1.5 text-xs text-text-primary">
+                    <input
+                      type="radio"
+                      name="user-password-mode"
+                      checked={form.passwordMode === "link"}
+                      onChange={() =>
+                        setForm((f) => ({ ...f, passwordMode: "link", password: "" }))
+                      }
+                    />
+                    <span>
+                      {t(
+                        "adminUsers.passwordModeLink",
+                        "Générer un lien pour que l'utilisateur définisse son mot de passe (recommandé)"
+                      )}
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-1.5 text-xs text-text-primary">
+                    <input
+                      type="radio"
+                      name="user-password-mode"
+                      checked={form.passwordMode === "manual"}
+                      onChange={() => setForm((f) => ({ ...f, passwordMode: "manual" }))}
+                    />
+                    <span>
+                      {t(
+                        "adminUsers.passwordModeManual",
+                        "Définir un mot de passe initial temporaire"
+                      )}
+                    </span>
+                  </label>
+                </div>
+                {form.passwordMode === "manual" && (
+                  <div className="mt-2">
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={form.password}
+                      onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                      className={`w-full rounded-lg border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral ${
+                        passwordError ? "border-rag-red" : "border-border"
+                      }`}
+                      aria-label={t("adminUsers.fieldPassword", "Mot de passe")}
+                      required
+                      aria-invalid={passwordError !== null}
+                    />
+                    {passwordError && <p className="mt-1 text-xs text-rag-red">{passwordError}</p>}
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium text-text-secondary">
                 {t("adminUsers.directionLabel", "Direction / service (optionnel)")}
@@ -1028,7 +1302,22 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {(
                   [
-                    { value: "inherit", label: t("adminUsers.clearanceInherit", "Hérite du rôle") },
+                    {
+                      // Options = échelle de l'entreprise (`formCompany.confidentialityLevels`) ;
+                      // le défaut affiche le niveau hérité des rôles saisis (Company.roleClearance).
+                      value: "inherit",
+                      label: t(
+                        "admin.confidentiality.inheritWithLevel",
+                        "Hérite du rôle (niveau {level})"
+                      ).replace(
+                        "{level}",
+                        inheritedRoleLevel(
+                          form.profiles.filter((p) => p.role),
+                          formCompany?.roleClearance,
+                          formCompany?.confidentialityLevels ?? []
+                        ) ?? t("admin.confidentiality.noLevel", "aucun")
+                      ),
+                    },
                     { value: "none", label: t("adminUsers.clearanceNone", "Aucun accès") },
                     {
                       value: "custom",
@@ -1086,10 +1375,15 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
 
           {showClearanceHint && (
             <p className="rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
-              {t(
-                "adminUsers.clearanceNoLevels",
-                "Configurez d'abord des niveaux de confidentialité dans l'onglet Paramètres de cette entreprise pour activer ce contrôle."
-              )}
+              {isEntAdmin && !user?.isGlobalAdmin
+                ? t(
+                    "adminUsers.clearanceNoLevelsCompany",
+                    "Aucun niveau de confidentialité n'est défini pour votre entreprise — contactez BearingPoint pour les mettre en place."
+                  )
+                : t(
+                    "adminUsers.clearanceNoLevels",
+                    "Configurez d'abord des niveaux de confidentialité dans l'onglet Paramètres de cette entreprise pour activer ce contrôle."
+                  )}
             </p>
           )}
         </div>
@@ -1116,6 +1410,22 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         </div>
       )}
 
+      <div className="flex items-center gap-3">
+        <label htmlFor="users-status-filter" className="text-xs font-semibold text-text-secondary">
+          {t("adminUsers.filterByStatus", "Statut")}
+        </label>
+        <select
+          id="users-status-filter"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as UserStatusFilter)}
+          className="rounded-lg border border-border bg-bg-surface px-3 py-1.5 text-xs text-text-primary outline-none focus:border-bp-coral"
+        >
+          <option value="all">{t("adminUsers.statusAll", "Tous")}</option>
+          <option value="active">{t("adminUsers.statusActive", "Actifs")}</option>
+          <option value="disabled">{t("adminUsers.statusDisabled", "Désactivés")}</option>
+        </select>
+      </div>
+
       <div className="rounded-xl border border-border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -1141,14 +1451,17 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             </tr>
           </thead>
           <tbody>
-            {users
+            {filterUsersByStatus(users, statusFilter)
               .filter((u) => fixedCompanyId || matchesFilter(u.companyId, companyFilter))
               .map((u, idx) => {
                 const { profileLabels, badges } = profilesSummary(u);
+                const isDisabled = u.disabled === true;
                 return (
                   <tr
                     key={`${u.username}.${u.companyId ?? ""}`}
-                    className="border-b border-border hover:bg-bg-elevated/50"
+                    className={`border-b border-border hover:bg-bg-elevated/50 ${
+                      isDisabled ? "opacity-60" : ""
+                    }`}
                   >
                     <td className="hidden px-4 py-2.5 font-mono text-xs text-text-secondary sm:table-cell">
                       {u.username}
@@ -1176,6 +1489,11 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                             {badge}
                           </span>
                         ))}
+                        {isDisabled && (
+                          <span className="rounded-full bg-rag-red-light px-2 py-0.5 text-xs font-semibold text-rag-red">
+                            {t("adminUsers.badgeDisabled", "Désactivé")}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="hidden px-4 py-2.5 text-text-secondary sm:table-cell">
@@ -1188,6 +1506,37 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
                         aria-label={t("common.edit", "Modifier")}
                       >
                         <Pencil size={14} />
+                      </button>
+                      {!isDisabled && (
+                        <button
+                          onClick={() => openResetLink(u)}
+                          className="mr-2 text-text-secondary hover:text-bp-coral"
+                          aria-label={t(
+                            "adminUsers.resetPassword",
+                            "Réinitialiser le mot de passe"
+                          )}
+                          title={t("adminUsers.resetPassword", "Réinitialiser le mot de passe")}
+                        >
+                          <KeyRound size={14} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => requestToggleDisabled(u)}
+                        className={`mr-2 text-text-secondary ${
+                          isDisabled ? "hover:text-rag-green" : "hover:text-rag-red"
+                        }`}
+                        aria-label={
+                          isDisabled
+                            ? t("adminUsers.enableUser", "Réactiver")
+                            : t("adminUsers.disableUser", "Désactiver")
+                        }
+                        title={
+                          isDisabled
+                            ? t("adminUsers.enableUser", "Réactiver")
+                            : t("adminUsers.disableUser", "Désactiver")
+                        }
+                      >
+                        <Power size={14} />
                       </button>
                       <button
                         onClick={() => remove(u.username, u.companyId ?? null)}
@@ -1234,11 +1583,7 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         onOpenChange={(next) => {
           if (!next) setRenameConfirm(null);
         }}
-        title={
-          renameConfirm?.isPasswordOnly
-            ? t("adminUsers.confirmPasswordTitle", "Changer le mot de passe ?")
-            : t("adminUsers.confirmRenameTitle", "Renommer l'utilisateur ?")
-        }
+        title={t("adminUsers.confirmRenameTitle", "Renommer l'utilisateur ?")}
         footer={
           <>
             <Button variant="ghost" onClick={() => setRenameConfirm(null)}>
@@ -1251,17 +1596,12 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
         }
       >
         <p className="text-sm text-text-secondary">
-          {renameConfirm?.isPasswordOnly
-            ? t(
-                "adminUsers.confirmPasswordBody",
-                "Vous vous apprêtez à changer le mot de passe du compte « {username} ». Si ce compte n'avait encore jamais de mot de passe (ex. owner créé sans compte de connexion), il en sera créé un."
-              ).replace("{username}", renameConfirm?.oldUsername ?? "")
-            : t(
-                "adminUsers.confirmRenameBody",
-                "Vous vous apprêtez à renommer le compte « {old} » en « {new} ». L'ancien identifiant cessera de fonctionner ; les profils, l'entreprise et les droits associés sont conservés."
-              )
-                .replace("{old}", renameConfirm?.oldUsername ?? "")
-                .replace("{new}", renameConfirm?.newUser.username ?? "")}{" "}
+          {t(
+            "adminUsers.confirmRenameBody",
+            "Vous vous apprêtez à renommer le compte « {old} » en « {new} ». L'ancien identifiant cessera de fonctionner ; les profils, l'entreprise et les droits associés sont conservés."
+          )
+            .replace("{old}", renameConfirm?.oldUsername ?? "")
+            .replace("{new}", renameConfirm?.newUser.username ?? "")}{" "}
           {t("adminUsers.notReversible", "Cette action n'est pas réversible depuis cet écran.")}
         </p>
       </Modal>
@@ -1291,6 +1631,119 @@ export function UsersPanel({ scopeCompanyId }: { scopeCompanyId?: string } = {})
             "Le compte « {username} » sera définitivement supprimé (Firebase Auth et profil). Cette action est irréversible."
           ).replace("{username}", deleteConfirm?.username ?? "")}
         </p>
+      </Modal>
+
+      {/* Confirmation avant désactivation / réactivation (compte conservé, historique intact). */}
+      <Modal
+        open={disableConfirm !== null}
+        onOpenChange={(next) => {
+          if (!next) setDisableConfirm(null);
+        }}
+        title={
+          disableConfirm?.disabled
+            ? t("adminUsers.confirmDisableTitle", "Désactiver l'utilisateur ?")
+            : t("adminUsers.confirmEnableTitle", "Réactiver l'utilisateur ?")
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDisableConfirm(null)}>
+              {t("common.cancel", "Annuler")}
+            </Button>
+            <Button
+              variant={disableConfirm?.disabled ? "danger" : "primary"}
+              onClick={confirmToggleDisabled}
+            >
+              {disableConfirm?.disabled
+                ? t("adminUsers.disableUser", "Désactiver")
+                : t("adminUsers.enableUser", "Réactiver")}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text-secondary">
+          {(disableConfirm?.disabled
+            ? t(
+                "adminUsers.confirmDisableBody",
+                "Le compte « {username} » ne pourra plus se connecter et ses sessions ouvertes seront coupées. Le compte et son historique sont conservés ; vous pourrez le réactiver à tout moment."
+              )
+            : t(
+                "adminUsers.confirmEnableBody",
+                "Le compte « {username} » pourra de nouveau se connecter avec son mot de passe actuel."
+              )
+          ).replace("{username}", disableConfirm?.user.username ?? "")}
+        </p>
+      </Modal>
+
+      {/* Lien de réinitialisation à usage unique — l'admin ne voit ni ne choisit jamais le mot de
+          passe. Copie / mailto parce que les e-mails Firebase Auth sont synthétiques et ne
+          reçoivent aucun courrier (voir openResetLink). */}
+      <Modal
+        open={resetLinkDialog !== null}
+        onOpenChange={(next) => {
+          if (!next) setResetLinkDialog(null);
+        }}
+        title={
+          resetLinkDialog?.isNewAccount
+            ? t("adminUsers.resetLinkNewTitle", "Utilisateur créé — lien d'activation")
+            : t("adminUsers.resetLinkTitle", "Lien de réinitialisation du mot de passe")
+        }
+        maxWidth="560px"
+        footer={
+          <Button variant="primary" onClick={() => setResetLinkDialog(null)}>
+            {t("adminUsers.close", "Fermer")}
+          </Button>
+        }
+      >
+        {resetLinkDialog && (
+          <div className="space-y-3 text-sm text-text-secondary">
+            <p>
+              {t(
+                "adminUsers.resetLinkBody",
+                "Transmettez ce lien à « {username} » : il lui permet de définir lui-même son mot de passe. Il est à usage unique et expire après un délai limité. Vous ne voyez jamais le mot de passe."
+              ).replace("{username}", resetLinkDialog.username)}
+            </p>
+            <input
+              readOnly
+              value={resetLinkDialog.link}
+              onFocus={(e) => e.currentTarget.select()}
+              aria-label={t("adminUsers.resetLinkLabel", "Lien de réinitialisation")}
+              className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2 font-mono text-xs text-text-primary outline-none"
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={copyResetLink}>
+                <Copy size={14} className="mr-1.5 inline" />
+                {linkCopied
+                  ? t("adminUsers.linkCopied", "Lien copié")
+                  : t("adminUsers.copyLink", "Copier le lien")}
+              </Button>
+              {resetLinkDialog.email && (
+                <a
+                  href={buildPasswordResetMailto({
+                    email: resetLinkDialog.email,
+                    displayName: resetLinkDialog.displayName,
+                    username: resetLinkDialog.username,
+                    link: resetLinkDialog.link,
+                  })}
+                  className="inline-flex items-center rounded-lg bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:bg-bp-coral/90"
+                >
+                  <Mail size={14} className="mr-1.5" />
+                  {t("adminUsers.sendByEmail", "Envoyer par e-mail à {email}").replace(
+                    "{email}",
+                    resetLinkDialog.email
+                  )}
+                </a>
+              )}
+            </div>
+            {!resetLinkDialog.email && (
+              <p className="text-xs">
+                {t(
+                  "adminUsers.resetLinkNoEmail",
+                  "Aucun e-mail de contact renseigné pour cet utilisateur : copiez le lien et transmettez-le par un canal sûr."
+                )}
+              </p>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

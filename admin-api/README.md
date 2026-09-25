@@ -16,8 +16,23 @@ Next.js app's build and does not affect it.
   `{ oldUsername, newUsername, companyId, newPassword? }`.
 - `POST /admin/delete-user` — `Authorization: Bearer <Firebase ID token>`, body
   `{ username, companyId }`.
+- `POST /admin/set-user-disabled` — `Authorization: Bearer <Firebase ID token>`, body
+  `{ username, companyId, disabled: boolean }`. Sets the `disabled` flag on BOTH the Firebase Auth
+  account (`updateUser`, plus `revokeRefreshTokens` when disabling) and the `adminUsers` doc (the
+  frontend also refuses login on that Firestore flag, so it holds even if this service is down).
+  Refuses to disable the caller's own account (`403`) or the last active company admin of the
+  company (`409`).
+- `POST /admin/password-reset-link` — `Authorization: Bearer <Firebase ID token>`, body
+  `{ username, companyId }` → `200 { ok: true, link }`. Returns a one-time Firebase password reset
+  link (`generatePasswordResetLink`) for the user's synthetic email; the admin never sees or sets
+  the password. Because synthetic emails (`…@betrack.local`) cannot receive mail, the link is
+  returned to the admin UI, which offers "copy" and a `mailto:` to the user's real contact email
+  (`adminUsers.email`) when set. If the profile has no Firebase Auth account yet (seeded "picker"
+  owners), one is created with a random, never-disclosed password first. Refuses a disabled account
+  (`409`). Optional env var `PASSWORD_RESET_CONTINUE_URL`: return URL after the reset (its domain
+  must be in Firebase Auth's authorized domains).
 
-Both POST routes require the caller to be `role: "admin"` (global) or `role: "admin_entreprise"`
+All POST routes require the caller to be `role: "admin"` (global) or `role: "admin_entreprise"`
 for the target `companyId`. Errors are returned as
 `{ ok: false, error: "<code>", message: "<French message>" }` with an appropriate HTTP status
 (`400 invalid_input`, `401 unauthenticated`, `403 forbidden`, `404 not_found`, `409 conflict`,

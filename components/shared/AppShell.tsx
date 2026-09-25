@@ -298,7 +298,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     // allowedRoutes.has() suffirait déjà à les bloquer, mais on le rend explicite ici.
     const isCompanyDetail = pathname === "/admin/companies/detail";
     const companyDetailAllowed = isCompanyDetail && !!user.isGlobalAdmin;
-    if (!isLeverDetail && !companyDetailAllowed && !allowedRoutes.has(pathname)) {
+    // « Mon profil » (/profile) : ouvert depuis le bloc utilisateur de la Sidebar, jamais dans la
+    // nav, et accessible à TOUT utilisateur connecté quel que soit son profil (consultation de son
+    // compte + changement de mot de passe) — liste blanche explicite.
+    const isProfilePage = pathname === "/profile";
+    if (!isLeverDetail && !companyDetailAllowed && !isProfilePage && !allowedRoutes.has(pathname)) {
       // Repli sur la première page RÉELLEMENT autorisée (nav filtrée elle ne peut plus être vide
       // ici, voir le retour anticipé ci-dessus) : renvoyer vers `navItems[0]` SANS le filtre par
       // type de programme pourrait pointer une page elle-même interdite pour le type de programme

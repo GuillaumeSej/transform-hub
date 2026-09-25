@@ -170,6 +170,25 @@ describe("auth — resolveAuthUserProfile", () => {
     });
   });
 
+  it("refuses a disabled account (Firestore flag) with a clear French message", async () => {
+    getDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        username: "bob",
+        profiles: [],
+        firstName: "Bob",
+        lastName: "L",
+        name: "Bob L",
+        companyId: "c1",
+        disabled: true,
+      }),
+    });
+    const { resolveAuthUserProfile, AccountDisabledError } = await import("@/lib/auth");
+    const promise = resolveAuthUserProfile("bob.c1");
+    await expect(promise).rejects.toBeInstanceOf(AccountDisabledError);
+    await expect(promise).rejects.toThrow(/désactivé/);
+  });
+
   it("throws an explicit error when no Firestore profile matches", async () => {
     getDoc.mockResolvedValue({ exists: () => false });
     const { resolveAuthUserProfile } = await import("@/lib/auth");

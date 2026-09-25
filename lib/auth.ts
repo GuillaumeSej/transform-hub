@@ -109,6 +109,20 @@ export async function resolveAuthUserProfile(slug: string): Promise<AuthUser> {
   }
 
   const data = snap.data();
+  // Compte désactivé par un admin (UsersPanel) : refusé ICI, sur le flag Firestore, et pas
+  // seulement via le flag `disabled` Firebase Auth posé par admin-api — la connexion reste donc
+  // bloquée même si admin-api était injoignable au moment de la désactivation. On coupe aussi la
+  // session Firebase qui vient d'être ouverte (ou persistée, cas useRole.tsx).
+  if (data.disabled === true) {
+    try {
+      const { signOut } = await import("firebase/auth");
+      const { getAuthInstance } = await import("@/lib/firebase");
+      await signOut(getAuthInstance());
+    } catch {
+      // Déconnexion best-effort : l'erreur ci-dessous empêche de toute façon la session applicative.
+    }
+    throw new AccountDisabledError();
+  }
   const { profiles, isGlobalAdmin, isCompanyAdmin } = normalizeProfileFields(data);
   return {
     username: data.username,
@@ -122,7 +136,20 @@ export async function resolveAuthUserProfile(slug: string): Promise<AuthUser> {
     companyId: data.companyId ?? null,
     confidentialityClearance: data.confidentialityClearance,
     direction: data.direction,
+    email: data.email,
   };
+}
+
+/** Message affiché à la connexion d'un compte désactivé (flag Firestore `adminUsers.disabled`, ou
+ *  erreur Firebase Auth `auth/user-disabled` — voir app/login/page.tsx). */
+export const ACCOUNT_DISABLED_MESSAGE =
+  "Ce compte a été désactivé. Contactez l'administrateur de votre entreprise pour le réactiver.";
+
+export class AccountDisabledError extends Error {
+  constructor() {
+    super(ACCOUNT_DISABLED_MESSAGE);
+    this.name = "AccountDisabledError";
+  }
 }
 
 /**

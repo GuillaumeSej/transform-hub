@@ -1,6 +1,6 @@
 /**
  * Client fin pour le backend admin séparé (`admin-api/`, base URL `NEXT_PUBLIC_ADMIN_API_BASE_URL`)
- * — les deux seules opérations qui doivent passer par ce service plutôt que par Firestore
+ * — les opérations qui doivent passer par ce service plutôt que par Firestore
  * directement : renommer un compte (identifiant + mot de passe, qui touchent Firebase Auth, pas
  * seulement le profil Firestore) et supprimer un compte (idem, pour que le compte Firebase Auth
  * soit réellement supprimé et pas seulement le document Firestore). Voir UsersPanel.tsx.
@@ -41,11 +41,11 @@ function getBaseUrl(): string {
   return base.replace(/\/+$/, "");
 }
 
-async function postAdminApi<TBody extends object>(
+async function postAdminApi<TBody extends object, TResult extends object = object>(
   path: string,
   idToken: string,
   body: TBody
-): Promise<void> {
+): Promise<TResult> {
   const base = getBaseUrl();
   let res: Response;
   try {
@@ -64,7 +64,9 @@ async function postAdminApi<TBody extends object>(
     );
   }
 
-  let data: { ok?: boolean; error?: AdminApiErrorCode; message?: string } | null = null;
+  let data:
+    ({ ok?: boolean; error?: AdminApiErrorCode; message?: string } & Partial<TResult>) | null =
+    null;
   try {
     data = await res.json();
   } catch {
@@ -76,6 +78,7 @@ async function postAdminApi<TBody extends object>(
     const message = data?.message ?? "Erreur inconnue du service d'administration des comptes.";
     throw new AdminApiError(code, message);
   }
+  return data as TResult;
 }
 
 /**
@@ -100,4 +103,38 @@ export async function deleteUserAccount(
   params: { username: string; companyId: string | null }
 ): Promise<void> {
   await postAdminApi("/admin/delete-user", idToken, params);
+}
+
+/** Désactive (`disabled: true`) ou réactive un compte : flag Firebase Auth ET flag Firestore
+ *  `adminUsers.disabled`, via le backend admin (refuse l'auto-désactivation et la désactivation du
+ *  dernier admin d'entreprise actif). */
+export async function setUserDisabled(
+  idToken: string,
+  params: { username: string; companyId: string | null; disabled: boolean }
+): Promise<void> {
+  await postAdminApi("/admin/set-user-disabled", idToken, params);
+}
+
+/**
+ * Obtient un lien de réinitialisation de mot de passe À USAGE UNIQUE pour un utilisateur — l'admin
+ * ne voit ni ne choisit jamais le mot de passe. Le lien est renvoyé à l'UI (copie / `mailto:`)
+ * plutôt qu'envoyé par Firebase : les e-mails Firebase Auth sont synthétiques (voir
+ * lib/auth.ts:usernameToSyntheticEmail) et ne peuvent recevoir aucun courrier.
+ */
+export async function generatePasswordResetLink(
+  idToken: string,
+  params: { username: string; companyId: string | null }
+): Promise<string> {
+  const data = await postAdminApi<typeof params, { link: string }>(
+    "/admin/password-reset-link",
+    idToken,
+    params
+  );
+  if (typeof data.link !== "string" || !data.link) {
+    throw new AdminApiError(
+      "internal_error",
+      "Réponse inattendue du service d'administration des comptes (lien manquant)."
+    );
+  }
+  return data.link;
 }

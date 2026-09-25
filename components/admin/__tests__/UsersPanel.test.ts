@@ -92,6 +92,15 @@ describe("UsersPanel — missingRequiredFields", () => {
     );
   });
 
+  it("does not require a password when requirePassword is false (edit, or creation via reset link)", () => {
+    expect(
+      missingRequiredFields({ ...validForm, password: "", requirePassword: false }, undefined)
+    ).toEqual([]);
+    expect(
+      missingRequiredFields({ ...validForm, password: "", requirePassword: true }, undefined)
+    ).toContain("Mot de passe");
+  });
+
   it("flags Entreprise for a non-global-admin account when the field is shown (no fixedCompanyId) and empty", () => {
     expect(missingRequiredFields({ ...validForm, companyId: "" }, undefined)).toContain(
       "Entreprise"

@@ -3,8 +3,13 @@
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import { useEffect, useState } from "react";
 import { History } from "lucide-react";
-import type { AuditEntry, Lever } from "@/types";
+import type { AuditEntry, Company, Lever } from "@/types";
 import { subscribeAuditLog, subscribeLevers, filterAuditByCompany } from "@/lib/firestore/levers";
+import {
+  subscribeAccountAudit,
+  subscribeCompanies,
+  type AccountAuditEntry,
+} from "@/lib/firestore/admin";
 import { useRole } from "@/lib/hooks/useRole";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { intlTag } from "@/lib/format";
@@ -37,6 +42,20 @@ function actionLabels(t: (key: string, fallback?: string) => string): Record<str
   };
 }
 
+/** Libellés des actions sur les COMPTES journalisées par admin-api (`adminApiAuditLog`, voir
+ *  admin-api/src/lib/audit.ts). */
+function accountActionLabels(
+  t: (key: string, fallback?: string) => string
+): Record<string, string> {
+  return {
+    rename_user: t("adminHistory.account.renameUser", "Renommage"),
+    delete_user: t("adminHistory.account.deleteUser", "Suppression"),
+    disable_user: t("adminHistory.account.disableUser", "Désactivation"),
+    enable_user: t("adminHistory.account.enableUser", "Réactivation"),
+    password_reset_link: t("adminHistory.account.passwordResetLink", "Lien de réinitialisation"),
+  };
+}
+
 function formatTimestamp(ts: string): string {
   try {
     const d = new Date(ts);
@@ -55,8 +74,17 @@ function formatTimestamp(ts: string): string {
 export default function AdminHistoryPage() {
   const { t } = useTranslation();
   const ACTION_LABELS = actionLabels(t);
+  const ACCOUNT_ACTION_LABELS = accountActionLabels(t);
   const { user } = useRole();
-  const companyId = user?.companyId ?? null;
+  // Admin d'entreprise : toujours SA société. Admin global (companyId null) : le journal métier
+  // est partitionné par entreprise (`leverMeta/{companyId}__auditLog`) et `subscribeAuditLog(null)`
+  // ne renvoie rien — sans sélecteur, l'historique d'un admin global restait donc toujours vide.
+  const ownCompanyId = user?.companyId ?? null;
+  const isGlobalViewer = !!user && ownCompanyId === null;
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const companyId = ownCompanyId ?? (selectedCompanyId || companies[0]?.id || null);
+  const [accountAudit, setAccountAudit] = useState<AccountAuditEntry[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [levers, setLevers] = useState<Lever[]>([]);
   const [actionFilter, setActionFilter] = useState<string[]>([]);
@@ -64,9 +92,27 @@ export default function AdminHistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
+    if (!isGlobalViewer) return;
+    const unsub = subscribeCompanies(setCompanies, null);
+    return unsub;
+  }, [isGlobalViewer]);
+
+  useEffect(() => {
     const unsub = subscribeAuditLog(setAudit, companyId);
     return unsub;
   }, [companyId]);
+
+  // Actions sur les comptes (admin-api) : scopées à l'entreprise pour un admin d'entreprise
+  // (imposé par firestore.rules), journal complet pour l'admin global, filtré ci-dessous sur
+  // l'entreprise sélectionnée (+ les actions sur les comptes admin globaux, companyId null).
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeAccountAudit(setAccountAudit, ownCompanyId);
+    return unsub;
+  }, [user, ownCompanyId]);
+  const visibleAccountAudit = isGlobalViewer
+    ? accountAudit.filter((e) => e.companyId === companyId || e.companyId === null)
+    : accountAudit;
 
   useEffect(() => {
     const unsub = subscribeLevers(setLevers, companyId);
@@ -118,6 +164,20 @@ export default function AdminHistoryPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+        {isGlobalViewer && companies.length > 0 && (
+          <select
+            value={companyId ?? ""}
+            onChange={(e) => setSelectedCompanyId(e.target.value)}
+            aria-label={t("adminHistory.company", "Entreprise")}
+            className="rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
+          >
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -272,6 +332,61 @@ export default function AdminHistoryPage() {
             {t("adminHistory.empty", "Aucune entrée dans l'historique.")}
           </div>
         )}
+      </div>
+
+      {/* Actions sur les comptes utilisateurs (renommage, suppression, désactivation, lien de
+          réinitialisation) — journal `adminApiAuditLog` écrit par admin-api. */}
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold text-text-primary">
+          {t("adminHistory.accountTitle", "Actions sur les comptes utilisateurs")}
+        </h2>
+        <div className="rounded-xl border border-border overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-bg-elevated border-b border-border">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                  {t("adminHistory.column.date", "Date")}
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                  {t("adminHistory.account.actor", "Par")}
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                  {t("adminHistory.column.action", "Action")}
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                  {t("adminHistory.account.target", "Compte")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleAccountAudit.map((entry) => (
+                <tr key={entry.id} className="border-b border-border hover:bg-bg-elevated/50">
+                  <td className="px-4 py-2.5 font-mono text-xs text-text-secondary whitespace-nowrap">
+                    {formatTimestamp(entry.ts)}
+                  </td>
+                  <td className="px-4 py-2.5 font-medium text-text-primary">
+                    {entry.actorUsername}
+                  </td>
+                  <td className="px-4 py-2.5 text-text-secondary">
+                    {ACCOUNT_ACTION_LABELS[entry.action] ?? entry.action}
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">
+                    {entry.targetNewUsername
+                      ? `${entry.targetOldUsername} → ${entry.targetNewUsername}`
+                      : entry.targetOldUsername}
+                  </td>
+                </tr>
+              ))}
+              {visibleAccountAudit.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6 text-center text-sm text-text-secondary">
+                    {t("adminHistory.accountEmpty", "Aucune action sur les comptes.")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

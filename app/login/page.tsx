@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
-import { signInUser } from "@/lib/auth";
+import { AccountDisabledError, ACCOUNT_DISABLED_MESSAGE, signInUser } from "@/lib/auth";
 import { subscribeCompanyDirectory } from "@/lib/firestore/admin";
 import { resolveLandingRoute, resolveUserNav } from "@/lib/nav-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -68,6 +68,11 @@ export default function LoginPage() {
         : undefined;
     if (code === "auth/operation-not-allowed" || code === "auth/configuration-not-found") {
       return t("login.errorNotConfigured");
+    }
+    // Compte désactivé par un admin : flag Firebase Auth (admin-api) OU flag Firestore
+    // `adminUsers.disabled` (vérifié par resolveAuthUserProfile, même sans admin-api).
+    if (code === "auth/user-disabled" || err instanceof AccountDisabledError) {
+      return t("login.errorDisabled", ACCOUNT_DISABLED_MESSAGE);
     }
     // Authentifié avec succès mais aucun document 'adminUsers' correspondant (voir
     // resolveAuthUserProfile dans lib/auth.ts) — pas un problème d'identifiants, message dédié.

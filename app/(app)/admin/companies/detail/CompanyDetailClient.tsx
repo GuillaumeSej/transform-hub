@@ -13,9 +13,34 @@ import {
   BarChart3,
   FolderKanban,
   SlidersHorizontal,
+  UserPlus,
 } from "lucide-react";
-import type { Company } from "@/types";
-import { subscribeCompanies, saveCompany } from "@/lib/firestore/admin";
+import type {
+  AuthUser,
+  Chantier,
+  Company,
+  Indicator,
+  Lever,
+  Program,
+  StrategicAxis,
+} from "@/types";
+import {
+  subscribeCompanies,
+  saveCompany,
+  subscribePrograms,
+  subscribeUsers,
+} from "@/lib/firestore/admin";
+import { subscribeStrategicAxes } from "@/lib/firestore/strategicAxes";
+import { subscribeChantiers } from "@/lib/firestore/chantiers";
+import { subscribeLevers } from "@/lib/firestore/levers";
+import { subscribeIndicators } from "@/lib/firestore/indicators";
+import {
+  computeCompanyOnboardingSteps,
+  countConfidentialityLevelUsage,
+  type CompanyOnboardingStepId,
+} from "@/lib/companyOnboarding";
+import { resolveProgramType } from "@/lib/axisLogic";
+import { CompanyOnboardingChecklist } from "@/components/admin/CompanyOnboardingChecklist";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import {
@@ -132,6 +157,8 @@ export default function CompanyDetailClient() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState<TabId>(() => (isTabId(urlTab) ? urlTab : "settings"));
+  // Ouvre le formulaire UsersPanel avec « Admin entreprise » pré-coché (étape 2 de la mise en place).
+  const [createAdminSignal, setCreateAdminSignal] = useState(0);
   const [form, setForm] = useState<CompanyFormState>(DEFAULT_COMPANY_FORM);
   const [saving, setSaving] = useState(false);
 
@@ -151,6 +178,87 @@ export default function CompanyDetailClient() {
   }, [companyId]);
 
   const company = useMemo(() => companies.find((c) => c.id === companyId), [companies, companyId]);
+
+  // Données de la checklist « Mise en place » (voir lib/companyOnboarding.ts) et du décompte
+  // d'usage des niveaux de confidentialité (avertissement au retrait/renommage d'un niveau).
+  // Abonnements scopés sur l'entreprise, réservés au global admin (seul profil admis ici).
+  const [companyUsers, setCompanyUsers] = useState<AuthUser[]>([]);
+  const [companyPrograms, setCompanyPrograms] = useState<Program[]>([]);
+  const [companyAxes, setCompanyAxes] = useState<StrategicAxis[]>([]);
+  const [companyChantiers, setCompanyChantiers] = useState<Chantier[]>([]);
+  const [companyLevers, setCompanyLevers] = useState<Lever[]>([]);
+  const [companyIndicators, setCompanyIndicators] = useState<Indicator[]>([]);
+  useEffect(() => {
+    if (!isGlobalAdmin || !companyId) return;
+    const unsubs = [
+      subscribeUsers(setCompanyUsers, companyId),
+      subscribePrograms(setCompanyPrograms, companyId),
+      subscribeStrategicAxes(companyId, setCompanyAxes),
+      subscribeChantiers(companyId, setCompanyChantiers),
+      subscribeLevers(setCompanyLevers, companyId),
+      subscribeIndicators(companyId, setCompanyIndicators),
+    ];
+    return () => unsubs.forEach((unsub) => unsub());
+  }, [isGlobalAdmin, companyId]);
+
+  const onboardingSteps = useMemo(
+    () =>
+      computeCompanyOnboardingSteps({
+        company,
+        users: companyUsers,
+        programs: companyPrograms,
+        axes: companyAxes,
+      }),
+    [company, companyUsers, companyPrograms, companyAxes]
+  );
+  const hasCompanyAdmin = onboardingSteps.find((s) => s.id === "companyAdmin")?.done ?? false;
+  const levelUsage = useMemo(
+    () =>
+      countConfidentialityLevelUsage({
+        levers: companyLevers,
+        axes: companyAxes,
+        chantiers: companyChantiers,
+        indicators: companyIndicators,
+        users: companyUsers,
+      }),
+    [companyLevers, companyAxes, companyChantiers, companyIndicators, companyUsers]
+  );
+
+  /** Bouton d'une étape de la checklist : ouvre l'onglet concerné puis fait défiler jusqu'à la
+   *  section (l'onglet n'est rendu qu'après le changement d'état, d'où le léger différé). */
+  const goToOnboardingStep = (step: CompanyOnboardingStepId) => {
+    const scrollTo = (elementId: string) =>
+      window.setTimeout(
+        () =>
+          document
+            .getElementById(elementId)
+            ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+        50
+      );
+    if (step === "strategicPlan" && company) {
+      const strategic = companyPrograms.find((p) => resolveProgramType(p) === "strategic");
+      // Pas encore de programme stratégique : parcours d'import Excel (crée le programme à la
+      // confirmation). Sinon, fiche du programme existant — ne jamais en créer un second.
+      router.replace(
+        strategic
+          ? `/admin/companies/detail?id=${encodeURIComponent(company.id)}&tab=projects&manageProgram=${encodeURIComponent(strategic.id)}`
+          : `/admin/companies/detail?id=${encodeURIComponent(company.id)}&onboarding=strategic`
+      );
+      if (strategic) setTab("projects");
+      scrollTo(strategic ? "company-detail-tabs" : "company-strategic-onboarding");
+      return;
+    }
+    const target: Record<CompanyOnboardingStepId, TabId> = {
+      company: "settings",
+      companyAdmin: "users",
+      settings: "projects",
+      confidentiality: "settings",
+      strategicPlan: "projects",
+    };
+    setTab(target[step]);
+    if (step === "companyAdmin" && !hasCompanyAdmin) setCreateAdminSignal((n) => n + 1);
+    scrollTo(step === "confidentiality" ? "company-confidentiality-levels" : "company-detail-tabs");
+  };
 
   // "Baseline" du formulaire = état dérivé de `company` en Firestore. On compare `form` à cette
   // baseline pour savoir si l'utilisateur a des modifs non enregistrées (seul l'onglet "settings"
@@ -311,26 +419,35 @@ export default function CompanyDetailClient() {
         </div>
       </div>
 
-      {showStrategicOnboarding && company && (
-        <StrategicPlanOnboarding
-          companyId={company.id}
-          onManual={() =>
-            router.replace(
-              `/admin/companies/detail?id=${encodeURIComponent(company.id)}&tab=projects`
-            )
-          }
-          onOpenProgram={(programId) =>
-            router.replace(
-              `/admin/companies/detail?id=${encodeURIComponent(company.id)}&tab=projects&manageProgram=${encodeURIComponent(programId)}`
-            )
-          }
-          onDismiss={() =>
-            router.replace(`/admin/companies/detail?id=${encodeURIComponent(company.id)}`)
-          }
-        />
+      {company && (
+        <CompanyOnboardingChecklist steps={onboardingSteps} onGoTo={goToOnboardingStep} />
       )}
 
-      <div className="flex snap-x gap-2 overflow-x-auto border-b border-border pb-2">
+      {showStrategicOnboarding && company && (
+        <div id="company-strategic-onboarding" className="scroll-mt-4">
+          <StrategicPlanOnboarding
+            companyId={company.id}
+            onManual={() =>
+              router.replace(
+                `/admin/companies/detail?id=${encodeURIComponent(company.id)}&tab=projects`
+              )
+            }
+            onOpenProgram={(programId) =>
+              router.replace(
+                `/admin/companies/detail?id=${encodeURIComponent(company.id)}&tab=projects&manageProgram=${encodeURIComponent(programId)}`
+              )
+            }
+            onDismiss={() =>
+              router.replace(`/admin/companies/detail?id=${encodeURIComponent(company.id)}`)
+            }
+          />
+        </div>
+      )}
+
+      <div
+        id="company-detail-tabs"
+        className="flex snap-x scroll-mt-4 gap-2 overflow-x-auto border-b border-border pb-2"
+      >
         {TABS.map((tabDef) => {
           const Icon = tabDef.icon;
           const active = tab === tabDef.id;
@@ -359,6 +476,7 @@ export default function CompanyDetailClient() {
               <CompanyFieldsEditor
                 value={form}
                 onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+                levelUsage={levelUsage}
               />
               <button
                 onClick={saveSettings}
@@ -374,7 +492,36 @@ export default function CompanyDetailClient() {
           )}
           {tab === "configuration" && <ProgramConfigEditor companyId={company.id} />}
           {tab === "impact-config" && <ImpactConfigEditor companyId={company.id} />}
-          {tab === "users" && <UsersPanel scopeCompanyId={company.id} />}
+          {tab === "users" && (
+            <div className="space-y-3">
+              {/* Étape 2 de la mise en place : le premier accès client EST le compte admin
+                  d'entreprise. Création via le formulaire unique de UsersPanel (pas de doublon). */}
+              {!hasCompanyAdmin && (
+                <div className="flex items-start gap-2 rounded-lg border border-bp-coral/40 bg-bp-coral/5 p-3 text-xs text-text-primary">
+                  <UserPlus size={14} className="mt-0.5 shrink-0 text-bp-coral" />
+                  <div className="flex-1 space-y-2">
+                    <p>
+                      {t(
+                        "admin.onboarding.companyAdmin.hintShort",
+                        "Aucun admin d'entreprise pour ce client. Créez son premier accès : il gérera ensuite ses utilisateurs et leurs habilitations de confidentialité."
+                      )}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setCreateAdminSignal((n) => n + 1)}
+                      className="rounded-md bg-bp-coral px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                    >
+                      {t("admin.onboarding.companyAdmin.create", "Créer l'admin entreprise")}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <UsersPanel
+                scopeCompanyId={company.id}
+                createCompanyAdminSignal={createAdminSignal}
+              />
+            </div>
+          )}
           {tab === "financial-hierarchy" && (
             <HierarchyEditor companies={companies} companyId={company.id} domain="financial" />
           )}
