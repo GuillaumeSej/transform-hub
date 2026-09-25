@@ -316,29 +316,40 @@ export function TodoSection({
 
 // ─── Bloqué chez d'autres (vue pilotage) ────────────────────────────────────────────────────────
 
+/** Aussi rendu par l'onglet « En attente chez d'autres » de la page Validation
+ *  (app/(app)/validation/page.tsx), qui surcharge `title` / `subtitle` / `emptyLabel`. */
 export function BlockedSection({
   items,
   navigate,
   t,
+  title,
+  subtitle,
+  emptyLabel,
   ...filter
 }: {
   items: WorkspaceItem[];
   navigate: Navigate;
   t: Translate;
+  title?: string;
+  subtitle?: string;
+  emptyLabel?: string;
 } & FilterProps) {
   return (
     <Card className={cn(filter.filterLabel && HIGHLIGHT)}>
       <SectionHeader
-        title={t("me.blocked.title", "Bloqué chez d'autres")}
+        title={title ?? t("me.blocked.title", "Bloqué chez d'autres")}
         count={items.length}
-        subtitle={t(
-          "me.blocked.subtitle",
-          "Vue par exception : validations en attente chez un autre acteur depuis plus de 7 jours."
-        )}
+        subtitle={
+          subtitle ??
+          t(
+            "me.blocked.subtitle",
+            "Vue par exception : validations en attente chez un autre acteur depuis plus de 7 jours."
+          )
+        }
         actions={filterActions(filter, t)}
       />
       {items.length === 0 ? (
-        <EmptyState title={t("me.blocked.empty", "Aucune validation bloquée.")} />
+        <EmptyState title={emptyLabel ?? t("me.blocked.empty", "Aucune validation bloquée.")} />
       ) : (
         <ul className="divide-y divide-border">
           {items.map((item) => (
@@ -516,7 +527,7 @@ export function PerimeterSection({
 
 // ─── Squelette de chargement ────────────────────────────────────────────────────────────────────
 
-function SkeletonCard({ rows }: { rows: number }) {
+export function SkeletonCard({ rows }: { rows: number }) {
   return (
     <div className="mb-4 overflow-hidden rounded-lg border border-border bg-white shadow-sm">
       <div className="border-b border-border px-[18px] py-3.5">

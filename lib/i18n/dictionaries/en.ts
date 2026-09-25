@@ -59,6 +59,12 @@ const en: Record<string, string> = {
   "validation.milestone.projet": "Project",
   "validation.milestone.chantier": "Work package",
   "validation.milestone.targetMilestone": "Target milestone",
+  "validation.tabs.mine": "My decisions",
+  "validation.tabs.blocked": "Waiting on others",
+  "validation.tabs.blockedSubtitle":
+    "Approvals pending for more than 7 days with another decision-maker — follow up on them.",
+  "validation.tabs.blockedEmpty": "No approvals waiting on others for more than 7 days.",
+  "validation.tabs.loading": "Loading…",
   // Validation stratégique (lib/strategicApprovals.ts)
   "validation.sa.kind.milestone": "Milestone change",
   "validation.sa.kind.kpi_value": "KPI value",

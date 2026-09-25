@@ -51,8 +51,11 @@ const sectionHeaders = (nav: NavItem[]) =>
     .map((i) => i.section);
 
 describe("« Mon espace » in the « Mes actions » (decision) section", () => {
+  const PILOT_ROLES: Role[] = ["cto", "program_sponsor", "program_owner"];
   const allDefs = [
-    ...Object.entries(roles).map(([role, def]) => [role, def.nav] as const),
+    ...Object.entries(roles)
+      .filter(([role]) => !PILOT_ROLES.includes(role as Role))
+      .map(([role, def]) => [role, def.nav] as const),
     ["admin-global", ADMIN_NAV_DEFINITIONS.global.nav] as const,
     ["admin-company", ADMIN_NAV_DEFINITIONS.company.nav] as const,
   ];
@@ -67,6 +70,10 @@ describe("« Mon espace » in the « Mes actions » (decision) section", () => {
       if (validationIndex >= 0) expect(validationIndex).toBe(meIndex + 1);
     }
   );
+
+  it.each(PILOT_ROLES)("%s: no « Mon espace » (pilot profile, see Validation tab)", (role) => {
+    expect(roles[role].nav.some((i) => i.id === "me")).toBe(false);
+  });
 
   it.each(Object.keys(roles) as Role[])(
     "%s: resolved nav has no duplicated section header",
@@ -93,9 +100,14 @@ describe("« Mon espace » in the « Mes actions » (decision) section", () => {
   });
 });
 
-describe("resolveLandingRoute — landing page stays /me", () => {
-  it.each(Object.keys(roles) as Role[])("%s → /me", (role) => {
+describe("resolveLandingRoute — /me for operational profiles, dashboard for pilots", () => {
+  const PILOTS: Role[] = ["cto", "program_sponsor", "program_owner"];
+  it.each((Object.keys(roles) as Role[]).filter((r) => !PILOTS.includes(r)))("%s → /me", (role) => {
     expect(resolveLandingRoute(resolveUserNav(u(role)))).toBe("/me");
+  });
+
+  it.each(PILOTS)("%s → /dashboard", (role) => {
+    expect(resolveLandingRoute(resolveUserNav(u(role)))).toBe("/dashboard");
   });
 
   it("admins → /me", () => {

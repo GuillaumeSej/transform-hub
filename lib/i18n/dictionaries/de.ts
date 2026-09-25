@@ -56,6 +56,12 @@ const de: Record<string, string> = {
   "validation.milestone.projet": "Projekt",
   "validation.milestone.chantier": "Arbeitspaket",
   "validation.milestone.targetMilestone": "Zielmeilenstein",
+  "validation.tabs.mine": "Meine Entscheidungen",
+  "validation.tabs.blocked": "Wartet auf andere",
+  "validation.tabs.blockedSubtitle":
+    "Freigaben, die seit mehr als 7 Tagen bei einem anderen Entscheider liegen — fassen Sie nach.",
+  "validation.tabs.blockedEmpty": "Keine Freigaben, die seit mehr als 7 Tagen bei anderen warten.",
+  "validation.tabs.loading": "Wird geladen…",
   // Validation stratégique (lib/strategicApprovals.ts)
   "validation.sa.kind.milestone": "Meilensteinwechsel",
   "validation.sa.kind.kpi_value": "KPI-Wert",

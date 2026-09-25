@@ -71,7 +71,10 @@ const CTO_LIKE_NAV: RoleDefinition["nav"] = [
     programTypes: ["performance"],
   },
   { id: "hr", icon: "Users", label: "nav.hrDashboard", programTypes: ["performance"] },
-  ME_NAV_ITEM,
+  // PAS de « Mon espace » (ME_NAV_ITEM) pour les profils de pilotage (cto / program_sponsor /
+  // program_owner) : il doublonnait Validation (leurs décisions) et le tableau de bord (alertes,
+  // santé par programme). Leur seul apport propre, « Bloqué chez d'autres », vit désormais dans un
+  // onglet de la page Validation. Page d'arrivée = tableau de bord (voir `resolveLandingRoute`).
   // Portes de validation (voir lib/leversLogic.ts::approveLeverGate) : visible pour cto (tous les
   // programmes) et program_sponsor/program_owner (visibilité restreinte à leurs programmes via
   // lib/consolidatedProgramAccess.ts, même mécanisme que le reste de cette nav partagée),

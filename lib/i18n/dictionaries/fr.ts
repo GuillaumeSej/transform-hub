@@ -83,6 +83,13 @@ const fr: Record<string, string> = {
   "validation.milestone.projet": "Projet",
   "validation.milestone.chantier": "Chantier",
   "validation.milestone.targetMilestone": "Jalon visé",
+  "validation.tabs.mine": "Mes décisions",
+  "validation.tabs.blocked": "En attente chez d'autres",
+  "validation.tabs.blockedSubtitle":
+    "Validations en attente depuis plus de 7 jours chez un autre décideur — relancez-les.",
+  "validation.tabs.blockedEmpty":
+    "Aucune validation en attente chez d'autres depuis plus de 7 jours.",
+  "validation.tabs.loading": "Chargement…",
   // Validation stratégique (lib/strategicApprovals.ts)
   "validation.sa.kind.milestone": "Passage de jalon",
   "validation.sa.kind.kpi_value": "Valeur KPI",

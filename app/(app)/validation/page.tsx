@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { Suspense, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { displayMilestoneId } from "@/lib/axisLogic";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
@@ -25,6 +26,15 @@ import { StageBadge } from "@/components/shared/StageBadge";
 import type { AuthUser, Lever } from "@/types";
 import { intlTag } from "@/lib/format";
 import { onActivateKey } from "@/lib/a11y";
+import { isPilotProfile } from "@/lib/myWorkspace";
+import { useMyWorkspace } from "@/lib/hooks/useMyWorkspace";
+import { BlockedSection, SkeletonCard } from "@/components/workspace/WorkspaceSections";
+import {
+  parseValidationTab,
+  validationTabQuery,
+  VALIDATION_TAB_PARAM,
+  type ValidationTab,
+} from "@/components/validation/validationTabs";
 
 function formatTimestamp(ts: string): string {
   try {
@@ -462,11 +472,94 @@ function StrategicValidationView({
   );
 }
 
-export default function ValidationPage() {
+/**
+ * Vue pilotage (cto / program_sponsor / program_owner / admins — `isPilotProfile`, même règle que
+ * « Mon espace ») : deux onglets. « Mes décisions » = contenu historique de la page, INCHANGÉ ;
+ * « En attente chez d'autres » = `MyWorkspace.blocked` (validations en attente depuis plus de 7 j
+ * chez un autre décideur), calculé par le moteur de « Mon espace » (`useMyWorkspace` → pas de règle
+ * dupliquée). Le hook n'est monté que pour les pilotes. Onglet synchronisé avec `?tab=blocked`.
+ */
+function PilotValidationTabs({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tab = parseValidationTab(searchParams.get(VALIDATION_TAB_PARAM));
+  const { workspace, loading } = useMyWorkspace();
+
+  const selectTab = (next: ValidationTab) => {
+    const qs = validationTabQuery(searchParams.toString(), next);
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
+  const blockedLabel = t("validation.tabs.blocked", "En attente chez d'autres");
+  const tabs: { id: ValidationTab; label: string }[] = [
+    { id: "mine", label: t("validation.tabs.mine", "Mes décisions") },
+    {
+      id: "blocked",
+      label: loading ? blockedLabel : `${blockedLabel} (${workspace.blocked.length})`,
+    },
+  ];
+
+  return (
+    <div>
+      <div
+        role="tablist"
+        className="mb-4 flex w-fit overflow-hidden rounded-md border border-border"
+      >
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            onClick={() => selectTab(item.id)}
+            className={`px-3 py-1.5 text-xs font-semibold ${
+              tab === item.id ? "bg-black text-white" : "bg-white text-secondary"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "mine" ? (
+        children
+      ) : loading ? (
+        <div aria-busy="true" aria-label={t("validation.tabs.loading", "Chargement…")}>
+          <SkeletonCard rows={3} />
+        </div>
+      ) : (
+        <BlockedSection
+          items={workspace.blocked}
+          navigate={(href) => router.push(href)}
+          t={t}
+          title={blockedLabel}
+          subtitle={t(
+            "validation.tabs.blockedSubtitle",
+            "Validations en attente depuis plus de 7 jours chez un autre décideur — relancez-les."
+          )}
+          emptyLabel={t(
+            "validation.tabs.blockedEmpty",
+            "Aucune validation en attente chez d'autres depuis plus de 7 jours."
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
+function ValidationPageContent() {
   const { t } = useTranslation();
   const { user } = useRole();
   const { programType, activeProgramId } = useActiveProgram();
   const isStrategic = programType === "strategic";
+
+  const decisions = isStrategic ? (
+    <StrategicValidationView user={user} activeProgramId={activeProgramId} />
+  ) : (
+    <PerformanceValidationTable user={user} />
+  );
 
   return (
     <div className="animate-fade-up">
@@ -475,11 +568,17 @@ export default function ValidationPage() {
         <h1 className="text-xl font-bold text-primary">{t("validation.title", "Validation")}</h1>
       </div>
 
-      {isStrategic ? (
-        <StrategicValidationView user={user} activeProgramId={activeProgramId} />
-      ) : (
-        <PerformanceValidationTable user={user} />
-      )}
+      {isPilotProfile(user) ? <PilotValidationTabs>{decisions}</PilotValidationTabs> : decisions}
     </div>
+  );
+}
+
+/** Suspense : `PilotValidationTabs` lit `useSearchParams()` (`?tab=`), ce que Next.js exige
+ *  d'envelopper en export statique (même motif que app/(app)/dashboard/page.tsx). */
+export default function ValidationPage() {
+  return (
+    <Suspense fallback={null}>
+      <ValidationPageContent />
+    </Suspense>
   );
 }
