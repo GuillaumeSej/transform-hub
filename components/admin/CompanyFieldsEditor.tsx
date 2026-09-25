@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useState } from "react";
 import { X } from "lucide-react";
 import type { Role, RiskLevel } from "@/types";
@@ -230,10 +231,9 @@ export function CompanyFieldsEditor({
           <label className="text-xs font-medium text-text-secondary">
             {t("adminCompanyFields.fyStart", "Début exercice")}
           </label>
-          <input
-            type="date"
+          <DateInput
             value={value.fyStart}
-            onChange={(e) => onChange({ fyStart: e.target.value })}
+            onChange={(v) => onChange({ fyStart: v })}
             className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
           />
         </div>
@@ -241,10 +241,9 @@ export function CompanyFieldsEditor({
           <label className="text-xs font-medium text-text-secondary">
             {t("adminCompanyFields.fyEnd", "Fin exercice")}
           </label>
-          <input
-            type="date"
+          <DateInput
             value={value.fyEnd}
-            onChange={(e) => onChange({ fyEnd: e.target.value })}
+            onChange={(v) => onChange({ fyEnd: v })}
             className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
           />
         </div>

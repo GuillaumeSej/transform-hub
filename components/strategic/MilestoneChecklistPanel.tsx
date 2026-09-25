@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useState, type ReactNode } from "react";
 import { CheckCircle2, Plus, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
@@ -329,11 +330,10 @@ export function MilestoneChecklistPanel({
                 >
                   {t("strategicChantierDetail.milestones.actionPlan.dueDate")}
                 </label>
-                <input
+                <DateInput
                   id={`milestone-due-${itemId}`}
-                  type="date"
                   value={stored?.actionPlan?.dueDate ?? ""}
-                  onChange={(e) => patchActionPlan({ dueDate: e.target.value })}
+                  onChange={(v) => patchActionPlan({ dueDate: v })}
                   className={SMALL_INPUT_CLASS}
                 />
               </div>

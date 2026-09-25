@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { ProgramConfig, Workstream } from "@/types";
@@ -247,10 +248,9 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
           <label className="text-xs font-medium text-text-secondary">
             {t("adminCompanyFields.fyStart", "Début exercice")}
           </label>
-          <input
-            type="date"
+          <DateInput
             value={form.fyStart}
-            onChange={(e) => setForm((f) => ({ ...f, fyStart: e.target.value }))}
+            onChange={(v) => setForm((f) => ({ ...f, fyStart: v }))}
             className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
           />
         </div>
@@ -258,10 +258,9 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
           <label className="text-xs font-medium text-text-secondary">
             {t("adminCompanyFields.fyEnd", "Fin exercice")}
           </label>
-          <input
-            type="date"
+          <DateInput
             value={form.fyEnd}
-            onChange={(e) => setForm((f) => ({ ...f, fyEnd: e.target.value }))}
+            onChange={(v) => setForm((f) => ({ ...f, fyEnd: v }))}
             className="mt-1 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
           />
         </div>

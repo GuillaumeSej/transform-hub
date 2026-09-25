@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useState, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -150,10 +151,9 @@ export function StaffingLineFields({
       <label className="block text-[11px] font-medium text-secondary">
         {t("staffing.startDate")}
         {required}
-        <input
-          type="date"
+        <DateInput
           value={value.startDate}
-          onChange={(e) => set("startDate", e.target.value)}
+          onChange={(v) => set("startDate", v)}
           onBlur={() => touch("startDate")}
           required
           aria-invalid={Boolean(errorFor("startDate"))}
@@ -164,11 +164,10 @@ export function StaffingLineFields({
       <label className="block text-[11px] font-medium text-secondary">
         {t("staffing.endDate")}
         {required}
-        <input
-          type="date"
+        <DateInput
           value={value.endDate}
           min={value.startDate || undefined}
-          onChange={(e) => set("endDate", e.target.value)}
+          onChange={(v) => set("endDate", v)}
           onBlur={() => touch("endDate")}
           required
           aria-invalid={Boolean(errorFor("endDate"))}

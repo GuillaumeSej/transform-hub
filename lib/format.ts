@@ -78,6 +78,29 @@ export function formatDate(
   return new Intl.DateTimeFormat(intlTag(locale), options).format(d);
 }
 
+/** Date ISO `YYYY-MM-DD` (ou horodatage ISO) → `JJ/MM/AAAA`, format français imposé partout sur
+ *  les dates de leviers/actions quelle que soit la langue (demande métier). Vide/invalide ⇒ "". */
+export function formatDateFr(iso: string | undefined | null): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
+/** `JJ/MM/AAAA` → ISO `YYYY-MM-DD`, ou `null` si la saisie est incomplète ou n'est pas une date
+ *  réelle (31/02, mois 13…). */
+export function parseDateFr(text: string): string | null {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text.trim());
+  if (!m) return null;
+  const [, dd, mm, yyyy] = m;
+  const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd)));
+  if (
+    d.getUTCFullYear() !== Number(yyyy) ||
+    d.getUTCMonth() !== Number(mm) - 1 ||
+    d.getUTCDate() !== Number(dd)
+  )
+    return null;
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 /** Date + heure localisées (par défaut `12 mars 2026, 14:05`). */
 export function formatDateTime(
   value: string | number | Date,

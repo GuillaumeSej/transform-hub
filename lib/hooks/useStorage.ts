@@ -412,6 +412,64 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     [persistAudit, currentUser, programConfig.workstreams]
   );
 
+  // Suppression à double validation (CTO ↔ responsable de chantier) — voir
+  // lib/leversLogic.ts::requestLeverDeletion/approveLeverDeletion/cancelLeverDeletion.
+  const requestLeverDeletion = useCallback(
+    (id: string, reason?: string) => {
+      if (!currentUser) throw new Error("Utilisateur non identifié");
+      const result = leversLogic.requestLeverDeletion(
+        leversRef.current,
+        id,
+        currentUser,
+        programConfig.workstreams,
+        reason
+      );
+      leversRef.current = result.levers;
+      setLevers(result.levers);
+      persistAudit(result.auditEntries);
+      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      return result.lever;
+    },
+    [persistAudit, currentUser, programConfig.workstreams]
+  );
+
+  const approveLeverDeletion = useCallback(
+    async (id: string) => {
+      if (!currentUser) throw new Error("Utilisateur non identifié");
+      const result = leversLogic.approveLeverDeletion(
+        leversRef.current,
+        id,
+        currentUser,
+        programConfig.workstreams
+      );
+      // Non optimiste : on attend Firestore avant de retirer le levier de l'écran.
+      await leversDb.deleteLeverDoc(id);
+      leversRef.current = result.levers;
+      setLevers(result.levers);
+      persistAudit(result.auditEntries);
+      return result.deleted;
+    },
+    [persistAudit, currentUser, programConfig.workstreams]
+  );
+
+  const cancelLeverDeletion = useCallback(
+    (id: string) => {
+      if (!currentUser) throw new Error("Utilisateur non identifié");
+      const result = leversLogic.cancelLeverDeletion(
+        leversRef.current,
+        id,
+        currentUser,
+        programConfig.workstreams
+      );
+      leversRef.current = result.levers;
+      setLevers(result.levers);
+      persistAudit(result.auditEntries);
+      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      return result.lever;
+    },
+    [persistAudit, currentUser, programConfig.workstreams]
+  );
+
   /** Création NON optimiste (contrairement aux autres mutations de ce hook) : l'écriture Firestore
    *  est attendue AVANT de mettre à jour l'état local et le journal d'audit, et toute erreur est
    *  propagée à l'appelant. Sinon un refus des règles (ex. levier sans `companyId`, id déjà pris
@@ -785,6 +843,9 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     requestLeverApproval,
     approveLeverGate,
     rejectLeverApproval,
+    requestLeverDeletion,
+    approveLeverDeletion,
+    cancelLeverDeletion,
     createLever,
     upsertLeverByCode,
     importLevers,

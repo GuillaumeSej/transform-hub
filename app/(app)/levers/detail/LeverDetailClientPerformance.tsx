@@ -20,8 +20,14 @@ import {
   Pencil,
   Plus,
   Send,
+  Trash2,
   TriangleAlert,
 } from "lucide-react";
+import {
+  hasLeverDeletionAccess,
+  LeverDeletionDialog,
+} from "@/components/shared/LeverDeletionDialog";
+import { formatDateFr } from "@/lib/format";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useRole } from "@/lib/hooks/useRole";
@@ -100,6 +106,7 @@ export function LeverDetailClientPerformance() {
   const [tab, setTab] = useState<Tab>(requestedTab ?? "overview");
   const [comment, setComment] = useState("");
   const [editOpen, setEditOpen] = useState(false);
+  const [deletionOpen, setDeletionOpen] = useState(false);
   const [actionModal, setActionModal] = useState<{
     mode: "create" | "edit";
     action?: LeverAction;
@@ -363,6 +370,34 @@ export function LeverDetailClientPerformance() {
         </div>
       </div>
 
+      {lever.deletionRequest && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-bp-coral/40 bg-bp-coral/5 px-4 py-2.5 text-xs text-primary">
+          <span className="inline-flex items-center gap-1.5">
+            <Trash2 size={13} className="text-bp-coral" />
+            {t(
+              "leverDeletion.banner",
+              "Suppression demandée par {name} le {date} — en attente de validation."
+            )
+              .replace("{name}", lever.deletionRequest.requestedByName)
+              .replace("{date}", formatDateFr(lever.deletionRequest.requestedAt))}
+          </span>
+          {hasLeverDeletionAccess(lever, user, data.workstreams) && (
+            <Button variant="outline" size="sm" onClick={() => setDeletionOpen(true)}>
+              {t("leverDeletion.viewRequest", "Voir la demande")}
+            </Button>
+          )}
+        </div>
+      )}
+
+      <LeverDeletionDialog
+        lever={lever}
+        user={user}
+        data={data}
+        open={deletionOpen}
+        onOpenChange={setDeletionOpen}
+        onDeleted={() => router.push("/levers")}
+      />
+
       {/* Stepper du cycle de vie — clic pour changer d'étape (la dernière étape "delivered" est
           atteinte automatiquement à 100 % du plan d'action, non cliquable). Les étapes et leurs
           libellés viennent du référentiel de l'entreprise (`useLifecycleLabels`). */}
@@ -575,6 +610,14 @@ export function LeverDetailClientPerformance() {
           // rôle qui n'existe pas.
           canEditWorkstreamWeight={!readOnly}
           computedRisk={leverRiskAssessment.level}
+          onDelete={
+            hasLeverDeletionAccess(lever, user, data.workstreams)
+              ? () => {
+                  setEditOpen(false);
+                  setDeletionOpen(true);
+                }
+              : undefined
+          }
           submitLabel={t("leverDetail.saveChanges", "Enregistrer les modifications")}
           onCancel={() => setEditOpen(false)}
           onSubmit={(values: LeverFormValues) => {
@@ -993,9 +1036,9 @@ export function LeverDetailClientPerformance() {
               <div className="flex flex-wrap items-center gap-3 text-[12.5px] text-primary">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-neutral-50 px-3 py-1">
                   <span className="text-tertiary">{t("leverDetail.start", "Début")}</span>
-                  <span className="font-medium">{lever.start}</span>
+                  <span className="font-medium">{formatDateFr(lever.start)}</span>
                   <span className="text-tertiary">→ {t("leverDetail.end", "Fin")}</span>
-                  <span className="font-medium">{lever.end}</span>
+                  <span className="font-medium">{formatDateFr(lever.end)}</span>
                 </span>
                 <span className="text-tertiary">·</span>
                 <span className="text-tertiary">
@@ -1091,7 +1134,7 @@ export function LeverDetailClientPerformance() {
                           </span>
                           {target && (
                             <span className="mt-0.5 block text-[10.5px] text-tertiary">
-                              {target.start} → {target.end}
+                              {formatDateFr(target.start)} → {formatDateFr(target.end)}
                             </span>
                           )}
                         </span>

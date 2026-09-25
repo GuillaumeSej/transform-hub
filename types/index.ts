@@ -351,6 +351,20 @@ export type Lever = {
    *  (pas encore soumise, ou déjà approuvée/rejetée). Voir lib/leversLogic.ts::requestLeverApproval /
    *  approveLeverGate / rejectLeverApproval. */
   approval?: LeverApproval;
+  /** Demande de SUPPRESSION en cours (double validation) : initiée par le CTO OU le responsable
+   *  de chantier du levier, elle doit être confirmée par l'AUTRE rôle (CTO → responsable de
+   *  chantier, et inversement) avant que le levier ne soit réellement supprimé. Voir
+   *  lib/leversLogic.ts::requestLeverDeletion / approveLeverDeletion / cancelLeverDeletion. */
+  deletionRequest?: LeverDeletionRequest;
+};
+
+export type LeverDeletionRequest = {
+  requestedBy: string;
+  requestedByName: string;
+  /** Rôle au titre duquel la demande est faite — l'approbation doit venir de l'autre rôle. */
+  requestedByRole: "cto" | "sponsor";
+  requestedAt: string;
+  reason?: string;
 };
 
 /** Les 3 statuts cibles pouvant être protégés par une demande de validation — M4→M5 (delivered)
@@ -712,7 +726,10 @@ export type AuditEntry = {
     // lib/leversLogic.ts::requestLeverApproval/approveLeverGate/rejectLeverApproval.
     | "approval_requested"
     | "approval_approved"
-    | "approval_rejected";
+    | "approval_rejected"
+    // Suppression d'un levier à double validation (CTO ↔ responsable de chantier).
+    | "deletion_requested"
+    | "deletion_cancelled";
   entity: string; // lever id, mouvement id (MV###) ou employé id (EMP###)
   field: string;
   old: string | number;

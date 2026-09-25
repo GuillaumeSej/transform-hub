@@ -1,6 +1,7 @@
 import {
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -175,6 +176,12 @@ export async function saveLever(lever: Lever): Promise<void> {
   // posé par une mutation d'action), ce qui faisait échouer silencieusement la persistance d'un
   // changement d'étape d'action (l'erreur n'était que loguée par le hook).
   await setDoc(doc(leversCol(), lever.id), JSON.parse(JSON.stringify(lever)));
+}
+
+/** Suppression définitive d'un levier (après double validation CTO ↔ responsable de chantier,
+ *  voir lib/leversLogic.ts::approveLeverDeletion). */
+export async function deleteLeverDoc(id: string): Promise<void> {
+  await deleteDoc(doc(leversCol(), id));
 }
 
 /** Création/mise à jour en masse (import Excel — voir lib/leverExcelImport.ts) : un seul

@@ -39,6 +39,8 @@ function actionLabels(t: (key: string, fallback?: string) => string): Record<str
     approval_requested: t("adminHistory.action.approvalRequested", "Validation demandée"),
     approval_approved: t("adminHistory.action.approvalApproved", "Demande validée"),
     approval_rejected: t("adminHistory.action.approvalRejected", "Validation rejetée"),
+    deletion_requested: t("adminHistory.action.deletionRequested", "Suppression demandée"),
+    deletion_cancelled: t("adminHistory.action.deletionCancelled", "Suppression refusée/annulée"),
   };
 }
 
@@ -199,6 +201,8 @@ export default function AdminHistoryPage() {
             { value: "approval_requested", label: ACTION_LABELS.approval_requested },
             { value: "approval_approved", label: ACTION_LABELS.approval_approved },
             { value: "approval_rejected", label: ACTION_LABELS.approval_rejected },
+            { value: "deletion_requested", label: ACTION_LABELS.deletion_requested },
+            { value: "deletion_cancelled", label: ACTION_LABELS.deletion_cancelled },
           ]}
         />
         <MultiSelect

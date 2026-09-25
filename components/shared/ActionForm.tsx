@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useState } from "react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { applyActionProgress, applyActionStatus } from "@/lib/leversLogic";
@@ -69,6 +70,8 @@ export function ActionForm({
       declaredProgressPct: a.declaredProgressPct,
       deliveredDate: a.deliveredDate,
     });
+
+  const endBeforeStart = !!start && !!end && end < start;
 
   const handleSubmit = () => {
     onSubmit({
@@ -144,23 +147,27 @@ export function ActionForm({
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
             {t("shared.actionForm.startDate", "Date début")}
           </label>
-          <input
-            className={inputClass}
-            type="date"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-          />
+          <DateInput className={inputClass} value={start} onChange={(v) => setStart(v)} />
         </div>
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
             {t("shared.actionForm.endDate", "Date fin")}
           </label>
-          <input
+          <DateInput
             className={inputClass}
-            type="date"
             value={end}
-            onChange={(e) => setEnd(e.target.value)}
+            min={start || undefined}
+            invalid={endBeforeStart}
+            onChange={(v) => setEnd(v)}
           />
+          {endBeforeStart && (
+            <span className="mt-0.5 block text-[10.5px] text-bp-coral">
+              {t(
+                "leverForm.endBeforeStart",
+                "La date de fin ne peut pas être antérieure à la date de début"
+              )}
+            </span>
+          )}
         </div>
         <div>
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
@@ -226,7 +233,7 @@ export function ActionForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!name.trim() || !start || !end}
+          disabled={!name.trim() || !start || !end || endBeforeStart}
           className="rounded-md bg-bp-coral px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-bp-red-brick disabled:opacity-40"
         >
           {resolvedSubmitLabel}

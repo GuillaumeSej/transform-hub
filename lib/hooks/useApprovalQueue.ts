@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { canDecideMilestone } from "@/lib/axisLogic";
-import { isLeverSponsoredBy } from "@/lib/leversLogic";
+import { canApproveLeverDeletion, isLeverSponsoredBy } from "@/lib/leversLogic";
 import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
 import { canDecideImpactRealized, isImpactRealizedPending } from "@/lib/impactStatus";
 import type {
@@ -67,6 +67,28 @@ export function useApprovalQueue(data: BeTrackData, user: AuthUser | null | unde
     queue,
     count: queue.length,
   };
+}
+
+// ─── Suppressions de leviers à confirmer (CTO ↔ responsable de chantier) ────────────────────
+
+/** Leviers dont la demande de suppression attend la confirmation de CET utilisateur (rôle
+ *  complémentaire de celui du demandeur, voir `canApproveLeverDeletion`). */
+export function resolveDeletionQueue(
+  data: Pick<BeTrackData, "levers" | "workstreams">,
+  user: AuthUser | null | undefined
+): Lever[] {
+  if (!user) return [];
+  return data.levers.filter(
+    (lever) => !!lever.deletionRequest && canApproveLeverDeletion(lever, user, data.workstreams)
+  );
+}
+
+export function useDeletionQueue(
+  data: Pick<BeTrackData, "levers" | "workstreams">,
+  user: AuthUser | null | undefined
+) {
+  const queue = useMemo(() => resolveDeletionQueue(data, user), [data, user]);
+  return { queue, count: queue.length };
 }
 
 // ─── Réalisés à valider (profil finance) ────────────────────────────────────────────────────

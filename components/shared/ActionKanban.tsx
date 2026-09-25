@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDateFr } from "@/lib/format";
 import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -198,7 +199,7 @@ export function ActionKanban({
                     </button>
                     <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10.5px] text-tertiary">
                       <span>
-                        {a.start} → {a.end}
+                        {formatDateFr(a.start)} → {formatDateFr(a.end)}
                       </span>
                     </div>
                     <ProgressSlider

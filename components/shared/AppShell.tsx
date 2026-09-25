@@ -24,6 +24,7 @@ import {
   useApprovalQueue,
   useMilestoneApprovalQueue,
   useRealizedApprovalQueue,
+  useDeletionQueue,
 } from "@/lib/hooks/useApprovalQueue";
 import { useStrategicApprovals } from "@/lib/hooks/useStrategicApprovals";
 import { StrategicApprovalsProvider } from "@/lib/hooks/useStrategicApprovalsContext";
@@ -65,6 +66,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const approvalQueue = useApprovalQueue(data, user);
   // Impacts cochés « Réalisé » en attente de la finance (audit C4) — vide hors profil finance.
   const realizedApprovalQueue = useRealizedApprovalQueue(data, user);
+  // Suppressions de leviers à confirmer (double validation CTO ↔ responsable de chantier).
+  const deletionQueue = useDeletionQueue(data, user);
   const [ready, setReady] = useState(false);
   const [noAccess, setNoAccess] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -391,11 +394,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             shellAlerts.length +
             approvalQueue.count +
             milestoneApprovalQueue.count +
-            realizedApprovalQueue.count
+            realizedApprovalQueue.count +
+            deletionQueue.count
           }
           alerts={shellAlerts}
           approvalQueue={approvalQueue.queue}
           realizedApprovalQueue={realizedApprovalQueue.queue}
+          deletionQueue={deletionQueue.queue}
           milestoneApprovalQueue={milestoneApprovalQueue.queue}
           onAlertClick={(alert) => {
             if (isStrategic) {

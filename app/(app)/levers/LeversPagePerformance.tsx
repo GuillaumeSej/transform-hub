@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LayoutGrid, ListTree, Plus, Table2, TriangleAlert } from "lucide-react";
+import { LayoutGrid, ListTree, Plus, Table2, Trash2, TriangleAlert } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
@@ -38,6 +38,10 @@ import { FilterToggleButton, useFilterBarExpanded } from "@/components/shared/Co
 import { ColumnVisibilityMenu } from "@/components/shared/ColumnVisibilityMenu";
 import { Modal } from "@/components/shared/Modal";
 import { initialsFromName, LeverForm, type LeverFormValues } from "@/components/shared/LeverForm";
+import {
+  hasLeverDeletionAccess,
+  LeverDeletionDialog,
+} from "@/components/shared/LeverDeletionDialog";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter } from "@/lib/filterUtils";
 import { matchesLeverSearch } from "@/lib/leverSearch";
@@ -69,7 +73,7 @@ type LeverRow = Lever & {
 export function LeversPagePerformance() {
   const { user } = useRole();
   const readOnly = isReadOnlyUser(user);
-  const data = useBeTrackData(user?.companyId ?? null);
+  const data = useBeTrackData(user?.companyId ?? null, user);
   // Vue scopée à UN programme Performance sélectionnable (voir le sélecteur plus bas) : le cycle
   // de vie étant désormais configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un
   // scope unique pour résoudre le bon référentiel — d'où `usePerformanceProgramSelector`, qui
@@ -100,6 +104,9 @@ export function LeversPagePerformance() {
     [requestedView]
   );
   const [newLeverOpen, setNewLeverOpen] = useState(false);
+  // Suppression à double validation (CTO ↔ responsable de chantier) — bouton poubelle en fin de
+  // ligne du tableau, voir LeverDeletionDialog.
+  const [deletionLeverId, setDeletionLeverId] = useState<string | null>(null);
 
   // Sélecteur de colonnes visibles (Tâche 3) — PAR UTILISATEUR (pas par profil), persisté en
   // localStorage sous `betrack_levers_columns_${username}`. Liste NOIRE (clés masquées) plutôt que
@@ -573,6 +580,8 @@ export function LeversPagePerformance() {
   // Pas d'édition inline dans ce tableau (décision audit 2026-09-24) : le 1er clic d'un double-clic
   // ouvrait la fiche, l'édition était donc inatteignable, et plusieurs colonnes « éditables »
   // étaient ignorées en silence. Toute modification passe par « Modifier le levier » de la fiche.
+  const canDeleteSomeLever =
+    !readOnly && programScopedLevers.some((l) => hasLeverDeletionAccess(l, user, data.workstreams));
   const columns: ColumnDef<LeverRow>[] = [
     // ── Identification ──
     {
@@ -726,6 +735,42 @@ export function LeversPagePerformance() {
       width: "110px",
       render: (r) => <StatusBadge risk={r.risk} reason={r.riskReason} />,
     },
+    // ── Suppression (CTO / responsable de chantier uniquement) ──
+    ...(canDeleteSomeLever
+      ? [
+          {
+            key: "deletionRequest" as const,
+            label: t("levers.column.delete", "Supprimer"),
+            filterable: false,
+            sortable: false,
+            align: "center" as const,
+            mobile: "hide" as const,
+            width: "70px",
+            render: (r: LeverRow) =>
+              hasLeverDeletionAccess(r, user, data.workstreams) ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeletionLeverId(r.id);
+                  }}
+                  title={
+                    r.deletionRequest
+                      ? t("levers.deletionPending", "Suppression en attente de validation")
+                      : t("levers.deleteLever", "Supprimer le levier")
+                  }
+                  aria-label={t("levers.deleteLever", "Supprimer le levier")}
+                  className={`relative inline-flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-bp-coral/10 hover:text-bp-coral ${r.deletionRequest ? "text-bp-coral" : "text-tertiary"}`}
+                >
+                  <Trash2 size={14} />
+                  {r.deletionRequest && (
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-bp-coral" />
+                  )}
+                </button>
+              ) : null,
+          },
+        ]
+      : []),
   ];
 
   // Colonnes réellement rendues, une fois les préférences utilisateur (Tâche 3) appliquées.
@@ -870,6 +915,14 @@ export function LeversPagePerformance() {
           }}
         />
       </Modal>
+
+      <LeverDeletionDialog
+        lever={deletionLeverId ? (data.getLeverById(deletionLeverId) ?? null) : null}
+        user={user}
+        data={data}
+        open={deletionLeverId !== null}
+        onOpenChange={(open) => !open && setDeletionLeverId(null)}
+      />
 
       {/* overflow-visible : surcharge le overflow-hidden par défaut de Card (troncature des coins
           arrondis) — cette carte ne contient QUE le bandeau d'outils (filtres/colonnes/vue), pas

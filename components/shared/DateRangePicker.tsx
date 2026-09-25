@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useMemo } from "react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -60,26 +61,24 @@ export function DateRangePicker({
       <div className="inline-flex items-center gap-2">
         <label className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
           {t("dashboard.widgets.dateFrom", "Du")}
-          <input
-            type="date"
+          <DateInput
             aria-label={resolvedAriaLabelFrom}
             className={inputClass}
             value={fromISO}
             min={minISO}
             max={maxISO}
-            onChange={(e) => onChange({ fromISO: e.target.value, toISO })}
+            onChange={(v) => onChange({ fromISO: v, toISO })}
           />
         </label>
         <label className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
           {t("dashboard.widgets.dateTo", "Au")}
-          <input
-            type="date"
+          <DateInput
             aria-label={resolvedAriaLabelTo}
             className={inputClass}
             value={toISO}
             min={minISO}
             max={maxISO}
-            onChange={(e) => onChange({ fromISO, toISO: e.target.value })}
+            onChange={(v) => onChange({ fromISO, toISO: v })}
           />
         </label>
       </div>

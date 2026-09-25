@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -648,15 +649,14 @@ function DeliverableDetailModal({
     >
       <label className="block text-xs font-bold uppercase tracking-wide text-secondary">
         {labels.dueDate} <span className="text-bp-coral">*</span>
-        <input
-          type="date"
+        <DateInput
           required
           className={INPUT_CLASS}
           value={effectiveDueDate(deliverable) ?? ""}
           // Échéance obligatoire : une saisie vidée n'est jamais écrite (pas de `undefined` envoyé
           // à Firestore, et un livrable reste toujours daté).
-          onChange={(e) => {
-            if (e.target.value) onPatch({ dueDate: e.target.value });
+          onChange={(v) => {
+            if (v) onPatch({ dueDate: v });
           }}
         />
       </label>
@@ -805,12 +805,11 @@ function AddDeliverableForm({
 
       <label className="mt-3 block text-[11.5px] font-bold uppercase tracking-wide text-secondary">
         {labels.dueDate} <span className="text-bp-coral">*</span>
-        <input
-          type="date"
+        <DateInput
           required
           className={INPUT_CLASS}
           value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
+          onChange={(v) => setDueDate(v)}
         />
       </label>
 
@@ -1188,11 +1187,10 @@ function ChantierActionForm({
           <label className="text-xs font-medium text-secondary" htmlFor="ca-start">
             {labels.start} <span className="text-bp-coral">*</span>
           </label>
-          <input
+          <DateInput
             id="ca-start"
-            type="date"
             value={start}
-            onChange={(e) => setStart(e.target.value)}
+            onChange={(v) => setStart(v)}
             className={INPUT_CLASS}
           />
         </div>
@@ -1200,13 +1198,7 @@ function ChantierActionForm({
           <label className="text-xs font-medium text-secondary" htmlFor="ca-end">
             {labels.end} <span className="text-bp-coral">*</span>
           </label>
-          <input
-            id="ca-end"
-            type="date"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            className={INPUT_CLASS}
-          />
+          <DateInput id="ca-end" value={end} onChange={(v) => setEnd(v)} className={INPUT_CLASS} />
         </div>
         <div>
           <label className="text-xs font-medium text-secondary" htmlFor="ca-budget">
@@ -1353,12 +1345,11 @@ function ChantierActionForm({
                     >
                       {labels.deliverableDueDate} <span className="text-bp-coral">*</span>
                     </label>
-                    <input
+                    <DateInput
                       id={`ca-deliverable-${d.id}-due`}
-                      type="date"
                       required
                       value={d.dueDate ?? ""}
-                      onChange={(e) => setDeliverableDueDate(d.id, e.target.value)}
+                      onChange={(v) => setDeliverableDueDate(d.id, v)}
                       className={cn(
                         `block ${SMALL_INPUT_CLASS}`,
                         d.label.trim() && !d.dueDate && "border-bp-coral"

@@ -13,6 +13,7 @@ import type {
   LeverStatus,
   LeverAction,
   LeverApproval,
+  LeverDeletionRequest,
   LifecycleStage,
   Role,
   Workstream,
@@ -937,6 +938,170 @@ export function rejectLeverApproval(
         field: "approval",
         old: `pending:${targetStatus}`,
         new: reason ?? "",
+      }),
+    ],
+  };
+}
+
+// ─── Suppression d'un levier à double validation ──────────────────────────────────────────────
+//
+// Réservée au CTO et au responsable de chantier (rôle "sponsor") du levier : l'un demande, l'AUTRE
+// confirme (CTO → responsable de chantier associé, responsable de chantier → CTO). Jamais la même
+// personne pour les deux étapes, même si elle cumule les deux rôles.
+
+type DeletionUser = Pick<AuthUser, "name" | "username" | "profiles">;
+type DeletionWorkstream = Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string };
+
+/** Rôles de suppression détenus par `user` SUR CE levier (CTO de son programme, responsable de
+ *  son chantier). */
+export function leverDeletionRoles(
+  lever: Lever,
+  user: DeletionUser | null | undefined,
+  workstreams: DeletionWorkstream[]
+): { cto: boolean; sponsor: boolean } {
+  if (!user) return { cto: false, sponsor: false };
+  const ws = workstreams.find((w) => w.id === lever.ws);
+  return {
+    cto: isLeverCtoOf(lever, user),
+    sponsor: hasRole(user, "sponsor") && isLeverSponsoredBy(lever, ws, user),
+  };
+}
+
+/** Peut-il INITIER une demande de suppression ? (aucune demande déjà en cours) */
+export function canRequestLeverDeletion(
+  lever: Lever,
+  user: DeletionUser | null | undefined,
+  workstreams: DeletionWorkstream[]
+): boolean {
+  if (lever.deletionRequest) return false;
+  const roles = leverDeletionRoles(lever, user, workstreams);
+  return roles.cto || roles.sponsor;
+}
+
+/** Peut-il CONFIRMER la demande en cours ? Il faut détenir le rôle complémentaire de celui du
+ *  demandeur, et ne pas être le demandeur. */
+export function canApproveLeverDeletion(
+  lever: Lever,
+  user: DeletionUser | null | undefined,
+  workstreams: DeletionWorkstream[]
+): boolean {
+  const req = lever.deletionRequest;
+  if (!req || !user || req.requestedBy === user.username) return false;
+  const roles = leverDeletionRoles(lever, user, workstreams);
+  return req.requestedByRole === "cto" ? roles.sponsor : roles.cto;
+}
+
+export function requestLeverDeletion(
+  levers: Lever[],
+  id: string,
+  user: DeletionUser,
+  workstreams: DeletionWorkstream[],
+  reason?: string
+): LeverMutationResult {
+  const idx = levers.findIndex((l) => l.id === id);
+  if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
+  const before = levers[idx];
+  if (before.deletionRequest) {
+    throw new Error("Une demande de suppression est déjà en cours pour ce levier");
+  }
+  const roles = leverDeletionRoles(before, user, workstreams);
+  if (!roles.cto && !roles.sponsor) {
+    throw new Error(
+      "Seuls le CTO et le responsable de chantier du levier peuvent en demander la suppression"
+    );
+  }
+  const request: LeverDeletionRequest = {
+    requestedBy: user.username,
+    requestedByName: user.name,
+    requestedByRole: roles.cto ? "cto" : "sponsor",
+    requestedAt: new Date().toISOString(),
+    ...(reason?.trim() ? { reason: reason.trim() } : {}),
+  };
+  const after: Lever = { ...before, deletionRequest: request };
+  const nextLevers = [...levers];
+  nextLevers[idx] = after;
+  return {
+    levers: nextLevers,
+    lever: after,
+    auditEntries: [
+      makeAuditEntry({
+        user: user.name,
+        action: "deletion_requested",
+        entity: id,
+        field: "deletion",
+        old: before.name,
+        new: reason?.trim() ?? "",
+      }),
+    ],
+  };
+}
+
+/** Confirme la demande : le levier est retiré de la liste (suppression définitive côté appelant). */
+export function approveLeverDeletion(
+  levers: Lever[],
+  id: string,
+  user: DeletionUser,
+  workstreams: DeletionWorkstream[]
+): { levers: Lever[]; deleted: Lever; auditEntries: AuditEntry[] } {
+  const before = levers.find((l) => l.id === id);
+  if (!before) throw new Error(`Lever "${id}" introuvable`);
+  if (!before.deletionRequest) {
+    throw new Error("Aucune demande de suppression en cours pour ce levier");
+  }
+  if (!canApproveLeverDeletion(before, user, workstreams)) {
+    throw new Error(
+      before.deletionRequest.requestedByRole === "cto"
+        ? "La suppression demandée par le CTO doit être confirmée par le responsable de chantier du levier"
+        : "La suppression demandée par le responsable de chantier doit être confirmée par le CTO"
+    );
+  }
+  return {
+    levers: levers.filter((l) => l.id !== id),
+    deleted: before,
+    auditEntries: [
+      makeAuditEntry({
+        user: user.name,
+        action: "deleted",
+        entity: id,
+        field: "lever",
+        old: `${before.code} — ${before.name}`,
+        new: `demandé par ${before.deletionRequest.requestedByName}`,
+      }),
+    ],
+  };
+}
+
+/** Refus (par l'approbateur) ou annulation (par le demandeur) de la demande en cours. */
+export function cancelLeverDeletion(
+  levers: Lever[],
+  id: string,
+  user: DeletionUser,
+  workstreams: DeletionWorkstream[]
+): LeverMutationResult {
+  const idx = levers.findIndex((l) => l.id === id);
+  if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
+  const before = levers[idx];
+  if (!before.deletionRequest) {
+    throw new Error("Aucune demande de suppression en cours pour ce levier");
+  }
+  const isRequester = before.deletionRequest.requestedBy === user.username;
+  if (!isRequester && !canApproveLeverDeletion(before, user, workstreams)) {
+    throw new Error("Vous n'êtes pas habilité à refuser cette demande de suppression");
+  }
+  const after: Lever = { ...before, deletionRequest: undefined };
+  const nextLevers = [...levers];
+  nextLevers[idx] = after;
+  return {
+    levers: nextLevers,
+    lever: after,
+    auditEntries: [
+      makeAuditEntry({
+        user: user.name,
+        action: "deletion_cancelled",
+        entity: id,
+        field: "deletion",
+        old: `demandé par ${before.deletionRequest.requestedByName}`,
+        new: isRequester ? "annulée" : "refusée",
       }),
     ],
   };

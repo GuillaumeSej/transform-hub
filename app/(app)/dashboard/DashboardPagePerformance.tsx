@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -1458,17 +1459,15 @@ export function DashboardPagePerformance() {
                   {/* Range picker libre */}
                   <div className="flex items-center gap-1 text-[10.5px] text-secondary">
                     <span className="font-semibold">{t("dashboard.widgets.dateFrom")}</span>
-                    <input
-                      type="date"
+                    <DateInput
                       value={trajRangeStart}
-                      onChange={(e) => setTrajRangeStart(e.target.value || effectiveFyStart)}
+                      onChange={(v) => setTrajRangeStart(v || effectiveFyStart)}
                       className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] focus:border-bp-coral focus:outline-none"
                     />
                     <span className="font-semibold">{t("dashboard.widgets.dateTo")}</span>
-                    <input
-                      type="date"
+                    <DateInput
                       value={trajRangeEnd}
-                      onChange={(e) => setTrajRangeEnd(e.target.value || effectiveFyEnd)}
+                      onChange={(v) => setTrajRangeEnd(v || effectiveFyEnd)}
                       className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] focus:border-bp-coral focus:outline-none"
                     />
                   </div>

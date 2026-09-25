@@ -134,7 +134,7 @@ import {
   type HrWidgetType,
 } from "@/lib/hrDashboardWidgets";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { formatMillions, formatNumber, intlTag } from "@/lib/format";
+import { formatMillions, formatNumber, intlTag, formatDateFr } from "@/lib/format";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 
 /** Libellé lisible d'une vue construite (builder générique RH) — `label` explicite si fourni,
@@ -2484,7 +2484,7 @@ export default function HrDashboardPage() {
                   {lever && (
                     <div className="mt-0.5 text-[10.5px] text-tertiary">
                       {lifecycle.label(lever.status)} · {t("hr.plannedEnd", "fin prévue")}{" "}
-                      {lever.end}
+                      {formatDateFr(lever.end)}
                     </div>
                   )}
                   <div className="mt-2 space-y-1">

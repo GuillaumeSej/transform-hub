@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/shared/Button";
@@ -574,19 +575,17 @@ export function MovementForm({
         </Field>
 
         <Field label={translate("shared.movementForm.plannedDate", "Date planifiée")}>
-          <input
-            type="date"
+          <DateInput
             className={inputClass}
             value={values.plannedDate}
-            onChange={(e) => set("plannedDate", e.target.value)}
+            onChange={(v) => set("plannedDate", v)}
           />
         </Field>
         <Field label={translate("shared.movementForm.actualDate", "Date réalisée")}>
-          <input
-            type="date"
+          <DateInput
             className={inputClass}
             value={values.actualDate ?? ""}
-            onChange={(e) => set("actualDate", e.target.value || null)}
+            onChange={(v) => set("actualDate", v || null)}
           />
         </Field>
         <Field label={translate("hr.status", "Statut")}>

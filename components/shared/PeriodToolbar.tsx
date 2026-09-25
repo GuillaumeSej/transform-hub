@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useMemo, useRef, useState } from "react";
 import { CalendarRange, Check, ChevronDown, FolderKanban, History, RotateCcw } from "lucide-react";
 import { useDismissable } from "@/lib/hooks/useDismissable";
@@ -316,15 +317,14 @@ function RangePill({
           <div className="grid grid-cols-2 gap-2">
             <label className="flex flex-col gap-1 text-[11px] font-medium text-secondary">
               {t("dashboard.widgets.dateFrom", "Du")}
-              <input
-                type="date"
+              <DateInput
                 aria-label={t("shared.dateRangePicker.fromLabel", "Date de début")}
                 className={inputClass}
                 value={fromISO}
                 min={minISO}
                 max={toISO || maxISO}
-                onChange={(e) => {
-                  const next = e.target.value;
+                onChange={(v) => {
+                  const next = v;
                   // from > to : la fin suit le début (jamais de plage inversée).
                   onRangeChange({
                     fromISO: next,
@@ -335,15 +335,14 @@ function RangePill({
             </label>
             <label className="flex flex-col gap-1 text-[11px] font-medium text-secondary">
               {t("dashboard.widgets.dateTo", "Au")}
-              <input
-                type="date"
+              <DateInput
                 aria-label={t("shared.dateRangePicker.toLabel", "Date de fin")}
                 className={inputClass}
                 value={toISO}
                 min={fromISO || minISO}
                 max={maxISO}
-                onChange={(e) => {
-                  const next = e.target.value;
+                onChange={(v) => {
+                  const next = v;
                   // to < from : le début suit la fin. Vide = plage ouverte (voir en-tête).
                   onRangeChange({
                     fromISO: next && fromISO && next < fromISO ? next : fromISO,

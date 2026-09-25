@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { displayMilestoneId } from "@/lib/axisLogic";
@@ -8,6 +8,7 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import {
   useApprovalQueue,
+  useDeletionQueue,
   useMilestoneApprovalQueue,
   useRealizedApprovalQueue,
 } from "@/lib/hooks/useApprovalQueue";
@@ -23,6 +24,7 @@ import { STATUS_SHORT_LABEL } from "@/lib/status-config";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { StageBadge } from "@/components/shared/StageBadge";
+import { LeverDeletionDialog } from "@/components/shared/LeverDeletionDialog";
 import type { AuthUser, Lever } from "@/types";
 import { intlTag } from "@/lib/format";
 import { onActivateKey } from "@/lib/a11y";
@@ -62,9 +64,11 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
   const data = useBeTrackData(user?.companyId ?? null, user);
   const { queue } = useApprovalQueue(data, user);
   const { queue: realizedQueue } = useRealizedApprovalQueue(data, user);
+  const { queue: deletionQueue } = useDeletionQueue(data, user);
+  const [deletionLeverId, setDeletionLeverId] = useState<string | null>(null);
   const { showToast } = useToast();
 
-  if (queue.length === 0 && realizedQueue.length === 0) {
+  if (queue.length === 0 && realizedQueue.length === 0 && deletionQueue.length === 0) {
     return (
       <Card>
         <CardBody>
@@ -94,6 +98,80 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
 
   return (
     <div className="flex flex-col gap-6">
+      <LeverDeletionDialog
+        lever={deletionLeverId ? (data.getLeverById(deletionLeverId) ?? null) : null}
+        user={user}
+        data={data}
+        open={deletionLeverId !== null}
+        onOpenChange={(open) => !open && setDeletionLeverId(null)}
+      />
+      {deletionQueue.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-sm font-bold text-primary">
+            {t("validation.deletion.title", "Suppressions à confirmer")} · {deletionQueue.length}
+          </h2>
+          <p className="text-xs text-secondary">
+            {t(
+              "validation.deletion.intro",
+              "Suppressions de leviers demandées par le CTO ou un responsable de chantier : elles ne sont effectives qu'après votre confirmation."
+            )}
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-border bg-white">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border bg-neutral-50 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                  <th className="px-4 py-2.5">{t("validation.lever", "Levier")}</th>
+                  <th className="px-4 py-2.5">{t("validation.workstream", "Chantier")}</th>
+                  <th className="px-4 py-2.5">{t("validation.requestedBy", "Demandé par")}</th>
+                  <th className="px-4 py-2.5">{t("validation.requestedAt", "Demandé le")}</th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {deletionQueue.map((lever) => (
+                  <tr
+                    key={lever.id}
+                    className="cursor-pointer border-b border-border last:border-0 hover:bg-neutral-50"
+                    tabIndex={0}
+                    onClick={() => router.push(`/levers/detail?id=${lever.id}`)}
+                    onKeyDown={onActivateKey(() => router.push(`/levers/detail?id=${lever.id}`))}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-mono text-[10px] text-tertiary">{lever.code}</div>
+                      <div className="font-semibold text-primary">{lever.name}</div>
+                    </td>
+                    <td className="px-4 py-3 text-secondary">
+                      {data.workstreams.find((w) => w.id === lever.ws)?.name ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-secondary">
+                      {lever.deletionRequest?.requestedByName ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-secondary">
+                      {lever.deletionRequest
+                        ? formatTimestamp(lever.deletionRequest.requestedAt)
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end">
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletionLeverId(lever.id);
+                          }}
+                        >
+                          {t("validation.deletion.review", "Examiner")}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       {realizedQueue.length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-bold text-primary">

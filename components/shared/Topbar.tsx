@@ -104,6 +104,7 @@ export function Topbar({
   approvalQueue = [],
   milestoneApprovalQueue = [],
   realizedApprovalQueue = [],
+  deletionQueue = [],
 }: {
   alertCount: number;
   onMenuClick: () => void;
@@ -127,6 +128,9 @@ export function Topbar({
   /** Impacts cochés « Réalisé » en attente de validation finance (profil finance uniquement,
    *  voir `useRealizedApprovalQueue`) — la décision se prend dans la page Validation. */
   realizedApprovalQueue?: RealizedApprovalEntry[];
+  /** Leviers dont la suppression attend la confirmation de l'utilisateur (CTO ↔ responsable de
+   *  chantier, voir `useDeletionQueue`). */
+  deletionQueue?: Lever[];
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -222,7 +226,8 @@ export function Topbar({
                 {alerts.length === 0 &&
                 approvalQueue.length === 0 &&
                 milestoneApprovalQueue.length === 0 &&
-                realizedApprovalQueue.length === 0 ? (
+                realizedApprovalQueue.length === 0 &&
+                deletionQueue.length === 0 ? (
                   <p className="px-4 py-6 text-center text-xs text-tertiary">
                     {t("shared.topbar.noNotifications", "Aucune notification à traiter.")}
                   </p>
@@ -294,6 +299,36 @@ export function Topbar({
                             "shared.topbar.realizedPending",
                             "Réalisé à valider · {amount}"
                           ).replace("{amount}", fmtCurr(impact.amount))}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {deletionQueue.length > 0 && (
+                  <div className="border-t-2 border-border">
+                    <div className="bg-neutral-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-tertiary">
+                      {t("validation.deletion.title", "Suppressions à confirmer")}
+                    </div>
+                    {deletionQueue.map((lever) => (
+                      <button
+                        key={lever.id}
+                        type="button"
+                        onClick={async () => {
+                          const proceed = await confirmDiscard();
+                          if (!proceed) return;
+                          setAlertsOpen(false);
+                          router.push("/validation");
+                        }}
+                        className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
+                      >
+                        <span className="block text-xs font-semibold text-primary">
+                          {lever.name}
+                        </span>
+                        <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
+                          {t(
+                            "shared.topbar.deletionPending",
+                            "Suppression demandée par {name}"
+                          ).replace("{name}", lever.deletionRequest?.requestedByName ?? "")}
                         </span>
                       </button>
                     ))}

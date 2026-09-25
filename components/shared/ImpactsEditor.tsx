@@ -1,5 +1,6 @@
 "use client";
 
+import { DateInput } from "@/components/shared/DateInput";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronLeft, ChevronRight, MessageSquare, Pencil } from "lucide-react";
@@ -723,28 +724,22 @@ export function ImpactsEditor({
                     </td>
                   )}
                   <td className="px-1 py-1">
-                    <input
+                    <DateInput
                       className={`${inputClass} text-[11px]`}
-                      type="date"
                       disabled={!rowEditable}
                       aria-label={t("impactsEditor.startDate", "Début")}
                       value={dates.start ?? ""}
-                      onChange={(e) =>
-                        update(imp.id, impactDatesPatch(imp, { start: e.target.value }))
-                      }
+                      onChange={(v) => update(imp.id, impactDatesPatch(imp, { start: v }))}
                     />
                   </td>
                   <td className="px-1 py-1">
                     {showEnd ? (
-                      <input
+                      <DateInput
                         className={`${inputClass} text-[11px]`}
-                        type="date"
                         disabled={!rowEditable}
                         aria-label={t("impactsEditor.endDate", "Fin")}
                         value={dates.end ?? ""}
-                        onChange={(e) =>
-                          update(imp.id, impactDatesPatch(imp, { end: e.target.value }))
-                        }
+                        onChange={(v) => update(imp.id, impactDatesPatch(imp, { end: v }))}
                       />
                     ) : (
                       na
