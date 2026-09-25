@@ -28,6 +28,7 @@ import {
   isGainImpact,
   isImpactLate,
   isImpactRealized,
+  isLeverLaunched,
   isRecurringImpact,
   parseLocalDate,
 } from "@/lib/impactStatus";
@@ -416,12 +417,17 @@ function implementationCosts(snapshot: { capex: number; opexOneOff: number }): n
  *  chantiers — audit M8 ; avant : prorata du champ stocké et périmé `lever.progress`) :
  *   - CAPEX lissé : engagé dès le début du lissage ; CAPEX one-shot : à sa date de déploiement ;
  *   - OPEX one-off : à sa date propre si renseignée ;
- *   - sans date : engagé si le levier est « Réalisé », ou « Exécuté » et démarré. */
+ *   - sans date : engagé si le levier est « Réalisé », ou « Exécuté » et démarré.
+ *  Alignée sur la règle unique du réalisé (`isImpactRealized`, audit C4/C5) : un statut coché à la
+ *  main prime (décoché = non engagé, en attente de validation finance = non engagé), et avant le
+ *  lancement du levier (Identifié / Validé / Planifié) une date passée ne suffit pas. */
 export function isInvestCostEngaged(
   impact: LeverImpact,
   lever: Pick<Lever, "status" | "start">,
   today: Date = new Date()
 ): boolean {
+  if (impact.status) return isImpactRealized(impact, today, lever.status);
+  if (!isLeverLaunched(lever.status)) return false;
   const refDate =
     impact.nature === "capex" && impact.capexAllocationMode === "smoothed"
       ? impact.capexStartDate
@@ -463,6 +469,7 @@ export function leverEngagedInvestCostByNature(
     }
     return { capex, opexOneOff };
   }
+  if (!isLeverLaunched(lever.status)) return { capex: 0, opexOneOff: 0 };
   const f = leverProgressPct(lever) / 100;
   return { capex: lever.capex * f, opexOneOff: lever.opexOneOff * f };
 }
@@ -1336,7 +1343,7 @@ export function sankeyChronology(data: BeTrackData): {
       if (explicit !== -1) {
         stageIdx = explicit;
       } else {
-        const p = l.progress;
+        const p = leverProgressPct(l);
         if (p <= 10) stageIdx = 0;
         else if (p <= 30) stageIdx = 1;
         else if (p <= 55) stageIdx = 2;
@@ -1376,7 +1383,7 @@ export function sankeyChronology(data: BeTrackData): {
         if (explicit !== -1) {
           cancelIdx = explicit;
         } else {
-          const p = l.progress;
+          const p = leverProgressPct(l);
           if (p <= 10) cancelIdx = 0;
           else if (p <= 30) cancelIdx = 1;
           else if (p <= 55) cancelIdx = 2;

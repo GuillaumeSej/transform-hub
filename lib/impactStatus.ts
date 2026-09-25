@@ -75,12 +75,16 @@ export function isImpactRealized(
   leverStatus?: LeverStatus
 ): boolean {
   if (impactStatusOf(imp, today) === "planned") return false;
-  if (!imp.status && leverStatus && !LAUNCHED_LEVER_STATUSES.includes(leverStatus)) return false;
+  if (!imp.status && leverStatus && !isLeverLaunched(leverStatus)) return false;
   return imp.realizedApproval?.status !== "pending";
 }
 
 /** Stades où le levier est lancé (« Exécuté », « Réalisé ») — voir `isImpactRealized`. */
 const LAUNCHED_LEVER_STATUSES: readonly LeverStatus[] = ["in_progress", "delivered"];
+
+export function isLeverLaunched(status: LeverStatus): boolean {
+  return LAUNCHED_LEVER_STATUSES.includes(status);
+}
 
 /** Impact de GAIN (économie, ou départ ETP) — par opposition aux coûts et aux recrutements. */
 export function isGainImpact(imp: LeverImpact): boolean {

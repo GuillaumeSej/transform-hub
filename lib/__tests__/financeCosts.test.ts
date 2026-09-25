@@ -166,7 +166,7 @@ describe("financeCosts — isCostEngaged", () => {
   const lv = (o: Partial<Lever>): Lever => ({ ...baseLever, ...o });
 
   it("CAPEX one-shot: engaged once capexDeploymentDate has passed", () => {
-    const l = lv({ status: "validated" });
+    const l = lv({ status: "in_progress" });
     const past = impact({ nature: "capex", capexDeploymentDate: "2026-01-01" });
     const future = impact({ nature: "capex", capexDeploymentDate: "2026-12-01" });
     expect(isCostEngaged({ impact: past, lever: l }, TODAY)).toBe(true);
@@ -180,8 +180,26 @@ describe("financeCosts — isCostEngaged", () => {
       capexStartDate: "2026-03-01",
       capexDeploymentDate: "2026-09-01",
     });
-    expect(isCostEngaged({ impact: smoothed, lever: lv({ status: "validated" }) }, TODAY)).toBe(
+    expect(isCostEngaged({ impact: smoothed, lever: lv({ status: "in_progress" }) }, TODAY)).toBe(
       true
+    );
+  });
+
+  it("lever not launched yet (audit C5): a past date is not enough, only a ticked cost counts", () => {
+    const l = lv({ status: "idea" });
+    const past = impact({ nature: "capex", capexDeploymentDate: "2026-01-01" });
+    expect(isCostEngaged({ impact: past, lever: l }, TODAY)).toBe(false);
+    expect(isCostEngaged({ impact: { ...past, status: "done" }, lever: l }, TODAY)).toBe(true);
+    // Coché mais en attente de validation finance, ou décoché : non engagé.
+    const pending = {
+      ...past,
+      status: "done" as const,
+      realizedApproval: { status: "pending" as const },
+    };
+    expect(isCostEngaged({ impact: pending, lever: l }, TODAY)).toBe(false);
+    const unticked = { ...past, status: "planned" as const };
+    expect(isCostEngaged({ impact: unticked, lever: lv({ status: "delivered" }) }, TODAY)).toBe(
+      false
     );
   });
 

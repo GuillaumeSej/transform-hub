@@ -442,9 +442,17 @@ describe("engine — sankeyChronology", () => {
     expect(linkToDeliveredExit).toBeUndefined();
   });
 
-  it("falls back to the progress heuristic for legacy levers without cancelledAtStage", () => {
+  it("falls back to the action-plan progress for legacy levers without cancelledAtStage", () => {
+    // Le champ stocké `progress` (périmé) est ignoré : seul l'avancement du plan d'action compte.
     const data = makeData({
-      levers: [{ ...baseLever, status: "cancelled", progress: 95 }],
+      levers: [
+        {
+          ...baseLever,
+          status: "cancelled",
+          progress: 0,
+          actions: [{ id: "a1", name: "A1", start: "", end: "", status: "done" as const }],
+        },
+      ],
     });
     const chrono = sankeyChronology(data);
     const deliveredExitLabel = `Abandonné après ${STATUS_LEVEL.delivered}`;
@@ -970,7 +978,7 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
         {
           ...baseLever,
           id: "L001",
-          status: "validated" as LeverStatus,
+          status: "in_progress" as LeverStatus,
           progress: 0,
           impacts: [
             {
@@ -1011,6 +1019,16 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
     });
     // 2 (CAPEX passé) + 1 (one-off passé) ; ni le CAPEX futur, ni l'OPEX récurrent.
     expect(programSummary(data).engagedCosts).toBe(3);
+    // Levier pas encore lancé (audit C5) : une date passée ne suffit pas, seul un coût coché compte.
+    const notLaunched = { ...data.levers[0], status: "validated" as LeverStatus };
+    expect(programSummary({ ...data, levers: [notLaunched] }).engagedCosts).toBe(0);
+    const ticked = {
+      ...notLaunched,
+      impacts: notLaunched.impacts!.map((i) =>
+        i.id === "c1" ? { ...i, status: "done" as const } : i
+      ),
+    };
+    expect(programSummary({ ...data, levers: [ticked] }).engagedCosts).toBe(2);
   });
 
   it("engagedCosts counts 100% for delivered levers regardless of progress", () => {
