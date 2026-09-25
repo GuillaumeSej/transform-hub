@@ -30,7 +30,7 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
-import { isReadOnlyUser } from "@/lib/roleProfiles";
+import { canImportStrategicPlan, isReadOnlyUser } from "@/lib/roleProfiles";
 import type { StrategicImportWrites } from "@/lib/strategicExcelImport";
 import type { Chantier, MilestoneId } from "@/types";
 
@@ -328,20 +328,22 @@ export function StrategicAxesView() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StrategicImportButton
-            data={{
-              axes: data.axes,
-              chantiers: data.chantiers,
-              actions: data.chantierActions,
-              indicators: data.indicators,
-              measurements: data.measurements,
-              staffing: data.staffing,
-            }}
-            companyId={user?.companyId}
-            programId={activeProgramId}
-            maturityStages={stages}
-            onImport={handleImport}
-          />
+          {canImportStrategicPlan(user, data.strategicRole) && (
+            <StrategicImportButton
+              data={{
+                axes: data.axes,
+                chantiers: data.chantiers,
+                actions: data.chantierActions,
+                indicators: data.indicators,
+                measurements: data.measurements,
+                staffing: data.staffing,
+              }}
+              companyId={user?.companyId}
+              programId={activeProgramId}
+              maturityStages={stages}
+              onImport={handleImport}
+            />
+          )}
           {!readOnly && (
             <Button variant="primary" onClick={() => setNewAxisOpen(true)}>
               <Plus size={13} /> {t("strategicAxes.newAxis")}

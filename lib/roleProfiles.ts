@@ -84,6 +84,18 @@ export function hasAnyRole(
 /** Super-admin global OU admin de sa propre entreprise — les deux habilitations qui, partout dans
  *  le code métier, "court-circuitent" les vérifications de rôle/clearance habituelles. Remplace
  *  les anciennes comparaisons `role === "admin" || role === "admin_entreprise"`. */
+/** Import Excel du Plan Stratégique (page Axes stratégiques) : réservé à l'admin BearingPoint
+ *  (global), à l'admin de l'entreprise et au pilote stratégique (`strategic_lead`) du programme
+ *  affiché — `strategicRole` = rôle stratégique EFFECTIF pour ce programme
+ *  (`useStrategicData().strategicRole`). Un import touche tout le plan : les autres profils
+ *  modifient leurs propres éléments directement dans l'outil. */
+export function canImportStrategicPlan(
+  user: Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined,
+  strategicRole: Role | undefined
+): boolean {
+  return isAnyAdmin(user) || strategicRole === "strategic_lead";
+}
+
 export function isAnyAdmin(
   user: Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
 ): boolean {
