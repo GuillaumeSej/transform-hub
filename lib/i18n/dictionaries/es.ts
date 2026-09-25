@@ -88,6 +88,8 @@ const es: Record<string, string> = {
   "nav.sectionLabel": "Navegación",
   "nav.sectionDecision": "Decisión",
   "nav.sectionReferenceData": "Datos de referencia",
+  "nav.collapseSidebar": "Contraer el menú",
+  "nav.expandSidebar": "Desplegar el menú",
 
   // ─── roles ────────────────────────────────────────────────────────────────
   "roles.admin.label": "Administrador",
@@ -265,6 +267,8 @@ const es: Record<string, string> = {
   "dashboard.widgets.healthWatch": "A vigilar",
   "dashboard.widgets.healthCritical": "Alertas críticas",
   "dashboard.widgets.healthCancelled": "Abandonada",
+  "dashboard.widgets.healthShowAll": "Mostrar todo",
+  "dashboard.widgets.healthFilterHint": "Haz clic en un estado para filtrar",
   "dashboard.widgets.underperformers": "Palancas con bajo rendimiento",
   "dashboard.widgets.underperformersDesc":
     "Palancas cuyo avance real es más de 10 puntos inferior al avance esperado",

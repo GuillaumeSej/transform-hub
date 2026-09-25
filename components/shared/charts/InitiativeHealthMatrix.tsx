@@ -24,9 +24,13 @@ const HEALTH_CELL_STYLE: Record<LeverHealthStatus, string> = {
 
 const HEALTH_ORDER: LeverHealthStatus[] = ["critical", "watch", "onTrack", "cancelled"];
 
-/** Statuts proposés dans les puces de filtre au-dessus de la matrice — "cancelled" est
- * volontairement exclu (statut résiduel, pas un niveau de santé qu'on cherche à filtrer). */
-const FILTERABLE_HEALTH: LeverHealthStatus[] = ["critical", "watch", "onTrack"];
+/** Marqueur carré « contour » (légende en mode filtre, statut non sélectionné). */
+const HEALTH_OUTLINE_STYLE: Record<LeverHealthStatus, string> = {
+  onTrack: "border-rag-green",
+  watch: "border-rag-amber",
+  critical: "border-rag-red",
+  cancelled: "border-neutral-400",
+};
 
 /** Géométrie des rectangles de leviers (largeur fixe). Le nombre de colonnes par bloc s'adapte
  * à la largeur disponible / au nombre de groupes (cf. `computeGroupColumns`) : peu de groupes →
@@ -40,14 +44,18 @@ export function InitiativeHealthMatrix({
   onLeverClick,
 }: {
   groups: LeverHealthGroup[];
-  labels: Record<LeverHealthStatus, string> & { empty: string };
+  labels: Record<LeverHealthStatus, string> & {
+    empty: string;
+    showAll: string;
+    filterHint: string;
+  };
   onLeverClick: (leverId: string) => void;
 }) {
-  // Filtre de statut géré localement au composant (chips cliquables, même pattern que les
-  // compteurs de sévérité du widget Alertes) : tableau vide = aucun filtre actif (multi-sélection).
+  // Filtre de statut géré localement au composant, piloté par la légende sous la matrice
+  // (chaque entrée est un bouton bascule) : tableau vide = aucun filtre actif (multi-sélection).
   const [statusFilter, setStatusFilter] = useState<LeverHealthStatus[]>([]);
   // Colonnes calculées sur les groupes non filtrés : la disposition reste stable quand on
-  // bascule les puces de filtre.
+  // bascule un statut dans la légende.
   const maxCells = groups.reduce((max, group) => Math.max(max, group.cells.length), 0);
   const { ref, cols } = useAdaptiveGroupColumns({ ...GRID, groupCount: groups.length, maxCells });
 
@@ -65,31 +73,6 @@ export function InitiativeHealthMatrix({
 
   return (
     <div className="space-y-3">
-      {/* Puces de filtre par statut — cliquer bascule actif/inactif ; état actif = fond plein. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {FILTERABLE_HEALTH.map((status) => {
-          const isActive = statusFilter.includes(status);
-          return (
-            <button
-              key={status}
-              type="button"
-              onClick={() =>
-                setStatusFilter((prev) => toggleInSelection(prev, status) as LeverHealthStatus[])
-              }
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition ${
-                isActive
-                  ? `${HEALTH_STYLE[status]} border-transparent text-white`
-                  : "border-border bg-white text-secondary hover:border-black hover:text-primary"
-              }`}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white" : HEALTH_STYLE[status]}`}
-              />
-              {labels[status]}
-            </button>
-          );
-        })}
-      </div>
       <div ref={ref} className="overflow-x-auto pb-1">
         <div className="flex min-w-max items-start justify-center gap-3">
           {filteredGroups.map((group, index) => {
@@ -138,13 +121,55 @@ export function InitiativeHealthMatrix({
           })}
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-border pt-2 text-[11px] text-secondary">
-        {HEALTH_ORDER.map((status) => (
-          <span key={status} className="inline-flex items-center gap-1.5">
-            <span className={`h-2.5 w-2.5 rounded-[2px] ${HEALTH_STYLE[status]}`} />
-            {labels[status]}
-          </span>
-        ))}
+      {/* Légende = filtre : chaque statut est un bouton bascule (aria-pressed). Sans filtre, tous
+          les carrés sont pleins (légende classique) ; avec filtre, les statuts retenus gardent un
+          carré plein + libellé gras souligné, les autres passent en carré contour atténué. */}
+      <div
+        role="group"
+        aria-label={labels.filterHint}
+        title={labels.filterHint}
+        className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-border pt-2 text-[11px] text-secondary"
+      >
+        {HEALTH_ORDER.map((status) => {
+          const isFiltering = statusFilter.length > 0;
+          const isActive = statusFilter.includes(status);
+          const isDimmed = isFiltering && !isActive;
+          return (
+            <button
+              key={status}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() =>
+                setStatusFilter((prev) => toggleInSelection(prev, status) as LeverHealthStatus[])
+              }
+              className={`inline-flex items-center gap-1.5 rounded-[2px] px-1 py-0.5 transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-black ${
+                isActive
+                  ? "font-semibold text-primary underline underline-offset-2"
+                  : isDimmed
+                    ? "opacity-50 hover:opacity-100"
+                    : ""
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`h-2.5 w-2.5 rounded-[2px] ${
+                  isDimmed ? `border ${HEALTH_OUTLINE_STYLE[status]}` : HEALTH_STYLE[status]
+                }`}
+              />
+              {labels[status]}
+            </button>
+          );
+        })}
+        {/* Toujours rendu (invisible sans filtre) pour éviter un saut de mise en page. */}
+        <button
+          type="button"
+          onClick={() => setStatusFilter([])}
+          className={`rounded-[2px] px-1 py-0.5 text-[11px] font-semibold text-secondary underline underline-offset-2 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-black ${
+            statusFilter.length === 0 ? "invisible" : ""
+          }`}
+        >
+          {labels.showAll}
+        </button>
       </div>
     </div>
   );

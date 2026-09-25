@@ -518,6 +518,8 @@ export function DashboardPagePerformance() {
     critical: t("dashboard.widgets.healthCritical"),
     cancelled: t("dashboard.widgets.healthCancelled"),
     empty: t("dashboard.widgets.initiativeHealthEmpty"),
+    showAll: t("dashboard.widgets.healthShowAll", "Tout afficher"),
+    filterHint: t("dashboard.widgets.healthFilterHint", "Cliquer sur un statut pour filtrer"),
   };
 
   const filteredAlerts = useMemo(() => {

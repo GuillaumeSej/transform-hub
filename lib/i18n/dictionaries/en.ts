@@ -91,6 +91,8 @@ const en: Record<string, string> = {
   "nav.sectionLabel": "Navigation",
   "nav.sectionDecision": "Decision",
   "nav.sectionReferenceData": "Reference data",
+  "nav.collapseSidebar": "Collapse menu",
+  "nav.expandSidebar": "Expand menu",
 
   // ─── roles ────────────────────────────────────────────────────────────────
   "roles.admin.label": "Administrator",
@@ -280,6 +282,8 @@ const en: Record<string, string> = {
   "dashboard.widgets.healthWatch": "To watch",
   "dashboard.widgets.healthCritical": "Critical alerts",
   "dashboard.widgets.healthCancelled": "Cancelled",
+  "dashboard.widgets.healthShowAll": "Show all",
+  "dashboard.widgets.healthFilterHint": "Click a status to filter",
   "dashboard.tab.cockpit": "Summary",
   "dashboard.tab.trajectory": "Trajectory",
   "dashboard.tab.prioritization": "Prioritization",

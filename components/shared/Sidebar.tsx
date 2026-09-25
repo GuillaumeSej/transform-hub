@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { PAGE_ROUTES, getDisplayRoleDefinition, resolveUserNav } from "@/lib/nav-config";
 import { assetPath, cn } from "@/lib/utils";
 import { ICON_REGISTRY } from "@/components/shared/icon-registry";
@@ -25,18 +26,28 @@ const SECTION_LABEL_KEYS: Record<string, string> = {
  *
  * Réutilisée telle quelle à l'intérieur du drawer mobile (voir AppShell.tsx) — `onNavigate` est
  * fourni dans ce contexte pour refermer le drawer au clic sur un lien de nav ; `className` permet
- * au drawer de remplacer `h-screen` par `h-full` (hauteur du panneau, pas du viewport). */
+ * au drawer de remplacer `h-screen` par `h-full` (hauteur du panneau, pas du viewport).
+ *
+ * Desktop uniquement : `collapsed` réduit la sidebar à un rail d'icônes (64px — logo réduit au
+ * symbole, libellés en infobulle, en-têtes de section masqués, avatar seul) et `onToggleCollapsed`
+ * affiche le bouton de bascule. Le drawer mobile ne fournit ni l'un ni l'autre : rendu inchangé. */
 export function Sidebar({
   alertCount,
   pendingApprovalCount = 0,
   onNavigate,
   className,
+  collapsed = false,
+  onToggleCollapsed,
 }: {
   alertCount: number;
   /** Demandes de validation stratégique à traiter (badge de l'item "Validation"). */
   pendingApprovalCount?: number;
   onNavigate?: () => void;
   className?: string;
+  /** Rail d'icônes (desktop) — voir le commentaire du composant. */
+  collapsed?: boolean;
+  /** Bascule réduit/déplié ; bouton absent si non fourni (drawer mobile). */
+  onToggleCollapsed?: () => void;
 }) {
   const pathname = usePathname();
   const { user, profiles, isGlobalAdmin, isCompanyAdmin } = useRole();
@@ -54,6 +65,9 @@ export function Sidebar({
   // Libellé/avatar affichés : profil Plan Performance, puis Plan Stratégique, puis admin — sinon
   // repli sur le nom de l'utilisateur (cas théorique d'un compte sans profil ni habilitation).
   const displayRole = getDisplayRoleDefinition({ profiles, isGlobalAdmin, isCompanyAdmin });
+  const toggleLabel = collapsed
+    ? t("nav.expandSidebar", "Déplier le menu")
+    : t("nav.collapseSidebar", "Réduire le menu");
 
   return (
     <aside
@@ -65,31 +79,52 @@ export function Sidebar({
         // <body> scrollable, et un simple scroll molette au-dessus du menu décalait alors TOUTE
         // la page (topbar + sidebar comprises) au lieu de rester sans effet. `overflow-hidden`
         // en garde-fou pour qu'aucun contenu interne ne puisse à son tour dépasser cette hauteur.
-        "flex h-dvh w-[248px] min-w-[248px] flex-col overflow-hidden bg-black text-white",
+        "flex h-dvh flex-col overflow-hidden bg-black text-white transition-[width,min-width] duration-200 ease-out motion-reduce:transition-none",
+        collapsed ? "w-16 min-w-16" : "w-[248px] min-w-[248px]",
         className
       )}
     >
-      <div className="border-b border-white/[0.12] px-[18px] pb-4 pt-5">
-        <Image
-          src={assetPath("/brand/logo-wordmark-white.png")}
-          alt="BearingPoint"
-          width={150}
-          height={26}
-          priority
-          className="h-[22px] w-auto"
-        />
-        <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/50">
-          {t("login.tagline", "BeTrack · Transformation")}
+      {collapsed ? (
+        <div className="flex justify-center border-b border-white/[0.12] pb-4 pt-5">
+          <Image
+            src={assetPath("/brand/logo-symbol-white.png")}
+            alt="BearingPoint"
+            width={26}
+            height={24}
+            priority
+            className="h-[22px] w-auto"
+          />
         </div>
-      </div>
+      ) : (
+        <div className="border-b border-white/[0.12] px-[18px] pb-4 pt-5">
+          <Image
+            src={assetPath("/brand/logo-wordmark-white.png")}
+            alt="BearingPoint"
+            width={150}
+            height={26}
+            priority
+            className="h-[22px] w-auto"
+          />
+          <div className="mt-2 whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.14em] text-white/50">
+            {t("login.tagline", "BeTrack · Transformation")}
+          </div>
+        </div>
+      )}
 
       {/* `overscroll-contain` : même si la liste de nav devait un jour dépasser sa hauteur
           disponible, le scroll wheel ne doit jamais "chaîner" vers le body derrière une fois la
           fin de la liste atteinte (cause typique d'un décalage visuel de toute la page). */}
-      <nav className="flex-1 overflow-y-auto overscroll-contain px-2.5 py-3">
-        <div className="px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
-          {t("nav.sectionLabel")}
-        </div>
+      <nav
+        className={cn(
+          "flex-1 overflow-y-auto overflow-x-hidden overscroll-contain py-3",
+          collapsed ? "px-2" : "px-2.5"
+        )}
+      >
+        {!collapsed && (
+          <div className="whitespace-nowrap px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+            {t("nav.sectionLabel")}
+          </div>
+        )}
         {nav.map((item, index) => {
           const Icon = ICON_REGISTRY[item.icon];
           const href = PAGE_ROUTES[item.id] ?? "/dashboard";
@@ -99,37 +134,61 @@ export function Sidebar({
           // `section` différente de l'item précédent ; sans `section` sur aucun item d'un rôle,
           // la liste reste strictement plate comme avant (comportement historique inchangé).
           const showSectionDivider = !!item.section && item.section !== nav[index - 1]?.section;
+          // Libellé alternatif selon le type de programme actif (ex. « Bibliothèque des leviers »
+          // → « Feuille de route » sur la même route /levers) — repli sur `label` quand aucune
+          // surcharge n'est définie pour ce type.
+          const label = t(item.labelByProgramType?.[programType] ?? item.label);
+          const approvalsBadge =
+            (item.badge === "approvals" || item.id === "validation") &&
+            programType === "strategic" &&
+            pendingApprovalCount > 0;
+          const alertsBadge = item.badge === "alerts" && alertCount > 0;
           return (
             <div key={item.id}>
-              {showSectionDivider && item.section && (
-                <div className="mt-2 border-t border-white/[0.12] px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
-                  {t(SECTION_LABEL_KEYS[item.section] ?? item.section)}
-                </div>
-              )}
+              {showSectionDivider &&
+                item.section &&
+                (collapsed ? (
+                  // Rail réduit : simple filet de séparation, sans le libellé de section.
+                  <div className="mx-1 mt-2 border-t border-white/[0.12] pt-2" />
+                ) : (
+                  <div className="mt-2 whitespace-nowrap border-t border-white/[0.12] px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                    {t(SECTION_LABEL_KEYS[item.section] ?? item.section)}
+                  </div>
+                ))}
               <GuardedLink
                 href={href}
                 onClick={onNavigate}
+                title={collapsed ? label : undefined}
+                aria-label={collapsed ? label : undefined}
                 className={cn(
-                  "my-0.5 flex items-center gap-2.5 border-l-2 border-transparent px-3 py-2.5 text-[13px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white",
+                  "relative my-0.5 flex items-center border-l-2 border-transparent py-2.5 text-[13px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white",
+                  collapsed ? "justify-center px-0" : "gap-2.5 px-3",
                   active && "border-bp-coral bg-white/[0.08] font-semibold text-white"
                 )}
               >
-                {Icon && <Icon size={15} className="w-4 text-center" />}
-                {/* Libellé alternatif selon le type de programme actif (ex. « Bibliothèque des
-                    leviers » → « Feuille de route » sur la même route /levers) — repli sur
-                    `label` quand aucune surcharge n'est définie pour ce type. */}
-                <span>{t(item.labelByProgramType?.[programType] ?? item.label)}</span>
-                {(item.badge === "approvals" || item.id === "validation") &&
-                  programType === "strategic" &&
-                  pendingApprovalCount > 0 && (
-                    <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
-                      {pendingApprovalCount}
-                    </span>
-                  )}
-                {item.badge === "alerts" && alertCount > 0 && (
-                  <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
-                    {alertCount}
-                  </span>
+                {Icon && <Icon size={15} className="w-4 shrink-0 text-center" />}
+                {collapsed ? (
+                  // Rail réduit : pastille sans chiffre à la place du badge compteur.
+                  (approvalsBadge || alertsBadge) && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-bp-coral"
+                    />
+                  )
+                ) : (
+                  <>
+                    <span className="whitespace-nowrap">{label}</span>
+                    {approvalsBadge && (
+                      <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
+                        {pendingApprovalCount}
+                      </span>
+                    )}
+                    {alertsBadge && (
+                      <span className="ml-auto rounded-full bg-bp-coral px-1.5 py-px text-[10px] font-semibold text-white">
+                        {alertCount}
+                      </span>
+                    )}
+                  </>
                 )}
               </GuardedLink>
             </div>
@@ -137,17 +196,56 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="flex items-center gap-2.5 border-t border-white/[0.08] px-4 py-3.5">
+      {onToggleCollapsed && (
+        <div className={cn("border-t border-white/[0.08] py-2", collapsed ? "px-2" : "px-2.5")}>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-label={toggleLabel}
+            title={toggleLabel}
+            className={cn(
+              "flex w-full items-center py-2 text-xs font-medium text-white/60 transition hover:bg-white/[0.06] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white",
+              collapsed ? "justify-center px-0" : "gap-2.5 px-3"
+            )}
+          >
+            {collapsed ? (
+              <PanelLeftOpen size={16} aria-hidden="true" className="shrink-0" />
+            ) : (
+              <>
+                <PanelLeftClose size={16} aria-hidden="true" className="shrink-0" />
+                <span className="whitespace-nowrap">{toggleLabel}</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "flex items-center border-t border-white/[0.08] py-3.5",
+          collapsed ? "justify-center px-0" : "gap-2.5 px-4"
+        )}
+        title={
+          collapsed
+            ? [user?.name, displayRole ? t(displayRole.label) : null].filter(Boolean).join(" · ")
+            : undefined
+        }
+      >
         <Avatar
           initials={(displayRole ? t(displayRole.short) : (user?.name ?? "?"))
             .slice(0, 2)
             .toUpperCase()}
           variant="coral"
         />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-semibold text-white">{user?.name ?? "—"}</div>
-          {displayRole && <div className="text-[10px] text-white/50">{t(displayRole.label)}</div>}
-        </div>
+        {!collapsed && (
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-semibold text-white">{user?.name ?? "—"}</div>
+            {displayRole && (
+              <div className="truncate text-[10px] text-white/50">{t(displayRole.label)}</div>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );

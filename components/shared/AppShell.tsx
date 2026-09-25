@@ -19,6 +19,7 @@ import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
 import { useNotifications } from "@/lib/hooks/useNotifications";
+import { useSidebarCollapsed } from "@/lib/hooks/useSidebarCollapsed";
 import {
   useApprovalQueue,
   useMilestoneApprovalQueue,
@@ -67,6 +68,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [noAccess, setNoAccess] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Sidebar desktop réductible en rail d'icônes (préférence par navigateur) — le contenu, en
+  // `flex-1`, récupère automatiquement la largeur libérée. Sans effet sur le drawer mobile.
+  const sidebar = useSidebarCollapsed();
 
   // ── Notifications : un jeu d'alertes PAR TYPE DE PROGRAMME ────────────────────────────────
   // La cloche du Topbar affichait jusqu'ici les alertes du Plan Performance (financières, leviers)
@@ -349,6 +353,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Sidebar
           alertCount={shellAlerts.length}
           pendingApprovalCount={strategicApprovals.pendingCount}
+          collapsed={sidebar.collapsed}
+          onToggleCollapsed={sidebar.toggle}
         />
       </div>
 
