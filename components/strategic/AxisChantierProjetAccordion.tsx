@@ -94,18 +94,18 @@ function TreeRow({
           activate();
         }
       }}
-      className={`group flex w-full items-center gap-2 py-2.5 pr-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-black ${indentClass} ${
+      className={`group flex w-full items-center gap-3 pr-5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-black ${indentClass} ${
         activate ? "cursor-pointer hover:bg-neutral-100" : "opacity-60"
-      } ${dimmed ? "opacity-60" : ""} ${level === "axis" ? "bg-neutral-50" : ""}`}
+      } ${dimmed ? "opacity-60" : ""} ${level === "axis" ? "bg-neutral-50 py-4" : level === "chantier" ? "py-3.5" : "py-3"}`}
     >
       {expandable ? (
-        <Chevron size={14} className="shrink-0 text-tertiary" aria-hidden />
+        <Chevron size={18} className="shrink-0 text-tertiary" aria-hidden />
       ) : (
-        <span className="w-[14px] shrink-0" aria-hidden />
+        <span className="w-[18px] shrink-0" aria-hidden />
       )}
       {dot}
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-2">
           {onOpen && expandable ? (
             <button
               type="button"
@@ -117,26 +117,26 @@ function TreeRow({
               className="inline-flex min-w-0 items-center gap-1 text-left hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
             >
               <span
-                className={`truncate ${level === "axis" ? "text-[12.5px] font-bold text-primary" : "text-[12px] font-semibold text-secondary"}`}
+                className={`truncate ${level === "axis" ? "text-[15px] font-bold text-primary" : "text-[14px] font-semibold text-primary"}`}
               >
                 {name}
               </span>
               <ExternalLink
-                size={11}
+                size={13}
                 className="shrink-0 text-tertiary opacity-0 transition group-hover:opacity-100"
                 aria-hidden
               />
             </button>
           ) : (
-            <span className="truncate text-[11.5px] font-medium text-primary">{name}</span>
+            <span className="truncate text-[13.5px] font-medium text-primary">{name}</span>
           )}
         </span>
-        <span className="block truncate text-[10.5px] text-tertiary">{owner}</span>
+        <span className="mt-0.5 block truncate text-[12px] text-tertiary">{owner}</span>
       </span>
-      <span className="hidden shrink-0 rounded-full border border-border bg-white px-2 py-px text-[10px] font-semibold text-tertiary sm:inline">
+      <span className="hidden shrink-0 rounded-full border border-border bg-white px-2.5 py-0.5 text-[11.5px] font-semibold text-secondary sm:inline">
         {count}
       </span>
-      <span className="w-[120px] shrink-0">
+      <span className="w-[160px] shrink-0">
         <ProgressBar pct={pct} />
       </span>
     </div>
@@ -220,7 +220,7 @@ export function AxisChantierProjetAccordion({
     );
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {axes.map((axis, axisIndex) => {
         const axisChantiers = chantiers.filter((c) => c.axisIds.includes(axis.id));
         // Nuance de la couleur d'axe par chantier — même calcul que l'onglet "Avancement" et les
@@ -234,12 +234,12 @@ export function AxisChantierProjetAccordion({
               open={axisOpen}
               onToggle={() => toggleAxis(axis.id)}
               onOpen={onAxisClick ? () => onAxisClick(axis.id) : undefined}
-              indentClass="pl-3.5"
+              indentClass="pl-5"
               openLabel={openLabel}
               dot={
                 <span
                   aria-hidden
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  className="h-3 w-3 shrink-0 rounded-full"
                   style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
                 />
               }
@@ -256,7 +256,7 @@ export function AxisChantierProjetAccordion({
             {axisOpen && (
               <div className="divide-y divide-border border-t border-border">
                 {axisChantiers.length === 0 ? (
-                  <p className="px-4 py-3 text-center text-[12px] text-tertiary">
+                  <p className="px-5 py-4 text-center text-[13px] text-tertiary">
                     {t("strategicAxes.axisNoChantier")}
                   </p>
                 ) : (
@@ -271,12 +271,12 @@ export function AxisChantierProjetAccordion({
                           open={chantierOpen}
                           onToggle={() => toggleChantier(chantierKey)}
                           onOpen={() => onProjetClick(chantier.id)}
-                          indentClass="pl-8"
+                          indentClass="pl-10"
                           openLabel={openLabel}
                           dot={
                             <span
                               aria-hidden
-                              className="h-2 w-2 shrink-0 rounded-full"
+                              className="h-2.5 w-2.5 shrink-0 rounded-full"
                               style={{
                                 backgroundColor:
                                   chantierShades.get(chantier.id) ?? AXIS_FALLBACK_COLOR,
@@ -297,9 +297,9 @@ export function AxisChantierProjetAccordion({
                         />
 
                         {chantierOpen && (
-                          <div className="space-y-1.5 bg-neutral-50/70 py-2 pl-14 pr-3.5">
+                          <div className="space-y-2.5 bg-neutral-50/70 py-4 pl-[4.5rem] pr-5">
                             {projets.length === 0 ? (
-                              <p className="py-1.5 text-[11.5px] text-tertiary">
+                              <p className="py-2 text-[13px] text-tertiary">
                                 {t("strategicAxes.chantierNoProjet")}
                               </p>
                             ) : (
@@ -310,7 +310,7 @@ export function AxisChantierProjetAccordion({
                                 return (
                                   <div
                                     key={action.id}
-                                    className="overflow-hidden rounded-md border border-border bg-white"
+                                    className="overflow-hidden rounded-md border border-border bg-white shadow-sm"
                                   >
                                     <TreeRow
                                       level="projet"
@@ -319,7 +319,7 @@ export function AxisChantierProjetAccordion({
                                           ? () => onProjetClick(chantier.id, action.id)
                                           : undefined
                                       }
-                                      indentClass="pl-2"
+                                      indentClass="pl-4"
                                       openLabel={openLabel}
                                       dot={<span className="hidden" />}
                                       name={action.name}
@@ -335,7 +335,7 @@ export function AxisChantierProjetAccordion({
                                       pct={progressOf(action)}
                                     />
                                     {action.deliverables && action.deliverables.length > 0 && (
-                                      <span className="flex flex-wrap items-center gap-1 px-2.5 pb-2">
+                                      <span className="flex flex-wrap items-center gap-2 pb-3.5 pl-[46px] pr-5">
                                         {action.deliverables.map((deliverable) => (
                                           <button
                                             key={deliverable.id}
@@ -357,7 +357,7 @@ export function AxisChantierProjetAccordion({
                                               deliverableState(deliverable),
                                               deliverableLateDays(deliverable)
                                             )}
-                                            className={`inline-flex max-w-[10rem] items-center gap-1.5 rounded-full border border-border bg-neutral-50 px-1.5 py-0.5 text-[10px] font-medium text-secondary transition focus:outline-none ${
+                                            className={`inline-flex max-w-[18rem] items-center gap-2 rounded-full border border-border bg-neutral-50 px-3 py-1 text-[12px] font-medium text-secondary transition focus:outline-none ${
                                               projetClickable
                                                 ? "hover:border-black hover:bg-white focus:ring-2 focus:ring-black"
                                                 : ""
@@ -365,7 +365,7 @@ export function AxisChantierProjetAccordion({
                                           >
                                             <DeliverableDiamond
                                               state={deliverableState(deliverable)}
-                                              size={6}
+                                              size={8}
                                             />
                                             <span className="truncate">{deliverable.label}</span>
                                           </button>
