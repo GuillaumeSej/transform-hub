@@ -1,26 +1,35 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/shared/Card";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import type {
+  MyWorkspace,
   WorkspaceItem,
   WorkspacePerimeterEntry,
   WorkspaceSeverity,
 } from "@/lib/myWorkspaceTypes";
 import {
+  categoryLabel,
+  filterTodoItems,
   groupBySeverity,
   groupByWeek,
   isLate,
   parseIsoDay,
   weekLabel,
+  workspaceBreakdown,
+  type CategoryPart,
+  type TodoCategory,
   type Translate,
-  type WorkspaceCounts,
+  type WorkspaceCategory,
 } from "@/components/workspace/workspaceView";
 import {
   EmptyState,
+  FilterChip,
   HealthDot,
+  RowChevron,
   PlanBadge,
   RowButton,
   SectionHeader,
@@ -33,77 +42,153 @@ type Navigate = (href: string) => void;
 
 const fill = (template: string, n: number) => template.replace("{n}", String(n));
 
-// ─── Bande KPI ──────────────────────────────────────────────────────────────────────────────────
+// ─── Répartition (barre 100 % empilée + tuiles-légende) ─────────────────────────────────────────
 
-export type KpiTarget = "todo" | "late" | "upcoming" | "blocked";
+/** Couleur par catégorie (tokens RAG / neutres de la charte). */
+const CATEGORY_FILL: Record<WorkspaceCategory, string> = {
+  overdue: "bg-rag-red",
+  toHandle: "bg-rag-amber",
+  upcoming: "bg-info-blue",
+  blocked: "bg-neutral-700",
+};
 
-export function KpiStrip({
-  counts,
-  pilotView,
+/**
+ * Bandeau de tête de « Mon espace » : UN total (« N éléments ») et sa répartition en barre 100 %
+ * empilée par catégorie DISJOINTE (`workspaceBreakdown` — la somme des segments = le total), puis
+ * une tuile-légende par catégorie (libellé · nombre · %). Segment, tuile : même action = filtrer
+ * la page sur cette catégorie (re-clic sur la catégorie active = retirer le filtre).
+ * « Bloqué chez d'autres » n'existe qu'en vue pilotage.
+ */
+export function WorkspaceBreakdown({
+  workspace,
+  active,
   onSelect,
   t,
 }: {
-  counts: WorkspaceCounts;
-  pilotView: boolean;
-  onSelect: (target: KpiTarget) => void;
+  workspace: MyWorkspace;
+  active: WorkspaceCategory | null;
+  onSelect: (category: WorkspaceCategory | null) => void;
   t: Translate;
 }) {
-  const tiles: { target: KpiTarget; label: string; value: number; accent: string }[] = [
-    {
-      target: "todo",
-      label: t("me.kpi.todo", "À faire"),
-      value: counts.todo,
-      accent: "border-black",
-    },
-    {
-      target: "late",
-      label: t("me.kpi.late", "En retard"),
-      value: counts.late,
-      accent: counts.late > 0 ? "border-bp-coral" : "border-neutral-300",
-    },
-    {
-      target: "upcoming",
-      label: t("me.kpi.upcoming", "À venir"),
-      value: counts.upcoming,
-      accent: "border-bp-warm-taupe",
-    },
-  ];
-  if (pilotView) {
-    tiles.push({
-      target: "blocked",
-      label: t("me.kpi.blocked", "Bloqué chez d'autres"),
-      value: counts.blocked,
-      accent: counts.blocked > 0 ? "border-bp-warm-brown" : "border-neutral-300",
-    });
-  }
+  const { total, parts } = workspaceBreakdown(workspace);
+  const shown = parts.filter((p) => p.count > 0);
+  const toggle = (c: WorkspaceCategory) => onSelect(active === c ? null : c);
+  const tip = (p: CategoryPart) =>
+    t("me.breakdown.segmentTip", "{label} : {n} ({pct} %) — cliquer pour filtrer")
+      .replace("{label}", categoryLabel(p.category, t))
+      .replace("{n}", String(p.count))
+      .replace("{pct}", String(p.pct));
+
   return (
-    <div
-      className={cn("mb-5 grid grid-cols-2 gap-3", pilotView ? "lg:grid-cols-4" : "sm:grid-cols-3")}
-    >
-      {tiles.map((tile) => (
-        <button
-          key={tile.target}
-          type="button"
-          onClick={() => onSelect(tile.target)}
-          className={cn(
-            "flex flex-col rounded-md border border-l-[3px] border-border bg-white px-4 py-3 text-left shadow-sm transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-bp-coral",
-            tile.accent
-          )}
-        >
-          <span className="text-[10px] font-bold uppercase tracking-widest text-tertiary">
-            {tile.label}
+    <section className="mb-5 border border-border bg-white p-4 shadow-sm sm:px-[18px]">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-[24px] font-bold leading-none tracking-tight text-primary tabular-nums">
+            {total}
           </span>
-          <span
-            className={cn(
-              "mt-1 text-[24px] font-bold leading-none tracking-tight",
-              tile.target === "late" && tile.value > 0 ? "text-rag-red" : "text-primary"
-            )}
-          >
-            {tile.value}
+          <span className="text-[13px] font-semibold text-primary">
+            {total === 1
+              ? t("me.breakdown.itemsOne", "élément")
+              : t("me.breakdown.itemsMany", "éléments")}
           </span>
-        </button>
-      ))}
-    </div>
+          <span className="text-[11px] text-tertiary">
+            {t("me.breakdown.hint", "Cliquez sur une catégorie pour filtrer la page.")}
+          </span>
+        </div>
+        {active && (
+          <FilterChip label={categoryLabel(active, t)} onClear={() => onSelect(null)} t={t} />
+        )}
+      </div>
+
+      <div
+        className="mt-3 flex h-3.5 w-full gap-px bg-neutral-100"
+        role="group"
+        aria-label={t("me.breakdown.aria", "Répartition de vos éléments par catégorie")}
+      >
+        {shown.map((p, i) => {
+          const label = tip(p);
+          return (
+            <button
+              key={p.category}
+              type="button"
+              onClick={() => toggle(p.category)}
+              aria-label={label}
+              aria-pressed={active === p.category}
+              style={{ flexGrow: p.count, flexBasis: 0 }}
+              className={cn(
+                "group/seg relative min-w-[6px] cursor-pointer transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black",
+                CATEGORY_FILL[p.category],
+                active && active !== p.category && "opacity-30"
+              )}
+            >
+              <span
+                role="tooltip"
+                className={cn(
+                  "pointer-events-none absolute bottom-full z-20 mb-2 whitespace-nowrap bg-neutral-900 px-2 py-1 text-[11px] font-semibold text-white opacity-0 shadow-md transition group-hover/seg:opacity-100 group-focus-visible/seg:opacity-100",
+                  i === 0
+                    ? "left-0"
+                    : i === shown.length - 1
+                      ? "right-0"
+                      : "left-1/2 -translate-x-1/2"
+                )}
+              >
+                {label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <ul
+        className={cn(
+          "mt-3 grid grid-cols-2 gap-2",
+          parts.length === 4 ? "lg:grid-cols-4" : "sm:grid-cols-3"
+        )}
+      >
+        {parts.map((p) => {
+          const isActive = active === p.category;
+          return (
+            <li key={p.category}>
+              <button
+                type="button"
+                onClick={() => toggle(p.category)}
+                aria-pressed={isActive}
+                title={tip(p)}
+                className={cn(
+                  "group flex w-full cursor-pointer items-center gap-2.5 border px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-bp-coral",
+                  isActive
+                    ? "border-bp-coral bg-bp-coral/5"
+                    : "border-border hover:border-strong hover:bg-neutral-100"
+                )}
+              >
+                <span aria-hidden className={cn("h-8 w-1.5 shrink-0", CATEGORY_FILL[p.category])} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[10px] font-bold uppercase tracking-widest text-tertiary">
+                    {categoryLabel(p.category, t)}
+                  </span>
+                  <span className="mt-0.5 flex items-baseline gap-1.5">
+                    <span
+                      className={cn(
+                        "text-[20px] font-bold leading-none tracking-tight tabular-nums",
+                        p.category === "overdue" && p.count > 0 ? "text-rag-red" : "text-primary"
+                      )}
+                    >
+                      {p.count}
+                    </span>
+                    <span className="text-[11px] tabular-nums text-tertiary">· {p.pct} %</span>
+                  </span>
+                </span>
+                {isActive ? (
+                  <X size={14} aria-hidden="true" className="shrink-0 text-bp-coral" />
+                ) : (
+                  <RowChevron />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -128,47 +213,60 @@ function severityGroupLabel(severity: WorkspaceSeverity, t: Translate): string {
   return t("me.severity.info", "À suivre");
 }
 
+/** Props communes aux blocs filtrables : filtre de catégorie actif sur ce bloc (puce + surlignage). */
+type FilterProps = {
+  /** Libellé du filtre actif ciblant ce bloc, `null` sinon. */
+  filterLabel?: string | null;
+  onClearFilter?: () => void;
+};
+
+function filterActions(
+  { filterLabel, onClearFilter }: FilterProps,
+  t: Translate
+): ReactNode | undefined {
+  return filterLabel && onClearFilter ? (
+    <FilterChip label={filterLabel} onClear={onClearFilter} t={t} />
+  ) : undefined;
+}
+
+const HIGHLIGHT = "ring-2 ring-bp-coral";
+
 export function TodoSection({
   items,
-  lateOnly,
-  onClearLateOnly,
+  category,
   navigate,
   t,
+  ...filter
 }: {
   items: WorkspaceItem[];
-  lateOnly: boolean;
-  onClearLateOnly: () => void;
+  /** Sous-catégorie filtrée (« En retard » / « À traiter »), `null` = tout « À faire ». */
+  category: TodoCategory | null;
   navigate: Navigate;
   t: Translate;
-}) {
-  const visible = lateOnly ? items.filter(isLate) : items;
+} & FilterProps) {
+  const visible = filterTodoItems(items, category);
   const groups = groupBySeverity(visible);
   return (
-    <Card>
+    <Card className={cn(filter.filterLabel && HIGHLIGHT)}>
       <SectionHeader
-        title={t("me.todo.title", "À faire")}
-        count={visible.length}
-        actions={
-          lateOnly && (
-            <button
-              type="button"
-              onClick={onClearLateOnly}
-              className="inline-flex items-center gap-1 rounded-full border border-bp-coral bg-bp-coral/10 px-2.5 py-1 text-[11px] font-semibold text-bp-coral transition hover:bg-bp-coral/20"
-            >
-              {t("me.todo.lateOnly", "En retard uniquement")}
-              <X size={12} aria-label={t("me.todo.clearFilter", "Retirer le filtre")} />
-            </button>
-          )
+        title={
+          category
+            ? `${t("me.todo.title", "À faire")} · ${categoryLabel(category, t)}`
+            : t("me.todo.title", "À faire")
         }
+        count={visible.length}
+        actions={filterActions(filter, t)}
       />
       {groups.length === 0 ? (
         <EmptyState
           title={
-            lateOnly
+            category === "overdue"
               ? t("me.todo.emptyLate", "Aucune action en retard.")
-              : t("me.todo.empty", "Rien à faire pour le moment.")
+              : category === "toHandle"
+                ? t("me.todo.emptyToHandle", "Aucune autre action à traiter.")
+                : t("me.todo.empty", "Rien à faire pour le moment.")
           }
-          hint={lateOnly ? undefined : t("me.todo.emptyHint", "Vous êtes à jour.")}
+          hint={category === null ? t("me.todo.emptyHint", "Vous êtes à jour.") : undefined}
         />
       ) : (
         groups.map((group) => (
@@ -222,13 +320,14 @@ export function BlockedSection({
   items,
   navigate,
   t,
+  ...filter
 }: {
   items: WorkspaceItem[];
   navigate: Navigate;
   t: Translate;
-}) {
+} & FilterProps) {
   return (
-    <Card>
+    <Card className={cn(filter.filterLabel && HIGHLIGHT)}>
       <SectionHeader
         title={t("me.blocked.title", "Bloqué chez d'autres")}
         count={items.length}
@@ -236,6 +335,7 @@ export function BlockedSection({
           "me.blocked.subtitle",
           "Vue par exception : validations en attente chez un autre acteur depuis plus de 7 jours."
         )}
+        actions={filterActions(filter, t)}
       />
       {items.length === 0 ? (
         <EmptyState title={t("me.blocked.empty", "Aucune validation bloquée.")} />
@@ -283,19 +383,21 @@ export function UpcomingSection({
   today,
   navigate,
   t,
+  ...filter
 }: {
   items: WorkspaceItem[];
   today: Date;
   navigate: Navigate;
   t: Translate;
-}) {
+} & FilterProps) {
   const groups = groupByWeek(items, today);
   return (
-    <Card>
+    <Card className={cn(filter.filterLabel && HIGHLIGHT)}>
       <SectionHeader
         title={t("me.upcoming.title", "À venir")}
         count={items.length}
         subtitle={t("me.upcoming.subtitle", "Échéances des 4 prochaines semaines")}
+        actions={filterActions(filter, t)}
       />
       {groups.length === 0 ? (
         <EmptyState
@@ -327,7 +429,7 @@ export function UpcomingSection({
                       <button
                         type="button"
                         onClick={() => navigate(item.href)}
-                        className="flex w-full items-start gap-2.5 rounded-sm py-1.5 pl-3 pr-1 text-left transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-bp-coral"
+                        className="group flex w-full cursor-pointer items-start gap-2.5 py-1.5 pl-3 pr-1 text-left transition hover:bg-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-bp-coral"
                       >
                         <span className="w-12 shrink-0 pt-px text-[11px] font-semibold text-secondary">
                           {d ? formatDate(d, { weekday: "short", day: "numeric" }) : "—"}
@@ -343,6 +445,7 @@ export function UpcomingSection({
                           )}
                         </span>
                         <PlanBadge plan={item.plan} t={t} />
+                        <RowChevron />
                       </button>
                     </li>
                   );
@@ -438,11 +541,7 @@ function SkeletonCard({ rows }: { rows: number }) {
 export function WorkspaceSkeleton({ label }: { label: string }) {
   return (
     <div className="animate-pulse" aria-busy="true" aria-label={label}>
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-[66px] rounded-md border border-border bg-white" />
-        ))}
-      </div>
+      <div className="mb-5 h-[150px] border border-border bg-white" />
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <SkeletonCard rows={4} />

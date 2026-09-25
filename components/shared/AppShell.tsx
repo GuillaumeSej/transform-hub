@@ -14,7 +14,7 @@ import {
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
 import { cleanupLegacyStorage } from "@/lib/legacyStorageCleanup";
-import { PAGE_ROUTES, resolveUserNav } from "@/lib/nav-config";
+import { PAGE_ROUTES, resolveLandingRoute, resolveUserNav } from "@/lib/nav-config";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
@@ -305,8 +305,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       // actif (ex. /workstreams pour un sponsor en mode stratégique) et provoquer une boucle de
       // redirection — d'où `navItems[0]` (filtré), avec `unfilteredNavItems[0]` en dernier repli
       // si le filtrage par programme a lui-même tout exclu (programme actif d'un type que ce
-      // profil ne couvre pas du tout).
-      router.replace(PAGE_ROUTES[navItems[0]?.id ?? unfilteredNavItems[0]?.id] ?? "/levers");
+      // profil ne couvre pas du tout). En pratique : /me (« Mon espace », sans `programTypes`, donc
+      // jamais exclu par le filtre) — explicite via resolveLandingRoute, l'item n'étant plus le
+      // 1er de la nav.
+      router.replace(resolveLandingRoute(navItems.length > 0 ? navItems : unfilteredNavItems));
       return;
     }
     cleanupLegacyStorage();

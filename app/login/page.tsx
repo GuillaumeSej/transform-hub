@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
 import { signInUser } from "@/lib/auth";
 import { subscribeCompanyDirectory } from "@/lib/firestore/admin";
-import { PAGE_ROUTES, resolveUserNav } from "@/lib/nav-config";
+import { resolveLandingRoute, resolveUserNav } from "@/lib/nav-config";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/locales";
 import { assetPath } from "@/lib/utils";
@@ -44,11 +44,10 @@ export default function LoginPage() {
     try {
       const user = await signInUser(username, password, companyId || null);
       login(user);
-      // Page d'atterrissage : premier item de l'union des nav de tous les profils/habilitations
-      // de l'utilisateur (voir resolveUserNav) — profil Plan Performance, puis Plan Stratégique,
-      // puis admin. Repli sur /levers si l'utilisateur n'a ni profil ni habilitation admin.
-      const firstNavItem = resolveUserNav(user)[0];
-      router.replace((firstNavItem && PAGE_ROUTES[firstNavItem.id]) ?? "/levers");
+      // Page d'atterrissage : /me (« Mon espace ») pour tout utilisateur qui l'a dans sa nav —
+      // explicite, l'item n'étant plus le 1er de la nav (voir resolveLandingRoute). Repli sur le
+      // 1er item, puis /levers si l'utilisateur n'a ni profil ni habilitation admin.
+      router.replace(resolveLandingRoute(resolveUserNav(user)));
     } catch (err) {
       setError(describeSignInError(err));
     }

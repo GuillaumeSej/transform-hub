@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import {
   BadgeCheck,
   Bell,
+  ChevronRight,
   FileCheck,
   Flag,
   Gauge,
@@ -11,6 +12,7 @@ import {
   ListChecks,
   ShieldCheck,
   Users,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -145,7 +147,43 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
-/** Ligne cliquable pleine largeur (navigation vers `href` via le callback). */
+/** Puce du filtre de catégorie actif (« Filtre : En retard ✕ ») — un clic la retire. */
+export function FilterChip({
+  label,
+  onClear,
+  t,
+}: {
+  label: string;
+  onClear: () => void;
+  t: Translate;
+}) {
+  const clear = t("me.filter.clear", "Retirer le filtre");
+  return (
+    <button
+      type="button"
+      onClick={onClear}
+      title={clear}
+      className="inline-flex items-center gap-1.5 border border-bp-coral bg-bp-coral/10 px-2.5 py-1 text-[11px] font-semibold text-bp-coral transition hover:bg-bp-coral/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-bp-coral"
+    >
+      {t("me.filter.active", "Filtre : {label}").replace("{label}", label)}
+      <X size={12} aria-label={clear} />
+    </button>
+  );
+}
+
+/** Chevron d'affordance des lignes cliquables (se décale et fonce au survol du parent `group`). */
+export function RowChevron() {
+  return (
+    <ChevronRight
+      size={16}
+      aria-hidden="true"
+      className="shrink-0 self-center text-neutral-300 transition group-hover:translate-x-0.5 group-hover:text-bp-coral"
+    />
+  );
+}
+
+/** Ligne cliquable pleine largeur (navigation vers `href` via le callback) : curseur main, fond
+ *  et filet coral au survol, chevron à droite. */
 export function RowButton({
   onClick,
   children,
@@ -160,11 +198,12 @@ export function RowButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-bp-coral sm:px-[18px]",
+        "group flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition hover:bg-neutral-100 hover:shadow-[inset_3px_0_0_rgb(var(--bp-coral-rgb))] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-bp-coral sm:px-[18px]",
         className
       )}
     >
       {children}
+      <RowChevron />
     </button>
   );
 }

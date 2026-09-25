@@ -33,11 +33,19 @@ import type { AuthUser, NavItem, Role, RoleDefinition } from "@/types";
  *   - Finance / RH (dashboard) / Workstreams / Opérations n'ont pas de sens sans leviers et
  *     restent donc réservés au Plan Performance. */
 /** « Mon espace » (route `/me`, portail personnel en lecture seule — voir app/(app)/me/page.tsx) :
- *  PREMIER item de CHAQUE définition de nav (rôles métier des deux plans + habilitations admin),
- *  donc aussi page d'atterrissage post-connexion (`resolveUserNav(user)[0]`, voir login/page.tsx)
- *  et repli d'AppShell. Sans `programTypes` : commun aux deux plans. Même objet partagé partout —
- *  `resolveUserNav` ne garde de toute façon que sa 1re occurrence. */
-const ME_NAV_ITEM: NavItem = { id: "me", icon: "UserCircle", label: "nav.myWorkspace" };
+ *  présent dans CHAQUE définition de nav (rôles métier des deux plans + habilitations admin), rangé
+ *  dans la section `"decision"` (« Mes actions ») en PREMIER item de la section, juste avant
+ *  "validation" quand le rôle la porte (sinon il forme la section à lui seul). N'étant plus le 1er
+ *  item de la nav, la page d'atterrissage post-connexion et le repli d'AppShell ne dérivent plus de
+ *  `resolveUserNav(user)[0]` : voir `resolveLandingRoute` ci-dessous. Sans `programTypes` : commun
+ *  aux deux plans. Même objet partagé partout — `resolveUserNav` ne garde de toute façon que sa
+ *  1re occurrence. */
+const ME_NAV_ITEM: NavItem = {
+  id: "me",
+  icon: "UserCircle",
+  label: "nav.myWorkspace",
+  section: "decision",
+};
 
 /** Nav du `cto` — même écrans/périmètre que les deux rôles "programme" de la fondation vue
  *  consolidée (`program_sponsor`/`program_owner`, voir types/index.ts) : SEULE leur VISIBILITÉ
@@ -47,7 +55,6 @@ const ME_NAV_ITEM: NavItem = { id: "me", icon: "UserCircle", label: "nav.myWorks
  *  diverger accidentellement au fil des rounds futurs (une modification de la nav CTO doit se
  *  répercuter automatiquement sur les deux nouveaux rôles). */
 const CTO_LIKE_NAV: RoleDefinition["nav"] = [
-  ME_NAV_ITEM,
   { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
   {
     id: "levers",
@@ -64,6 +71,7 @@ const CTO_LIKE_NAV: RoleDefinition["nav"] = [
     programTypes: ["performance"],
   },
   { id: "hr", icon: "Users", label: "nav.hrDashboard", programTypes: ["performance"] },
+  ME_NAV_ITEM,
   // Portes de validation (voir lib/leversLogic.ts::approveLeverGate) : visible pour cto (tous les
   // programmes) et program_sponsor/program_owner (visibilité restreinte à leurs programmes via
   // lib/consolidatedProgramAccess.ts, même mécanisme que le reste de cette nav partagée),
@@ -111,7 +119,6 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.sponsor.label",
     short: "roles.sponsor.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "workstreams",
         icon: "Layers",
@@ -126,6 +133,7 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
       {
         id: "validation",
         icon: "ShieldCheck",
@@ -139,7 +147,6 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.lever.label",
     short: "roles.lever.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -148,19 +155,20 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
     ],
   },
   finance: {
     label: "roles.finance.label",
     short: "roles.finance.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "finance",
         icon: "LineChart",
         label: "nav.financeModule",
         programTypes: ["performance"],
       },
+      ME_NAV_ITEM,
       // File « Réalisés à valider » (impacts cochés réalisés en attente de la finance, audit C4).
       {
         id: "validation",
@@ -183,8 +191,8 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.hr.label",
     short: "roles.hr.short",
     nav: [
-      ME_NAV_ITEM,
       { id: "hr", icon: "PieChart", label: "nav.hrDashboard", programTypes: ["performance"] },
+      ME_NAV_ITEM,
       // Round 13 : voir le commentaire identique sur le rôle `cto` ci-dessus.
       { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
       {
@@ -201,7 +209,6 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.ops.label",
     short: "roles.ops.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "operations",
         icon: "Factory",
@@ -216,6 +223,7 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
     ],
   },
 
@@ -236,7 +244,6 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.strategicLead.label",
     short: "roles.strategicLead.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -245,6 +252,7 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
       // Round "jalon validation gate" : le pilote stratégique est le SEUL approbateur des demandes
       // de validation de jalon de projet (`ChantierAction.milestoneApproval`, voir
       // `lib/axisLogic.ts::approveMilestoneGate`) — même route/id que `CTO_LIKE_NAV`'s "validation"
@@ -287,7 +295,6 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.axisSponsor.label",
     short: "roles.axisSponsor.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -296,6 +303,7 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
       // Validation stratégique (lib/strategicApprovals.ts) : demandes à valider + "Mes demandes".
       {
         id: "validation",
@@ -311,7 +319,6 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.chantierOwner.label",
     short: "roles.chantierOwner.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -320,6 +327,7 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
       // Validation stratégique (lib/strategicApprovals.ts) : demandes à valider + "Mes demandes".
       {
         id: "validation",
@@ -335,7 +343,6 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.chantierContributor.label",
     short: "roles.chantierContributor.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -344,6 +351,7 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
       // Validation stratégique (lib/strategicApprovals.ts) : demandes à valider + "Mes demandes".
       {
         id: "validation",
@@ -359,7 +367,6 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.internalComm.label",
     short: "roles.internalComm.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -368,13 +375,13 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
     ],
   },
   budget_control: {
     label: "roles.budgetControl.label",
     short: "roles.budgetControl.short",
     nav: [
-      ME_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -383,6 +390,7 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
     ],
   },
 
@@ -405,7 +413,6 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.comexMember.label",
     short: "roles.comexMember.short",
     nav: [
-      ME_NAV_ITEM,
       { id: "dashboard", icon: "PieChart", label: "nav.executiveDashboard" },
       {
         id: "levers",
@@ -415,6 +422,7 @@ export const roles: Record<Role, RoleDefinition> = {
       },
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
+      ME_NAV_ITEM,
     ],
   },
 };
@@ -429,8 +437,8 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
     label: "roles.admin.label",
     short: "roles.admin.short",
     nav: [
-      ME_NAV_ITEM,
       { id: "admin-companies", icon: "Building2", label: "nav.companies" },
+      ME_NAV_ITEM,
       // Portes de validation (voir CTO_LIKE_NAV ci-dessus) : un admin peut agir sur n'importe
       // quelle demande en cours (isAnyAdmin, lib/leversLogic.ts::approveLeverGate), doit donc
       // aussi voir la page dédiée. `section: "decision"` — voir le commentaire identique sur
@@ -446,10 +454,10 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
     label: "roles.admin_entreprise.label",
     short: "roles.admin_entreprise.short",
     nav: [
-      ME_NAV_ITEM,
       { id: "admin-users", icon: "Users", label: "nav.users" },
       { id: "admin-data", icon: "BarChart3", label: "nav.data" },
       { id: "admin-history", icon: "History", label: "nav.history" },
+      ME_NAV_ITEM,
       { id: "validation", icon: "ShieldCheck", label: "nav.validation", section: "decision" },
       { id: "hr-etp", icon: "Users", label: "nav.hrEtp", section: "reference" },
     ],
@@ -480,7 +488,32 @@ export function resolveUserNav(
       result.push(item);
     }
   }
-  return result;
+  // Regroupement STABLE par section (pilotage sans section, puis "decision", puis "reference",
+  // puis toute autre valeur) : la Sidebar n'affiche un en-tête de section que lorsque la section
+  // change entre deux items consécutifs — sans ce tri, l'union de plusieurs profils (ou une nav
+  // de rôle qui intercale une section au milieu, ex. `finance`/`hr`) produirait un en-tête
+  // « Mes actions » dupliqué ou des items de pilotage rangés visuellement sous une section.
+  return result
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => sectionRank(a.item.section) - sectionRank(b.item.section) || a.index - b.index)
+    .map(({ item }) => item);
+}
+
+const SECTION_ORDER: (string | undefined)[] = [undefined, "decision", "reference"];
+
+function sectionRank(section: string | undefined): number {
+  const rank = SECTION_ORDER.indexOf(section);
+  return rank === -1 ? SECTION_ORDER.length : rank;
+}
+
+/** Page d'atterrissage (post-connexion, et repli d'AppShell sur une route non autorisée) : `/me`
+ *  dès que la nav fournie contient « Mon espace » — explicitement, car l'item n'est plus le 1er de
+ *  la nav (rangé dans la section « Mes actions ») ; sinon 1er item de la nav, repli `/levers`.
+ *  `navItems` = résultat de `resolveUserNav` (éventuellement filtré par type de programme). */
+export function resolveLandingRoute(navItems: NavItem[]): string {
+  if (navItems.some((item) => item.id === "me")) return PAGE_ROUTES.me;
+  const first = navItems[0];
+  return (first && PAGE_ROUTES[first.id]) ?? "/levers";
 }
 
 /** Clé i18n du titre de la page `/levers` (Plan Performance) : le libellé de l'item de nav
