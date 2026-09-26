@@ -33,6 +33,9 @@ import { leverImpactTotals } from "@/lib/engine";
 import { resolveProgramType } from "@/lib/axisLogic";
 import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
 import { matchLeverOwner } from "@/lib/leverOwnerReconciliation";
+import { useRole } from "@/lib/hooks/useRole";
+import { isAnyAdmin } from "@/lib/roleProfiles";
+import { isLeverCtoOf } from "@/lib/leversLogic";
 
 /** Mêmes règles que `components/shared/Topbar.tsx`/`components/strategic/RaciChips.tsx` (2
  *  initiales max, majuscules) — pas de helper partagé exporté par ces composants d'affichage, on
@@ -195,6 +198,14 @@ export function LeverForm({
   // rattaché à du texte libre depuis ce formulaire, seulement à un compte de cette liste (ou
   // "Aucun").
   const companyUsers = useCompanyUsers(companyId);
+  // « Commanditaire » (sponsor du levier) : il confère des droits d'approbation (responsable de
+  // chantier, voir lib/leversLogic.ts::isLeverSponsorOf) — seuls le CTO du programme du levier ou
+  // un admin peuvent le modifier (un porteur ne peut pas se désigner lui-même commanditaire).
+  const { user: currentUser } = useRole();
+  const canEditSponsor =
+    isAnyAdmin(currentUser) ||
+    (!!currentUser &&
+      isLeverCtoOf({ programId: initialValues?.programId ?? values.programId }, currentUser));
 
   // Édition d'un levier LEGACY (jamais réconcilié, `ownerUsername` absent) dont l'`owner` texte
   // libre correspond à EXACTEMENT un compte réel : pré-sélectionne ce compte plutôt que "Aucun" —
@@ -224,6 +235,7 @@ export function LeverForm({
   // Même convenance UX que ci-dessus, pour le sponsor legacy (texte libre) — `matchLeverOwner` est
   // générique (comparaison nom normalisé), pas spécifique au propriétaire.
   useEffect(() => {
+    if (!canEditSponsor) return;
     if (values.sponsorUsername || !values.sponsor || companyUsers.length === 0) return;
     const match = matchLeverOwner(
       values.sponsor,
@@ -458,6 +470,11 @@ export function LeverForm({
           next.sponsor = initialValues?.sponsor ?? "";
           next.sponsorInit = initialValues?.sponsorInit ?? "";
           next.sponsorUsername = initialValues?.sponsorUsername;
+        } else if (!canEditSponsor) {
+          // Défense en profondeur : le sélecteur est désactivé, on renvoie le commanditaire d'origine.
+          next.sponsor = initialValues?.sponsor ?? "";
+          next.sponsorInit = initialValues?.sponsorInit ?? "";
+          next.sponsorUsername = initialValues?.sponsorUsername;
         }
         if (cleaned.length > 0 && !isLocked) {
           const tot = leverImpactTotals(cleaned);
@@ -669,6 +686,15 @@ export function LeverForm({
                *  "Aucun" — sert au scoping du rôle "sponsor" (voir Lever.sponsorUsername). */}
               <select
                 className={inputClass}
+                disabled={!canEditSponsor}
+                title={
+                  canEditSponsor
+                    ? undefined
+                    : t(
+                        "levers.approval.sponsorLocked",
+                        "Seuls le CTO du programme ou un admin peuvent modifier le commanditaire."
+                      )
+                }
                 value={values.sponsorUsername ?? ""}
                 onChange={(e) => {
                   const username = e.target.value;
@@ -919,6 +945,7 @@ export function LeverForm({
         impacts={impacts}
         onChange={(next) => set("impacts", next)}
         company={company}
+        programId={values.programId || undefined}
         canEdit
       />
       <p className="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-wide text-tertiary">
@@ -929,6 +956,7 @@ export function LeverForm({
         impacts={impacts}
         onChange={(next) => set("impacts", next)}
         company={company}
+        programId={values.programId || undefined}
         canEdit
       />
       {impacts.length === 0 && (

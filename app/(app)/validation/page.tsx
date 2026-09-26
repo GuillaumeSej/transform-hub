@@ -9,7 +9,6 @@ import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import {
   useApprovalQueue,
   useDeletionQueue,
-  useMilestoneApprovalQueue,
   useRealizedApprovalQueue,
 } from "@/lib/hooks/useApprovalQueue";
 import { decideImpactRealized } from "@/lib/impactStatus";
@@ -25,9 +24,13 @@ import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { StageBadge } from "@/components/shared/StageBadge";
 import { LeverDeletionDialog } from "@/components/shared/LeverDeletionDialog";
+import { LeverApprovalSteps } from "@/components/shared/LeverApprovalSteps";
+import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
+import { useCurrentCompany } from "@/lib/hooks/useCurrentCompany";
 import type { AuthUser, Lever } from "@/types";
 import { intlTag } from "@/lib/format";
 import { onActivateKey } from "@/lib/a11y";
+import { isAnyAdmin } from "@/lib/roleProfiles";
 import { isPilotProfile } from "@/lib/myWorkspace";
 import { useMyWorkspace } from "@/lib/hooks/useMyWorkspace";
 import { BlockedSection, SkeletonCard } from "@/components/workspace/WorkspaceSections";
@@ -53,18 +56,22 @@ function formatTimestamp(ts: string): string {
 }
 
 /**
- * Vue Plan Performance (comportement historique, INCHANGÉ) — sponsors de workstream, CTO et
- * admins : liste tout ce qui attend actuellement leur approbation, toutes portes confondues
- * (M1→M2/M2→M3/M3→M4, voir lib/leversLogic.ts::approveLeverGate). Même source de données que le
- * badge/dropdown du Topbar (`useApprovalQueue`, voir lib/hooks/useApprovalQueue.ts).
+ * Vue Plan Performance — responsables de chantier, CTO et admins : liste les demandes dont le
+ * palier COURANT attend leur décision (double validation hiérarchique, « Étape x/2 — attend … »,
+ * voir lib/leversLogic.ts::approveLeverGate). Même source de données que le badge/dropdown du
+ * Topbar (`useApprovalQueue`, voir lib/hooks/useApprovalQueue.ts).
  */
 function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
   const { t } = useTranslation();
   const router = useRouter();
   const data = useBeTrackData(user?.companyId ?? null, user);
   const { queue } = useApprovalQueue(data, user);
-  const { queue: realizedQueue } = useRealizedApprovalQueue(data, user);
-  const { queue: deletionQueue } = useDeletionQueue(data, user);
+  // File finance scopée programme + confidentialité (habilitation de l'entreprise courante).
+  const company = useCurrentCompany(user?.companyId);
+  const { queue: realizedQueue } = useRealizedApprovalQueue(data, user, company);
+  // Annuaire : un admin voit les suppressions qu'il peut confirmer faute de titulaire.
+  const companyUsers = useCompanyUsers(user?.companyId);
+  const { queue: deletionQueue } = useDeletionQueue(data, user, companyUsers);
   const [deletionLeverId, setDeletionLeverId] = useState<string | null>(null);
   const { showToast } = useToast();
 
@@ -83,9 +90,19 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
   /** Décision finance sur un impact coché « Réalisé » (même règle que l'onglet Impact de la fiche,
    *  `decideImpactRealized`) : validé → compte dans le réalisé ; rejeté → repasse non réalisé. */
   const decideRealized = (lever: Lever, impactId: string, decision: "approved" | "rejected") => {
-    const next = (lever.impacts ?? []).map((imp) =>
-      imp.id === impactId ? { ...imp, ...decideImpactRealized(imp, decision, user) } : imp
-    );
+    let next;
+    try {
+      next = (lever.impacts ?? []).map((imp) =>
+        imp.id === impactId ? { ...imp, ...decideImpactRealized(imp, decision, user) } : imp
+      );
+    } catch (err) {
+      showToast(
+        t("leverDetail.approval.error", "Action impossible"),
+        err instanceof Error ? err.message : String(err),
+        "error"
+      );
+      return;
+    }
     data.updateLever(lever.id, { impacts: next });
     showToast(
       decision === "approved"
@@ -290,10 +307,15 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
                           label={STATUS_SHORT_LABEL[targetStatus]}
                         />
                       )}
+                      {lever.approval && (
+                        <div className="mt-1">
+                          <LeverApprovalSteps approval={lever.approval} />
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-secondary">{ws?.name ?? "—"}</td>
                     <td className="px-4 py-3 text-secondary">
-                      {lever.approval?.requestedBy ?? "—"}
+                      {lever.approval?.requestedByName ?? lever.approval?.requestedBy ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-secondary">
                       {lever.approval ? formatTimestamp(lever.approval.requestedAt) : "—"}
@@ -306,9 +328,14 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
                           onClick={(e) => {
                             e.stopPropagation();
                             try {
-                              data.approveLeverGate(lever.id);
+                              const updated = data.approveLeverGate(lever.id);
                               showToast(
-                                t("leverDetail.approval.approved", "Demande approuvée"),
+                                updated.approval
+                                  ? t(
+                                      "levers.approval.stepApproved",
+                                      "Étape validée — transmise à l'étape suivante"
+                                    )
+                                  : t("leverDetail.approval.approved", "Demande approuvée"),
                                 lever.name,
                                 "success"
                               );
@@ -360,158 +387,119 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
 }
 
 /**
- * Vue Plan Stratégique (round "jalon validation gate") — pendant de `PerformanceValidationTable`
- * ci-dessus, pour les demandes de validation de JALON de projet (`ChantierAction.milestoneApproval`)
- * plutôt qu'une porte de cycle de vie de levier. Approbateurs = cascade `canDecideMilestone`
- * (pilote du chantier, à défaut responsable d'axe, `strategic_lead` du programme, admin) — pas de
- * sponsor/cto, notion absente du Plan Stratégique. Même source de données que le dropdown du Topbar
- * (`useMilestoneApprovalQueue`, voir lib/hooks/useApprovalQueue.ts).
+ * Plan Stratégique — marqueurs de jalon RELIQUATS (ancien circuit à approbateur unique, supprimé :
+ * `ChantierAction.milestoneApproval` posé SANS demande à chaîne en attente). Plus personne ne peut
+ * les « approuver » : liste en LECTURE SEULE, réservée aux admins, avec une action pour les
+ * effacer (`useStrategicApprovals().clearLegacyMilestone`) — le membre du projet redemande ensuite
+ * le passage (demande à chaîne). Les vraies demandes de jalon sont dans `StrategicApprovalsPanel`.
  */
-function StrategicValidationTable({
+function LegacyMilestoneMarkers({
   data,
   user,
-  excludeActionIds,
-  hideWhenEmpty,
+  sa,
 }: {
   data: StrategicData;
   user: AuthUser | null;
-  /** Projets déjà couverts par une demande du nouveau flux (lib/strategicApprovals.ts) : évite le
-   *  doublon avec le marqueur `milestoneApproval` posé par `request("milestone", …)`. */
-  excludeActionIds?: Set<string>;
-  hideWhenEmpty?: boolean;
+  sa: Pick<ReturnType<typeof useStrategicApprovals>, "legacyMilestones" | "clearLegacyMilestone">;
 }) {
   const { t } = useTranslation();
   const router = useRouter();
-  const { queue: fullQueue } = useMilestoneApprovalQueue(data, user);
-  const queue = excludeActionIds
-    ? fullQueue.filter(({ action }) => !excludeActionIds.has(action.id))
-    : fullQueue;
   const { showToast } = useToast();
-
-  if (queue.length === 0) {
-    if (hideWhenEmpty) return null;
-    return (
-      <Card>
-        <CardBody>
-          <p className="text-sm text-secondary">
-            {t("validation.empty", "Rien à valider pour le moment.")}
-          </p>
-        </CardBody>
-      </Card>
-    );
-  }
+  const legacy = sa.legacyMilestones;
+  if (!isAnyAdmin(user) || legacy.length === 0) return null;
+  const chantierName = (id: string) => data.chantiers.find((c) => c.id === id)?.name ?? "—";
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-white">
-      <table className="w-full text-left text-xs">
-        <thead>
-          <tr className="border-b border-border bg-neutral-50 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-            <th className="px-4 py-2.5">{t("validation.milestone.projet", "Projet")}</th>
-            <th className="px-4 py-2.5">{t("validation.milestone.chantier", "Chantier")}</th>
-            <th className="px-4 py-2.5">
-              {t("validation.milestone.targetMilestone", "Jalon visé")}
-            </th>
-            <th className="px-4 py-2.5">{t("validation.requestedBy", "Demandé par")}</th>
-            <th className="px-4 py-2.5">{t("validation.requestedAt", "Demandé le")}</th>
-            <th className="px-4 py-2.5" />
-          </tr>
-        </thead>
-        <tbody>
-          {queue.map(({ action, chantier }) => {
-            const approval = action.milestoneApproval;
-            return (
-              <tr
-                key={action.id}
-                className="cursor-pointer border-b border-border last:border-0 hover:bg-neutral-50"
-                tabIndex={0}
-                onClick={() => router.push(`/levers?chantier=${chantier.id}&action=${action.id}`)}
-                onKeyDown={onActivateKey(() =>
-                  router.push(`/levers?chantier=${chantier.id}&action=${action.id}`)
-                )}
-              >
-                <td className="px-4 py-3 font-semibold text-primary">{action.name}</td>
-                <td className="px-4 py-3 text-secondary">{chantier.name}</td>
-                <td className="px-4 py-3">
-                  {approval && (
-                    <span className="rounded-full bg-rag-amber-light px-2.5 py-1 text-[11px] font-semibold text-rag-amber">
-                      {displayMilestoneId(approval.targetMilestone)}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-secondary">{approval?.requestedBy ?? "—"}</td>
-                <td className="px-4 py-3 text-secondary">
-                  {approval ? formatTimestamp(approval.requestedAt) : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        try {
-                          await data.approveMilestoneGate(action.id);
-                          showToast(
-                            t("leverDetail.approval.approved", "Demande approuvée"),
-                            action.name,
-                            "success"
-                          );
-                        } catch (err) {
-                          showToast(
-                            t("leverDetail.approval.error", "Action impossible"),
-                            err instanceof Error ? err.message : String(err),
-                            "error"
-                          );
-                        }
-                      }}
-                    >
-                      {t("leverDetail.approval.approve", "Approuver")}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        try {
-                          await data.rejectMilestoneApproval(action.id);
-                          showToast(
-                            t("leverDetail.approval.rejected", "Demande de validation rejetée"),
-                            action.name,
-                            "success"
-                          );
-                        } catch (err) {
-                          showToast(
-                            t("leverDetail.approval.error", "Action impossible"),
-                            err instanceof Error ? err.message : String(err),
-                            "error"
-                          );
-                        }
-                      }}
-                    >
-                      {t("leverDetail.approval.reject", "Rejeter")}
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="mt-4">
+      <p className="mb-2 text-xs text-secondary">
+        {t(
+          "strategicApprovals.legacyMilestone.intro",
+          "Anciennes demandes de passage de jalon (circuit supprimé) : lecture seule. Effacez-les pour que le projet redemande le passage via le circuit de validation."
+        )}
+      </p>
+      <div className="overflow-x-auto rounded-lg border border-border bg-white">
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="border-b border-border bg-neutral-50 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+              <th className="px-4 py-2.5">{t("validation.milestone.projet", "Projet")}</th>
+              <th className="px-4 py-2.5">{t("validation.milestone.chantier", "Chantier")}</th>
+              <th className="px-4 py-2.5">
+                {t("validation.milestone.targetMilestone", "Jalon visé")}
+              </th>
+              <th className="px-4 py-2.5">{t("validation.requestedBy", "Demandé par")}</th>
+              <th className="px-4 py-2.5">{t("validation.requestedAt", "Demandé le")}</th>
+              <th className="px-4 py-2.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {legacy.map((action) => {
+              const marker = action.milestoneApproval;
+              const href = `/levers?chantier=${action.chantierId}&action=${action.id}`;
+              return (
+                <tr
+                  key={action.id}
+                  className="cursor-pointer border-b border-border last:border-0 hover:bg-neutral-50"
+                  tabIndex={0}
+                  onClick={() => router.push(href)}
+                  onKeyDown={onActivateKey(() => router.push(href))}
+                >
+                  <td className="px-4 py-3 font-semibold text-primary">{action.name}</td>
+                  <td className="px-4 py-3 text-secondary">{chantierName(action.chantierId)}</td>
+                  <td className="px-4 py-3">
+                    {marker && (
+                      <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-semibold text-secondary">
+                        {displayMilestoneId(marker.targetMilestone)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-secondary">{marker?.requestedBy ?? "—"}</td>
+                  <td className="px-4 py-3 text-secondary">
+                    {marker ? formatTimestamp(marker.requestedAt) : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await sa.clearLegacyMilestone(action.id);
+                            showToast(
+                              t(
+                                "strategicApprovals.legacyMilestone.cleared",
+                                "Ancienne demande de jalon effacée"
+                              ),
+                              action.name,
+                              "success"
+                            );
+                          } catch (err) {
+                            showToast(
+                              t("leverDetail.approval.error", "Action impossible"),
+                              err instanceof Error ? err.message : String(err),
+                              "error"
+                            );
+                          }
+                        }}
+                      >
+                        {t("strategicApprovals.legacyMilestone.clear", "Effacer")}
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
 /**
- * Page dédiée "Validation" — devenue program-type-aware (round "jalon validation gate") : en mode
- * Plan Performance, comportement historique inchangé (`PerformanceValidationTable`, portes de
- * cycle de vie de levier) ; en mode Plan Stratégique, demandes de validation de jalon de projet
- * (`StrategicValidationTable`, nouveau round). La PAGE branche elle-même sur `programType`
- * (`useActiveProgram`) plutôt que de dupliquer la route — voir `lib/nav-config.ts` pour l'octroi
- * d'accès nav correspondant (`strategic_lead` y gagne cet item, scopé `programTypes: ["strategic"]`).
- */
-/**
- * Vue Plan Stratégique complète : demandes de validation (lib/strategicApprovals.ts) + file de
- * jalons historique (`milestoneApproval` posé hors du nouveau flux) sous « À valider ».
+ * Page dédiée "Validation" — program-type-aware : en mode Plan Performance, comportement historique
+ * (`PerformanceValidationTable`) ; en mode Plan Stratégique, demandes de validation à paliers
+ * (`StrategicApprovalsPanel`, lib/strategicApprovals.ts) + marqueurs de jalon reliquats (admins).
  */
 function StrategicValidationView({
   user,
@@ -527,26 +515,12 @@ function StrategicValidationView({
     programId: activeProgramId,
     data,
   });
-  const covered = new Set(
-    sa.approvals
-      .filter((a) => a.kind === "milestone" && a.status === "pending")
-      .map((a) => a.targetId)
-  );
   return (
     <StrategicApprovalsPanel
       api={sa}
       data={{ ...data, programId: activeProgramId }}
       user={user}
-      legacy={
-        <div className="mt-4">
-          <StrategicValidationTable
-            data={data}
-            user={user}
-            excludeActionIds={covered}
-            hideWhenEmpty
-          />
-        </div>
-      }
+      legacy={<LegacyMilestoneMarkers data={data} user={user} sa={sa} />}
     />
   );
 }

@@ -1,9 +1,7 @@
-import {
-  approveMilestoneGate,
-  requestMilestoneApproval as requestMilestoneApprovalLogic,
-} from "@/lib/axisLogic";
+import { advanceMilestone, milestonePassageTarget } from "@/lib/axisLogic";
 import {
   approvalStepInfo,
+  isPilotOrAdmin,
   pendingOn,
   splitPatchByCategory,
   type GatedCategory,
@@ -263,27 +261,28 @@ export function pendingBadgeLabel(
 // ─── Jalon appliqué directement ───────────────────────────────────────────────────────────────
 
 /**
- * Passage de jalon APPLIQUÉ DIRECTEMENT (`milestoneFlow` → "applied" : admin / pilote du plan,
- * chaîne vide) : patch qui avance réellement le jalon (`currentMilestone` → jalon suivant, ancien
- * jalon ajouté à `passedMilestones`, aucun marqueur `milestoneApproval` laissé en base). Mêmes
- * vérifications que le chemin historique (prérequis complets, habilitation à décider) — lève sinon.
- * Remplace l'ancien chemin « pose le marqueur puis attends une confirmation » pour ces acteurs.
+ * Passage de jalon APPLIQUÉ DIRECTEMENT (`milestoneFlow` → "applied" : admin / pilote du programme,
+ * seuls habilités à ne pas passer par une demande à chaîne) : patch qui avance réellement le jalon
+ * (`currentMilestone` → jalon suivant, ancien jalon ajouté à `passedMilestones`, aucun marqueur
+ * `milestoneApproval` laissé en base). Lève si l'acteur n'est ni admin ni pilote du programme du
+ * chantier, ou si les prérequis ne sont pas complets. `axes` : conservé pour compatibilité.
  */
 export function directMilestoneAdvance(
   action: ChantierAction,
   user: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
   chantiers: Chantier[],
   actions: ChantierAction[],
-  axes: Pick<StrategicAxis, "id" | "owner">[]
+  axes?: Pick<StrategicAxis, "id" | "owner">[]
 ): Pick<ChantierAction, "milestones" | "milestoneApproval"> {
-  const marker = requestMilestoneApprovalLogic(action, user, chantiers, actions);
-  return approveMilestoneGate(
-    { ...action, milestoneApproval: marker },
-    user,
-    chantiers,
-    actions,
-    axes
-  );
+  void axes;
+  const chantier = chantiers.find((c) => c.id === action.chantierId);
+  if (!isPilotOrAdmin(user, chantier?.programId)) {
+    throw new Error(
+      "Seuls le pilote du plan et les administrateurs appliquent directement un passage de jalon"
+    );
+  }
+  const { targetMilestone } = milestonePassageTarget(action, chantiers, actions);
+  return advanceMilestone(action, targetMilestone);
 }
 
 // ─── Résultat d'un flux ─────────────────────────────────────────────────────────────────────

@@ -282,16 +282,30 @@ describe("strategicFiche — directMilestoneAdvance", () => {
     expect(patch.milestoneApproval).toBeUndefined();
   });
 
-  it("advances directly for the chantier pilote who owns the projet", () => {
+  it("advances directly for the program pilot (strategic_lead of P1) only — not the chantier sponsor", () => {
     const a = complete("pilote1");
     const patch = directMilestoneAdvance(
       a,
-      { username: "pilote1", profiles: [] },
+      { username: "lead", profiles: [{ role: "strategic_lead", programId: "P1" }] },
       [chantier],
       [a],
       []
     );
     expect(patch.milestones?.currentMilestone).toBe("E3");
+    // Le sponsor de chantier (même propriétaire du projet) passe par une demande à chaîne.
+    expect(() =>
+      directMilestoneAdvance(a, { username: "pilote1", profiles: [] }, [chantier], [a], [])
+    ).toThrow();
+    // Pilote d'un AUTRE programme : non.
+    expect(() =>
+      directMilestoneAdvance(
+        a,
+        { username: "lead2", profiles: [{ role: "strategic_lead", programId: "P2" }] },
+        [chantier],
+        [a],
+        []
+      )
+    ).toThrow();
   });
 
   it("refuses an incomplete checklist or a non-decider", () => {

@@ -8,6 +8,7 @@ import { subscribeUsers, subscribePrograms } from "@/lib/firestore/admin";
 import { subscribeLevers, subscribeAuditLog, filterAuditByCompany } from "@/lib/firestore/levers";
 import { subscribeEmployees, subscribeMovements } from "@/lib/firestore/workforce";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { roleLabelKey } from "@/lib/nav-config";
 import { intlTag } from "@/lib/format";
 
 const ACTION_COLORS: Record<string, string> = {
@@ -160,7 +161,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
                   key={role}
                   className="rounded-full bg-bg-surface px-1.5 py-0.5 text-[10px] font-medium text-text-secondary"
                 >
-                  {role}: {count}
+                  {t(roleLabelKey(role) ?? role, role)}: {count}
                 </span>
               ))}
             </div>

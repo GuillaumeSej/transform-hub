@@ -11,25 +11,30 @@ import {
   canApproveLeverDeletion,
   canRequestLeverDeletion,
   leverDeletionRoles,
+  type LeverDirectoryUser,
 } from "@/lib/leversLogic";
+import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
+import { isAnyAdmin } from "@/lib/roleProfiles";
 import type { AuthUser, Lever, Workstream } from "@/types";
 
 type DeletionActions = {
   workstreams: Workstream[];
-  requestLeverDeletion: (id: string, reason?: string) => Lever;
-  approveLeverDeletion: (id: string) => Promise<Lever>;
-  cancelLeverDeletion: (id: string) => Lever;
+  requestLeverDeletion: (id: string, reason?: string, users?: LeverDirectoryUser[]) => Lever;
+  approveLeverDeletion: (id: string, users?: LeverDirectoryUser[]) => Promise<Lever>;
+  cancelLeverDeletion: (id: string, users?: LeverDirectoryUser[]) => Lever;
 };
 
 /** L'utilisateur a-t-il quoi que ce soit à faire côté suppression sur ce levier (demander,
- *  confirmer/refuser, ou annuler sa propre demande) ? Sert à afficher le bouton poubelle. */
+ *  confirmer/refuser, ou annuler sa propre demande) ? Sert à afficher le bouton poubelle. Un admin
+ *  y a toujours accès : il peut tenir le rôle manquant (levier sans compte responsable de
+ *  chantier, programme sans CTO) — le dialogue, qui charge l'annuaire, dit s'il peut agir. */
 export function hasLeverDeletionAccess(
   lever: Lever,
   user: AuthUser | null | undefined,
   workstreams: Workstream[]
 ): boolean {
   const roles = leverDeletionRoles(lever, user, workstreams);
-  return roles.cto || roles.sponsor;
+  return roles.cto || roles.sponsor || isAnyAdmin(user);
 }
 
 /**
@@ -56,23 +61,37 @@ export function LeverDeletionDialog({
   const { showToast } = useToast();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  // Annuaire : détecte l'absence de titulaire (responsable de chantier / CTO) qu'un admin peut
+  // remplacer — toujours deux personnes différentes (voir leverDeletionRoles).
+  const users = useCompanyUsers(user?.companyId);
   useEffect(() => {
     if (open) setReason("");
   }, [open]);
 
   if (!lever) return null;
   const req = lever.deletionRequest;
-  const canRequest = canRequestLeverDeletion(lever, user, data.workstreams);
-  const canApprove = canApproveLeverDeletion(lever, user, data.workstreams);
+  const canRequest = canRequestLeverDeletion(lever, user, data.workstreams, users);
+  const canApprove = canApproveLeverDeletion(lever, user, data.workstreams, users);
   const isRequester = !!req && req.requestedBy === user?.username;
-  const roles = leverDeletionRoles(lever, user, data.workstreams);
+  const roles = leverDeletionRoles(lever, user, data.workstreams, users);
+  const actsAsAdmin = req
+    ? canApprove && (req.requestedByRole === "cto" ? !roles.sponsor : !roles.cto)
+    : canRequest && !roles.cto && !roles.sponsor;
   const approverLabel = req
     ? req.requestedByRole === "cto"
       ? t("leverDeletion.roleSponsor", "le responsable de chantier")
       : t("leverDeletion.roleCto", "le CTO")
-    : roles.cto
+    : roles.cto || (!roles.sponsor && roles.adminAsCto)
       ? t("leverDeletion.roleSponsor", "le responsable de chantier")
       : t("leverDeletion.roleCto", "le CTO");
+  const adminNotice = actsAsAdmin ? (
+    <p className="mt-2 text-[11px] text-tertiary">
+      {t(
+        "levers.approval.deletionAsAdmin",
+        "Aucun titulaire pour ce rôle sur ce levier : vous agissez en tant qu'admin (la demande et la confirmation restent deux personnes différentes)."
+      )}
+    </p>
+  ) : null;
 
   const run = async (fn: () => unknown | Promise<unknown>, title: string) => {
     setBusy(true);
@@ -118,6 +137,7 @@ export function LeverDeletionDialog({
             onChange={(e) => setReason(e.target.value)}
           />
         </label>
+        {adminNotice}
       </>
     ) : (
       <p className="text-xs text-secondary">
@@ -138,7 +158,7 @@ export function LeverDeletionDialog({
             disabled={busy}
             onClick={() =>
               run(
-                () => data.requestLeverDeletion(lever.id, reason),
+                () => data.requestLeverDeletion(lever.id, reason, users),
                 t("leverDeletion.requested", "Demande de suppression envoyée")
               )
             }
@@ -178,6 +198,7 @@ export function LeverDeletionDialog({
                 approverLabel
               )}
         </p>
+        {adminNotice}
       </>
     );
     if (canApprove) {
@@ -188,7 +209,7 @@ export function LeverDeletionDialog({
             disabled={busy}
             onClick={() =>
               run(
-                () => data.cancelLeverDeletion(lever.id),
+                () => data.cancelLeverDeletion(lever.id, users),
                 t("leverDeletion.refused", "Demande de suppression refusée")
               )
             }
@@ -201,7 +222,7 @@ export function LeverDeletionDialog({
             onClick={() =>
               run(
                 async () => {
-                  const deleted = await data.approveLeverDeletion(lever.id);
+                  const deleted = await data.approveLeverDeletion(lever.id, users);
                   onDeleted?.(deleted);
                 },
                 t("leverDeletion.deleted", "Levier supprimé")
@@ -223,7 +244,7 @@ export function LeverDeletionDialog({
             disabled={busy}
             onClick={() =>
               run(
-                () => data.cancelLeverDeletion(lever.id),
+                () => data.cancelLeverDeletion(lever.id, users),
                 t("leverDeletion.cancelled", "Demande de suppression annulée")
               )
             }

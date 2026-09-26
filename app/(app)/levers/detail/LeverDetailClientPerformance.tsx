@@ -6,10 +6,11 @@ import { subscribeCompanies, subscribePrograms } from "@/lib/firestore/admin";
 import {
   allActionsDone,
   leverAccessDenialReason,
-  isLeverCtoOf,
-  isLeverOwnedBy,
-  isLeverSponsoredBy,
+  canDecideLeverApproval,
+  leverHierarchyLevelOf,
 } from "@/lib/leversLogic";
+import { LeverApprovalSteps } from "@/components/shared/LeverApprovalSteps";
+import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
 import {
   ArrowLeft,
   ArrowRight,
@@ -78,8 +79,9 @@ type CascadeProposal = CascadeResult & { checked: Record<string, boolean> };
 export function LeverDetailClientPerformance() {
   const { t } = useTranslation();
   const { user } = useRole();
-  const readOnly = isReadOnlyUser(user);
   const data = useBeTrackData(user?.companyId ?? null, user);
+  // Annuaire : snapshot des titulaires de la chaîne de validation à la demande.
+  const companyUsers = useCompanyUsers(user?.companyId);
   const [roleClearance, setRoleClearance] = useState<Company["roleClearance"]>();
   const [riskThresholds, setRiskThresholds] = useState<Company["riskThresholds"]>();
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -117,6 +119,8 @@ export function LeverDetailClientPerformance() {
   const [pendingGateApproval, setPendingGateApproval] = useState(false);
 
   const lever = data.getLeverById(id);
+  // Lecture seule sur le programme DU LEVIER (hr / comex_member n'éditent pas les leviers).
+  const readOnly = isReadOnlyUser(user, lever?.programId ?? null, "performance");
 
   // Garde-fou (M4/M5 sans mouvements RH liés) : M5 "Réalisé" est atteint AUTOMATIQUEMENT à 100 %
   // du plan d'action (voir lib/leversLogic.ts::recomputeLeverProgress), donc il n'y a pas de clic
@@ -238,17 +242,15 @@ export function LeverDetailClientPerformance() {
   }
 
   const ws = data.workstreams.find((w) => w.id === lever.ws);
-  // Round "portes de validation" : l'utilisateur courant a-t-il le droit d'agir (approuver ou
-  // rejeter) sur la demande en cours ? Sponsor du workstream OU cto, peu importe la porte
-  // concernée (approbateur unique, voir lib/leversLogic.ts::approveLeverGate). Même résolution
-  // du sponsor du workstream que `canUserViewLever`/`isLeverSponsoredBy` ailleurs dans ce fichier.
+  // Portes de validation (double validation hiérarchique, lib/leversLogic.ts::approveLeverGate) :
+  // approuver/rejeter est réservé aux décideurs du palier COURANT (titulaire — responsable de
+  // chantier AVEC le rôle "sponsor", ou CTO — ou admin pour un seul palier), jamais au demandeur.
   const canActOnPendingApproval =
-    !!lever.approval &&
-    !!user &&
-    (isAnyAdmin(user) || isLeverSponsoredBy(lever, ws, user) || isLeverCtoOf(lever, user));
-  // Idem pour le bouton "Soumettre pour validation" (voir requestLeverApproval) : seul le
-  // porteur du levier ou un admin peut initier une demande.
-  const canSubmitApproval = !!user && (isAnyAdmin(user) || isLeverOwnedBy(lever, user));
+    !!lever.approval && canDecideLeverApproval(lever, user, data.workstreams);
+  const isOwnPendingRequest = !!lever.approval && lever.approval.requestedBy === user?.username;
+  // Soumettre : porteur, responsable de chantier, CTO du levier, ou admin (voir requestLeverApproval).
+  const canSubmitApproval =
+    !!user && (isAnyAdmin(user) || !!leverHierarchyLevelOf(lever, user, data.workstreams));
   // Réalisé à date (net) = gains bruts réalisés − OPEX récurrent réalisé (`engine.realizedSavings`),
   // exactement la même formule et la même somme d'impacts que celle utilisée pour le % de
   // progression (`engine.displayedProgressPct`) — jamais une projection proratée sur une courbe
@@ -276,8 +278,14 @@ export function LeverDetailClientPerformance() {
   const movementReconciliation = reconcileLeverMovements(lever, data.workforce.movements, realFte);
   function runApproveGate() {
     try {
-      data.approveLeverGate(lever!.id);
-      showToast(t("leverDetail.approval.approved", "Demande approuvée"), lever!.name, "success");
+      const updated = data.approveLeverGate(lever!.id);
+      showToast(
+        updated.approval
+          ? t("levers.approval.stepApproved", "Étape validée — transmise à l'étape suivante")
+          : t("leverDetail.approval.approved", "Demande approuvée"),
+        lever!.name,
+        "success"
+      );
     } catch (err) {
       showToast(
         t("leverDetail.approval.error", "Action impossible"),
@@ -447,8 +455,8 @@ export function LeverDetailClientPerformance() {
                           )
                         : isCascadeGated
                           ? t(
-                              "leverDetail.approval.stageHint",
-                              "Cette étape nécessite une demande de validation (porteur → commanditaire ou CTO), voir ci-dessous"
+                              "levers.approval.stageHint",
+                              "Cette étape nécessite une demande de validation (responsable de chantier puis CTO), voir ci-dessous"
                             )
                           : isPast
                             ? t(
@@ -503,8 +511,8 @@ export function LeverDetailClientPerformance() {
                 <span className="flex items-center gap-1.5 text-xs text-info-blue">
                   <Send size={13} />{" "}
                   {t(
-                    "leverDetail.approval.submitHint",
-                    "Ce levier est prêt pour une demande de validation (porteur → commanditaire ou CTO)."
+                    "levers.approval.submitHint",
+                    "Ce levier est prêt pour une demande de validation (double validation : niveaux au-dessus du demandeur, responsable de chantier puis CTO)."
                   )}
                 </span>
                 <Button
@@ -512,9 +520,12 @@ export function LeverDetailClientPerformance() {
                   size="sm"
                   onClick={() => {
                     try {
-                      data.requestLeverApproval(lever.id);
+                      const updated = data.requestLeverApproval(lever.id, companyUsers);
                       showToast(
-                        t("leverDetail.approval.requested", "Demande de validation envoyée"),
+                        // CTO : sommet de la hiérarchie, la porte est franchie directement.
+                        updated.approval
+                          ? t("leverDetail.approval.requested", "Demande de validation envoyée")
+                          : t("leverDetail.approval.approved", "Demande approuvée"),
                         lever.name,
                         "success"
                       );
@@ -536,10 +547,50 @@ export function LeverDetailClientPerformance() {
               <div className="flex items-center gap-1.5 text-xs text-info-blue">
                 <Info size={13} />
                 {t(
-                  "leverDetail.approval.pending",
-                  "En attente d'approbation (commanditaire ou CTO) pour passer en « {stage} »"
+                  lever.approval.chain?.length
+                    ? "levers.approval.pending"
+                    : "leverDetail.approval.pending",
+                  lever.approval.chain?.length
+                    ? "Demande de validation pour passer en « {stage} »"
+                    : "En attente d'approbation (commanditaire ou CTO) pour passer en « {stage} »"
                 ).replace("{stage}", lifecycle.shortLabel(lever.approval.targetStatus))}
               </div>
+              <div className="mt-1">
+                <LeverApprovalSteps approval={lever.approval} />
+              </div>
+              {isOwnPendingRequest && (
+                <div className="mt-1 text-[11px] text-tertiary">
+                  {t(
+                    "levers.approval.ownRequest",
+                    "Votre demande : vous ne pouvez pas la valider vous-même."
+                  )}
+                  {!readOnly && !canActOnPendingApproval && (
+                    <Button
+                      className="ml-2"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        try {
+                          data.rejectLeverApproval(lever.id);
+                          showToast(
+                            t("levers.approval.withdrawn", "Demande retirée"),
+                            lever.name,
+                            "success"
+                          );
+                        } catch (err) {
+                          showToast(
+                            t("leverDetail.approval.error", "Action impossible"),
+                            err instanceof Error ? err.message : String(err),
+                            "error"
+                          );
+                        }
+                      }}
+                    >
+                      {t("levers.approval.withdraw", "Retirer la demande")}
+                    </Button>
+                  )}
+                </div>
+              )}
               {!readOnly && canActOnPendingApproval && (
                 <div className="mt-2 flex items-center gap-2">
                   <Button
@@ -1366,6 +1417,7 @@ export function LeverDetailClientPerformance() {
             <ImpactsEditor
               scope="financial"
               impacts={lever.impacts ?? []}
+              programId={lever.programId}
               company={company}
               canEdit={!readOnly}
               readOnly={readOnly}
@@ -1391,6 +1443,7 @@ export function LeverDetailClientPerformance() {
             <ImpactsEditor
               scope="fte"
               impacts={lever.impacts ?? []}
+              programId={lever.programId}
               company={company}
               canEdit={!readOnly}
               readOnly={readOnly}

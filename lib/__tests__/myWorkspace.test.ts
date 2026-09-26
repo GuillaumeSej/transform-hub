@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMyWorkspace,
+  isPilotProfile,
   missingMeasurementPeriod,
   type MyWorkspaceStrategicInput,
 } from "@/lib/myWorkspace";
@@ -514,6 +515,37 @@ describe("buildMyWorkspace", () => {
     );
     expect(wsCto.blocked).toEqual([
       expect.objectContaining({ id: "blockedValidation:strategic:S9", waitingOn: "sofia" }),
+    ]);
+  });
+});
+
+describe("buildMyWorkspace — contributeurs projet, pilote stratégique", () => {
+  it("un contributeur projet voit l'échéance du projet et le projet dans son périmètre", () => {
+    const bob = makeUser("bob", [{ role: "projet_contributor", programId: "p2" }]);
+    const strategic = makeStrategic({
+      chantierActions: [
+        makeAction("A1", "2026-09-20", { owner: "alice", contributors: ["bob"] }),
+        makeAction("A2", "2026-09-30", { owner: "alice", contributors: ["carl"] }),
+        // Ancien `sponsor` de projet : ne donne plus rien.
+        makeAction("A3", "2026-09-28", { owner: "alice", sponsor: "bob" }),
+      ],
+    });
+    const ws = buildMyWorkspace({ user: bob, strategic, today: TODAY }, t);
+    expect(ws.todo.map((i) => i.id)).toEqual(["chantierAction:A1"]);
+    expect(ws.todo[0]).toMatchObject({ severity: "critical", daysLate: 5 });
+    expect(ws.perimeter.map((p) => [p.id, p.role])).toEqual([["action:A1", "Contributeur projet"]]);
+  });
+
+  it("strategic_lead = profil de pilotage (vue pilotage, onglet « En attente chez d'autres »)", () => {
+    const lead = makeUser("lea", [{ role: "strategic_lead", programId: "p2" }]);
+    expect(isPilotProfile(lead)).toBe(true);
+    const ws = buildMyWorkspace(
+      { user: lead, strategic: makeStrategic(), programs, users: [lead], today: TODAY },
+      t
+    );
+    expect(ws.pilotView).toBe(true);
+    expect(ws.perimeter).toEqual([
+      expect.objectContaining({ id: "program:p2", role: "Pilote du plan stratégique" }),
     ]);
   });
 });

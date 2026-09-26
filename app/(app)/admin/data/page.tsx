@@ -16,6 +16,7 @@ import { subscribeLevers } from "@/lib/firestore/levers";
 import { subscribeEmployees, subscribeMovements } from "@/lib/firestore/workforce";
 import { useRole } from "@/lib/hooks/useRole";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { roleLabelKey } from "@/lib/nav-config";
 
 // Round multi-profils : chaque utilisateur peut porter 0 à 2 profils métier + des habilitations
 // admin additives (isGlobalAdmin/isCompanyAdmin). Pour cette histogramme purement indicatif, on
@@ -212,7 +213,7 @@ export default function AdminDataPage() {
                   key={role}
                   className="rounded-full bg-bg-surface px-1.5 py-0.5 text-[10px] font-medium text-text-secondary"
                 >
-                  {role}: {count}
+                  {t(roleLabelKey(role) ?? role, role)}: {count}
                 </span>
               ))}
             </div>
@@ -300,7 +301,7 @@ export default function AdminDataPage() {
                       key={role}
                       className="rounded-full bg-bg-surface px-1.5 py-0.5 text-[10px] font-medium text-text-secondary"
                     >
-                      {role}: {count}
+                      {t(roleLabelKey(role) ?? role, role)}: {count}
                     </span>
                   ))}
                 </div>

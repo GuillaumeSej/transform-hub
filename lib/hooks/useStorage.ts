@@ -353,24 +353,25 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
    *  (voir doc-comment ci-dessus) : ce point d'entrée n'a de sens qu'avec un utilisateur réel
    *  identifié. */
   const requestLeverApproval = useCallback(
-    (id: string) => {
+    (id: string, users?: leversLogic.LeverDirectoryUser[]) => {
       if (!currentUser)
         throw new Error(
           "Utilisateur non identifié : impossible de soumettre la demande de validation"
         );
-      const result = leversLogic.requestLeverApproval(
-        leversRef.current,
-        id,
-        currentUser,
-        workflowOptionsFor(id)
-      );
+      // Chaîne de validation snapshotée à la demande (double validation hiérarchique) : les
+      // chantiers et l'annuaire (`users`, fourni par l'appelant) résolvent les titulaires.
+      const result = leversLogic.requestLeverApproval(leversRef.current, id, currentUser, {
+        ...workflowOptionsFor(id),
+        workstreams: programConfig.workstreams,
+        users,
+      });
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
       leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
       return result.lever;
     },
-    [persistAudit, currentUser, workflowOptionsFor]
+    [persistAudit, currentUser, workflowOptionsFor, programConfig.workstreams]
   );
 
   const approveLeverGate = useCallback(
@@ -415,14 +416,15 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   // Suppression à double validation (CTO ↔ responsable de chantier) — voir
   // lib/leversLogic.ts::requestLeverDeletion/approveLeverDeletion/cancelLeverDeletion.
   const requestLeverDeletion = useCallback(
-    (id: string, reason?: string) => {
+    (id: string, reason?: string, users?: leversLogic.LeverDirectoryUser[]) => {
       if (!currentUser) throw new Error("Utilisateur non identifié");
       const result = leversLogic.requestLeverDeletion(
         leversRef.current,
         id,
         currentUser,
         programConfig.workstreams,
-        reason
+        reason,
+        users
       );
       leversRef.current = result.levers;
       setLevers(result.levers);
@@ -434,13 +436,14 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   );
 
   const approveLeverDeletion = useCallback(
-    async (id: string) => {
+    async (id: string, users?: leversLogic.LeverDirectoryUser[]) => {
       if (!currentUser) throw new Error("Utilisateur non identifié");
       const result = leversLogic.approveLeverDeletion(
         leversRef.current,
         id,
         currentUser,
-        programConfig.workstreams
+        programConfig.workstreams,
+        users
       );
       // Non optimiste : on attend Firestore avant de retirer le levier de l'écran.
       await leversDb.deleteLeverDoc(id);
@@ -453,13 +456,14 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   );
 
   const cancelLeverDeletion = useCallback(
-    (id: string) => {
+    (id: string, users?: leversLogic.LeverDirectoryUser[]) => {
       if (!currentUser) throw new Error("Utilisateur non identifié");
       const result = leversLogic.cancelLeverDeletion(
         leversRef.current,
         id,
         currentUser,
-        programConfig.workstreams
+        programConfig.workstreams,
+        users
       );
       leversRef.current = result.levers;
       setLevers(result.levers);

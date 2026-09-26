@@ -6,12 +6,11 @@
  * Sources (qui alimente quoi) :
  *  - `resolveApprovalQueue`          → portes de validation de levier (« À faire », `/validation`)
  *  - `resolveRealizedApprovalQueue`  → réalisés à valider (profil finance)
- *  - `resolveMilestoneApprovalQueue` → jalons de projet (flux historique `milestoneApproval`),
- *                                      hors projets déjà couverts par une demande stratégique
  *  - `bucketApprovals(...).pending`  → demandes de validation stratégiques décidables
  *  - `generateAlerts` + `targetAlerts` → alertes levier ciblées (la cloche), rouges/ambre ouvertes
  *  - `movementAlerts` + `primaryAlertKindByMovement` → mouvements RH en alerte (rôle `hr`)
- *  - `ChantierAction.owner/end` + `isProjetLate`/`isProjetDone` → projets dont l'utilisateur est owner
+ *  - `ChantierAction.owner/contributors/end` + `isProjetLate`/`isProjetDone` → projets dont
+ *    l'utilisateur est responsable ou contributeur
  *  - indicateurs dont l'utilisateur est responsable (`resolveIndicatorOwner`) sans mesure pour la
  *    dernière période échue (voir `missingMeasurementPeriod`, règle documentée ci-dessous)
  *
@@ -21,7 +20,7 @@
  *    « À faire » `warning` ; échéance dans `upcomingDays` (28 j) → « À venir » `info` ; au-delà :
  *    ignoré. Un élément NON daté (validation, alerte) va toujours dans « À faire ».
  *  - Validation en attente depuis plus de `blockedAfterDays` : `critical` (sinon `warning`).
- *  - Vue pilotage (cto / program_sponsor / program_owner / admins) :
+ *  - Vue pilotage (cto / program_sponsor / program_owner / strategic_lead / admins) :
  *      · « Bloqué chez d'autres » = validations en attente depuis plus de `blockedAfterDays` dont
  *        l'approbateur NOMINAL n'est pas l'utilisateur (il ne peut au mieux qu'escalader) — le
  *        temps d'attente vient des horodatages de demande existants (`LeverApproval.requestedAt`,
@@ -36,11 +35,7 @@
  *  - Dédoublonnage : un même objet (clé `dedupeKey`) remonté par plusieurs sources ne garde que
  *    l'élément le plus grave ; un élément de « À faire » est retiré de « À venir »/« Bloqué ».
  */
-import {
-  resolveApprovalQueue,
-  resolveMilestoneApprovalQueue,
-  resolveRealizedApprovalQueue,
-} from "@/lib/hooks/useApprovalQueue";
+import { resolveApprovalQueue, resolveRealizedApprovalQueue } from "@/lib/hooks/useApprovalQueue";
 import type { StrategicData } from "@/lib/hooks/useStrategicData";
 import { generateAlerts } from "@/lib/alertEngine";
 import { alertTitle } from "@/lib/alertText";
@@ -254,13 +249,21 @@ function chantierHealthToWorkspace(state: ChantierHealthState): WorkspaceHealth 
   return state === "critical" ? "red" : state === "watch" ? "amber" : "green";
 }
 
+/** Responsable (`owner`) ou contributeur (`contributors`) du projet. */
+function isProjetMember(action: Pick<ChantierAction, "owner" | "contributors">, username: string) {
+  return action.owner === username || (action.contributors ?? []).includes(username);
+}
+
 /** Profil « pilotage » : exceptions plutôt que listes exhaustives. */
 export function isPilotProfile(user: AuthUser | null | undefined): boolean {
   return (
     isAnyAdmin(user) ||
     hasRole(user, "cto") ||
     hasRole(user, "program_sponsor") ||
-    hasRole(user, "program_owner")
+    hasRole(user, "program_owner") ||
+    // Pilote du plan stratégique : même vue pilotage (et onglet Validation « En attente chez
+    // d'autres ») que les pilotes Performance — voir `PILOT_ROLES_WITHOUT_ME` (lib/nav-config.ts).
+    hasRole(user, "strategic_lead")
   );
 }
 
@@ -572,6 +575,16 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
           return t("me.item.projetUpdateApproval", "Valider une modification de projet");
         case "chantier_update":
           return t("me.item.chantierUpdateApproval", "Valider une modification de chantier");
+        case "axe_create":
+          return t("me.item.axeCreateApproval", "Valider la création d'un axe");
+        case "axe_update":
+          return t("me.item.axeUpdateApproval", "Valider une modification d'axe");
+        case "indicator_update":
+          return t("me.item.indicatorUpdateApproval", "Valider une modification d'indicateur");
+        case "staffing_update":
+          return t("me.item.staffingUpdateApproval", "Valider une modification de staffing");
+        default:
+          return t("me.item.genericApproval", "Valider une demande");
       }
     };
     for (const a of approvals) {
@@ -618,64 +631,14 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
       }
     }
 
-    // 6. Jalons (flux historique `milestoneApproval`), hors projets couverts par une demande
-    //    stratégique (même exclusion que app/(app)/validation/page.tsx). Nominal = pilote du
-    //    chantier, à défaut responsable d'axe (cascade `canDecideMilestone` hors escalade).
-    const covered = new Set(approvals.filter((a) => a.kind === "milestone").map((a) => a.targetId));
-    const milestoneDecidable = new Set(
-      resolveMilestoneApprovalQueue(chantierActions, chantiers, user, axes).map((e) => e.action.id)
-    );
-    for (const action of chantierActions) {
-      const approval = action.milestoneApproval;
-      if (!approval || covered.has(action.id)) continue;
-      const chantier = chantierById.get(action.chantierId);
-      if (!chantier) continue;
-      const axisOwners = axes
-        .filter((ax) => chantier.axisIds.includes(ax.id) && ax.owner)
-        .map((ax) => ax.owner as string);
-      const nominal = chantier.pilote
-        ? chantier.pilote === user.username
-        : axisOwners.includes(user.username);
-      const waitingDays = daysSince(approval.requestedAt, today);
-      const base = {
-        source: "milestoneApproval" as const,
-        plan: "strategic" as const,
-        title: tf("me.item.milestoneApproval", "Valider le passage au jalon {to}", {
-          to: displayMilestoneId(approval.targetMilestone),
-        }),
-        context: projetContext(action),
-        waitingDays,
-        href: VALIDATION_HREF,
-        programId: chantier.programId,
-        dedupeKey: `projet:${action.id}:milestone`,
-      };
-      if (milestoneDecidable.has(action.id) && (nominal || !pilotView)) {
-        todo.push({
-          ...base,
-          id: `milestoneApproval:${action.id}`,
-          severity: approvalSeverity(waitingDays),
-        });
-      } else if (
-        pilotView &&
-        !nominal &&
-        isStale(waitingDays) &&
-        inPilotScope(chantier.programId)
-      ) {
-        blocked.push({
-          ...base,
-          id: `blockedValidation:milestone:${action.id}`,
-          source: "blockedValidation",
-          severity: "warning",
-          waitingOn:
-            chantier.pilote ?? axisOwners[0] ?? t("me.role.strategicLead", "Pilote stratégique"),
-        });
-      }
-    }
+    // (Ancien § 6 — jalons du flux historique `ChantierAction.milestoneApproval` : retiré, ce flux
+    //  est déprécié au profit des demandes stratégiques `kind: "milestone"` traitées au § 5.)
 
-    // 7. Projets dont l'utilisateur est owner : retard / échéance proche / à venir.
+    // 7. Projets dont l'utilisateur est responsable (`owner`) OU contributeur (`contributors`) :
+    //    retard / échéance proche / à venir.
     const todayDate = new Date(`${today}T00:00:00`);
     for (const action of chantierActions) {
-      if (action.owner !== user.username || !action.end) continue;
+      if (!isProjetMember(action, user.username) || !action.end) continue;
       const pct = progressOf(action);
       if (isProjetDone(action, progressOf)) continue;
       const late = isProjetLate(action, pct, todayDate);
@@ -796,6 +759,7 @@ function buildPerimeter(
   const out: WorkspacePerimeterEntry[] = [];
   const roleOwner = t("me.role.owner", "Responsable");
   const roleSponsor = t("me.role.sponsor", "Sponsor");
+  const roleContributor = t("me.role.contributor", "Contributeur projet");
 
   if (perf) {
     const wsById = new Map(perf.workstreams.map((w) => [w.id, w]));
@@ -857,10 +821,13 @@ function buildPerimeter(
       });
     }
     const chantierById = new Map(chantiers.map((c) => [c.id, c]));
+    // Projets : responsable (`owner`) ou contributeur (`contributors`). L'ancien
+    // `ChantierAction.sponsor` (legacy, sans rôle depuis la hiérarchie stratégique) ne donne plus
+    // de ligne de périmètre.
     for (const action of chantierActions) {
       const owner = action.owner === user.username;
-      const sponsor = !owner && action.sponsor === user.username;
-      if (!owner && !sponsor) continue;
+      const contributor = !owner && isProjetMember(action, user.username);
+      if (!owner && !contributor) continue;
       const pct = progressOf(action);
       const chantier = chantierById.get(action.chantierId);
       out.push({
@@ -868,7 +835,7 @@ function buildPerimeter(
         kind: "action",
         plan: "strategic",
         label: chantier ? `${chantier.name} · ${action.name}` : action.name,
-        role: owner ? roleOwner : roleSponsor,
+        role: owner ? roleOwner : roleContributor,
         health: isProjetDone(action, progressOf)
           ? "green"
           : isProjetLate(action, pct, todayDate)
@@ -912,18 +879,22 @@ function buildPilotPerimeter(
         health = worstHealth(strategic.chantiers.map(healthOf));
         progressPct = average(strategic.chantierActions.map(progressOf));
       }
+      const programSponsorLabel = t("me.role.programSponsor", "Commanditaire du programme");
+      const programOwnerLabel = t("me.role.programOwner", "Responsable du programme");
       const role =
         program.sponsor === user.username
-          ? t("me.role.sponsor", "Sponsor")
+          ? programSponsorLabel
           : program.owner === user.username
-            ? t("me.role.programOwner", "Owner du programme")
+            ? programOwnerLabel
             : hasRole(user, "cto")
               ? t("me.role.cto", "CTO")
               : isAnyAdmin(user)
                 ? t("me.role.admin", "Administrateur")
-                : hasRole(user, "program_sponsor")
-                  ? t("me.role.sponsor", "Sponsor")
-                  : t("me.role.programOwner", "Owner du programme");
+                : type === "strategic" && hasRole(user, "strategic_lead")
+                  ? t("me.role.strategicLead", "Pilote du plan stratégique")
+                  : hasRole(user, "program_sponsor")
+                    ? programSponsorLabel
+                    : programOwnerLabel;
       return {
         id: `program:${program.id}`,
         kind: "program",

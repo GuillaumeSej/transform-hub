@@ -1,9 +1,11 @@
-import { axisDecisionMakers, isStrategicLeadOf } from "@/lib/axisLogic";
+import { axisDecisionMakers, isProjetMember, isStrategicLeadOf } from "@/lib/axisLogic";
 import { canFillIndicatorValue } from "@/lib/kpiHistory";
 import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
 import {
   approvalChain,
+  fallbackApprovalChain,
   type ApprovalStep,
+  type ChainLevel,
   type HierarchyContext,
   type StrategicLevel,
 } from "@/lib/strategicHierarchy";
@@ -14,12 +16,20 @@ import type { AuthUser, Chantier, ChantierAction, Indicator, StrategicAxis } fro
  * `lib/__tests__/kpiCorrectionRouting.test.ts`).
  *
  * RÈGLE EN VIGUEUR (PO, « données de pilotage ») — une valeur KPI, saisie OU corrigée/supprimée,
- * est TOUJOURS validée par les deux niveaux au-dessus de son auteur, l'auteur étant traité au moins
- * comme sponsor de chantier (`approvalChain(..., 2, "chantierSponsor")`, voir
- * lib/strategicHierarchy.ts) : sponsor d'axe PUIS pilote du plan. Seuls le pilote du plan (chaîne
- * vide) et les admins corrigent directement ; un sponsor de chantier ou d'axe passe désormais par
- * une demande (plus de correction directe « avec information »). `routeKpiCorrection` renvoie la
- * chaîne (`chain`) ; `approver` = son 1er palier. Contexte hiérarchique : `kpiHierarchyContext`.
+ * est TOUJOURS validée par les deux niveaux au-dessus du niveau RÉEL de son auteur
+ * (`approvalChain(..., 2, kpiAuthorFloor(...))`, voir lib/strategicHierarchy.ts) :
+ *  - responsable / contributeur d'un projet LIÉ au KPI (`ChantierAction.indicatorId`) → sponsor de
+ *    chantier (le chantier de CE projet) PUIS sponsor d'axe (un contributeur est traité comme le
+ *    responsable projet : son responsable projet ne valide pas) ;
+ *  - sponsor de chantier → sponsor d'axe PUIS pilote ; sponsor d'axe → pilote ;
+ *  - auteur HORS hiérarchie (responsable de saisie nommé, rôle historique) : traité comme le niveau
+ *    juste en dessous du propriétaire du KPI — KPI de CHANTIER → niveau responsable projet (sponsor
+ *    de chantier puis sponsor d'axe) ; KPI d'AXE → niveau sponsor de chantier (sponsor d'axe puis
+ *    pilote).
+ * Seuls le pilote du programme et les admins corrigent directement. Aucun niveau au-dessus désigné
+ * → repli pilote(s), puis admins (`fallbackApprovalChain`) ; utilisateurs non chargés → `"retry"`
+ * (jamais d'application directe par défaut). `routeKpiCorrection` renvoie la chaîne (`chain`) ;
+ * `approver` = son 1er palier. Contexte hiérarchique : `kpiHierarchyContext`.
  *
  * Tableau HISTORIQUE (avant la règle ci-dessus, conservé pour les demandes legacy sans chaîne —
  * `kpiCorrectionApprover`, `kpiCorrectionDecisionInformees`) — hiérarchie des responsables :
@@ -55,7 +65,8 @@ export type KpiCorrectionData = {
   axes: StrategicAxis[];
   chantiers: Chantier[];
   chantierActions: ChantierAction[];
-  users?: Pick<AuthUser, "username" | "profiles">[];
+  users?: (Pick<AuthUser, "username" | "profiles"> &
+    Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin">>)[];
 };
 
 export type KpiCorrectionIndicator = Pick<
@@ -72,6 +83,8 @@ export type KpiResponsibles = {
   axisOwners: string[];
   planLeads: string[];
   projetOwners: string[];
+  /** Responsables ET contributeurs des projets LIÉS au KPI (`indicatorId`). */
+  linkedProjetMembers: string[];
 };
 
 function uniq(list: (string | undefined | null)[]): string[] {
@@ -115,14 +128,33 @@ export function kpiResponsibles(
         .filter((a) => linkedChantierIds.has(a.chantierId) || a.indicatorId === indicator.id)
         .map((a) => a.owner)
     ),
+    linkedProjetMembers: uniq(
+      data.chantierActions
+        .filter((a) => a.indicatorId === indicator.id)
+        .flatMap((a) => [a.owner, ...(a.contributors ?? [])])
+    ),
   };
 }
 
+/** Projet LIÉ au KPI (`indicatorId`) dont `username` est responsable ou contributeur (le 1er). */
+export function linkedProjetOf(
+  indicator: Pick<KpiCorrectionIndicator, "id">,
+  data: Pick<KpiCorrectionData, "chantierActions">,
+  username: string | undefined
+): ChantierAction | undefined {
+  if (!username) return undefined;
+  return data.chantierActions.find(
+    (a) => a.indicatorId === indicator.id && isProjetMember(a, username)
+  );
+}
+
 /**
- * Contexte hiérarchique d'un KPI pour `approvalChain` : chantier = celui où `requestedBy` porte un
- * projet lié au KPI s'il y en a un, sinon `indicator.chantierId`, sinon le 1er chantier lié ;
- * axes = `indicator.axisId` + axes de ce chantier (leurs sponsors détiennent ensemble le palier
- * "axisSponsor") ; pilotes = strategic_lead du programme du KPI.
+ * Contexte hiérarchique d'un KPI pour `approvalChain`, vu de `requestedBy` :
+ *  - chantier = celui du projet LIÉ au KPI dont il est membre (responsable/contributeur ; ce projet
+ *    est alors le `projet` du contexte), sinon un chantier lié dont il est le sponsor, sinon
+ *    `indicator.chantierId`, sinon le 1er chantier lié ;
+ *  - axes = `indicator.axisId` + axes de ce chantier (leurs sponsors détiennent ensemble le palier
+ *    "axisSponsor") ; pilotes = strategic_lead du programme du KPI.
  */
 export function kpiHierarchyContext(
   indicator: KpiCorrectionIndicator,
@@ -130,21 +162,47 @@ export function kpiHierarchyContext(
   requestedBy?: string,
   resp: KpiResponsibles = kpiResponsibles(indicator, data)
 ): HierarchyContext {
-  const own = requestedBy
-    ? resp.chantiers.find((c) =>
-        data.chantierActions.some((a) => a.chantierId === c.id && a.owner === requestedBy)
-      )
+  const projet = linkedProjetOf(indicator, data, requestedBy) ?? null;
+  const projetChantier = projet
+    ? data.chantiers.find((c) => c.id === projet.chantierId)
     : undefined;
+  const sponsored = requestedBy ? resp.chantiers.find((c) => c.pilote === requestedBy) : undefined;
   const chantier =
-    own ?? resp.chantiers.find((c) => c.id === indicator.chantierId) ?? resp.chantiers[0] ?? null;
+    projetChantier ??
+    sponsored ??
+    resp.chantiers.find((c) => c.id === indicator.chantierId) ??
+    resp.chantiers[0] ??
+    null;
   const axisIds = uniq([indicator.axisId, ...(chantier?.axisIds ?? [])]);
   const axes = axisIds
     .map((id) => data.axes.find((a) => a.id === id))
     .filter((a): a is StrategicAxis => !!a);
-  return { axis: axes[0] ?? null, axes, chantier, projet: null, pilots: resp.planLeads };
+  return { axis: axes[0] ?? null, axes, chantier, projet, pilots: resp.planLeads };
 }
 
-/** Chaîne de validation d'une valeur KPI saisie/corrigée par `author` (voir l'en-tête). */
+/**
+ * Niveau PLANCHER de l'auteur d'une valeur KPI (voir l'en-tête) : membre d'un projet lié, ou KPI
+ * de CHANTIER → "projectOwner" (validé par sponsor de chantier puis sponsor d'axe) ; KPI d'AXE →
+ * "chantierSponsor" (sponsor d'axe puis pilote). Un auteur placé plus haut garde son niveau réel.
+ */
+export function kpiAuthorFloor(
+  indicator: KpiCorrectionIndicator,
+  data: Pick<KpiCorrectionData, "chantierActions">,
+  author: string | undefined
+): StrategicLevel {
+  if (linkedProjetOf(indicator, data, author)) return "projectOwner";
+  return indicator.chantierId ? "projectOwner" : "chantierSponsor";
+}
+
+/** Usernames des admins connus (`data.users`) — palier de repli ultime. */
+export function adminUsernames(users: KpiCorrectionData["users"]): string[] {
+  return uniq(
+    (users ?? []).filter((u) => u.isGlobalAdmin || u.isCompanyAdmin).map((u) => u.username)
+  );
+}
+
+/** Chaîne HIÉRARCHIQUE de validation d'une valeur KPI saisie/corrigée par `author` (voir
+ *  l'en-tête) — peut être vide (aucun niveau au-dessus désigné) : voir `fallbackApprovalChain`. */
 export function kpiApprovalChain(
   author: string,
   indicator: KpiCorrectionIndicator,
@@ -155,7 +213,7 @@ export function kpiApprovalChain(
     author,
     kpiHierarchyContext(indicator, data, author, resp),
     2,
-    "chantierSponsor"
+    kpiAuthorFloor(indicator, data, author)
   );
 }
 
@@ -177,6 +235,7 @@ export function kpiCorrectionLevel(
   if (resp.axisOwners.includes(actor.username)) return "axis";
   if (resp.chantierPilotes.includes(actor.username)) return "chantier";
   if (resp.projetOwners.includes(actor.username)) return "projet";
+  if (resp.linkedProjetMembers.includes(actor.username)) return "projet";
   return "none";
 }
 
@@ -261,6 +320,15 @@ function informLevels(usernames: string[], resp: KpiResponsibles): KpiInformLeve
 
 export type KpiCorrectionRoute =
   | { mode: "forbidden"; level: KpiCorrectionLevel }
+  /** Utilisateurs pas encore chargés : chaîne incalculable — ne rien appliquer, réessayer (les
+   *  flux lèvent `ApprovalRetryError`). */
+  | {
+      mode: "retry";
+      level: KpiCorrectionLevel;
+      /** Toujours vides (compat des écrans qui lisent ces champs hors "request"). */
+      inform: string[];
+      informLevels: KpiInformLevel[];
+    }
   | {
       mode: "direct";
       level: KpiCorrectionLevel;
@@ -279,7 +347,7 @@ export type KpiCorrectionRoute =
       informLevels: KpiInformLevel[];
     };
 
-const STEP_APPROVER_LEVEL: Partial<Record<StrategicLevel, KpiApproverLevel>> = {
+const STEP_APPROVER_LEVEL: Partial<Record<ChainLevel, KpiApproverLevel>> = {
   chantierSponsor: "chantier",
   axisSponsor: "axis",
   pilot: "plan",
@@ -296,15 +364,26 @@ export function routeKpiCorrection(
   if (!actor) return { mode: "forbidden", level };
   if (
     level === "none" &&
-    !canFillIndicatorValue(indicator, actor, { axes: data.axes, chantiers: data.chantiers })
+    !canFillIndicatorValue(indicator, actor, {
+      axes: data.axes,
+      chantiers: data.chantiers,
+      chantierActions: data.chantierActions,
+    })
   ) {
     return { mode: "forbidden", level };
   }
-  const chain = level === "plan" ? [] : kpiApprovalChain(actor.username, indicator, data, resp);
-  if (chain.length === 0) {
-    // Pilote du plan / admin (ou personne au-dessus) : correction directe, personne à informer.
+  if (level === "plan") {
+    // Pilote du programme / admin : correction directe, personne à informer.
     return { mode: "direct", level, inform: [], informLevels: [] };
   }
+  // Sans utilisateurs chargés, pilotes (et admins de repli) inconnus : ne pas décider.
+  if (!(data.users ?? []).length) return { mode: "retry", level, inform: [], informLevels: [] };
+  const chain = fallbackApprovalChain(
+    kpiApprovalChain(actor.username, indicator, data, resp),
+    actor.username,
+    resp.planLeads,
+    adminUsernames(data.users)
+  );
   const first = chain[0];
   const approver: KpiCorrectionApprover = {
     level: STEP_APPROVER_LEVEL[first.level] ?? "plan",

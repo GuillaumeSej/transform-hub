@@ -13,6 +13,8 @@ import type {
   LeverStatus,
   LeverAction,
   LeverApproval,
+  LeverApprovalLevel,
+  LeverApprovalStep,
   LeverDeletionRequest,
   LifecycleStage,
   Role,
@@ -533,6 +535,11 @@ export type LeverWorkflowOptions = {
    *  « validation requise » sont des portes (voir `gatedStatusesFor`/`gateCrossedBy`, lib/status-config.ts). Omis = les 3 portes
    *  historiques (qualified/validated/in_progress). */
   lifecycleStages?: LifecycleStage[];
+  /** `requestLeverApproval` : chantiers du programme (résolution du responsable de chantier). */
+  workstreams?: (Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string })[];
+  /** `requestLeverApproval` : annuaire de l'entreprise, pour snapshoter les titulaires de chaque
+   *  palier de la chaîne (voir `leverApprovalChain`). */
+  users?: LeverDirectoryUser[];
 };
 
 export function updateLever(
@@ -546,7 +553,7 @@ export function updateLever(
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
   const before = levers[idx];
 
-  // Portes de validation (porteur → sponsor OU cto, voir requestLeverApproval/approveLeverGate/
+  // Portes de validation (double validation hiérarchique, voir requestLeverApproval/approveLeverGate/
   // rejectLeverApproval plus bas) : le SEUL chemin légitime vers l'un des 3 statuts protégés
   // ("qualified" M2, "validated" M3, "in_progress" M4 — voir `LeverApprovalGate`) est
   // `approveLeverGate`, qui appelle CETTE fonction en interne avec un patch qui touche AUSSI
@@ -773,36 +780,240 @@ export function upsertLeverByCode(
   return { ...createLever(levers, input, user), created: true };
 }
 
+// ─── Portes du cycle de vie : DOUBLE validation hiérarchique (décision PO) ────────────────────
+//
+// Calquée sur le Plan Stratégique (lib/strategicHierarchy.ts + en-tête de lib/strategicApprovals.ts).
+// Hiérarchie Transfo : CTO du programme du levier (`isLeverCtoOf`) > responsable de chantier (rôle
+// "sponsor" ET sponsor du chantier/levier, `isLeverSponsorOf`) > responsable de levier (porteur).
+//
+//  - Une demande est validée par les niveaux STRICTEMENT AU-DESSUS du demandeur, dans l'ordre :
+//      porteur → responsable de chantier PUIS CTO ; responsable de chantier → CTO seul ;
+//      CTO → application directe (sommet, comme le pilote du Plan Stratégique).
+//  - Un niveau vide (aucun titulaire) est SAUTÉ. Si AUCUN niveau n'existe au-dessus d'un demandeur
+//    non-CTO, la demande est routée vers les admins (palier "admin") — jamais d'application directe.
+//  - Chaîne SNAPSHOTÉE à la demande (`LeverApproval.chain` + `stepIndex`).
+//  - Le demandeur ne décide JAMAIS sa propre demande (admin compris) ; une même personne ne valide
+//    jamais deux paliers ; un admin non titulaire peut débloquer UN palier par demande, jamais deux.
+//  - Demandes d'avant ce modèle (sans `chain`) : palier unique, décidé par le responsable de
+//    chantier (avec le rôle "sponsor"), le CTO ou un admin — jamais le demandeur.
+
+/** Utilisateur agissant sur une demande de validation / suppression. */
+type LeverActor = Pick<
+  AuthUser,
+  "name" | "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin"
+>;
+type LeverWorkstreamRef = Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string };
+/** Annuaire des comptes de l'entreprise (résolution des titulaires de chaque niveau). */
+export type LeverDirectoryUser = Pick<AuthUser, "username" | "name" | "profiles"> & {
+  disabled?: boolean;
+};
+
+/** Droits de RESPONSABLE DE CHANTIER sur ce levier : il faut le rôle "sponsor" ET être le sponsor
+ *  du chantier (ou du levier). `isLeverSponsoredBy` seul ne suffit pas : un porteur qui s'est
+ *  lui-même saisi comme « Commanditaire » ne devient pas approbateur pour autant. */
+export function isLeverSponsorOf(
+  lever: Pick<Lever, "sponsor" | "sponsorUsername" | "ws">,
+  workstreams: LeverWorkstreamRef[],
+  user: Pick<AuthUser, "name" | "username" | "profiles"> | null | undefined
+): boolean {
+  if (!user || !hasRole(user, "sponsor")) return false;
+  return isLeverSponsoredBy(
+    lever,
+    workstreams.find((w) => w.id === lever.ws),
+    user
+  );
+}
+
+/** Niveau hiérarchique Transfo le plus haut détenu par `user` sur ce levier. */
+export type LeverHierarchyLevel = "owner" | "sponsor" | "cto";
+
+export function leverHierarchyLevelOf(
+  lever: Lever,
+  user: Pick<AuthUser, "name" | "username" | "profiles">,
+  workstreams: LeverWorkstreamRef[]
+): LeverHierarchyLevel | null {
+  if (isLeverCtoOf(lever, user)) return "cto";
+  if (isLeverSponsorOf(lever, workstreams, user)) return "sponsor";
+  if (isLeverOwnedBy(lever, user)) return "owner";
+  return null;
+}
+
+function activeDirectory(users: LeverDirectoryUser[]): LeverDirectoryUser[] {
+  return users.filter((u) => !u.disabled);
+}
+
 /**
- * Validation du passage de l'une des 3 portes du cycle de vie — "qualified" (M2, UI "Validé"),
- * "validated" (M3, UI "Planifié") ou "in_progress" (M4, UI "Exécuté") — voir `LeverApproval`/
- * `LeverApprovalGate` (types/index.ts) et le garde-fou correspondant dans `updateLever`
- * ci-dessus. M4→M5 ("delivered") reste libre, atteint automatiquement à 100% du plan d'action.
- * Design volontairement simple (pas de configuration par entreprise) : seules ces 3 portes sont
- * concernées, les autres transitions de statut restent librement modifiables via `updateLever`
- * comme avant.
- *
- * Modèle à approbateur UNIQUE (pas de cascade séquentielle) : le porteur du levier soumet la
- * demande, puis SOIT le sponsor du workstream SOIT le CTO l'approuve — le premier des deux à
- * agir ferme la porte, sans attendre l'autre.
- *
- * `requestLeverApproval` : appelable uniquement par le porteur du levier (`isLeverOwnedBy`) ou un
- * admin, depuis le statut juste avant la porte concernée (`idea` → porte "qualified", `qualified`
- * → porte "validated", `validated` → porte "in_progress" — voir `GATE_BY_STATUS`,
- * lib/status-config.ts).
+ * Chaîne de validation d'une demande de `requester` sur ce levier (voir l'en-tête de section).
+ * `users` = annuaire de l'entreprise : titulaires résolus et snapshotés. Sans annuaire (appelant
+ * historique), repli : palier responsable de chantier d'après les identifiants du chantier/levier,
+ * palier CTO toujours présent (titulaires résolus par rôle au moment de décider).
+ * Chaîne vide ⇔ demandeur CTO (application directe).
+ */
+export function leverApprovalChain(
+  lever: Lever,
+  requester: Pick<AuthUser, "name" | "username" | "profiles">,
+  workstreams: LeverWorkstreamRef[],
+  users?: LeverDirectoryUser[]
+): LeverApprovalStep[] {
+  const own = leverHierarchyLevelOf(lever, requester, workstreams);
+  if (own === "cto") return [];
+  const levels: ("sponsor" | "cto")[] = own === "sponsor" ? ["cto"] : ["sponsor", "cto"];
+  const used = new Set<string>([requester.username]);
+  const steps: LeverApprovalStep[] = [];
+  for (const level of levels) {
+    if (users) {
+      const holders = activeDirectory(users).filter(
+        (u) =>
+          !used.has(u.username) &&
+          (level === "cto" ? isLeverCtoOf(lever, u) : isLeverSponsorOf(lever, workstreams, u))
+      );
+      holders.forEach((u) => used.add(u.username));
+      if (holders.length === 0) continue;
+      steps.push({
+        level,
+        usernames: holders.map((u) => u.username),
+        names: holders.map((u) => u.name),
+      });
+      continue;
+    }
+    if (level === "cto") {
+      steps.push({ level, usernames: [] });
+      continue;
+    }
+    const ws = workstreams.find((w) => w.id === lever.ws);
+    const usernames = [ws?.sponsorUsername, lever.sponsorUsername].filter(
+      (u): u is string => !!u && !used.has(u)
+    );
+    const names = [
+      ws?.sponsorUsername ? undefined : ws?.sponsor,
+      lever.sponsorUsername ? undefined : lever.sponsor,
+    ].filter(
+      (n): n is string => !!n && normalizeOwnerName(n) !== normalizeOwnerName(requester.name)
+    );
+    if (usernames.length === 0 && names.length === 0) continue;
+    usernames.forEach((u) => used.add(u));
+    steps.push({
+      level,
+      usernames: Array.from(new Set(usernames)),
+      ...(names.length ? { names } : {}),
+    });
+  }
+  return steps.length > 0 ? steps : [{ level: "admin", usernames: [] }];
+}
+
+/** Palier courant d'une demande à chaîne (`undefined` pour une demande legacy). */
+export function currentLeverApprovalStep(
+  approval: LeverApproval | undefined
+): LeverApprovalStep | undefined {
+  if (!approval?.chain?.length) return undefined;
+  return approval.chain[Math.min(approval.stepIndex ?? 0, approval.chain.length - 1)];
+}
+
+export type LeverApprovalStepInfo = {
+  /** Palier courant, 1-based. */
+  current: number;
+  total: number;
+  level: LeverApprovalLevel;
+  usernames: string[];
+  names: string[];
+};
+
+/** « Étape x/n » d'une demande à chaîne ; `undefined` pour une demande legacy (palier unique). */
+export function leverApprovalStepInfo(
+  approval: LeverApproval | undefined
+): LeverApprovalStepInfo | undefined {
+  if (!approval?.chain?.length) return undefined;
+  const idx = Math.min(approval.stepIndex ?? 0, approval.chain.length - 1);
+  const step = approval.chain[idx];
+  return {
+    current: idx + 1,
+    total: approval.chain.length,
+    level: step.level,
+    usernames: step.usernames,
+    names: step.names?.length ? step.names : step.usernames,
+  };
+}
+
+function holdsLeverApprovalStep(
+  step: LeverApprovalStep,
+  lever: Lever,
+  user: LeverActor,
+  workstreams: LeverWorkstreamRef[]
+): boolean {
+  if (step.level === "admin") return false;
+  if (step.usernames.includes(user.username)) return true;
+  return step.level === "cto"
+    ? isLeverCtoOf(lever, user)
+    : isLeverSponsorOf(lever, workstreams, user);
+}
+
+/** Motif pour lequel `user` ne peut pas décider le palier courant (`null` = il peut). */
+export type LeverApprovalDenial =
+  "no_request" | "own_request" | "already_decided_step" | "admin_step_used" | "not_approver";
+
+export function leverApprovalDenialReason(
+  lever: Lever,
+  user: LeverActor | null | undefined,
+  workstreams: LeverWorkstreamRef[]
+): LeverApprovalDenial | null {
+  const approval = lever.approval;
+  if (!approval || !user) return "no_request";
+  if (approval.requestedBy === user.username) return "own_request";
+  if (!approval.chain?.length) {
+    // Demande legacy : palier unique.
+    return isAnyAdmin(user) ||
+      isLeverSponsorOf(lever, workstreams, user) ||
+      isLeverCtoOf(lever, user)
+      ? null
+      : "not_approver";
+  }
+  const idx = Math.min(approval.stepIndex ?? 0, approval.chain.length - 1);
+  const prior = approval.chain.slice(0, idx);
+  if (prior.some((s) => s.decidedBy === user.username)) return "already_decided_step";
+  if (holdsLeverApprovalStep(approval.chain[idx], lever, user, workstreams)) return null;
+  if (isAnyAdmin(user)) return prior.some((s) => s.byAdmin) ? "admin_step_used" : null;
+  return "not_approver";
+}
+
+/** `user` peut-il approuver/refuser le palier COURANT de la demande en cours ? */
+export function canDecideLeverApproval(
+  lever: Lever,
+  user: LeverActor | null | undefined,
+  workstreams: LeverWorkstreamRef[]
+): boolean {
+  return leverApprovalDenialReason(lever, user, workstreams) === null;
+}
+
+const APPROVAL_DENIAL_MESSAGE: Record<LeverApprovalDenial, string> = {
+  no_request: "Ce levier n'a pas de demande de validation en cours",
+  own_request: "Vous ne pouvez pas valider votre propre demande",
+  already_decided_step: "Vous avez déjà validé une étape de cette demande",
+  admin_step_used:
+    "Un admin a déjà débloqué une étape de cette demande : l'autre revient à son titulaire",
+  not_approver: "Vous n'êtes pas habilité à approuver l'étape en cours de cette demande",
+};
+
+/**
+ * Soumet une demande de validation de la porte suivante (`nextGateFor`). Demandeurs : porteur,
+ * responsable de chantier, CTO du levier, ou admin (traité comme le porteur). La chaîne est
+ * calculée (`leverApprovalChain`) et snapshotée ; un CTO (chaîne vide) franchit directement la porte.
  */
 export function requestLeverApproval(
   levers: Lever[],
   id: string,
-  user: Pick<AuthUser, "name" | "username" | "isGlobalAdmin" | "isCompanyAdmin">,
+  requester: Pick<AuthUser, "name" | "username" | "isGlobalAdmin" | "isCompanyAdmin"> &
+    Partial<Pick<AuthUser, "profiles">>,
   options: LeverWorkflowOptions = {}
 ): LeverMutationResult {
+  const user = { ...requester, profiles: requester.profiles ?? [] };
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
   const before = levers[idx];
-  if (!isAnyAdmin(user) && !isLeverOwnedBy(before, user)) {
+  const workstreams = options.workstreams ?? [];
+  const level = leverHierarchyLevelOf(before, user, workstreams);
+  if (!isAnyAdmin(user) && !level) {
     throw new Error(
-      `Seul le porteur du levier "${id}" (ou un admin) peut soumettre une demande de validation`
+      `Seuls le porteur, le responsable de chantier ou le CTO du levier "${id}" (ou un admin) peuvent soumettre une demande de validation`
     );
   }
   const targetStatus = nextGateFor(before.status, options.lifecycleStages);
@@ -811,45 +1022,68 @@ export function requestLeverApproval(
       `Le levier "${id}" ne peut pas être soumis à validation depuis le statut "${before.status}"`
     );
   }
-  const now = new Date().toISOString();
+  if (before.approval) {
+    throw new Error(`Une demande de validation est déjà en cours pour le levier "${id}"`);
+  }
+  const requested = makeAuditEntry({
+    user: user.name,
+    action: "approval_requested",
+    entity: id,
+    field: "approval",
+    old: before.status,
+    new: `pending:${targetStatus}`,
+  });
+  const chain = leverApprovalChain(before, user, workstreams, options.users);
+  if (chain.length === 0) {
+    // CTO : sommet de la hiérarchie, personne au-dessus → application directe.
+    const result = updateLever(
+      levers,
+      id,
+      { status: targetStatus, approval: undefined },
+      user.name,
+      options
+    );
+    return {
+      ...result,
+      auditEntries: [
+        requested,
+        ...result.auditEntries,
+        makeAuditEntry({
+          user: user.name,
+          action: "approval_approved",
+          entity: id,
+          field: "approval",
+          old: `pending:${targetStatus}`,
+          new: targetStatus,
+        }),
+      ],
+    };
+  }
   const approval: LeverApproval = {
     targetStatus,
     requestedBy: user.username,
-    requestedAt: now,
+    requestedByName: user.name,
+    requestedAt: new Date().toISOString(),
+    chain,
+    stepIndex: 0,
   };
   const after: Lever = { ...before, approval };
   const nextLevers = [...levers];
   nextLevers[idx] = after;
-  return {
-    levers: nextLevers,
-    lever: after,
-    auditEntries: [
-      makeAuditEntry({
-        user: user.name,
-        action: "approval_requested",
-        entity: id,
-        field: "approval",
-        old: before.status,
-        new: `pending:${targetStatus}`,
-      }),
-    ],
-  };
+  return { levers: nextLevers, lever: after, auditEntries: [requested] };
 }
 
 /**
- * Approuve la demande de validation en cours — vérifie que l'appelant est habilité (sponsor du
- * workstream du levier, OU `isLeverCtoOf`, OU admin — un seul des deux rôles métier suffit).
- * Ferme directement la porte : `approval` est vidé et `status` passe à `approval.targetStatus`
- * en réutilisant `updateLever` (pour ne pas dupliquer `applyPlanLock`/l'audit "updated" sur
- * d'éventuels autres champs déjà en attente) — le patch inclut explicitement `approval:
- * undefined`, ce qui est précisément ce que le garde-fou de `updateLever` accepte comme passage
- * légitime.
+ * Valide le palier COURANT (voir `leverApprovalDenialReason` pour qui peut). Palier intermédiaire
+ * → le palier est horodaté et la demande passe au suivant (statut inchangé). Dernier palier (ou
+ * demande legacy) → la porte est franchie : `status` = `targetStatus` et `approval` vidé, via
+ * `updateLever` (patch incluant `approval: undefined`, seul passage légitime d'une porte).
  */
 export function approveLeverGate(
   levers: Lever[],
   id: string,
-  user: Pick<AuthUser, "name" | "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
-  workstreams: (Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string })[]
+  user: LeverActor,
+  workstreams: LeverWorkstreamRef[]
 ): LeverMutationResult {
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
@@ -857,19 +1091,67 @@ export function approveLeverGate(
   if (!before.approval) {
     throw new Error(`Le levier "${id}" n'a pas de demande de validation en cours`);
   }
-  const parentWorkstream = workstreams.find((w) => w.id === before.ws);
-  const isSponsor = isLeverSponsoredBy(before, parentWorkstream, user);
-  const isCto = isLeverCtoOf(before, user);
-  if (!isAnyAdmin(user) && !isSponsor && !isCto) {
-    throw new Error(`Vous n'êtes pas habilité à approuver la demande de validation de ce levier`);
-  }
+  const denial = leverApprovalDenialReason(before, user, workstreams);
+  if (denial) throw new Error(APPROVAL_DENIAL_MESSAGE[denial]);
 
   const now = new Date().toISOString();
-  const targetStatus = before.approval.targetStatus;
+  const approval = before.approval;
+  const targetStatus = approval.targetStatus;
+  const chain = approval.chain ?? [];
+  const stepIdx = Math.min(approval.stepIndex ?? 0, Math.max(chain.length - 1, 0));
+  let nextChain = chain;
+  if (chain.length > 0) {
+    const step = chain[stepIdx];
+    const byAdmin = !holdsLeverApprovalStep(step, before, user, workstreams);
+    nextChain = chain.map((s, i) =>
+      i === stepIdx
+        ? {
+            ...s,
+            decidedBy: user.username,
+            decidedByName: user.name,
+            decidedAt: now,
+            ...(byAdmin ? { byAdmin: true } : {}),
+          }
+        : s
+    );
+    if (stepIdx + 1 < chain.length) {
+      const after: Lever = {
+        ...before,
+        approval: { ...approval, chain: nextChain, stepIndex: stepIdx + 1 },
+      };
+      const nextLevers = [...levers];
+      nextLevers[idx] = after;
+      return {
+        levers: nextLevers,
+        lever: after,
+        auditEntries: [
+          makeAuditEntry({
+            user: user.name,
+            action: "approval_approved",
+            entity: id,
+            field: "approval",
+            old: `pending:${targetStatus}`,
+            new: `step:${stepIdx + 1}/${chain.length}`,
+          }),
+        ],
+      };
+    }
+  }
+
+  const finalLevel = chain.length > 0 ? chain[stepIdx].level : undefined;
+  const role: "sponsor" | "cto" | undefined =
+    finalLevel === "sponsor" || finalLevel === "cto"
+      ? finalLevel
+      : isLeverSponsorOf(before, workstreams, user)
+        ? "sponsor"
+        : isLeverCtoOf(before, user)
+          ? "cto"
+          : undefined;
   const approvedApproval: LeverApproval = {
-    ...before.approval,
+    ...approval,
+    ...(chain.length > 0 ? { chain: nextChain } : {}),
     approvedBy: user.username,
-    approvedByRole: isSponsor ? "sponsor" : isCto ? "cto" : undefined,
+    approvedByRole: role,
     approvedAt: now,
   };
   const leversWithStamp = [...levers];
@@ -897,16 +1179,16 @@ export function approveLeverGate(
 }
 
 /**
- * Annule la demande en cours — annulable par le porteur du levier, le sponsor du workstream, le
- * CTO, ou un admin. Vide `lever.approval` : le levier reste à son statut de départ, sans
- * pénalité (une nouvelle demande peut être soumise plus tard via `requestLeverApproval`).
+ * Refus (par un décideur du palier courant, ou un admin — qui peut toujours clore une demande
+ * bloquée) ou retrait (par le demandeur). Vide `lever.approval` : le levier reste à son statut
+ * de départ, une nouvelle demande pourra être soumise.
  */
 export function rejectLeverApproval(
   levers: Lever[],
   id: string,
-  user: Pick<AuthUser, "name" | "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
+  user: LeverActor,
   reason?: string,
-  workstreams: (Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string })[] = []
+  workstreams: LeverWorkstreamRef[] = []
 ): LeverMutationResult {
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
@@ -915,12 +1197,10 @@ export function rejectLeverApproval(
     throw new Error(`Le levier "${id}" n'a pas de demande de validation en cours`);
   }
   const targetStatus = before.approval.targetStatus;
-  const parentWorkstream = workstreams.find((w) => w.id === before.ws);
   const authorized =
+    before.approval.requestedBy === user.username ||
     isAnyAdmin(user) ||
-    isLeverOwnedBy(before, user) ||
-    isLeverSponsoredBy(before, parentWorkstream, user) ||
-    isLeverCtoOf(before, user);
+    canDecideLeverApproval(before, user, workstreams);
   if (!authorized) {
     throw new Error(`Vous n'êtes pas habilité à rejeter la demande de validation de ce levier`);
   }
@@ -948,22 +1228,58 @@ export function rejectLeverApproval(
 // Réservée au CTO et au responsable de chantier (rôle "sponsor") du levier : l'un demande, l'AUTRE
 // confirme (CTO → responsable de chantier associé, responsable de chantier → CTO). Jamais la même
 // personne pour les deux étapes, même si elle cumule les deux rôles.
+// Déblocage admin : quand le levier n'a AUCUN compte responsable de chantier, ou que son programme
+// n'a AUCUN CTO, un admin peut tenir le rôle manquant (demander ou confirmer à ce titre) — toujours
+// deux personnes différentes.
 
-type DeletionUser = Pick<AuthUser, "name" | "username" | "profiles">;
-type DeletionWorkstream = Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string };
+type DeletionUser = Pick<AuthUser, "name" | "username" | "profiles"> &
+  Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin">>;
+type DeletionWorkstream = LeverWorkstreamRef;
+
+export type LeverDeletionRoles = {
+  cto: boolean;
+  sponsor: boolean;
+  /** Admin pouvant tenir le rôle CTO faute de CTO sur le programme. */
+  adminAsCto: boolean;
+  /** Admin pouvant tenir le rôle responsable de chantier faute de compte titulaire. */
+  adminAsSponsor: boolean;
+};
+
+/** Le levier n'a-t-il aucun compte responsable de chantier ? Avec annuaire : aucun compte actif
+ *  n'a les droits (`isLeverSponsorOf`) ; sans : aucun sponsor rattaché à un compte. */
+export function leverHasNoSponsorAccount(
+  lever: Lever,
+  workstreams: DeletionWorkstream[],
+  users?: LeverDirectoryUser[]
+): boolean {
+  if (users) return !activeDirectory(users).some((u) => isLeverSponsorOf(lever, workstreams, u));
+  const ws = workstreams.find((w) => w.id === lever.ws);
+  return !ws?.sponsorUsername && !lever.sponsorUsername;
+}
+
+/** Le programme du levier n'a-t-il aucun CTO ? Inconnu (false) sans annuaire. */
+export function leverHasNoCto(lever: Lever, users?: LeverDirectoryUser[]): boolean {
+  if (!users) return false;
+  return !activeDirectory(users).some((u) => isLeverCtoOf(lever, u));
+}
 
 /** Rôles de suppression détenus par `user` SUR CE levier (CTO de son programme, responsable de
- *  son chantier). */
+ *  son chantier), plus les rôles qu'un admin peut tenir faute de titulaire. */
 export function leverDeletionRoles(
   lever: Lever,
   user: DeletionUser | null | undefined,
-  workstreams: DeletionWorkstream[]
-): { cto: boolean; sponsor: boolean } {
-  if (!user) return { cto: false, sponsor: false };
-  const ws = workstreams.find((w) => w.id === lever.ws);
+  workstreams: DeletionWorkstream[],
+  users?: LeverDirectoryUser[]
+): LeverDeletionRoles {
+  if (!user) return { cto: false, sponsor: false, adminAsCto: false, adminAsSponsor: false };
+  const cto = isLeverCtoOf(lever, user);
+  const sponsor = isLeverSponsorOf(lever, workstreams, user);
+  const admin = isAnyAdmin(user);
   return {
-    cto: isLeverCtoOf(lever, user),
-    sponsor: hasRole(user, "sponsor") && isLeverSponsoredBy(lever, ws, user),
+    cto,
+    sponsor,
+    adminAsCto: admin && !cto && leverHasNoCto(lever, users),
+    adminAsSponsor: admin && !sponsor && leverHasNoSponsorAccount(lever, workstreams, users),
   };
 }
 
@@ -971,24 +1287,28 @@ export function leverDeletionRoles(
 export function canRequestLeverDeletion(
   lever: Lever,
   user: DeletionUser | null | undefined,
-  workstreams: DeletionWorkstream[]
+  workstreams: DeletionWorkstream[],
+  users?: LeverDirectoryUser[]
 ): boolean {
   if (lever.deletionRequest) return false;
-  const roles = leverDeletionRoles(lever, user, workstreams);
-  return roles.cto || roles.sponsor;
+  const roles = leverDeletionRoles(lever, user, workstreams, users);
+  return roles.cto || roles.sponsor || roles.adminAsCto || roles.adminAsSponsor;
 }
 
-/** Peut-il CONFIRMER la demande en cours ? Il faut détenir le rôle complémentaire de celui du
- *  demandeur, et ne pas être le demandeur. */
+/** Peut-il CONFIRMER la demande en cours ? Il faut détenir (ou, admin, tenir faute de titulaire)
+ *  le rôle complémentaire de celui du demandeur, et ne pas être le demandeur. */
 export function canApproveLeverDeletion(
   lever: Lever,
   user: DeletionUser | null | undefined,
-  workstreams: DeletionWorkstream[]
+  workstreams: DeletionWorkstream[],
+  users?: LeverDirectoryUser[]
 ): boolean {
   const req = lever.deletionRequest;
   if (!req || !user || req.requestedBy === user.username) return false;
-  const roles = leverDeletionRoles(lever, user, workstreams);
-  return req.requestedByRole === "cto" ? roles.sponsor : roles.cto;
+  const roles = leverDeletionRoles(lever, user, workstreams, users);
+  return req.requestedByRole === "cto"
+    ? roles.sponsor || roles.adminAsSponsor
+    : roles.cto || roles.adminAsCto;
 }
 
 export function requestLeverDeletion(
@@ -996,7 +1316,8 @@ export function requestLeverDeletion(
   id: string,
   user: DeletionUser,
   workstreams: DeletionWorkstream[],
-  reason?: string
+  reason?: string,
+  users?: LeverDirectoryUser[]
 ): LeverMutationResult {
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
@@ -1004,16 +1325,24 @@ export function requestLeverDeletion(
   if (before.deletionRequest) {
     throw new Error("Une demande de suppression est déjà en cours pour ce levier");
   }
-  const roles = leverDeletionRoles(before, user, workstreams);
-  if (!roles.cto && !roles.sponsor) {
+  const roles = leverDeletionRoles(before, user, workstreams, users);
+  if (!roles.cto && !roles.sponsor && !roles.adminAsCto && !roles.adminAsSponsor) {
     throw new Error(
       "Seuls le CTO et le responsable de chantier du levier peuvent en demander la suppression"
     );
   }
+  const asAdmin = !roles.cto && !roles.sponsor;
   const request: LeverDeletionRequest = {
     requestedBy: user.username,
     requestedByName: user.name,
-    requestedByRole: roles.cto ? "cto" : "sponsor",
+    requestedByRole: roles.cto
+      ? "cto"
+      : roles.sponsor
+        ? "sponsor"
+        : roles.adminAsCto
+          ? "cto"
+          : "sponsor",
+    ...(asAdmin ? { requestedAsAdmin: true } : {}),
     requestedAt: new Date().toISOString(),
     ...(reason?.trim() ? { reason: reason.trim() } : {}),
   };
@@ -1041,14 +1370,15 @@ export function approveLeverDeletion(
   levers: Lever[],
   id: string,
   user: DeletionUser,
-  workstreams: DeletionWorkstream[]
+  workstreams: DeletionWorkstream[],
+  users?: LeverDirectoryUser[]
 ): { levers: Lever[]; deleted: Lever; auditEntries: AuditEntry[] } {
   const before = levers.find((l) => l.id === id);
   if (!before) throw new Error(`Lever "${id}" introuvable`);
   if (!before.deletionRequest) {
     throw new Error("Aucune demande de suppression en cours pour ce levier");
   }
-  if (!canApproveLeverDeletion(before, user, workstreams)) {
+  if (!canApproveLeverDeletion(before, user, workstreams, users)) {
     throw new Error(
       before.deletionRequest.requestedByRole === "cto"
         ? "La suppression demandée par le CTO doit être confirmée par le responsable de chantier du levier"
@@ -1076,7 +1406,8 @@ export function cancelLeverDeletion(
   levers: Lever[],
   id: string,
   user: DeletionUser,
-  workstreams: DeletionWorkstream[]
+  workstreams: DeletionWorkstream[],
+  users?: LeverDirectoryUser[]
 ): LeverMutationResult {
   const idx = levers.findIndex((l) => l.id === id);
   if (idx === -1) throw new Error(`Lever "${id}" introuvable`);
@@ -1085,7 +1416,7 @@ export function cancelLeverDeletion(
     throw new Error("Aucune demande de suppression en cours pour ce levier");
   }
   const isRequester = before.deletionRequest.requestedBy === user.username;
-  if (!isRequester && !canApproveLeverDeletion(before, user, workstreams)) {
+  if (!isRequester && !canApproveLeverDeletion(before, user, workstreams, users)) {
     throw new Error("Vous n'êtes pas habilité à refuser cette demande de suppression");
   }
   const after: Lever = { ...before, deletionRequest: undefined };

@@ -129,7 +129,7 @@ function randomTempPassword(): string {
 /**
  * Boutons "Télécharger le modèle" / "Exporter le plan" / "Importer un fichier" du plan
  * stratégique — voir `lib/strategicExcelImport.ts` pour le format, l'upsert et le rapprochement
- * des personnes. `onImport` reçoit les créations + mises à jour (Owner/Pilote/Sponsor déjà
+ * des personnes. `onImport` reçoit les créations + mises à jour (colonnes « personne » déjà
  * réécrits en usernames, y compris pour les comptes créés ici) et les écrit
  * (`writeStrategicImport`).
  *
@@ -312,7 +312,10 @@ export function StrategicImportButton({
               username: p.username!,
               firstName: p.firstName ?? "",
               lastName: p.lastName ?? p.name,
-              role: "chantier_contributor" as Role,
+              // Rôle proposé = celui de la colonne où la personne apparaît (la plus haute dans la
+              // hiérarchie : sponsor d'axe > sponsor de chantier > responsable projet >
+              // contributeur projet) ; repli : responsable projet.
+              role: p.suggestedRole ?? ("chantier_contributor" as Role),
               collisionWith: p.collisionWith,
               include: true,
             }))
@@ -365,7 +368,7 @@ export function StrategicImportButton({
       for (const person of included) {
         accounts.push(await createPersonAccount(person));
       }
-      // Owner/Pilote/Sponsor : texte → username des comptes créés (ou déjà existants).
+      // Colonnes « personne » : texte → username des comptes créés (ou déjà existants).
       const mapping = new Map<string, string>();
       for (const r of accounts) {
         if (r.status === "created" || r.status === "existing") mapping.set(r.key, r.username);

@@ -7,6 +7,7 @@ import { useToast } from "@/lib/hooks/useToast";
 import { parseNumber } from "@/lib/kpiHistory";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
+  canAdjustKpiValue,
   canDecide,
   describeApproval,
   STRATEGIC_APPROVAL_KINDS,
@@ -18,26 +19,17 @@ import {
 import { intlTag } from "@/lib/format";
 import {
   chainStepsView,
+  KIND_FALLBACK,
+  kindLabelKey,
   LEVEL_FALLBACK,
   levelLabelKey,
   patchDiffRows,
   type ChainStepView,
 } from "@/lib/strategicApprovalView";
-import type { StrategicLevel } from "@/lib/strategicHierarchy";
+import type { ChainLevel } from "@/lib/strategicHierarchy";
 import type { AuthUser } from "@/types";
 
 type Tab = "todo" | "mine" | "history";
-
-const KIND_FALLBACK: Record<StrategicApprovalKind, string> = {
-  milestone: "Passage de jalon",
-  kpi_value: "Valeur KPI",
-  projet_create: "Ajout de projet",
-  projet_update: "Modification de projet",
-  projet_delete: "Suppression de projet",
-  chantier_create: "Création de chantier",
-  chantier_update: "Modification de chantier",
-  chantier_delete: "Suppression de chantier",
-};
 
 function formatTimestamp(ts: string | undefined): string {
   if (!ts) return "—";
@@ -89,8 +81,8 @@ export function StrategicApprovalsPanel({
   const [adjusted, setAdjusted] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const kindLabel = (k: StrategicApprovalKind) => t(`validation.sa.kind.${k}`, KIND_FALLBACK[k]);
-  const levelLabel = (l: StrategicLevel) => t(levelLabelKey(l), LEVEL_FALLBACK[l]);
+  const kindLabel = (k: StrategicApprovalKind) => t(kindLabelKey(k), KIND_FALLBACK[k]);
+  const levelLabel = (l: ChainLevel) => t(levelLabelKey(l), LEVEL_FALLBACK[l]);
   /** Ids → libellés pour le diff des modifications (chantier/axes de rattachement, indicateur). */
   const idNames = useMemo(() => {
     const out: Record<string, string> = {};
@@ -101,12 +93,11 @@ export function StrategicApprovalsPanel({
   }, [data.chantiers, data.axes, data.indicators]);
   const decidable = (a: StrategicApproval) =>
     a.status === "pending" && (user === undefined || canDecide(user, a, data));
-  /** Correction KPI (valeur modifiable par l'approbateur avant d'accepter). */
-  const kpiCorrection = (a: StrategicApproval): KpiValueApprovalPayload | undefined => {
-    if (a.kind !== "kpi_value") return undefined;
-    const p = a.payload as KpiValueApprovalPayload;
-    return p.measurementId && !p.remove ? p : undefined;
-  };
+  /** Correction KPI dont la valeur est modifiable par le décideur COURANT avant d'accepter —
+   *  uniquement au DERNIER palier (`canAdjustKpiValue`) : un valideur intermédiaire approuve ou
+   *  refuse, sans ajuster. */
+  const kpiCorrection = (a: StrategicApproval): KpiValueApprovalPayload | undefined =>
+    canAdjustKpiValue(a) ? (a.payload as KpiValueApprovalPayload) : undefined;
   const statusLabel = (s: StrategicApproval["status"], direct?: boolean) =>
     direct
       ? t("validation.sa.status.direct", "Appliquée (information)")
@@ -409,7 +400,7 @@ function ChainStepper({
   levelLabel,
 }: {
   steps: ChainStepView[];
-  levelLabel: (level: StrategicLevel) => string;
+  levelLabel: (level: ChainLevel) => string;
 }) {
   const { t } = useTranslation();
   const stateText = (s: ChainStepView) =>

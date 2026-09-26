@@ -161,3 +161,44 @@ describe("Plan Stratégique — rôles (décision PO)", () => {
     expect(ids).not.toContain("validation");
   });
 });
+
+describe("resolveUserNav — dedup merges programTypes (mixed Performance + Strategic profiles)", () => {
+  const visibleIds = (user: AuthUser, type: "performance" | "strategic") =>
+    resolveUserNav(user)
+      .filter((i) => !i.programTypes || i.programTypes.includes(type))
+      .map((i) => i.id);
+
+  it("sponsor + axis_sponsor: Validation on BOTH program types", () => {
+    const user = u("sponsor", "axis_sponsor");
+    expect(visibleIds(user, "performance")).toContain("validation");
+    expect(visibleIds(user, "strategic")).toContain("validation");
+    // Dashboard stratégique du sponsor d'axe, sans dashboard Performance pour le `sponsor`.
+    expect(visibleIds(user, "strategic")).toContain("dashboard");
+    expect(visibleIds(user, "performance")).not.toContain("dashboard");
+  });
+
+  it("finance + chantier_owner: Validation on BOTH program types", () => {
+    const user = u("finance", "chantier_owner");
+    expect(visibleIds(user, "performance")).toContain("validation");
+    expect(visibleIds(user, "strategic")).toContain("validation");
+    // Le badge des demandes stratégiques est conservé sur l'item fusionné.
+    expect(resolveUserNav(user).find((i) => i.id === "validation")?.badge).toBe("approvals");
+  });
+
+  it("an item without programTypes absorbs a restricted duplicate", () => {
+    const user = u("cto", "strategic_lead");
+    const dashboard = resolveUserNav(user).find((i) => i.id === "dashboard");
+    expect(dashboard?.programTypes).toBeUndefined();
+  });
+
+  it("does not mutate the shared role definitions", () => {
+    resolveUserNav(u("sponsor", "axis_sponsor"));
+    const sponsorValidation = roles.sponsor.nav.find((i) => i.id === "validation");
+    expect(sponsorValidation?.programTypes).toEqual(["performance"]);
+  });
+
+  it("strategic_lead: dashboard (strategic) and lands on /dashboard", () => {
+    expect(visibleIds(u("strategic_lead"), "strategic")).toContain("dashboard");
+    expect(resolveLandingRoute(resolveUserNav(u("strategic_lead")))).toBe("/dashboard");
+  });
+});

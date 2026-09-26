@@ -4,7 +4,7 @@ import {
   axisDecisionMakers,
   axisSponsorLabel,
   resolveUserFullName,
-  approveMilestoneGate,
+  advanceMilestone,
   axisProgressPct,
   projetMilestoneCounts,
   canFillIndicator,
@@ -33,6 +33,7 @@ import {
   isStrategicLeadOf,
   latestMeasurement,
   mergeMilestoneChecklistItems,
+  milestonePassageTarget,
   milestoneProgressPct,
   numberIndicators,
   programBlockedActions,
@@ -40,8 +41,6 @@ import {
   programRoadmap,
   programRoadmapBounds,
   progressBucket,
-  rejectMilestoneApproval,
-  requestMilestoneApproval,
   resolveChantierOwner,
   resolveIndicatorOwner,
   resolveIndicatorStatus,
@@ -1606,7 +1605,11 @@ describe("isStrategicLeadOf", () => {
   });
 });
 
-describe("requestMilestoneApproval", () => {
+// Ancien circuit à approbateur unique (requestMilestoneApproval / approveMilestoneGate /
+// rejectMilestoneApproval) SUPPRIMÉ : restent les prérequis (`milestonePassageTarget`) et l'avancée
+// pure (`advanceMilestone`) ; les droits sont portés par la route de validation (voir
+// lib/__tests__/strategicApprovalAudit.test.ts).
+describe("milestonePassageTarget", () => {
   // E2 n'a que des items manuels (pas d'item `auto`) — évite d'avoir à poser des chantiers/actions
   // pour satisfaire `resolveMilestoneAutoFlags` dans ces tests, non pertinent ici.
   function actionReadyForE2(overrides?: Partial<ChantierAction>): ChantierAction {
@@ -1628,73 +1631,22 @@ describe("requestMilestoneApproval", () => {
     };
   }
 
-  it("returns the next milestone in order, requested by the acting user", () => {
+  it("returns the current and next milestone in order", () => {
     const action = actionReadyForE2();
-    const approval = requestMilestoneApproval(
-      action,
-      { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
-      [],
-      [action]
-    );
-    expect(approval.targetMilestone).toBe("E3");
-    expect(approval.requestedBy).toBe("owner1");
-    expect(typeof approval.requestedAt).toBe("string");
+    expect(milestonePassageTarget(action, [], [action])).toEqual({
+      from: "E2",
+      targetMilestone: "E3",
+    });
   });
 
-  it("allows an admin to request on behalf of a project they don't own", () => {
-    const action = actionReadyForE2({ owner: "someone-else" });
-    expect(() =>
-      requestMilestoneApproval(
-        action,
-        { username: "admin1", isGlobalAdmin: true, isCompanyAdmin: false },
-        [],
-        [action]
-      )
-    ).not.toThrow();
-  });
-
-  it("allows a project contributor to request the milestone passage", () => {
-    const action = actionReadyForE2({ owner: "owner1", contributors: ["contrib1"] });
-    expect(
-      requestMilestoneApproval(
-        action,
-        { username: "contrib1", isGlobalAdmin: false, isCompanyAdmin: false },
-        [],
-        [action]
-      ).requestedBy
-    ).toBe("contrib1");
-  });
-
-  it("throws for a user who is neither the project owner nor an admin", () => {
-    const action = actionReadyForE2({ owner: "owner1" });
-    expect(() =>
-      requestMilestoneApproval(
-        action,
-        { username: "someone-else", isGlobalAdmin: false, isCompanyAdmin: false },
-        [],
-        [action]
-      )
-    ).toThrow();
-  });
-
-  it("blocks the request when a custom action of the current milestone is incomplete", () => {
+  it("blocks when a custom action of the current milestone is incomplete", () => {
     const action = actionReadyForE2({
       customMilestoneActions: { E2: [{ id: "CUSTOM-1", label: "Migrer la base clients" }] },
-      // Tous les items FIXES du jalon sont à 100 (voir actionReadyForE2), mais l'action
-      // personnalisée n'a encore aucune réponse dans checklists.E2 — doit bloquer comme n'importe
-      // quel item fixe manuel non répondu.
     });
-    expect(() =>
-      requestMilestoneApproval(
-        action,
-        { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
-        [],
-        [action]
-      )
-    ).toThrow();
+    expect(() => milestonePassageTarget(action, [], [action])).toThrow();
   });
 
-  it("allows the request once the custom action is also at 100%", () => {
+  it("allows the passage once the custom action is also at 100%", () => {
     const action = actionReadyForE2({
       customMilestoneActions: { E2: [{ id: "CUSTOM-1", label: "Migrer la base clients" }] },
       milestones: {
@@ -1710,14 +1662,7 @@ describe("requestMilestoneApproval", () => {
         },
       },
     });
-    expect(() =>
-      requestMilestoneApproval(
-        action,
-        { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
-        [],
-        [action]
-      )
-    ).not.toThrow();
+    expect(() => milestonePassageTarget(action, [], [action])).not.toThrow();
   });
 
   it("never blocks on an excluded fixed item, even though it was never answered", () => {
@@ -1727,7 +1672,6 @@ describe("requestMilestoneApproval", () => {
         currentMilestone: "E2",
         passedMilestones: ["E0", "E1"],
         checklists: {
-          // E2-B2 (exclu pour ce projet) n'a jamais été répondu — sans l'exclusion ça bloquerait.
           E2: [
             { itemId: "E2-B1", progressPct: 100 },
             { itemId: "E2-B3", progressPct: 100 },
@@ -1735,17 +1679,10 @@ describe("requestMilestoneApproval", () => {
         },
       },
     });
-    expect(() =>
-      requestMilestoneApproval(
-        action,
-        { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
-        [],
-        [action]
-      )
-    ).not.toThrow();
+    expect(() => milestonePassageTarget(action, [], [action])).not.toThrow();
   });
 
-  it("throws when canPassMilestone is not satisfied for the current milestone (prerequisite gate)", () => {
+  it("throws when canPassMilestone is not satisfied for the current milestone", () => {
     const action = actionReadyForE2({
       milestones: {
         currentMilestone: "E2",
@@ -1758,17 +1695,10 @@ describe("requestMilestoneApproval", () => {
         },
       },
     });
-    expect(() =>
-      requestMilestoneApproval(
-        action,
-        { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
-        [],
-        [action]
-      )
-    ).toThrow();
+    expect(() => milestonePassageTarget(action, [], [action])).toThrow();
   });
 
-  it("throws when the project has already reached the last milestone (E4, nothing further to request)", () => {
+  it("throws when the project has already reached the last milestone", () => {
     const action = actionReadyForE2({
       milestones: {
         currentMilestone: "E4",
@@ -1776,257 +1706,57 @@ describe("requestMilestoneApproval", () => {
         checklists: {},
       },
     });
-    expect(() =>
-      requestMilestoneApproval(
-        action,
-        { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
-        [],
-        [action]
-      )
-    ).toThrow();
+    expect(() => milestonePassageTarget(action, [], [action])).toThrow();
   });
 
-  it("defaults an action without any `milestones` to E0 as the current milestone", () => {
+  it("defaults an action without any `milestones` to E0 (incomplete → throws)", () => {
     const action: ChantierAction = {
       ...makeAction("CH1", "2026-01-01", "2026-06-30", "A1"),
       owner: "owner1",
     };
-    // E0 a un item auto ("dependencyAlert") — sans chantier/dépendance, il vaut 100 (vert) ; les
-    // 4 items manuels restants ne sont pas répondus → canPassMilestone bloque, comme attendu.
-    expect(() =>
-      requestMilestoneApproval(
-        action,
-        { username: "owner1", isGlobalAdmin: false, isCompanyAdmin: false },
-        [],
-        [action]
-      )
-    ).toThrow();
+    expect(() => milestonePassageTarget(action, [], [action])).toThrow();
   });
 });
 
-describe("approveMilestoneGate", () => {
-  function actionWithApproval(overrides?: Partial<ChantierAction>): ChantierAction {
-    return {
-      ...makeAction("CH1", "2026-01-01", "2026-06-30", "A1"),
-      owner: "owner1",
-      milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} },
-      milestoneApproval: {
-        targetMilestone: "E3",
-        requestedBy: "owner1",
-        requestedAt: "2026-01-01",
-      },
-      ...overrides,
-    };
-  }
-
-  it("throws when the project has no approval request in progress", () => {
-    const action = { ...actionWithApproval(), milestoneApproval: undefined };
-    const chantiers = [makeChantier("CH1", { programId: "p1" })];
-    expect(() =>
-      approveMilestoneGate(
-        action,
-        {
-          username: "lead1",
-          profiles: [{ role: "strategic_lead" }],
-          isGlobalAdmin: false,
-          isCompanyAdmin: false,
-        },
-        chantiers
-      )
-    ).toThrow();
-  });
-
-  it("advances currentMilestone to the target and pushes the old one onto passedMilestones", () => {
-    const action = actionWithApproval();
-    const chantiers = [makeChantier("CH1", { programId: "p1" })];
-    const patch = approveMilestoneGate(
-      action,
-      {
-        username: "lead1",
-        profiles: [{ role: "strategic_lead" }],
-        isGlobalAdmin: false,
-        isCompanyAdmin: false,
-      },
-      chantiers
+describe("advanceMilestone", () => {
+  it("advances currentMilestone to the target, pushes the old one and clears the marker", () => {
+    const patch = advanceMilestone(
+      { milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} } },
+      "E3"
     );
     expect(patch.milestones).toEqual({
       currentMilestone: "E3",
       passedMilestones: ["E0", "E1", "E2"],
       checklists: {},
     });
+    expect("milestoneApproval" in patch).toBe(true);
     expect(patch.milestoneApproval).toBeUndefined();
   });
 
   it("does not duplicate the current milestone in passedMilestones if already present", () => {
-    const action = actionWithApproval({
-      milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1", "E2"], checklists: {} },
-    });
-    const chantiers = [makeChantier("CH1", { programId: "p1" })];
-    const patch = approveMilestoneGate(
-      action,
+    const patch = advanceMilestone(
       {
-        username: "lead1",
-        profiles: [{ role: "strategic_lead" }],
-        isGlobalAdmin: false,
-        isCompanyAdmin: false,
+        milestones: {
+          currentMilestone: "E2",
+          passedMilestones: ["E0", "E1", "E2"],
+          checklists: {},
+        },
       },
-      chantiers
+      "E3"
     );
     expect(patch.milestones?.passedMilestones).toEqual(["E0", "E1", "E2"]);
   });
 
-  it("allows a program-scoped strategic_lead on the matching program", () => {
-    const action = actionWithApproval();
-    const chantiers = [makeChantier("CH1", { programId: "p1" })];
-    expect(() =>
-      approveMilestoneGate(
-        action,
-        {
-          username: "lead1",
-          profiles: [{ role: "strategic_lead", programId: "p1" }],
-          isGlobalAdmin: false,
-          isCompanyAdmin: false,
-        },
-        chantiers
-      )
-    ).not.toThrow();
-  });
-
-  it("blocks a program-scoped strategic_lead on a DIFFERENT program", () => {
-    const action = actionWithApproval();
-    const chantiers = [makeChantier("CH1", { programId: "p1" })];
-    expect(() =>
-      approveMilestoneGate(
-        action,
-        {
-          username: "lead1",
-          profiles: [{ role: "strategic_lead", programId: "p2" }],
-          isGlobalAdmin: false,
-          isCompanyAdmin: false,
-        },
-        chantiers
-      )
-    ).toThrow();
-  });
-
-  it("allows an admin even without a strategic_lead profile", () => {
-    const action = actionWithApproval();
-    const chantiers = [makeChantier("CH1", { programId: "p1" })];
-    expect(() =>
-      approveMilestoneGate(
-        action,
-        { username: "admin1", profiles: [], isGlobalAdmin: true, isCompanyAdmin: false },
-        chantiers
-      )
-    ).not.toThrow();
-  });
-
-  it("blocks the project owner (not strategic_lead, not admin) from approving their own request", () => {
-    const action = actionWithApproval({ owner: "owner1" });
-    const chantiers = [makeChantier("CH1", { programId: "p1" })];
-    expect(() =>
-      approveMilestoneGate(
-        action,
-        { username: "owner1", profiles: [], isGlobalAdmin: false, isCompanyAdmin: false },
-        chantiers
-      )
-    ).toThrow();
-  });
-
-  it("blocks approval when the parent chantier cannot be resolved (orphan reference), unless admin", () => {
-    const action = actionWithApproval();
-    expect(() =>
-      approveMilestoneGate(
-        action,
-        {
-          username: "lead1",
-          profiles: [{ role: "strategic_lead" }],
-          isGlobalAdmin: false,
-          isCompanyAdmin: false,
-        },
-        []
-      )
-    ).toThrow();
-  });
-});
-
-describe("rejectMilestoneApproval", () => {
-  function actionWithApproval(overrides?: Partial<ChantierAction>): ChantierAction {
-    return {
-      ...makeAction("CH1", "2026-01-01", "2026-06-30", "A1"),
-      owner: "owner1",
-      milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} },
-      milestoneApproval: {
-        targetMilestone: "E3",
-        requestedBy: "owner1",
-        requestedAt: "2026-01-01",
-      },
-      ...overrides,
+  it("throws when the target is not strictly after the current milestone (stale request)", () => {
+    const action = {
+      milestones: { currentMilestone: "E3" as const, passedMilestones: [], checklists: {} },
     };
-  }
-
-  it("throws when the project has no approval request in progress", () => {
-    const action = { ...actionWithApproval(), milestoneApproval: undefined };
-    expect(() =>
-      rejectMilestoneApproval(
-        action,
-        { username: "owner1", profiles: [], isGlobalAdmin: false, isCompanyAdmin: false },
-        [makeChantier("CH1", { programId: "p1" })]
-      )
-    ).toThrow();
+    expect(() => advanceMilestone(action, "E3")).toThrow();
+    expect(() => advanceMilestone(action, "E2")).toThrow();
   });
 
-  it("clears milestoneApproval when the project's own owner rejects it (no penalty)", () => {
-    const action = actionWithApproval({ owner: "owner1" });
-    const patch = rejectMilestoneApproval(
-      action,
-      { username: "owner1", profiles: [], isGlobalAdmin: false, isCompanyAdmin: false },
-      [makeChantier("CH1", { programId: "p1" })]
-    );
-    expect(patch).toEqual({ milestoneApproval: undefined });
-  });
-
-  it("allows the strategic_lead scoped to the program", () => {
-    const action = actionWithApproval();
-    expect(() =>
-      rejectMilestoneApproval(
-        action,
-        {
-          username: "lead1",
-          profiles: [{ role: "strategic_lead", programId: "p1" }],
-          isGlobalAdmin: false,
-          isCompanyAdmin: false,
-        },
-        [makeChantier("CH1", { programId: "p1" })]
-      )
-    ).not.toThrow();
-  });
-
-  it("allows an admin", () => {
-    const action = actionWithApproval();
-    expect(() =>
-      rejectMilestoneApproval(
-        action,
-        { username: "admin1", profiles: [], isGlobalAdmin: true, isCompanyAdmin: false },
-        [makeChantier("CH1", { programId: "p1" })]
-      )
-    ).not.toThrow();
-  });
-
-  it("blocks a user who is neither the owner, strategic_lead of this program, nor admin", () => {
-    const action = actionWithApproval({ owner: "owner1" });
-    expect(() =>
-      rejectMilestoneApproval(
-        action,
-        {
-          username: "random-user",
-          profiles: [{ role: "chantier_contributor" }],
-          isGlobalAdmin: false,
-          isCompanyAdmin: false,
-        },
-        [makeChantier("CH1", { programId: "p1" })]
-      )
-    ).toThrow();
+  it("defaults to E0 when the project has no milestone state", () => {
+    expect(advanceMilestone({}, "E1").milestones?.currentMilestone).toBe("E1");
   });
 });
 

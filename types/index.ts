@@ -41,6 +41,10 @@
  *   - `program_owner`   : owner d'UN OU PLUSIEURS programmes Performance (`Program.owner`,
  *                          `AuthUser.username`) — même mécanique, restreinte aux programmes dont il
  *                          est owner.
+ * « Même visualisation que `cto` » ne vaut PAS droit de décision : ni `program_sponsor` ni
+ * `program_owner` n'approuvent les portes de validation des leviers, les réalisés ou les
+ * suppressions (hiérarchie Transfo = CTO > responsable de chantier > responsable de levier, voir
+ * lib/leversLogic.ts::leverApprovalChain) — aucune décision PO à ce stade sur leur rôle éventuel.
  * Noms choisis pour ne pas collisionner avec `sponsor` (rôle historique scopé WORKSTREAM via
  * `Workstream.sponsorUsername`, voir `lib/leversLogic.ts::isLeverSponsoredBy`) : le préfixe
  * `program_` marque sans ambiguïté le scope PROGRAMME. Comme `cto`, ce sont des rôles rattachables
@@ -353,11 +357,12 @@ export type Lever = {
    *  besoin de sommer à 100 — voir `lib/workstreamLogic.ts::workstreamDeclaredProgress` pour le
    *  calcul de la moyenne pondérée. Non défini = poids implicite égal entre leviers du workstream. */
   workstreamWeightPct?: number;
-  /** Demande de validation en cours pour l'une des 3 portes du cycle de vie (M1→M2, M2→M3,
-   *  M3→M4 — voir `LeverApprovalGate`) : le porteur du levier soumet, puis le sponsor du
-   *  workstream OU le CTO l'approuve (un seul des deux suffit, peu importe lequel agit en
-   *  premier — plus de séquence obligatoire à deux étapes). Non défini = pas de demande en cours
-   *  (pas encore soumise, ou déjà approuvée/rejetée). Voir lib/leversLogic.ts::requestLeverApproval /
+  /** Demande de validation en cours pour l'une des portes du cycle de vie (M1→M2, M2→M3,
+   *  M3→M4 — voir `LeverApprovalGate`) : DOUBLE validation séquentielle calquée sur le Plan
+   *  Stratégique — la demande est validée par les niveaux AU-DESSUS du demandeur dans la
+   *  hiérarchie Transfo (CTO > responsable de chantier > responsable de levier), chaîne
+   *  snapshotée dans `approval.chain`. Non défini = pas de demande en cours (pas encore soumise,
+   *  ou déjà approuvée/rejetée). Voir lib/leversLogic.ts::requestLeverApproval /
    *  approveLeverGate / rejectLeverApproval. */
   approval?: LeverApproval;
   /** Demande de SUPPRESSION en cours (double validation) : initiée par le CTO OU le responsable
@@ -372,6 +377,9 @@ export type LeverDeletionRequest = {
   requestedByName: string;
   /** Rôle au titre duquel la demande est faite — l'approbation doit venir de l'autre rôle. */
   requestedByRole: "cto" | "sponsor";
+  /** true = demande faite par un ADMIN tenant le rôle `requestedByRole` faute de titulaire (levier
+   *  sans compte responsable de chantier, ou programme sans CTO). */
+  requestedAsAdmin?: boolean;
   requestedAt: string;
   reason?: string;
 };
@@ -380,12 +388,36 @@ export type LeverDeletionRequest = {
  *  reste libre, voir `lib/status-config.ts::STATUS_CYCLE`. */
 export type LeverApprovalGate = "qualified" | "validated" | "in_progress";
 
+/** Niveau hiérarchique Transfo d'un palier de validation de levier. `"admin"` = palier de repli
+ *  quand aucun niveau n'existe au-dessus d'un demandeur non-CTO (jamais d'application directe). */
+export type LeverApprovalLevel = "sponsor" | "cto" | "admin";
+
+/** Un palier de la chaîne de validation d'un levier, snapshoté à la demande. */
+export type LeverApprovalStep = {
+  level: LeverApprovalLevel;
+  /** Titulaires du palier au moment de la demande (vide si inconnus : résolution par rôle). */
+  usernames: string[];
+  /** Noms lisibles des titulaires (affichage « attend {name} »). */
+  names?: string[];
+  decidedBy?: string;
+  decidedByName?: string;
+  decidedAt?: string;
+  /** true = palier débloqué par un ADMIN non titulaire (un seul palier par demande). */
+  byAdmin?: boolean;
+};
+
 export type LeverApproval = {
   /** Statut que le levier atteindra une fois la demande approuvée. */
   targetStatus: LeverApprovalGate;
   /** Username de l'utilisateur ayant initié la demande de validation. */
   requestedBy: string;
+  requestedByName?: string;
   requestedAt: string;
+  /** Chaîne de validation séquentielle (voir lib/leversLogic.ts::leverApprovalChain). ABSENTE =
+   *  demande d'avant ce modèle, traitée comme un palier unique (commanditaire OU CTO OU admin). */
+  chain?: LeverApprovalStep[];
+  /** Index du palier courant dans `chain` (0 par défaut). */
+  stepIndex?: number;
   /** Renseignés une fois approuvé (informatif — l'objet `approval` est vidé juste après). */
   approvedBy?: string;
   approvedByRole?: "sponsor" | "cto";
@@ -446,15 +478,19 @@ export type LeverImpact = {
   endDate?: string; // ISO date
   /** Commentaires libres sur cette ligne d'impact (ex. méthode de calcul, hypothèses). */
   comments?: Comment[];
-  /** Validation finance du passage à "Réalisé" (status "done"/"ongoing") : quand un profil non-finance
-   *  coche "Réalisé", la ligne passe en "pending" jusqu'à décision d'un profil finance ; un profil
-   *  finance qui coche lui-même passe directement en "approved". Absent = impact jamais coché réalisé,
-   *  ou coché avant l'introduction de ce workflow (traité comme approuvé, compat rétroactive). */
+  /** Validation finance du passage à "Réalisé" (status "done"/"ongoing") : cocher "Réalisé" passe
+   *  TOUJOURS la ligne en "pending" — y compris pour un profil finance, qui ne valide plus son propre
+   *  réalisé (demandeur ≠ validateur) : un AUTRE profil finance du programme du levier, ou un admin,
+   *  décide (voir lib/impactStatus.ts). Absent = impact jamais coché réalisé, ou coché avant
+   *  l'introduction de ce workflow (traité comme approuvé, compat rétroactive). */
   realizedApproval?: {
     status: "pending" | "approved" | "rejected";
     requestedBy?: string; // AuthUser.name
+    /** AuthUser.username du demandeur (absent sur les demandes antérieures : repli sur le nom). */
+    requestedByUsername?: string;
     requestedAt?: string; // ISO datetime
     decidedBy?: string; // AuthUser.name
+    decidedByUsername?: string;
     decidedAt?: string; // ISO datetime
   };
 };

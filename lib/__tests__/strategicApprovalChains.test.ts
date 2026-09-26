@@ -14,6 +14,7 @@ import {
   describeApproval,
   fieldCategory,
   isPendingOn,
+  legacyMilestoneMarkers,
   needsApproval,
   pendingApproversOf,
   pendingOn,
@@ -29,6 +30,7 @@ import {
   type StrategicApprovalTarget,
 } from "@/lib/strategicApprovals";
 import {
+  ApprovalGateUnavailableError,
   createChantierFlow,
   updateChantierFlow,
   updateProjetFlow,
@@ -189,17 +191,33 @@ describe("chaînes par kind et niveau d'auteur", () => {
     expect(chainOf("milestone", alice, T.projet)).toEqual(["lea"]);
     expect(chainOf("milestone", lea, T.projet)).toEqual([]);
   });
-  it("KPI (chantier ou axe) : plancher sponsor de chantier → sponsor d'axe puis pilote", () => {
-    expect(chainOf("kpi_value", cora, T.kpi)).toEqual(["alice", "lea"]);
-    expect(chainOf("kpi_value", carl, T.kpi)).toEqual(["alice", "lea"]);
+  it("KPI : chaîne depuis le niveau RÉEL de l'auteur (PO : le sponsor de chantier valide les KPI de ses projets)", () => {
+    // Projet LIÉ au KPI : responsable ET contributeur → sponsor de chantier puis sponsor d'axe.
+    const linked = data({ chantierActions: [projet({ indicatorId: "IND1" })] });
+    expect(chainOf("kpi_value", carl, T.kpi, undefined, linked)).toEqual(["bob", "alice"]);
+    expect(chainOf("kpi_value", cora, T.kpi, undefined, linked)).toEqual(["bob", "alice"]);
+    // Sponsor de chantier → sponsor d'axe puis pilote ; sponsor d'axe → pilote ; pilote → direct.
     expect(chainOf("kpi_value", bob, T.kpi)).toEqual(["alice", "lea"]);
-    expect(chainOf("kpi_value", user("kpiResp"), T.kpi)).toEqual(["alice", "lea"]);
+    expect(chainOf("kpi_value", alice, T.kpi)).toEqual(["lea"]);
+    expect(chainOf("kpi_value", lea, T.kpi)).toEqual([]);
+    // Hors hiérarchie, KPI de CHANTIER : niveau responsable projet → chantier puis axe.
+    expect(chainOf("kpi_value", user("kpiResp"), T.kpi)).toEqual(["bob", "alice"]);
+    expect(chainOf("kpi_value", carl, T.kpi)).toEqual(["bob", "alice"]);
+    // Hors hiérarchie, KPI d'AXE : niveau sponsor de chantier → axe puis pilote.
     const macro = kpi({ chantierId: undefined });
     expect(
       chainOf("kpi_value", user("x"), T.kpi, undefined, data({ indicators: [macro] }))
     ).toEqual(["alice", "lea"]);
-    expect(chainOf("kpi_value", alice, T.kpi)).toEqual(["lea"]);
-    expect(chainOf("kpi_value", lea, T.kpi)).toEqual([]);
+    // KPI d'axe mais saisi par le membre d'un projet lié : chantier du projet puis axe.
+    expect(
+      chainOf(
+        "kpi_value",
+        cora,
+        T.kpi,
+        undefined,
+        data({ indicators: [macro], chantierActions: [projet({ indicatorId: "IND1" })] })
+      )
+    ).toEqual(["bob", "alice"]);
   });
   it("création / suppression de projet : plancher responsable projet → chantier puis axe", () => {
     const create = { action: projet({ id: "NEW", owner: "cora" }) } as StrategicApprovalPayload;
@@ -360,13 +378,15 @@ describe("demande à paliers : snapshot, avance, refus, droits", () => {
   });
 
   it("personne ne décide sa propre demande — admin compris", () => {
-    const own = request("milestone", admin, T.projet, { targetMilestone: "E1" }, data());
-    // Un admin applique directement ; si une demande existe quand même avec une chaîne :
+    // Un admin applique directement : aucune demande ne peut être construite pour lui.
+    expect(() => request("milestone", admin, T.projet, { targetMilestone: "E1" }, data())).toThrow(
+      /directement/
+    );
+    // Si une demande existe quand même avec une chaîne :
     const withChain: StrategicApproval = {
       ...req(),
       requestedBy: "root",
     };
-    expect(own.chain).toBeUndefined(); // chaîne vide → repli legacy
     expect(canDecideStep(admin, withChain)).toBe(false);
     expect(canDecide(carl, req(), data())).toBe(false);
   });
@@ -381,12 +401,15 @@ describe("demande à paliers : snapshot, avance, refus, droits", () => {
     };
     expect(canDecide(admin, orphan, data())).toBe(true);
     const s1 = decideApproval(orphan, admin, "approved").approval;
-    expect(canDecide(admin, s1, data())).toBe(true);
     expect(s1.chain?.[0].decidedBy).toBe("root");
+    // Un admin décide AU PLUS UN palier d'une même demande : le suivant revient à un AUTRE admin.
+    expect(canDecide(admin, s1, data())).toBe(false);
+    const admin2 = user("root2", undefined, { isGlobalAdmin: true });
+    expect(canDecide(admin2, s1, data())).toBe(true);
   });
 
   it("le pilote du plan ne décide PAS l'étape 1 (plus d'escalade strategic_lead), seulement la sienne", () => {
-    const k = request("kpi_value", carl, T.kpi, { period: "2026-03", value: 5 });
+    const k = request("kpi_value", bob, T.kpi, { period: "2026-03", value: 5 });
     expect(k.chain?.map((s) => s.level)).toEqual(["axisSponsor", "pilot"]);
     expect(canDecide(lea, k, data())).toBe(false);
     const s1 = decideApproval(k, alice, "approved").approval;
@@ -432,10 +455,13 @@ describe("compatibilité legacy (demandes sans chaîne)", () => {
     approverUsernames: ["bob"],
     status: "pending",
   });
-  it("approbateur unique, escalade strategic_lead et admin conservées", () => {
+  it("approbateur ou admin (autre que le demandeur) ; plus d'escalade strategic_lead", () => {
     expect(canDecide(bob, legacy(), data())).toBe(true);
-    expect(canDecide(lea, legacy(), data())).toBe(true);
+    expect(canDecide(lea, legacy(), data())).toBe(false);
     expect(canDecide(admin, legacy(), data())).toBe(true);
+    // Un admin ne décide jamais sa PROPRE demande legacy.
+    expect(canDecide(admin, { ...legacy(), requestedBy: "root" }, data())).toBe(false);
+    expect(canDecide(carl, legacy(), data())).toBe(false);
     expect(canDecide(alice, legacy(), data())).toBe(false);
     expect(approvalStepInfo(legacy())).toBeUndefined();
     expect(stepLabel(legacy())).toBe("");
@@ -451,7 +477,7 @@ describe("compatibilité legacy (demandes sans chaîne)", () => {
     });
     expect(r.approval.chain).toBeUndefined();
   });
-  it("buildApproval avec chain: null → legacy ; chaîne calculée vide → repli legacy", () => {
+  it("buildApproval avec chain: null → legacy ; route directe (pilote) → lève, jamais de repli legacy", () => {
     const a = buildApproval({
       kind: "milestone",
       target: T.projet,
@@ -464,8 +490,7 @@ describe("compatibilité legacy (demandes sans chaîne)", () => {
     });
     expect(a.chain).toBeUndefined();
     expect(a.approverUsernames).toEqual(["bob"]);
-    const byPilot = request("milestone", lea, T.projet, { targetMilestone: "E1" });
-    expect(byPilot.chain).toBeUndefined();
+    expect(() => request("milestone", lea, T.projet, { targetMilestone: "E1" })).toThrow();
   });
 });
 
@@ -505,15 +530,14 @@ describe("files d'attente, alertes, audit", () => {
     expect(e.new).toContain("en attente de ALICE");
     expect(e.new).toContain("(vu)");
   });
-  it("resolveMilestoneApprovalQueue : un jalon porté par une demande à paliers en attente est exclu de la file historique", () => {
+  it("jalons : l'ancienne file est vide ; un marqueur sans demande à chaîne est un reliquat", () => {
     const marked = projet({
       milestoneApproval: { targetMilestone: "E1", requestedBy: "carl", requestedAt: "" },
     });
     const pending = request("milestone", carl, T.projet, { targetMilestone: "E1" });
-    expect(resolveMilestoneApprovalQueue([marked], [chantier()], bob, [axis()])).toHaveLength(1);
-    expect(
-      resolveMilestoneApprovalQueue([marked], [chantier()], bob, [axis()], [pending])
-    ).toHaveLength(0);
+    expect(resolveMilestoneApprovalQueue([marked], [chantier()], bob, [axis()])).toHaveLength(0);
+    expect(legacyMilestoneMarkers([marked], [])).toHaveLength(1);
+    expect(legacyMilestoneMarkers([marked], [pending])).toHaveLength(0);
   });
   it("pendingOn / isPendingOn par cible et par champ", () => {
     const upd = request("projet_update", carl, T.projet, planningPatch);
@@ -671,7 +695,7 @@ describe("flux de modification / création de chantier", () => {
     ]);
     expect((store[1].payload as { before: object }).before).toEqual({ end: "2026-06-01" });
   });
-  it("updateProjetFlow : pilote/admin → tout appliqué ; rien de modifié → noop ; sans porte → direct", async () => {
+  it("updateProjetFlow : pilote/admin → tout appliqué ; rien de modifié → noop ; sans porte → refus", async () => {
     const { gate, store } = gateFor(lea);
     const apply = vi.fn(async () => undefined);
     const r = await updateProjetFlow(gate, projet(), { budget: 1, end: "2027-01-01" }, apply);
@@ -680,7 +704,10 @@ describe("flux de modification / création de chantier", () => {
     expect(apply).toHaveBeenCalledWith({ budget: 1, end: "2027-01-01" });
     expect((await updateProjetFlow(gate, projet(), { budget: 100 }, apply)).outcome).toBe("noop");
     const direct = vi.fn(async () => undefined);
-    expect((await updateProjetFlow(null, projet(), { budget: 5 }, direct)).outcome).toBe("applied");
+    await expect(updateProjetFlow(null, projet(), { budget: 5 }, direct)).rejects.toThrow(
+      ApprovalGateUnavailableError
+    );
+    expect(direct).not.toHaveBeenCalled();
   });
   it("champ vidé via une demande : encodé null, puis effacé à l'approbation", async () => {
     const { gate, store } = gateFor(carl);

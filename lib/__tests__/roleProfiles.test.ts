@@ -8,6 +8,7 @@ import {
   isCrossTrackRole,
   isPerformanceRole,
   isReadOnlyUser,
+  canAccessPerformanceProgram,
   isStrategicRole,
   normalizeLegacyProfiles,
 } from "@/lib/roleProfiles";
@@ -269,5 +270,69 @@ describe("rôles Plan Stratégique — décision PO (hr transverse, projet_contr
         { role: "strategic_lead", programId: "s1" },
       ])
     ).toThrow();
+  });
+});
+
+describe("isReadOnlyUser — Performance program (hr / comex cross-track)", () => {
+  it("comex_member-only on a Performance program is read-only (plan and HR pages)", () => {
+    const comex = { profiles: [{ role: "comex_member" as const, programId: "p1" }] };
+    expect(isReadOnlyUser(comex, "p1", "performance")).toBe(true);
+    expect(isReadOnlyUser(comex, "p1", "performance", "hr")).toBe(true);
+  });
+
+  it("hr: read-only on levers (plan), NOT on HR pages", () => {
+    const hr = { profiles: [{ role: "hr" as const, programId: "p1" }] };
+    expect(isReadOnlyUser(hr, "p1", "performance")).toBe(true);
+    expect(isReadOnlyUser(hr, "p1", "performance", "plan")).toBe(true);
+    expect(isReadOnlyUser(hr, "p1", "performance", "hr")).toBe(false);
+    // Profil hr legacy sans programme : lu comme « tous programmes ».
+    expect(isReadOnlyUser({ profiles: [{ role: "hr" as const }] }, "p1", "performance", "hr")).toBe(
+      false
+    );
+  });
+
+  it("comex_member + another profile elsewhere: read-only where only comex applies", () => {
+    const user = {
+      profiles: [
+        { role: "comex_member" as const, programId: "p1" },
+        { role: "lever" as const, programId: "p2" },
+      ],
+    };
+    expect(isReadOnlyUser(user, "p1", "performance")).toBe(true);
+    expect(isReadOnlyUser(user, "p2", "performance")).toBe(false);
+  });
+});
+
+describe("assertValidProfiles — a single hr profile per user", () => {
+  it("rejects two hr profiles, even on distinct programs", () => {
+    expect(() =>
+      assertValidProfiles(
+        [
+          { role: "hr", programId: "p1" },
+          { role: "hr", programId: "s1" },
+        ],
+        { p1: "performance", s1: "strategic" }
+      )
+    ).toThrow(/un seul profil Directeur RH/i);
+  });
+});
+
+describe("canAccessPerformanceProgram — direct URL to a lever detail", () => {
+  it("requires a profile/right on the lever's program", () => {
+    const lever = { username: "u", profiles: [{ role: "lever" as const, programId: "p2" }] };
+    expect(canAccessPerformanceProgram(lever, "p2")).toBe(true);
+    expect(canAccessPerformanceProgram(lever, "p1")).toBe(false);
+    const comex = { username: "u", profiles: [{ role: "comex_member" as const, programId: "p1" }] };
+    expect(canAccessPerformanceProgram(comex, "p1")).toBe(true);
+    const strategicOnly = { username: "u", profiles: [{ role: "axis_sponsor" as const }] };
+    expect(canAccessPerformanceProgram(strategicOnly, "p1")).toBe(false);
+    expect(canAccessPerformanceProgram({ ...strategicOnly, isCompanyAdmin: true }, "p1")).toBe(
+      true
+    );
+    const cto = { username: "u", profiles: [{ role: "cto" as const, programId: "p9" }] };
+    expect(canAccessPerformanceProgram(cto, "p1")).toBe(true);
+    const ps = { username: "u", profiles: [{ role: "program_sponsor" as const, programId: "p9" }] };
+    expect(canAccessPerformanceProgram(ps, "p1", { sponsor: "u" })).toBe(true);
+    expect(canAccessPerformanceProgram(ps, "p1", { sponsor: "x" })).toBe(false);
   });
 });

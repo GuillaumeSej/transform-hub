@@ -22,10 +22,10 @@ import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useSidebarCollapsed } from "@/lib/hooks/useSidebarCollapsed";
 import {
   useApprovalQueue,
-  useMilestoneApprovalQueue,
   useRealizedApprovalQueue,
   useDeletionQueue,
 } from "@/lib/hooks/useApprovalQueue";
+import { canAccessPerformanceProgram } from "@/lib/roleProfiles";
 import { useStrategicApprovals } from "@/lib/hooks/useStrategicApprovals";
 import { StrategicApprovalsProvider } from "@/lib/hooks/useStrategicApprovalsContext";
 import { APPROVAL_ALERT_ROUTE } from "@/lib/strategicApprovals";
@@ -49,6 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // filtre que la Sidebar, sinon une page masquée dans la nav (ex. /hr en mode stratégique)
   // resterait accessible en tapant son URL directement.
   const {
+    programs,
     programType,
     activeProgram,
     activeProgramId,
@@ -95,11 +96,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     activeProgramId,
     user
   );
-  // Pendant Plan Stratégique de `approvalQueue` ci-dessus (round "jalon validation gate") :
-  // demandes de validation de JALON de projet, voir lib/hooks/useApprovalQueue.ts. Comme
-  // `approvalQueue`, pas de garde `isStrategic` explicite — `strategic.chantierActions` est déjà
-  // structurellement vide hors mode stratégique (voir `useStrategicData` ci-dessus, `companyId`
-  // passé à `null`), donc cette file est naturellement vide en mode Plan Performance.
   // Validation stratégique (lib/strategicApprovals.ts) : alertes dérivées + badge de la sidebar.
   // Neutralisé hors mode stratégique (`companyId` null → aucun abonnement).
   const strategicApprovals = useStrategicApprovals({
@@ -108,14 +104,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     programId: activeProgramId,
     data: strategic,
   });
-  // Demandes "milestone" à paliers EXCLUES de la file historique : elles sont déjà comptées, au
-  // palier COURANT de l'utilisateur, dans `strategicApprovals.pending` / ses alertes « à valider »
-  // (un approbateur de l'étape 2 ne les voit qu'après l'étape 1).
-  const milestoneApprovalQueue = useMilestoneApprovalQueue(
-    strategic,
-    user,
-    strategicApprovals.approvals
-  );
+  // (L'ancienne file des jalons `ChantierAction.milestoneApproval` — `useMilestoneApprovalQueue` —
+  // est dépréciée : les demandes de jalon passent par `strategicApprovals` ci-dessus.)
 
   const strategicNotifications = useMemo(() => {
     const alerts: Alert[] = [];
@@ -329,6 +319,41 @@ export function AppShell({ children }: { children: ReactNode }) {
     setReady(true);
   }, [user, loading, router, pathname, programType, programsLoading]);
 
+  // Garde PROGRAMME de la fiche levier (`/levers/detail?id=…`, jamais dans la nav donc non bornée
+  // par `allowedRoutes`) : sur un programme Performance, ouvrir un levier par URL directe exige un
+  // profil/droit sur le programme DU LEVIER (`canAccessPerformanceProgram` — admin, cto, sponsor/
+  // owner désigné du programme, ou tout profil rattaché à ce programme, `comex_member`/`hr` compris
+  // en lecture seule). Le périmètre nominatif et la confidentialité restent vérifiés par la page
+  // (`leverAccessDenialReason`). `?id=` est lu depuis `window.location` (pas de `useSearchParams`
+  // dans la coquille, qui exigerait une frontière Suspense au niveau du layout) : réévalué au
+  // chargement des leviers et à chaque changement de route — cas visé = l'URL saisie/partagée.
+  const leverDetailId =
+    pathname === "/levers/detail" && typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("id")
+      : null;
+  const leverDetailProgramId = leverDetailId
+    ? data.getLeverById(leverDetailId)?.programId
+    : undefined;
+  useEffect(() => {
+    if (loading || !user || programsLoading || isStrategic) return;
+    if (!leverDetailProgramId) return;
+    const program = programs.find((p) => p.id === leverDetailProgramId) ?? null;
+    if (canAccessPerformanceProgram(user, leverDetailProgramId, program)) return;
+    const nav = resolveUserNav(user).filter(
+      (item) => !item.programTypes || item.programTypes.includes(programType)
+    );
+    router.replace(resolveLandingRoute(nav));
+  }, [
+    leverDetailProgramId,
+    loading,
+    user,
+    programsLoading,
+    isStrategic,
+    programs,
+    programType,
+    router,
+  ]);
+
   if (loading || !user || !ready) return null;
 
   if (noAccess) {
@@ -400,7 +425,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           alertCount={
             shellAlerts.length +
             approvalQueue.count +
-            milestoneApprovalQueue.count +
             realizedApprovalQueue.count +
             deletionQueue.count
           }
@@ -408,7 +432,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           approvalQueue={approvalQueue.queue}
           realizedApprovalQueue={realizedApprovalQueue.queue}
           deletionQueue={deletionQueue.queue}
-          milestoneApprovalQueue={milestoneApprovalQueue.queue}
           onAlertClick={(alert) => {
             if (isStrategic) {
               // Une alerte stratégique ne pointe jamais un levier : cascade de dépendance → fiche

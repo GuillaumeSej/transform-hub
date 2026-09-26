@@ -227,7 +227,9 @@ export default function BaseEtpPage() {
     return subscribePrograms(setPrograms, user.companyId);
   }, [user?.companyId]);
   const programNameById = useMemo(() => new Map(programs.map((p) => [p.id, p.name])), [programs]);
-  const readOnly = isReadOnlyUser(user);
+  // Page RH (Base ETP scopée ENTREPRISE, mouvements) : zone "hr" — le Directeur RH y édite, seul
+  // un profil exclusivement COMEX est en consultation.
+  const readOnly = isReadOnlyUser(user, null, undefined, "hr");
   const data = useBeTrackData(user?.companyId ?? null);
   const router = useRouter();
   const searchParams = useSearchParams();

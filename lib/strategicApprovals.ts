@@ -1,18 +1,29 @@
 import {
+  advanceMilestone,
   assertMilestoneStillPassable,
   axisDecisionMakers,
   computeIndicatorStatus,
   displayMilestoneId,
   isStrategicLeadOf,
+  KPI_NEVER_FILL_ROLES,
   latestMeasurement,
+  resolveStrategicRoleForProgram,
 } from "@/lib/axisLogic";
 import { samePeriod } from "@/lib/indicatorPeriod";
-import { kpiCorrectionApprover, kpiHierarchyContext } from "@/lib/kpiCorrectionRouting";
-import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import {
+  adminUsernames,
+  kpiAuthorFloor,
+  kpiCorrectionApprover,
+  kpiHierarchyContext,
+} from "@/lib/kpiCorrectionRouting";
 import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
 import {
   approvalChain,
+  authorLevel,
+  fallbackApprovalChain,
+  STRATEGIC_LEVELS,
   type ApprovalStep,
+  type ChainLevel,
   type HierarchyContext,
   type StrategicLevel,
 } from "@/lib/strategicHierarchy";
@@ -55,10 +66,23 @@ import type {
  *   si les responsables changent ensuite. Décideurs d'un palier : l'un de `chain[stepIndex]
  *   .usernames`, ou un ADMIN (contournement, comme le Plan Transfo — y compris quand tous les
  *   usernames du palier ont disparu/été désactivés : un admin débloque toujours). Le pilote ne
- *   décide QUE son propre palier (plus d'escalade strategic_lead sur les demandes à chaîne).
- *   Personne — admin compris — ne décide sa propre demande ; une personne ayant déjà validé un
- *   palier ne valide pas le suivant (hors admin). Un refus à n'importe quel palier CLÔT la demande.
- *   Chaîne vide (auteur pilote, personne au-dessus) ou auteur ADMIN → application directe.
+ *   décide QUE son propre palier (plus d'escalade strategic_lead). Personne — admin compris — ne
+ *   décide sa propre demande ; une personne — admin compris — ayant déjà validé un palier ne
+ *   valide pas le suivant (un admin décide donc AU PLUS UN palier d'une demande). Un refus à
+ *   n'importe quel palier CLÔT la demande.
+ *
+ *   ROUTE (`resolveApprovalRoute`, seule source de vérité « direct / demande / réessayer /
+ *   interdit ») :
+ *    - "direct"    : auteur ADMIN, ou PILOTE du programme de la cible (`strategic_lead` scopé), ou
+ *                    modification libre (0 validation) ;
+ *    - "forbidden" : l'auteur n'a pas le droit de faire cette saisie (nouveaux kinds : axes,
+ *                    objectifs KPI, staffing, jalon — voir `canEditAxis`, `canCreateAxis`,
+ *                    `canEditIndicatorTarget`, `canEditStaffing`, `canRequestMilestone`) ;
+ *    - "retry"     : utilisateurs pas encore chargés (`data.users` vide) — les pilotes/admins de
+ *                    la chaîne sont inconnus : ne RIEN appliquer, réessayer ;
+ *    - "request"   : chaîne hiérarchique ; si aucun niveau au-dessus n'est désigné → palier unique
+ *                    « pilote(s) » ; sans pilote → palier « admin » (`fallbackApprovalChain`).
+ *                    JAMAIS d'application directe faute de valideur pour un non-pilote/non-admin.
  *
  *   Côté UI :
  *    - avant d'agir : `sa.needsApproval(kind, target, undefined, payload)` (hook) — false ⇒
@@ -72,8 +96,34 @@ import type {
  *      `pendingApproversOf(approval)` ; droit de décider : `canDecide` / `canDecideStep` ;
  *    - décision : `sa.approve(id, comment?)` / `sa.reject(id, comment)` — le hook fait avancer le
  *      palier (`decideApproval`) et n'applique l'effet qu'à la DERNIÈRE validation.
- *   Demandes d'AVANT ce modèle (sans `chain`) : relues et décidées avec l'ancien comportement
- *   (approbateur unique `approverUsernames`, escalade strategic_lead, admin), voir ci-dessous.
+ *   Demandes d'AVANT ce modèle (sans `chain`) : relues et décidées par leur approbateur
+ *   (`approverUsernames` / approbateur résolu) ou un admin — jamais par le demandeur (admin
+ *   compris), plus d'escalade strategic_lead.
+ *
+ *   NOUVEAUX KINDS (API pour l'UI axes / objectifs KPI / staffing — flux dans
+ *   lib/strategicApprovalFlows.ts : `createAxisFlow`, `updateAxisFlow`,
+ *   `updateIndicatorTargetFlow`, `staffingFlow`) :
+ *    - "axe_create"       target { type: "axe", id: <nouvel id>, name } ; payload { axis } —
+ *                         pilote/admin uniquement (`canCreateAxis`), appliqué directement ;
+ *    - "axe_update"       target axe ; payload { patch, before, category } — pilote/admin direct ;
+ *                         sponsor de CET axe → 1 validation (pilote) ; libellés (nom, description,
+ *                         couleur) libres ; désignation du sponsor (`owner`) : pilote/admin seuls ;
+ *                         autres rôles : interdit (`canEditAxis`) ;
+ *    - "indicator_update" target indicateur ; payload { patch, before } sur objective /
+ *                         objectiveValue / direction / targetSchedule (`INDICATOR_TARGET_FIELDS`) —
+ *                         pilotage, 2 validations depuis le niveau de l'auteur (KPI de chantier par
+ *                         le sponsor de chantier → sponsor d'axe puis pilote ; KPI d'axe par le
+ *                         sponsor d'axe → pilote) ; qui : `canEditIndicatorTarget` ;
+ *    - "staffing_update"  target projet (ligne avec `actionId`) ou chantier ; payload { op:
+ *                         "create"|"update"|"delete", line, before? } — pilotage, 2 validations
+ *                         depuis le niveau de l'auteur ; qui : `canEditStaffing` (sponsor de
+ *                         chantier et au-dessus pour une ligne chantier, responsable projet et
+ *                         au-dessus pour une ligne projet ; comex/RH jamais).
+ *   Jalons : l'ancien circuit à approbateur unique (`milestoneApproval` seul) est supprimé ; TOUT
+ *   passage passe par une demande "milestone" à chaîne (`milestoneFlow`), le marqueur
+ *   `ChantierAction.milestoneApproval` n'étant plus qu'un miroir d'affichage. Marqueur SANS demande
+ *   en attente = reliquat : `legacyMilestoneMarkers` (lecture seule), `clearLegacyMilestoneMarker`
+ *   (admin).
  * ═════════════════════════════════════════════════════════════════════════════════════════════
  *
  * Ancien modèle (demandes SANS `chain`, conservé pour relecture) — qui valide quoi :
@@ -88,8 +138,8 @@ import type {
  *  - "projet_delete"   suppression d'un projet           → responsable du CHANTIER
  *  - "chantier_delete" suppression d'un chantier         → responsable de l'AXE
  * Repli en cascade quand le responsable nominal n'est pas renseigné : pilote de chantier → owner
- * d'axe → strategic_lead. Un admin peut toujours décider ; le strategic_lead du programme aussi
- * (escalade). Personne (hors admin) ne décide sa propre demande.
+ * d'axe → strategic_lead. DÉCISION (audit) : l'approbateur ou un admin, jamais le demandeur (admin
+ * compris) ; plus d'escalade strategic_lead.
  *
  * Double validation de "projet_create" (round <n>, retour PO : « il faut un double go-ahead ») :
  * le modèle `StrategicApproval` ne porte qu'UNE décision (`approverRole`/`status`) — pas de chaîne
@@ -122,7 +172,11 @@ export type StrategicApprovalKind =
   | "projet_delete"
   | "chantier_create"
   | "chantier_update"
-  | "chantier_delete";
+  | "chantier_delete"
+  | "axe_create"
+  | "axe_update"
+  | "indicator_update"
+  | "staffing_update";
 
 export const STRATEGIC_APPROVAL_KINDS: StrategicApprovalKind[] = [
   "milestone",
@@ -133,6 +187,10 @@ export const STRATEGIC_APPROVAL_KINDS: StrategicApprovalKind[] = [
   "chantier_create",
   "chantier_update",
   "chantier_delete",
+  "axe_create",
+  "axe_update",
+  "indicator_update",
+  "staffing_update",
 ];
 
 /** Catégorie d'une modification (règles PO) : "pilotage" = 2 validations, "planning" et
@@ -204,6 +262,38 @@ export type ChantierUpdateApprovalPayload = {
 /** Création de chantier (target = axe de rattachement principal, `chantier.axisIds[0]`) :
  *  `chantier` complet, id déjà généré (application idempotente). */
 export type ChantierCreateApprovalPayload = { chantier: Chantier };
+/** Création d'axe (target = { type: "axe", id: axis.id }) : axe complet, id déjà généré. */
+export type AxeCreateApprovalPayload = { axis: StrategicAxis };
+/** Modification d'un axe (target = axe) — même format que `ProjetUpdateApprovalPayload`. */
+export type AxeUpdateApprovalPayload = {
+  patch: Partial<StrategicAxis>;
+  before: Partial<StrategicAxis>;
+  category: GatedCategory;
+};
+/** Champs « objectif » d'un KPI soumis à `"indicator_update"`. */
+export const INDICATOR_TARGET_FIELDS = [
+  "objective",
+  "objectiveValue",
+  "direction",
+  "targetSchedule",
+] as const;
+export type IndicatorTargetField = (typeof INDICATOR_TARGET_FIELDS)[number];
+export type IndicatorTargetPatch = Partial<Pick<Indicator, IndicatorTargetField>>;
+/** Modification de l'objectif d'un KPI (target = indicateur). `null` dans `patch` = champ vidé. */
+export type IndicatorUpdateApprovalPayload = {
+  patch: IndicatorTargetPatch;
+  before: IndicatorTargetPatch;
+};
+export type StaffingOp = "create" | "update" | "delete";
+/** Création / modification / suppression d'UNE ligne ETP (`ChantierStaffing`) — target = projet
+ *  (`line.actionId`) ou chantier. `line` : la ligne complète visée (id stable ; pour "delete",
+ *  la ligne existante). `before` : ligne au moment de la demande ("update"/"delete") — une ligne
+ *  modifiée entre-temps rend la demande PÉRIMÉE. */
+export type StaffingUpdateApprovalPayload = {
+  op: StaffingOp;
+  line: ChantierStaffing;
+  before?: ChantierStaffing;
+};
 export type StrategicApprovalPayload =
   | MilestoneApprovalPayload
   | KpiValueApprovalPayload
@@ -211,12 +301,17 @@ export type StrategicApprovalPayload =
   | ProjetUpdateApprovalPayload
   | ChantierUpdateApprovalPayload
   | ChantierCreateApprovalPayload
-  | DeleteApprovalPayload;
+  | DeleteApprovalPayload
+  | AxeCreateApprovalPayload
+  | AxeUpdateApprovalPayload
+  | IndicatorUpdateApprovalPayload
+  | StaffingUpdateApprovalPayload;
 
 /** Un palier de la chaîne de validation, snapshoté à la demande. `decided*` renseignés quand le
  *  palier a été validé (ou refusé : le refus clôt la demande). */
 export type ApprovalChainStep = {
-  level: StrategicLevel;
+  /** Niveau hiérarchique du palier, ou `"admin"` (palier de repli, voir `fallbackApprovalChain`). */
+  level: ChainLevel;
   usernames: string[];
   decidedBy?: string;
   decidedByName?: string;
@@ -270,7 +365,14 @@ export type StrategicApprovalData = {
   chantierActions: ChantierAction[];
   indicators: Indicator[];
   measurements?: IndicatorMeasurement[];
-  users?: Pick<AuthUser, "username" | "name" | "profiles">[];
+  /** Lignes ETP du programme (optionnel) : fournies, une demande "staffing_update" de
+   *  modification/suppression est vérifiée non périmée à l'application. */
+  staffing?: ChantierStaffing[];
+  /** Utilisateurs de l'entreprise. VIDE/absent = pas encore chargés : aucune route n'est alors
+   *  décidée pour un non-pilote/non-admin (`"retry"`). Les drapeaux admin servent au palier de
+   *  repli « admin ». */
+  users?: (Pick<AuthUser, "username" | "name" | "profiles"> &
+    Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin">>)[];
 };
 
 export type ResolvedApprover = {
@@ -400,6 +502,14 @@ export function resolveApprover(
       // palier — une demande relue depuis avant cette fonctionnalité (sans `payload.stage`) résout
       // donc exactement comme avant.
       return stage === "chantier" ? chantierLevel() : axisLevel();
+    // Nouveaux kinds : toujours à chaîne (jamais legacy) — résolution indicative seulement.
+    case "axe_create":
+    case "axe_update":
+      return lead();
+    case "indicator_update":
+      return axisLevel();
+    case "staffing_update":
+      return chantierLevel();
   }
 }
 
@@ -438,7 +548,6 @@ const PROJET_FIELD_CATEGORY: Record<string, ValidationCategory> = {
   // Désignations.
   owner: "designation",
   contributors: "designation",
-  sponsor: "designation",
 };
 const PROJET_INTERNAL_FIELDS = new Set(["id", "companyId", "milestoneApproval"]);
 
@@ -460,7 +569,6 @@ const CHANTIER_FIELD_CATEGORY: Record<string, ValidationCategory> = {
   milestones: "pilotage",
   dependencies: "planning",
   pilote: "designation",
-  sponsorName: "designation",
   responsibleRoles: "designation",
   confidentialityLevel: "designation",
 };
@@ -472,7 +580,30 @@ const CHANTIER_INTERNAL_FIELDS = new Set([
   "lastUpdate",
 ]);
 
-export type PatchEntity = "projet" | "chantier";
+/** Catégorie de chaque champ d'un AXE : libellés libres ; désignation du sponsor réservée au
+ *  pilote/admin (`canEditAxis`) ; le reste (étape, confidentialité…) soumis à 1 validation. */
+const AXE_FIELD_CATEGORY: Record<string, ValidationCategory> = {
+  name: "free",
+  description: "free",
+  color: "free",
+  owner: "designation",
+  stage: "planning",
+  confidentialityLevel: "planning",
+};
+const AXE_INTERNAL_FIELDS = new Set(["id", "companyId", "programId", "createdAt", "lastUpdate"]);
+
+export type PatchEntity = "projet" | "chantier" | "axe";
+
+const FIELD_TABLES: Record<PatchEntity, Record<string, ValidationCategory>> = {
+  projet: PROJET_FIELD_CATEGORY,
+  chantier: CHANTIER_FIELD_CATEGORY,
+  axe: AXE_FIELD_CATEGORY,
+};
+const INTERNAL_TABLES: Record<PatchEntity, Set<string>> = {
+  projet: PROJET_INTERNAL_FIELDS,
+  chantier: CHANTIER_INTERNAL_FIELDS,
+  axe: AXE_INTERNAL_FIELDS,
+};
 
 function sameValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(stripUndefined(a) ?? null) === JSON.stringify(stripUndefined(b) ?? null);
@@ -499,8 +630,7 @@ export function fieldCategory(
   after?: unknown
 ): ValidationCategory {
   if (entity === "projet" && field === "deliverables") return deliverablesCategory(before, after);
-  const table = entity === "projet" ? PROJET_FIELD_CATEGORY : CHANTIER_FIELD_CATEGORY;
-  return table[field] ?? "planning";
+  return FIELD_TABLES[entity][field] ?? "planning";
 }
 
 /** Nombre de validations pour un changement de champ (raccourci UI). */
@@ -526,7 +656,7 @@ export function splitPatchByCategory<T extends object>(
   patch: Partial<T>
 ): SplitPatch<T> {
   const out: SplitPatch<T> = { pilotage: {}, planning: {}, designation: {}, free: {} };
-  const internal = entity === "projet" ? PROJET_INTERNAL_FIELDS : CHANTIER_INTERNAL_FIELDS;
+  const internal = INTERNAL_TABLES[entity];
   for (const [key, value] of Object.entries(patch)) {
     if (internal.has(key)) continue;
     const prev = (before as Record<string, unknown>)[key];
@@ -547,18 +677,48 @@ export const KIND_VALIDATIONS: Record<StrategicApprovalKind, 1 | 2> = {
   chantier_create: 2,
   chantier_update: 2,
   chantier_delete: 2,
+  axe_create: 1,
+  axe_update: 1,
+  indicator_update: 2,
+  staffing_update: 2,
 };
 
-/** Niveau plancher de l'auteur par kind (voir `approvalChain`) : un KPI est traité comme saisi au
- *  moins par un sponsor de chantier ; créer/supprimer un projet relève au moins du responsable
- *  projet ; créer/supprimer un chantier au moins du sponsor de chantier. */
+/** Niveau plancher de l'auteur par kind (voir `approvalChain`) : créer/supprimer un projet relève
+ *  au moins du responsable projet ; créer/supprimer un chantier au moins du sponsor de chantier ;
+ *  un axe, du sponsor d'axe. KPI / staffing : plancher dynamique, voir `authorFloor`. */
 const KIND_FLOOR: Partial<Record<StrategicApprovalKind, StrategicLevel>> = {
-  kpi_value: "chantierSponsor",
   projet_create: "projectOwner",
   projet_delete: "projectOwner",
   chantier_create: "chantierSponsor",
   chantier_delete: "chantierSponsor",
+  axe_create: "axisSponsor",
+  axe_update: "axisSponsor",
 };
+
+/** Plancher de l'auteur pour CETTE demande (voir `KIND_FLOOR`) :
+ *  - "kpi_value" : niveau réel de l'auteur (`kpiAuthorFloor`, lib/kpiCorrectionRouting.ts) —
+ *    membre d'un projet lié / KPI de chantier → responsable projet ; KPI d'axe → sponsor de chantier ;
+ *  - "indicator_update" : KPI de chantier → sponsor de chantier ; KPI d'axe → sponsor d'axe ;
+ *  - "staffing_update" : ligne projet → responsable projet ; ligne chantier → sponsor de chantier. */
+function authorFloor(
+  kind: StrategicApprovalKind,
+  target: StrategicApprovalTarget,
+  data: StrategicApprovalData,
+  payload: StrategicApprovalPayload | undefined,
+  author: string
+): StrategicLevel | undefined {
+  if (kind === "kpi_value" || kind === "indicator_update") {
+    const indicator = data.indicators.find((i) => i.id === target.id);
+    if (!indicator) return kind === "kpi_value" ? "projectOwner" : "chantierSponsor";
+    if (kind === "kpi_value") return kpiAuthorFloor(indicator, data, author);
+    return indicator.chantierId ? "chantierSponsor" : "axisSponsor";
+  }
+  if (kind === "staffing_update") {
+    const line = (payload as StaffingUpdateApprovalPayload | undefined)?.line;
+    return line?.actionId || target.type === "projet" ? "projectOwner" : "chantierSponsor";
+  }
+  return KIND_FLOOR[kind];
+}
 
 function validationCount(
   kind: StrategicApprovalKind,
@@ -567,6 +727,10 @@ function validationCount(
   if (kind === "projet_update" || kind === "chantier_update") {
     const category = (payload as ProjetUpdateApprovalPayload | undefined)?.category ?? "pilotage";
     return requiredValidations(category);
+  }
+  if (kind === "axe_update") {
+    const category = (payload as AxeUpdateApprovalPayload | undefined)?.category;
+    return (category as ValidationCategory | undefined) === "free" ? 0 : 1;
   }
   return KIND_VALIDATIONS[kind];
 }
@@ -598,6 +762,10 @@ export function hierarchyContextFor(
     if (!indicator) return { pilots };
     return kpiHierarchyContext(indicator, { ...data, programId }, requestedBy);
   }
+  if (kind === "axe_create") {
+    // Axe pas encore créé : seul le pilote est au-dessus.
+    return { axis: null, axes: [], pilots };
+  }
   if (kind === "chantier_create") {
     const created = (payload as ChantierCreateApprovalPayload | undefined)?.chantier;
     const axisIds = created?.axisIds?.length ? created.axisIds : [target.id];
@@ -617,26 +785,288 @@ export function hierarchyContextFor(
   return { axis: axes[0] ?? null, axes, chantier: chantier ?? null, projet, pilots };
 }
 
+// ─── Route : direct / demande / réessayer / interdit ────────────────────────────────────────
+
+export type ApprovalRoute =
+  | { mode: "direct" }
+  | { mode: "request"; chain: ApprovalStep[] }
+  | { mode: "retry"; reason: string }
+  | { mode: "forbidden"; reason: string };
+
+type RouteActor = Pick<Actor, "username"> & Partial<Actor>;
+
+const RETRY_REASON =
+  "Utilisateurs en cours de chargement : impossible de déterminer les valideurs, réessayez dans un instant";
+
+/** Les utilisateurs sont-ils chargés (au moins un) ? Sinon, aucune chaîne fiable. */
+export function usersLoaded(data: Pick<StrategicApprovalData, "users">): boolean {
+  return (data.users?.length ?? 0) > 0;
+}
+
+function isLeadOfProgram(
+  user: Pick<AuthUser, "profiles"> | null | undefined,
+  programId: string | undefined
+): boolean {
+  return (
+    !!user &&
+    hasRole(user, "strategic_lead") &&
+    isStrategicLeadOf({ programId: programId ?? "" }, user)
+  );
+}
+
+/** Pilote (strategic_lead scopé) du programme, ou admin : les seuls à appliquer directement. */
+export function isPilotOrAdmin(
+  user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined,
+  programId: string | null | undefined
+): boolean {
+  return !!user && (isAnyAdmin(user) || isLeadOfProgram(user, programId ?? undefined));
+}
+
+/** Rôle stratégique effectif « jamais de saisie » (comex / RH) sur ce programme. */
+function isNeverFillRole(
+  user: Pick<AuthUser, "profiles"> | null | undefined,
+  programId: string | null | undefined
+): boolean {
+  const role = resolveStrategicRoleForProgram(user, programId);
+  return !!role && KPI_NEVER_FILL_ROLES.includes(role);
+}
+
+const levelRank = (level: StrategicLevel | null) => (level ? STRATEGIC_LEVELS.indexOf(level) : -1);
+
+type PermUser = Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">;
+
+/** Créer un axe : pilote du programme ou admin uniquement (décision PO). */
+export function canCreateAxis(
+  user: PermUser | null | undefined,
+  programId: string | null | undefined
+): boolean {
+  return isPilotOrAdmin(user, programId);
+}
+
+/** Modifier un axe : pilote/admin (direct), ou le sponsor de CET axe (`owner`, 1 validation par le
+ *  pilote) — jamais un comex/RH. Tout autre rôle : non. */
+export function canEditAxis(
+  user: PermUser | null | undefined,
+  axis: Pick<StrategicAxis, "programId" | "owner"> | null | undefined
+): boolean {
+  if (!user || !axis) return false;
+  if (isPilotOrAdmin(user, axis.programId)) return true;
+  if (isNeverFillRole(user, axis.programId)) return false;
+  return !!axis.owner && axis.owner === user.username;
+}
+
 /**
- * Chaîne de validation d'une demande de `author` (paliers N+1 puis N+2 selon le kind/la
- * catégorie). Vide ⇒ application directe : auteur ADMIN, catégorie libre, ou personne au-dessus
- * (le pilote du plan). Utiliser pour l'aperçu « sera validé par X puis Y » (`previewApprovalChain`).
+ * Modifier l'OBJECTIF d'un KPI (`INDICATOR_TARGET_FIELDS`) : pilote/admin (direct) ; sinon le
+ * sponsor du chantier du KPI (KPI de chantier) ou un sponsor de son axe / des axes de son chantier —
+ * pilotage, 2 validations depuis son niveau. Jamais comex/RH, jamais un responsable projet /
+ * contributeur / responsable de saisie (ils saisissent des VALEURS, pas l'objectif).
+ */
+export function canEditIndicatorTarget(
+  user: PermUser | null | undefined,
+  indicator: Pick<Indicator, "programId" | "axisId" | "chantierId"> | null | undefined,
+  data: {
+    axes: Pick<StrategicAxis, "id" | "owner">[];
+    chantiers: Pick<Chantier, "id" | "pilote" | "axisIds">[];
+  }
+): boolean {
+  if (!user || !indicator) return false;
+  if (isPilotOrAdmin(user, indicator.programId)) return true;
+  if (isNeverFillRole(user, indicator.programId)) return false;
+  const chantier = indicator.chantierId
+    ? data.chantiers.find((c) => c.id === indicator.chantierId)
+    : undefined;
+  if (chantier?.pilote && chantier.pilote === user.username) return true;
+  const axisIds = new Set([indicator.axisId, ...(chantier?.axisIds ?? [])]);
+  return data.axes.some((a) => axisIds.has(a.id) && !!a.owner && a.owner === user.username);
+}
+
+/**
+ * Créer / modifier / supprimer des lignes ETP (`ChantierStaffing`) : ligne CHANTIER (sans projet)
+ * → sponsor de chantier et au-dessus (sponsor d'axe, pilote) ; ligne PROJET → responsable projet et
+ * au-dessus. Admin/pilote : direct. comex/RH : jamais. `axes` : axes du programme (reconnaît les
+ * sponsors d'axe du chantier).
+ */
+export function canEditStaffing(
+  user: PermUser | null | undefined,
+  chantier: Pick<Chantier, "programId" | "pilote" | "axisIds"> | null | undefined,
+  projet?: Pick<ChantierAction, "owner" | "contributors"> | null,
+  axes: Pick<StrategicAxis, "id" | "owner">[] = []
+): boolean {
+  if (!user || !chantier) return false;
+  if (isPilotOrAdmin(user, chantier.programId)) return true;
+  if (isNeverFillRole(user, chantier.programId)) return false;
+  const ctx: HierarchyContext = {
+    axes: axes.filter((a) => chantier.axisIds?.includes(a.id)),
+    chantier,
+    projet: projet ?? null,
+    pilots: [],
+  };
+  const level = authorLevel(user.username, ctx);
+  return levelRank(level) >= levelRank(projet ? "projectOwner" : "chantierSponsor");
+}
+
+/** Demander un passage de jalon : admin, ou toute personne placée dans la hiérarchie du projet
+ *  (contributeur, responsable projet, sponsors, pilote). */
+export function canRequestMilestone(
+  user: PermUser | null | undefined,
+  action: ChantierAction,
+  data: StrategicApprovalData
+): boolean {
+  if (!user) return false;
+  const chantier = data.chantiers.find((c) => c.id === action.chantierId);
+  if (isPilotOrAdmin(user, chantier?.programId ?? data.programId)) return true;
+  const ctx = hierarchyContextFor(
+    "milestone",
+    { type: "projet", id: action.id, name: action.name },
+    {
+      ...data,
+      chantierActions: [action, ...data.chantierActions.filter((a) => a.id !== action.id)],
+    }
+  );
+  return authorLevel(user.username, ctx) != null;
+}
+
+/** Programme de la demande (pour « pilote du programme ») : axe/chantier créé → son programme. */
+function routeProgramId(
+  kind: StrategicApprovalKind,
+  target: StrategicApprovalTarget,
+  data: StrategicApprovalData,
+  payload: StrategicApprovalPayload | undefined
+): string | undefined {
+  if (kind === "axe_create") {
+    return (
+      (payload as AxeCreateApprovalPayload | undefined)?.axis?.programId ||
+      data.programId ||
+      undefined
+    );
+  }
+  if (kind === "chantier_create") {
+    const created = (payload as ChantierCreateApprovalPayload | undefined)?.chantier;
+    if (created?.programId) return created.programId;
+  }
+  if (kind === "staffing_update") {
+    const line = (payload as StaffingUpdateApprovalPayload | undefined)?.line;
+    if (line?.programId) return line.programId;
+  }
+  return resolveTargetProgramId(target, data);
+}
+
+/** Contrôle de DROIT des kinds qui en portent un (null = autorisé). */
+function forbiddenReason(
+  kind: StrategicApprovalKind,
+  actor: RouteActor,
+  target: StrategicApprovalTarget,
+  data: StrategicApprovalData,
+  payload: StrategicApprovalPayload | undefined,
+  programId: string | undefined
+): string | null {
+  const user = actor as PermUser;
+  switch (kind) {
+    case "axe_create":
+      return canCreateAxis(user, programId)
+        ? null
+        : "Seuls le pilote du plan et les administrateurs peuvent créer un axe";
+    case "axe_update": {
+      const axis = data.axes.find((a) => a.id === target.id);
+      if (!axis) return "Axe introuvable";
+      if (!canEditAxis(user, axis)) {
+        return "Seuls le pilote du plan, le sponsor de l'axe et les administrateurs peuvent modifier cet axe";
+      }
+      const patch = (payload as AxeUpdateApprovalPayload | undefined)?.patch ?? {};
+      if ("owner" in patch && !isPilotOrAdmin(user, axis.programId)) {
+        return "Le sponsor d'axe est désigné par le pilote du plan (ou un administrateur)";
+      }
+      return null;
+    }
+    case "indicator_update": {
+      const indicator = data.indicators.find((i) => i.id === target.id);
+      if (!indicator) return "Indicateur introuvable";
+      return canEditIndicatorTarget(user, indicator, data)
+        ? null
+        : "Vous n'êtes pas habilité à modifier l'objectif de cet indicateur";
+    }
+    case "staffing_update": {
+      const line = (payload as StaffingUpdateApprovalPayload | undefined)?.line;
+      const projetId = line?.actionId ?? (target.type === "projet" ? target.id : undefined);
+      const projet = projetId ? data.chantierActions.find((a) => a.id === projetId) : undefined;
+      const chantierId =
+        line?.chantierId ??
+        projet?.chantierId ??
+        (target.type === "chantier" ? target.id : undefined);
+      const chantier = data.chantiers.find((c) => c.id === chantierId);
+      if (!chantier || (projetId && !projet)) return "Chantier ou projet introuvable";
+      return canEditStaffing(user, chantier, projet ?? null, data.axes)
+        ? null
+        : "Vous n'êtes pas habilité à modifier le staffing de ce périmètre";
+    }
+    case "milestone": {
+      const action = data.chantierActions.find((a) => a.id === target.id);
+      if (!action) return "Projet introuvable";
+      return canRequestMilestone(user, action, data)
+        ? null
+        : "Seuls les membres du projet, leurs responsables et les administrateurs peuvent demander un passage de jalon";
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * ROUTE d'une saisie de `actor` (voir l'en-tête) — seule source de vérité :
+ *  1. droit (kinds axes / objectif KPI / staffing / jalon) → "forbidden" ;
+ *  2. admin, pilote du programme de la cible, ou modification libre → "direct" ;
+ *  3. utilisateurs non chargés → "retry" (jamais d'application par défaut) ;
+ *  4. sinon "request" : chaîne hiérarchique (N+1 puis N+2 selon le kind/la catégorie, depuis le
+ *     niveau RÉEL de l'auteur, plancher `authorFloor`) ; vide → palier pilote(s), à défaut admins.
+ */
+export function resolveApprovalRoute(
+  kind: StrategicApprovalKind,
+  actor: RouteActor | null | undefined,
+  target: StrategicApprovalTarget,
+  data: StrategicApprovalData,
+  payload?: StrategicApprovalPayload
+): ApprovalRoute {
+  if (!actor) return { mode: "forbidden", reason: "Session indisponible" };
+  const programId = routeProgramId(kind, target, data, payload);
+  const forbidden = forbiddenReason(kind, actor, target, data, payload, programId);
+  if (forbidden) return { mode: "forbidden", reason: forbidden };
+  if (isPilotOrAdmin(actor as PermUser, programId)) return { mode: "direct" };
+  const count = validationCount(kind, payload);
+  if (count === 0) return { mode: "direct" };
+  if (!usersLoaded(data)) return { mode: "retry", reason: RETRY_REASON };
+  const ctx = hierarchyContextFor(kind, target, data, payload, actor.username);
+  const hierarchy = approvalChain(
+    actor.username,
+    ctx,
+    count,
+    authorFloor(kind, target, data, payload, actor.username)
+  );
+  const chain = fallbackApprovalChain(
+    hierarchy,
+    actor.username,
+    strategicLeadUsernames(programId, data),
+    adminUsernames(data.users)
+  );
+  return { mode: "request", chain };
+}
+
+/**
+ * Chaîne de validation d'une demande de `author` (vide ⇒ pas de demande : application directe,
+ * ou route "retry"/"forbidden" — voir `resolveApprovalRoute` pour distinguer).
  */
 export function computeApprovalChain(
   kind: StrategicApprovalKind,
-  author: Pick<Actor, "username"> & Partial<Actor>,
+  author: RouteActor,
   target: StrategicApprovalTarget,
   data: StrategicApprovalData,
   payload?: StrategicApprovalPayload
 ): ApprovalStep[] {
-  if (isAnyAdmin(author as Actor)) return [];
-  const count = validationCount(kind, payload);
-  if (count === 0) return [];
-  const ctx = hierarchyContextFor(kind, target, data, payload, author.username);
-  return approvalChain(author.username, ctx, count, KIND_FLOOR[kind]);
+  const route = resolveApprovalRoute(kind, author, target, data, payload);
+  return route.mode === "request" ? route.chain : [];
 }
 
-/** Alias UI : paliers qu'aurait une demande de `actor` (vide = application directe). */
+/** Alias UI : paliers qu'aurait une demande de `actor` (vide = application directe / pas de
+ *  demande possible). */
 export function previewApprovalChain(
   kind: StrategicApprovalKind,
   actor: Actor | null | undefined,
@@ -648,45 +1078,26 @@ export function previewApprovalChain(
   return computeApprovalChain(kind, actor, target, data, payload);
 }
 
-/** Rôle affiché d'un niveau (compat `approverRole`). */
-const LEVEL_ROLE: Record<StrategicLevel, Role> = {
+/** Rôle affiché d'un niveau (compat `approverRole`). Palier « admin » : pas de rôle dédié dans
+ *  `Role` → "strategic_lead" (libellé réel porté par `chain[i].level`). */
+const LEVEL_ROLE: Record<ChainLevel, Role> = {
+  admin: "strategic_lead",
   pilot: "strategic_lead",
   axisSponsor: "axis_sponsor",
   chantierSponsor: "chantier_owner",
   projectOwner: "chantier_contributor",
-  contributor: "chantier_contributor",
+  contributor: "projet_contributor",
 };
 
-export function levelRole(level: StrategicLevel): Role {
+export function levelRole(level: ChainLevel): Role {
   return LEVEL_ROLE[level];
 }
 
-function isLeadOfProgram(user: Actor | null | undefined, programId: string | undefined): boolean {
-  return (
-    !!user &&
-    hasRole(user, "strategic_lead") &&
-    isStrategicLeadOf({ programId: programId ?? "" }, user)
-  );
-}
-
-/** LEGACY : l'utilisateur est-il un approbateur légitime (hors règle d'auto-décision) ? */
-function isApproverFor(
-  user: Actor | null | undefined,
-  approver: ResolvedApprover,
-  programId: string | undefined
-): boolean {
-  if (!user) return false;
-  if (isAnyAdmin(user)) return true;
-  if (approver.usernames.includes(user.username)) return true;
-  return isLeadOfProgram(user, programId);
-}
-
 /**
- * L'acteur doit-il passer par une demande ? `false` ⇒ appliquer directement : acteur ADMIN, ou
- * chaîne vide (catégorie libre, ou personne au-dessus de lui — le pilote du plan). `payload` :
- * nécessaire pour `projet_update`/`chantier_update` (catégorie) et `chantier_create` (axes) ;
- * ignoré sinon. `stage` : LEGACY (ancienne double validation de `projet_create` par demandes
- * enchaînées), ignoré — le modèle à chaîne couvre les deux paliers dans UNE demande.
+ * L'acteur doit-il passer par une demande ? `false` ⇒ appliquer directement (route "direct").
+ * `true` pour "request", mais AUSSI pour "retry"/"forbidden" : ne jamais appliquer directement
+ * dans ces cas — préférer `resolveApprovalRoute` (ou les flux) pour savoir quoi faire.
+ * `stage` : LEGACY, ignoré.
  */
 export function needsApproval(
   kind: StrategicApprovalKind,
@@ -697,9 +1108,7 @@ export function needsApproval(
   payload?: StrategicApprovalPayload
 ): boolean {
   void stage;
-  if (!actor) return true;
-  if (isAnyAdmin(actor)) return false;
-  return computeApprovalChain(kind, actor, target, data, payload).length > 0;
+  return resolveApprovalRoute(kind, actor, target, data, payload).mode !== "direct";
 }
 
 /** Palier courant (demande à chaîne), sinon `undefined`. */
@@ -732,8 +1141,9 @@ function priorDeciders(approval: StrategicApproval): string[] {
 
 /**
  * Demande à chaîne : `user` peut-il décider le palier COURANT ? L'un des usernames du palier, ou un
- * admin ; jamais le demandeur (admin compris) ; jamais une personne ayant déjà validé un palier
- * précédent (sauf admin). Pas d'escalade strategic_lead : le pilote ne décide que SON palier.
+ * admin ; jamais le demandeur (admin compris) ; jamais une personne — admin COMPRIS — ayant déjà
+ * validé un palier précédent (un admin décide au plus UN palier d'une même demande). Pas
+ * d'escalade strategic_lead : le pilote ne décide que SON palier.
  */
 export function canDecideStep(
   user: Actor | null | undefined,
@@ -741,14 +1151,15 @@ export function canDecideStep(
 ): boolean {
   if (!user || approval.status !== "pending" || !approval.chain?.length) return false;
   if (approval.requestedBy === user.username) return false;
-  if (isAnyAdmin(user)) return true;
   if (priorDeciders(approval).includes(user.username)) return false;
+  if (isAnyAdmin(user)) return true;
   return currentStep(approval)?.usernames.includes(user.username) ?? false;
 }
 
 /** `user` peut-il approuver/refuser cette demande (encore en attente) — palier courant pour une
- *  demande à chaîne (`canDecideStep`), règle historique sinon (approbateur, strategic_lead du
- *  programme, admin — admin pouvant même décider sa propre demande legacy). */
+ *  demande à chaîne (`canDecideStep`) ; demande LEGACY (sans chaîne) : son approbateur (snapshot
+ *  `approverUsernames` ou approbateur résolu) ou un admin, JAMAIS le demandeur (admin compris) —
+ *  plus d'escalade strategic_lead. */
 export function canDecide(
   user: Actor | null | undefined,
   approval: StrategicApproval,
@@ -756,8 +1167,8 @@ export function canDecide(
 ): boolean {
   if (!user || approval.status !== "pending") return false;
   if (approval.chain?.length) return canDecideStep(user, approval);
-  if (isAnyAdmin(user)) return true;
   if (approval.requestedBy === user.username) return false;
+  if (isAnyAdmin(user)) return true;
   const stage =
     approval.kind === "projet_create"
       ? (approval.payload as ProjetCreateApprovalPayload).stage
@@ -769,15 +1180,18 @@ export function canDecide(
     stage,
     { payload: approval.payload, requestedBy: approval.requestedBy }
   );
-  const usernames = Array.from(new Set([...resolved.usernames, ...approval.approverUsernames]));
-  return isApproverFor(user, { ...resolved, usernames }, approval.programId);
+  return (
+    resolved.usernames.includes(user.username) ||
+    (approval.approverUsernames ?? []).includes(user.username) ||
+    approval.approverUsername === user.username
+  );
 }
 
 export type ApprovalStepInfo = {
   /** Palier courant, 1-based (= total quand la demande est close après validation complète). */
   current: number;
   total: number;
-  level?: StrategicLevel;
+  level?: ChainLevel;
   usernames: string[];
 };
 
@@ -806,9 +1220,13 @@ function pendingFields(approval: StrategicApproval): string[] {
   switch (approval.kind) {
     case "projet_update":
     case "chantier_update":
+    case "axe_update":
+    case "indicator_update":
       return Object.keys((approval.payload as ProjetUpdateApprovalPayload).patch ?? {});
     case "milestone":
       return ["milestones"];
+    case "staffing_update":
+      return ["staffing"];
     default:
       return [];
   }
@@ -862,13 +1280,13 @@ export function stripUndefined<T>(value: T): T {
 }
 
 /**
- * Construit une demande (non persistée). Modèle à CHAÎNE par défaut : la chaîne est calculée
- * depuis le demandeur (`computeApprovalChain`) et SNAPSHOTÉE (`chain`, `stepIndex: 0`), les champs
- * `approver*` reflétant le 1er palier. `chain` explicite : utilisé tel quel ; `chain: null` ⇒
- * demande LEGACY à approbateur unique (`resolveApprover`) — réservé aux demandes enchaînées de
- * l'ancien modèle (`nextProjetCreateApproval`) et aux enregistrements d'information.
- * Repli défensif : si la chaîne calculée est VIDE (l'appelant aurait dû appliquer directement,
- * voir `needsApproval`), la demande est construite en legacy plutôt que sans décideur.
+ * Construit une demande (non persistée). Modèle à CHAÎNE par défaut : la route est calculée depuis
+ * le demandeur (`resolveApprovalRoute`) et sa chaîne SNAPSHOTÉE (`chain`, `stepIndex: 0`), les
+ * champs `approver*` reflétant le 1er palier. LÈVE si la route n'est pas "request" : "direct"
+ * (l'appelant doit appliquer lui-même), "retry" (utilisateurs non chargés), "forbidden".
+ * `chain` explicite : utilisé tel quel ; `chain: null` ⇒ demande LEGACY à approbateur unique
+ * (`resolveApprover`) — réservé aux demandes enchaînées de l'ancien modèle
+ * (`nextProjetCreateApproval`) et aux enregistrements d'information.
  */
 export function buildApproval(input: {
   kind: StrategicApprovalKind;
@@ -885,11 +1303,24 @@ export function buildApproval(input: {
   now?: string;
   chain?: ApprovalStep[] | null;
 }): StrategicApproval {
-  const chain =
-    input.chain === null
-      ? []
-      : (input.chain ??
-        computeApprovalChain(input.kind, input.requester, input.target, input.data, input.payload));
+  let chain: ApprovalStep[] = [];
+  if (input.chain) chain = input.chain;
+  else if (input.chain === undefined) {
+    const route = resolveApprovalRoute(
+      input.kind,
+      input.requester,
+      input.target,
+      input.data,
+      input.payload
+    );
+    if (route.mode === "direct") {
+      throw new Error(
+        "Aucune validation requise : la modification doit être appliquée directement"
+      );
+    }
+    if (route.mode !== "request") throw new Error(route.reason);
+    chain = route.chain;
+  }
   if (chain.length) {
     return stripUndefined({
       id: input.id ?? newApprovalId(),
@@ -1122,6 +1553,10 @@ export type ApprovalEffects = {
   saveStaffing: ChantierStaffing[];
   /** Chantiers à écrire — `"chantier_create"` / `"chantier_update"` approuvés. */
   saveChantiers: Chantier[];
+  /** Axes à écrire — `"axe_create"` / `"axe_update"` approuvés. */
+  saveAxes: StrategicAxis[];
+  /** Lignes ETP à supprimer — `"staffing_update"` op "delete" approuvé. */
+  deleteStaffingIds: string[];
 };
 
 function emptyEffects(): ApprovalEffects {
@@ -1134,6 +1569,8 @@ function emptyEffects(): ApprovalEffects {
     saveIndicators: [],
     saveStaffing: [],
     saveChantiers: [],
+    saveAxes: [],
+    deleteStaffingIds: [],
   };
 }
 
@@ -1198,29 +1635,13 @@ export function applyApprovedPayload(
       const action = data.chantierActions.find((a) => a.id === approval.targetId);
       if (!action) throw new Error("Projet introuvable : il a peut-être été supprimé");
       const { targetMilestone } = approval.payload as MilestoneApprovalPayload;
-      const before = action.milestones ?? {
-        currentMilestone: "E0" as MilestoneId,
-        passedMilestones: [] as MilestoneId[],
-        checklists: {},
-      };
-      if (
-        MILESTONE_ORDER.indexOf(targetMilestone) <= MILESTONE_ORDER.indexOf(before.currentMilestone)
-      ) {
-        throw new Error(
-          `Le projet est déjà au jalon ${displayMilestoneId(before.currentMilestone)} ou au-delà : demande périmée`
-        );
-      }
-      // La check-list du jalon courant a pu régresser depuis la demande : on RE-VÉRIFIE la porte
-      // (`canPassMilestone`, même fusion que la demande) au moment de l'approbation — lève sinon.
+      // Périmée si déjà au jalon visé ou au-delà (`advanceMilestone` lève) ; la check-list du
+      // jalon courant a pu régresser depuis la demande : on RE-VÉRIFIE la porte au moment de
+      // l'approbation — lève sinon.
+      const patch = advanceMilestone(action, targetMilestone);
       assertMilestoneStillPassable(action, data.chantiers, data.chantierActions);
-      const passed = before.passedMilestones.includes(before.currentMilestone)
-        ? before.passedMilestones
-        : [...before.passedMilestones, before.currentMilestone];
       effects.saveActions.push(
-        withoutMilestoneApproval({
-          ...action,
-          milestones: { ...before, currentMilestone: targetMilestone, passedMilestones: passed },
-        })
+        withoutMilestoneApproval({ ...action, milestones: patch.milestones })
       );
       return effects;
     }
@@ -1388,6 +1809,70 @@ export function applyApprovedPayload(
       });
       return effects;
     }
+    case "axe_create": {
+      const { axis } = approval.payload as AxeCreateApprovalPayload;
+      effects.saveAxes.push({
+        ...axis,
+        companyId: approval.companyId,
+        programId: axis.programId || approval.programId,
+      });
+      return effects;
+    }
+    case "axe_update": {
+      const axis = data.axes.find((a) => a.id === approval.targetId);
+      if (!axis) throw new Error("Axe introuvable : il a peut-être été supprimé");
+      const { patch, before } = approval.payload as AxeUpdateApprovalPayload;
+      assertNotStale(axis, before, patch);
+      const next = { ...axis };
+      for (const key of Object.keys(patch)) {
+        if (AXE_INTERNAL_FIELDS.has(key)) continue;
+        const value = (patch as Record<string, unknown>)[key];
+        (next as Record<string, unknown>)[key] = value === null ? undefined : value;
+      }
+      const decidedAt = approval.decidedAt ?? new Date().toISOString();
+      effects.saveAxes.push(stripUndefined({ ...next, lastUpdate: decidedAt.slice(0, 10) }));
+      return effects;
+    }
+    case "indicator_update": {
+      const indicator = data.indicators.find((i) => i.id === approval.targetId);
+      if (!indicator) throw new Error("Indicateur introuvable : il a peut-être été supprimé");
+      const { patch, before } = approval.payload as IndicatorUpdateApprovalPayload;
+      assertNotStale(indicator, before, patch);
+      const next = { ...indicator };
+      for (const key of Object.keys(patch)) {
+        if (!(INDICATOR_TARGET_FIELDS as readonly string[]).includes(key)) continue;
+        const value = (patch as Record<string, unknown>)[key];
+        (next as Record<string, unknown>)[key] = value === null ? undefined : value;
+      }
+      const decidedAt = approval.decidedAt ?? new Date().toISOString();
+      const updated: Indicator = stripUndefined({ ...next, lastUpdate: decidedAt.slice(0, 10) });
+      // La cible a changé : le statut (en avance / en retard) peut changer aussi.
+      const status = computeIndicatorStatus(updated, data.measurements ?? []);
+      effects.saveIndicators.push({ ...updated, status });
+      return effects;
+    }
+    case "staffing_update": {
+      const { op, line, before } = approval.payload as StaffingUpdateApprovalPayload;
+      if (!data.chantiers.some((c) => c.id === line.chantierId)) {
+        throw new Error("Chantier introuvable : il a peut-être été supprimé");
+      }
+      if (line.actionId && !data.chantierActions.some((a) => a.id === line.actionId)) {
+        throw new Error("Projet introuvable : il a peut-être été supprimé");
+      }
+      if (op !== "create" && data.staffing) {
+        const current = data.staffing.find((st) => st.id === line.id);
+        if (!current)
+          throw new Error("Ligne de staffing introuvable : elle a peut-être été supprimée");
+        if (before && !sameValue(current, before)) {
+          throw new Error(
+            "La ligne de staffing a été modifiée depuis la demande : demande périmée, à refaire"
+          );
+        }
+      }
+      if (op === "delete") effects.deleteStaffingIds.push(line.id);
+      else effects.saveStaffing.push(stripUndefined({ ...line, companyId: approval.companyId }));
+      return effects;
+    }
   }
 }
 
@@ -1402,6 +1887,63 @@ export function applyRejectedPayload(
     if (action?.milestoneApproval) effects.saveActions.push(withoutMilestoneApproval(action));
   }
   return effects;
+}
+
+// ─── Jalons : reliquats de l'ancien circuit ─────────────────────────────────────────────────
+
+/**
+ * Projets portant un marqueur `milestoneApproval` SANS demande "milestone" à chaîne en attente :
+ * reliquats de l'ancien circuit à approbateur unique (supprimé). Affichés en LECTURE SEULE (plus
+ * personne ne peut les « approuver ») ; un admin les efface (`clearLegacyMilestoneMarker`), le
+ * membre du projet redemande ensuite le passage via `milestoneFlow` (demande à chaîne).
+ */
+export function legacyMilestoneMarkers<A extends Pick<ChantierAction, "id" | "milestoneApproval">>(
+  actions: A[],
+  approvals: Pick<StrategicApproval, "kind" | "status" | "targetId">[] | undefined
+): A[] {
+  const covered = new Set(
+    (approvals ?? [])
+      .filter((a) => a.kind === "milestone" && a.status === "pending")
+      .map((a) => a.targetId)
+  );
+  return actions.filter((a) => !!a.milestoneApproval && !covered.has(a.id));
+}
+
+/** Le marqueur de ce projet est-il un reliquat (voir `legacyMilestoneMarkers`) ? */
+export function isLegacyMilestoneMarker(
+  action: Pick<ChantierAction, "id" | "milestoneApproval">,
+  approvals: Pick<StrategicApproval, "kind" | "status" | "targetId">[] | undefined
+): boolean {
+  return legacyMilestoneMarkers([action], approvals).length > 0;
+}
+
+/** Projet sans son marqueur reliquat (écriture admin). Lève si non admin, ou si le marqueur est
+ *  porté par une demande à chaîne en attente (elle se clôt par approbation/refus). */
+export function clearLegacyMilestoneMarker(
+  action: ChantierAction,
+  user: Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined,
+  approvals: Pick<StrategicApproval, "kind" | "status" | "targetId">[] | undefined
+): ChantierAction {
+  if (!isAnyAdmin(user)) {
+    throw new Error("Seul un administrateur peut effacer une ancienne demande de jalon");
+  }
+  if (!isLegacyMilestoneMarker(action, approvals)) {
+    throw new Error("Aucune ancienne demande de jalon à effacer sur ce projet");
+  }
+  return withoutMilestoneApproval(action);
+}
+
+/**
+ * Le décideur COURANT peut-il AJUSTER la valeur d'une correction KPI avant d'accepter ? Seulement
+ * au DERNIER palier (ou demande legacy) : un valideur intermédiaire approuve ou refuse, sans
+ * modifier la valeur que le palier suivant validera.
+ */
+export function canAdjustKpiValue(approval: StrategicApproval): boolean {
+  if (approval.kind !== "kpi_value" || approval.status !== "pending") return false;
+  const p = approval.payload as KpiValueApprovalPayload;
+  if (!p.measurementId || p.remove) return false;
+  if (!approval.chain?.length) return true;
+  return (approval.stepIndex ?? 0) >= approval.chain.length - 1;
 }
 
 /**
@@ -1435,10 +1977,7 @@ export function nextProjetCreateApproval(
   // "chantier" en premier lieu (`createProjetFlow` l'aurait créé directement, voir cette fonction).
   const requesterIsAxisApprover =
     axisApprover.usernames.includes(approval.requestedBy) ||
-    isLeadOfProgram(
-      requesterUser ? { username: requesterUser.username, profiles: requesterUser.profiles } : null,
-      approval.programId
-    );
+    isLeadOfProgram(requesterUser ?? null, approval.programId);
   if (requesterIsAxisApprover) return undefined;
   return buildApproval({
     kind: "projet_create",
@@ -1541,6 +2080,34 @@ export function describeApproval(
       const { chantier } = approval.payload as ChantierCreateApprovalPayload;
       return { subject: chantier?.name || subject, after: chantier?.name || subject };
     }
+    case "axe_create": {
+      const { axis } = approval.payload as AxeCreateApprovalPayload;
+      return { subject: axis?.name || subject, after: axis?.name || subject };
+    }
+    case "axe_update":
+    case "indicator_update": {
+      const p = approval.payload as AxeUpdateApprovalPayload | IndicatorUpdateApprovalPayload;
+      const keys = Object.keys(p.patch ?? {});
+      const fmt = (src: Record<string, unknown> | undefined) =>
+        keys.map((k) => `${k} : ${formatFieldValue(src?.[k])}`).join(" ; ");
+      return {
+        subject,
+        before: fmt(p.before as Record<string, unknown>),
+        after: fmt(p.patch as Record<string, unknown>),
+      };
+    }
+    case "staffing_update": {
+      const { op, line, before } = approval.payload as StaffingUpdateApprovalPayload;
+      const fmt = (l: ChantierStaffing | undefined) =>
+        l
+          ? `${l.function} · ${l.fte} ETP${l.startDate ? ` (${l.startDate}${l.endDate ? ` → ${l.endDate}` : ""})` : ""}`
+          : undefined;
+      return {
+        subject,
+        before: op === "create" ? undefined : fmt(before ?? line),
+        after: op === "delete" ? undefined : fmt(line),
+      };
+    }
     default: {
       const p = approval.payload as DeleteApprovalPayload;
       return { subject: p.name ?? subject, before: p.name ?? subject };
@@ -1635,6 +2202,35 @@ function verbPhrase(approval: StrategicApproval, pastTense: boolean): string {
         ? `a créé le chantier « ${created} »`
         : `la création du chantier « ${created} »`;
     }
+    case "axe_create": {
+      const created = (approval.payload as AxeCreateApprovalPayload).axis?.name ?? name;
+      return pastTense ? `a créé l'axe « ${created} »` : `la création de l'axe « ${created} »`;
+    }
+    case "axe_update":
+      return pastTense
+        ? `a modifié l'axe « ${name} » (${updateFieldsText(approval)})`
+        : `la modification de l'axe « ${name} » (${updateFieldsText(approval)})`;
+    case "indicator_update":
+      return pastTense
+        ? `a modifié l'objectif de l'indicateur « ${name} » (${updateFieldsText(approval)})`
+        : `la modification de l'objectif de l'indicateur « ${name} » (${updateFieldsText(approval)})`;
+    case "staffing_update": {
+      const { op, line } = approval.payload as StaffingUpdateApprovalPayload;
+      const what = `${line.function} · ${line.fte} ETP`;
+      const verb =
+        op === "create"
+          ? pastTense
+            ? "a ajouté"
+            : "l'ajout de"
+          : op === "delete"
+            ? pastTense
+              ? "a supprimé"
+              : "la suppression de"
+            : pastTense
+              ? "a modifié"
+              : "la modification de";
+      return `${verb} la ligne de staffing « ${what} » de « ${name} »`;
+    }
   }
 }
 
@@ -1727,6 +2323,45 @@ function nounPhraseI18n(approval: StrategicApproval): NestedText {
           name: (approval.payload as ChantierCreateApprovalPayload).chantier?.name ?? name,
         },
       };
+    case "axe_create":
+      return {
+        key: k + "axeCreate",
+        fallback: "la création de l'axe « {name} »",
+        vars: { name: (approval.payload as AxeCreateApprovalPayload).axis?.name ?? name },
+      };
+    case "axe_update":
+      return {
+        key: k + "axeUpdate",
+        fallback: "la modification de l'axe « {name} » ({fields})",
+        vars: { name, fields: updateFieldsText(approval) },
+      };
+    case "indicator_update":
+      return {
+        key: k + "indicatorUpdate",
+        fallback: "la modification de l'objectif de l'indicateur « {name} » ({fields})",
+        vars: { name, fields: updateFieldsText(approval) },
+      };
+    case "staffing_update": {
+      const { op, line } = approval.payload as StaffingUpdateApprovalPayload;
+      const vars = { name, line: `${line.function} · ${line.fte} ETP` };
+      if (op === "create")
+        return {
+          key: k + "staffingCreate",
+          fallback: "l'ajout de la ligne de staffing « {line} » de « {name} »",
+          vars,
+        };
+      if (op === "delete")
+        return {
+          key: k + "staffingDelete",
+          fallback: "la suppression de la ligne de staffing « {line} » de « {name} »",
+          vars,
+        };
+      return {
+        key: k + "staffingUpdate",
+        fallback: "la modification de la ligne de staffing « {line} » de « {name} »",
+        vars,
+      };
+    }
   }
 }
 

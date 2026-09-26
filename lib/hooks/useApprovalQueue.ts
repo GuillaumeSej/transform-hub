@@ -1,58 +1,42 @@
 "use client";
 
 import { useMemo } from "react";
-import { canDecideMilestone } from "@/lib/axisLogic";
-import { canApproveLeverDeletion, isLeverSponsoredBy } from "@/lib/leversLogic";
-import { hasRole, isAnyAdmin } from "@/lib/roleProfiles";
-import { canDecideImpactRealized, isImpactRealizedPending } from "@/lib/impactStatus";
+import {
+  canApproveLeverDeletion,
+  canDecideLeverApproval,
+  filterAggregateVisibleLevers,
+  type LeverDirectoryUser,
+} from "@/lib/leversLogic";
+import { canDecideImpactRealized, canDecideImpactRealizedOn } from "@/lib/impactStatus";
 import type { StrategicApproval } from "@/lib/strategicApprovals";
 import type {
   AuthUser,
   BeTrackData,
   Chantier,
   ChantierAction,
+  Company,
   Lever,
   LeverImpact,
   StrategicAxis,
 } from "@/types";
 
-/** L'utilisateur a-t-il le rôle "cto" sur le programme de ce levier ? Fonction LOCALE à ce
- *  fichier (ne pas la déplacer dans `lib/leversLogic.ts`, réservé à l'autre agent qui implémente
- *  la logique métier de la cascade) : un profil "cto" sans `programId` couvre tous les
- *  programmes, un profil scopé à un programme ne couvre que celui-ci — même convention que
- *  `getAuthorizedPrograms` dans `lib/roleProfiles.ts`. */
-function isCtoForLever(
-  user: Pick<AuthUser, "profiles"> | null | undefined,
-  lever: Pick<Lever, "programId">
-): boolean {
-  return (
-    hasRole(user, "cto") &&
-    !!user?.profiles?.some(
-      (p) => p.role === "cto" && (!p.programId || p.programId === lever.programId)
-    )
-  );
-}
-
 /**
- * Résolution PURE de la file d'attente de validation, extraite du hook pour être testable sans
- * rendu React (voir lib/hooks/useApprovalQueue.test.ts). Même mécanique que `canUserViewLever`
- * (lib/leversLogic.ts) pour la résolution du sponsor de workstream : lu pour s'en inspirer, non
- * modifié. Modèle à approbateur UNIQUE (voir lib/leversLogic.ts::approveLeverGate) : un levier
- * avec une demande en cours apparaît pour le sponsor du workstream OU le CTO habilité, peu
- * importe la porte concernée (M1→M2/M2→M3/M3→M4) — et pour tout admin (global ou entreprise),
- * habilité sur n'importe quelle demande comme `approveLeverGate`/`rejectLeverApproval`.
+ * Résolution PURE de la file d'attente de validation des portes de levier, extraite du hook pour
+ * être testable sans rendu React (voir lib/__tests__/useApprovalQueue.test.ts). Double validation
+ * hiérarchique (voir lib/leversLogic.ts::approveLeverGate) : un levier n'apparaît que pour qui peut
+ * décider son palier COURANT (`canDecideLeverApproval`) — titulaire du palier (responsable de
+ * chantier AVEC le rôle "sponsor", ou CTO du programme), ou admin tant qu'aucun palier de la
+ * demande n'a déjà été débloqué par un admin ; jamais le demandeur, jamais une personne ayant déjà
+ * validé un palier précédent.
  */
 export function resolveApprovalQueue(
   data: Pick<BeTrackData, "levers" | "workstreams">,
   user: AuthUser | null | undefined
 ): Lever[] {
   if (!user) return [];
-  if (isAnyAdmin(user)) return data.levers.filter((lever) => !!lever.approval);
-  return data.levers.filter((lever) => {
-    if (!lever.approval) return false;
-    const parentWorkstream = data.workstreams.find((w) => w.id === lever.ws);
-    return isLeverSponsoredBy(lever, parentWorkstream, user) || isCtoForLever(user, lever);
-  });
+  return data.levers.filter(
+    (lever) => !!lever.approval && canDecideLeverApproval(lever, user, data.workstreams)
+  );
 }
 
 /**
@@ -73,22 +57,26 @@ export function useApprovalQueue(data: BeTrackData, user: AuthUser | null | unde
 // ─── Suppressions de leviers à confirmer (CTO ↔ responsable de chantier) ────────────────────
 
 /** Leviers dont la demande de suppression attend la confirmation de CET utilisateur (rôle
- *  complémentaire de celui du demandeur, voir `canApproveLeverDeletion`). */
+ *  complémentaire de celui du demandeur, voir `canApproveLeverDeletion`). `users` (annuaire,
+ *  optionnel) : permet à un admin de voir les demandes qu'il peut confirmer faute de titulaire. */
 export function resolveDeletionQueue(
   data: Pick<BeTrackData, "levers" | "workstreams">,
-  user: AuthUser | null | undefined
+  user: AuthUser | null | undefined,
+  users?: LeverDirectoryUser[]
 ): Lever[] {
   if (!user) return [];
   return data.levers.filter(
-    (lever) => !!lever.deletionRequest && canApproveLeverDeletion(lever, user, data.workstreams)
+    (lever) =>
+      !!lever.deletionRequest && canApproveLeverDeletion(lever, user, data.workstreams, users)
   );
 }
 
 export function useDeletionQueue(
   data: Pick<BeTrackData, "levers" | "workstreams">,
-  user: AuthUser | null | undefined
+  user: AuthUser | null | undefined,
+  users?: LeverDirectoryUser[]
 ) {
-  const queue = useMemo(() => resolveDeletionQueue(data, user), [data, user]);
+  const queue = useMemo(() => resolveDeletionQueue(data, user, users), [data, user, users]);
   return { queue, count: queue.length };
 }
 
@@ -101,60 +89,60 @@ export function useDeletionQueue(
 /** Une ligne de la file « Réalisés à valider » : l'impact en attente et son levier. */
 export type RealizedApprovalEntry = { lever: Lever; impact: LeverImpact };
 
+/** Entreprise courante, pour l'habilitation de confidentialité de la file finance. */
+export type RealizedQueueCompany = Pick<Company, "roleClearance" | "confidentialityLevels">;
+
+/**
+ * File « Réalisés à valider » de `user` : leviers des programmes sur lesquels il a les droits
+ * finance (profil finance du programme ou tous programmes ; admin = tous), visibles pour son
+ * habilitation de confidentialité (`filterAggregateVisibleLevers`, `company` = entreprise
+ * courante — absente : seule l'habilitation individuelle compte), hors impacts qu'il a lui-même
+ * déclarés réalisés (demandeur ≠ validateur, `canDecideImpactRealizedOn`).
+ */
 export function resolveRealizedApprovalQueue(
   data: Pick<BeTrackData, "levers">,
-  user: AuthUser | null | undefined
+  user: AuthUser | null | undefined,
+  company?: RealizedQueueCompany | null
 ): RealizedApprovalEntry[] {
-  if (!canDecideImpactRealized(user)) return [];
-  return data.levers
+  if (!user || !canDecideImpactRealized(user)) return [];
+  return filterAggregateVisibleLevers(data.levers, user, company)
     .filter((lever) => lever.status !== "cancelled")
     .flatMap((lever) =>
       (lever.impacts ?? [])
-        .filter((impact) => isImpactRealizedPending(impact))
+        .filter((impact) => canDecideImpactRealizedOn(user, lever, impact))
         .map((impact) => ({ lever, impact }))
     );
 }
 
 export function useRealizedApprovalQueue(
   data: Pick<BeTrackData, "levers">,
-  user: AuthUser | null | undefined
+  user: AuthUser | null | undefined,
+  company?: RealizedQueueCompany | null
 ) {
-  const queue = useMemo(() => resolveRealizedApprovalQueue(data, user), [data, user]);
+  const queue = useMemo(
+    () => resolveRealizedApprovalQueue(data, user, company),
+    [data, user, company]
+  );
   return { queue, count: queue.length };
 }
 
-// ─── Pendant Plan Stratégique — jalons E0→E4 (round "jalon validation gate") ───────────────────
+// ─── Pendant Plan Stratégique — jalons (ANCIEN circuit, SUPPRIMÉ) ───────────────────────────────
 //
-// Même page dédiée `/validation` et même dropdown Topbar que la file ci-dessus, mais pour la
-// DEMANDE DE VALIDATION DE JALON d'un projet (`ChantierAction.milestoneApproval`, voir
-// `lib/axisLogic.ts::requestMilestoneApproval`/`approveMilestoneGate`) plutôt qu'une porte de
-// cycle de vie de levier. Approbateurs = même cascade que `resolveApprover("milestone", …)`
-// (lib/strategicApprovals.ts) via `canDecideMilestone` : pilote du chantier, à défaut le(s)
-// responsable(s) de l'axe, toujours le `strategic_lead` du programme et les admins.
+// L'ancien circuit de validation de jalon à approbateur UNIQUE (`ChantierAction.milestoneApproval`
+// décidé via `canDecideMilestone`) est supprimé : TOUT passage de jalon est une demande
+// `StrategicApproval` "milestone" à chaîne, déjà présente au bon palier dans
+// `useStrategicApprovals().pending`. Les marqueurs reliquats sont listés par
+// `useStrategicApprovals().legacyMilestones` (lecture seule, effaçables par un admin).
+// Les exports ci-dessous ne sont conservés que pour la compilation des appelants restants
+// (AppShell/Topbar, lib/myWorkspace.ts) : ils renvoient TOUJOURS une file vide. À retirer.
 
-/** UNE ligne de la file d'attente de validation de jalon — le projet en attente ET son chantier
- *  parent déjà résolu (mêmes deux informations que la page/le dropdown ont besoin d'afficher :
- *  nom du chantier, nom du projet), même esprit que `ProgramRoadmapRow` (lib/axisLogic.ts). */
+/** @deprecated Ancien circuit supprimé — conservé pour compatibilité de type. */
 export type MilestoneApprovalQueueEntry = {
   action: ChantierAction;
   chantier: Chantier;
 };
 
-/**
- * Résolution PURE de la file d'attente de validation de jalon — voir `resolveApprovalQueue`
- * ci-dessus (même mécanique, adaptée). Un projet dont le chantier parent est introuvable
- * (référence orpheline) n'apparaît jamais dans la file : la cascade d'approbation a besoin du
- * chantier (programme, pilote, axes), et aucun projet fantôme ne doit être présenté à
- * l'approbation. `axes` : nécessaire pour qu'un responsable d'axe voie les demandes des chantiers
- * SANS pilote (repli de la cascade, voir `canDecideMilestone`).
- *
- * `approvals` (optionnel, `useStrategicApprovals().approvals`) : les projets dont le jalon est
- * porté par une demande `StrategicApproval` "milestone" EN ATTENTE sont EXCLUS — cette demande
- * (validation à paliers N+1 puis N+2, lib/strategicApprovals.ts) apparaît déjà, au bon palier,
- * dans `useStrategicApprovals().pending`. Sans cette exclusion, le pilote du chantier verrait ici
- * une demande qui attend en réalité le sponsor d'axe (étape 2). Même exclusion que
- * app/(app)/validation/page.tsx et lib/myWorkspace.ts. À passer par tout appelant (Topbar).
- */
+/** @deprecated Ancien circuit supprimé : renvoie toujours `[]` (voir la note de section). */
 export function resolveMilestoneApprovalQueue(
   chantierActions: ChantierAction[],
   chantiers: Chantier[],
@@ -162,27 +150,19 @@ export function resolveMilestoneApprovalQueue(
   axes: Pick<StrategicAxis, "id" | "owner">[] = [],
   approvals: Pick<StrategicApproval, "kind" | "status" | "targetId">[] = []
 ): MilestoneApprovalQueueEntry[] {
-  if (!user) return [];
-  const chantierById = new Map(chantiers.map((c) => [c.id, c]));
-  const covered = new Set(
-    approvals.filter((a) => a.kind === "milestone" && a.status === "pending").map((a) => a.targetId)
-  );
-  const entries: MilestoneApprovalQueueEntry[] = [];
-  for (const action of chantierActions) {
-    if (!action.milestoneApproval || covered.has(action.id)) continue;
-    const chantier = chantierById.get(action.chantierId);
-    if (!chantier) continue;
-    if (canDecideMilestone(chantier, user, axes)) {
-      entries.push({ action, chantier });
-    }
-  }
-  return entries;
+  void chantierActions;
+  void chantiers;
+  void user;
+  void axes;
+  void approvals;
+  return [];
 }
 
-/** Sur le modèle exact de `useApprovalQueue` ci-dessus — résout la file des projets dont la
- *  demande de validation de jalon attend actuellement CET utilisateur (cascade
- *  `canDecideMilestone` : pilote, responsable d'axe, `strategic_lead`, admin), pour alimenter le
- *  badge/dropdown de notifications ET la page dédiée `/validation` en mode Plan Stratégique. */
+const EMPTY_MILESTONE_QUEUE: MilestoneApprovalQueueEntry[] = [];
+
+/** @deprecated Ancien circuit supprimé : file toujours vide (`{ queue: [], count: 0 }`). Les
+ *  appelants (AppShell → Topbar) doivent retirer cet appel ; les demandes de jalon sont dans
+ *  `useStrategicApprovals().pending`. */
 export function useMilestoneApprovalQueue(
   data: {
     chantierActions: ChantierAction[];
@@ -190,23 +170,10 @@ export function useMilestoneApprovalQueue(
     axes?: Pick<StrategicAxis, "id" | "owner">[];
   },
   user: AuthUser | null | undefined,
-  /** Demandes stratégiques du programme — voir `resolveMilestoneApprovalQueue`. */
   approvals?: Pick<StrategicApproval, "kind" | "status" | "targetId">[]
 ) {
-  const queue = useMemo(
-    () =>
-      resolveMilestoneApprovalQueue(
-        data.chantierActions,
-        data.chantiers,
-        user,
-        data.axes,
-        approvals ?? []
-      ),
-    [data.chantierActions, data.chantiers, data.axes, user, approvals]
-  );
-
-  return {
-    queue,
-    count: queue.length,
-  };
+  void data;
+  void user;
+  void approvals;
+  return { queue: EMPTY_MILESTONE_QUEUE, count: 0 };
 }

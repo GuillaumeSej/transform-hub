@@ -223,81 +223,15 @@ function makeAction(overrides: Partial<ChantierAction> = {}): ChantierAction {
   };
 }
 
-describe("resolveMilestoneApprovalQueue", () => {
-  it("retourne une liste vide sans utilisateur", () => {
-    expect(resolveMilestoneApprovalQueue([makeAction()], [makeChantier()], null)).toEqual([]);
-  });
-
-  it("ignore les projets sans demande de validation de jalon en cours", () => {
-    const action = makeAction({ milestoneApproval: undefined });
-    const user = makeUser({ profiles: [{ role: "strategic_lead" }] });
-    expect(resolveMilestoneApprovalQueue([action], [makeChantier()], user)).toEqual([]);
-  });
-
-  it("ignore un projet dont le chantier parent est introuvable (référence orpheline)", () => {
-    const action = makeAction({ chantierId: "GHOST" });
-    const user = makeUser({ profiles: [{ role: "strategic_lead" }] });
-    expect(resolveMilestoneApprovalQueue([action], [makeChantier()], user)).toEqual([]);
-  });
-
-  it("inclut un projet en attente pour un strategic_lead scopé au bon programme", () => {
-    const action = makeAction();
-    const chantier = makeChantier({ programId: "p1" });
-    const user = makeUser({ profiles: [{ role: "strategic_lead", programId: "p1" }] });
-    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([
-      { action, chantier },
-    ]);
-  });
-
-  it("un strategic_lead sans programId (global) couvre tous les programmes", () => {
-    const action = makeAction();
-    const chantier = makeChantier({ programId: "p2" });
-    const user = makeUser({ profiles: [{ role: "strategic_lead" }] });
-    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([
-      { action, chantier },
-    ]);
-  });
-
-  it("exclut un projet en attente pour un strategic_lead scopé à un AUTRE programme", () => {
-    const action = makeAction();
-    const chantier = makeChantier({ programId: "p2" });
-    const user = makeUser({ profiles: [{ role: "strategic_lead", programId: "p1" }] });
-    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([]);
-  });
-
-  it("exclut un projet en attente pour un utilisateur qui n'est pas strategic_lead", () => {
-    const action = makeAction();
-    const user = makeUser({ profiles: [{ role: "chantier_contributor" }] });
-    expect(resolveMilestoneApprovalQueue([action], [makeChantier()], user)).toEqual([]);
-  });
-
-  it("inclut la demande pour le pilote du chantier (cascade strategicApprovals)", () => {
-    const action = makeAction();
-    const chantier = makeChantier({ pilote: "pilote1" });
-    const user = makeUser({ username: "pilote1", profiles: [{ role: "chantier_owner" }] });
-    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([
-      { action, chantier },
-    ]);
-  });
-
-  it("sans pilote, le responsable de l'axe est l'approbateur ; avec pilote, il ne l'est plus", () => {
-    const action = makeAction();
-    const axes = [{ id: "AX1", owner: "sponsor1" }];
-    const user = makeUser({ username: "sponsor1", profiles: [{ role: "axis_sponsor" }] });
-    const noPilote = makeChantier({ pilote: undefined });
-    expect(resolveMilestoneApprovalQueue([action], [noPilote], user, axes)).toEqual([
-      { action, chantier: noPilote },
-    ]);
-    const withPilote = makeChantier({ pilote: "pilote1" });
-    expect(resolveMilestoneApprovalQueue([action], [withPilote], user, axes)).toEqual([]);
-  });
-
-  it("un admin voit tous les projets en attente, tous rôles confondus", () => {
-    const action = makeAction();
-    const chantier = makeChantier();
-    const user = makeUser({ profiles: [], isCompanyAdmin: true });
-    expect(resolveMilestoneApprovalQueue([action], [chantier], user)).toEqual([
-      { action, chantier },
-    ]);
+// Ancien circuit de jalon à approbateur unique SUPPRIMÉ : la file historique est désormais
+// toujours vide (les demandes de jalon à chaîne sont dans useStrategicApprovals().pending).
+describe("resolveMilestoneApprovalQueue (déprécié)", () => {
+  it("renvoie toujours une liste vide, quel que soit l'utilisateur (ancien circuit supprimé)", () => {
+    const admin = makeUser({ isGlobalAdmin: true } as Partial<AuthUser>);
+    const lead = makeUser({ profiles: [{ role: "strategic_lead" }] });
+    const chantier = makeChantier({ programId: "p1", pilote: "pilote1" });
+    for (const user of [null, admin, lead]) {
+      expect(resolveMilestoneApprovalQueue([makeAction()], [chantier], user)).toEqual([]);
+    }
   });
 });

@@ -71,9 +71,9 @@ export const OPERATIONAL_ROLES: { value: Role; labelKey: string; label: string }
   // inchangée, toujours scopée WORKSTREAM, voir types/index.ts).
   { value: "sponsor", labelKey: "roles.sponsor.label", label: "Responsable de chantier" },
   { value: "lever", labelKey: "roles.lever.label", label: "Responsable de levier" },
-  { value: "finance", labelKey: "roles.finance.label", label: "Finance" },
-  { value: "hr", labelKey: "roles.hr.label", label: "RH" },
-  { value: "ops", labelKey: "roles.ops.label", label: "Ops" },
+  { value: "finance", labelKey: "roles.finance.label", label: "Contrôleur financier" },
+  { value: "hr", labelKey: "roles.hr.label", label: "Directeur RH" },
+  { value: "ops", labelKey: "roles.ops.label", label: "Responsable Opérations" },
   // Fondation vue consolidée multi-programmes (voir types/index.ts).
   {
     value: "program_sponsor",

@@ -204,7 +204,7 @@ export function ChantierForm({
             users={users}
             value={pilote}
             onChange={setPilote}
-            label={t("strategicAxes.form.chantierOwner", "Responsable de chantier")}
+            label={t("strategicAxes.form.chantierOwner", "Sponsor de chantier")}
             placeholder={t("strategicAxes.unassigned", "Non assigné")}
             id="chantier-pilote"
             disabled={!canEditPilote}

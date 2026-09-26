@@ -1,5 +1,5 @@
-import type { AuthUser, LeverImpact, LeverStatus } from "@/types";
-import { hasRole } from "@/lib/roleProfiles";
+import type { AuthUser, Lever, LeverImpact, LeverStatus } from "@/types";
+import { isAnyAdmin } from "@/lib/roleProfiles";
 
 export type ImpactStatus = NonNullable<LeverImpact["status"]>;
 
@@ -114,11 +114,63 @@ export function isImpactLate(
   return !Number.isNaN(d.getTime()) && d.getTime() < today.getTime();
 }
 
-/** Un profil finance peut décider (approuver/rejeter) la validation d'un impact réalisé. */
-export function canDecideImpactRealized(
-  user: Pick<AuthUser, "profiles"> | null | undefined
+/**
+ * Droits finance sur un programme : profil "finance" rattaché à ce programme, ou "tous programmes"
+ * (sans `programId`). `programId` absent = n'importe quel profil finance (appelants historiques
+ * sans levier en main).
+ */
+export function hasFinanceRightsOn(
+  user: Pick<AuthUser, "profiles"> | null | undefined,
+  programId?: string | null
 ): boolean {
-  return hasRole(user, "finance");
+  return !!user?.profiles?.some(
+    (p) =>
+      p.role === "finance" &&
+      (programId == null || p.programId == null || p.programId === programId)
+  );
+}
+
+/** Peut décider (approuver/rejeter) la validation d'un impact réalisé du levier (programme) :
+ *  profil finance de ce programme (ou tous programmes), ou admin. Ne dit rien du demandeur — voir
+ *  `canDecideImpactRealizedOn` pour la règle complète « demandeur ≠ validateur ». */
+export function canDecideImpactRealized(
+  user:
+    | (Pick<AuthUser, "profiles"> & Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin">>)
+    | null
+    | undefined,
+  lever?: Pick<Lever, "programId"> | null
+): boolean {
+  return isAnyAdmin(user) || hasFinanceRightsOn(user, lever?.programId);
+}
+
+/** `user` est-il l'auteur de la demande « Réalisé » de cet impact ? (username prioritaire, repli
+ *  sur le nom pour les demandes antérieures qui ne le stockaient pas) */
+export function isImpactRealizedRequester(
+  imp: LeverImpact,
+  user: (Pick<AuthUser, "name"> & Partial<Pick<AuthUser, "username">>) | null | undefined
+): boolean {
+  const req = imp.realizedApproval;
+  if (!req || !user) return false;
+  if (req.requestedByUsername) return req.requestedByUsername === user.username;
+  return !!req.requestedBy && req.requestedBy === user.name;
+}
+
+/** Règle complète : impact en attente, `user` habilité sur le programme du levier, et PAS le
+ *  demandeur (la finance ne valide plus son propre réalisé). */
+export function canDecideImpactRealizedOn(
+  user:
+    | (Pick<AuthUser, "profiles" | "name"> &
+        Partial<Pick<AuthUser, "username" | "isGlobalAdmin" | "isCompanyAdmin">>)
+    | null
+    | undefined,
+  lever: Pick<Lever, "programId"> | null | undefined,
+  imp: LeverImpact
+): boolean {
+  return (
+    isImpactRealizedPending(imp) &&
+    canDecideImpactRealized(user, lever) &&
+    !isImpactRealizedRequester(imp, user)
+  );
 }
 
 /** L'impact est-il coché "Réalisé" en attente de validation finance ? */
@@ -130,60 +182,56 @@ export function isImpactRealizedPending(imp: LeverImpact): boolean {
 /**
  * Patch à appliquer quand un utilisateur coche/décoche "Réalisé" sur une ligne d'impact.
  * - Décoche (retour à "planned") → on efface l'approbation en cours.
- * - Coche, profil finance → validé directement ("approved").
- * - Coche, autre profil (lever/CTO/resp. de chantier…) → passe "pending", en attente d'un profil
- *   finance (voir `canDecideImpactRealized`/`isImpactRealizedPending`).
+ * - Coche → TOUJOURS "pending" (y compris pour un profil finance, qui ne valide plus son propre
+ *   réalisé) : un AUTRE profil finance du programme, ou un admin, décide (voir
+ *   `canDecideImpactRealizedOn`/`isImpactRealizedPending`).
  */
 export function realizedTogglePatch(
   imp: LeverImpact,
   checked: boolean,
-  user: Pick<AuthUser, "profiles" | "name"> | null | undefined
+  user:
+    (Pick<AuthUser, "profiles" | "name"> & Partial<Pick<AuthUser, "username">>) | null | undefined
 ): Partial<LeverImpact> {
   if (!checked) {
     return { status: "planned", realizedApproval: undefined };
   }
   const status = coerceImpactStatus(imp, "done");
-  const now = new Date().toISOString();
-  if (canDecideImpactRealized(user)) {
-    return {
-      status,
-      realizedApproval: {
-        status: "approved",
-        decidedBy: user?.name,
-        decidedAt: now,
-      },
-    };
-  }
   return {
     status,
     realizedApproval: {
       status: "pending",
       requestedBy: user?.name,
-      requestedAt: now,
+      ...(user?.username ? { requestedByUsername: user.username } : {}),
+      requestedAt: new Date().toISOString(),
     },
   };
 }
 
-/** Décision finance sur une ligne en attente ("approved"/"rejected"). Rejeter repasse l'impact en
- *  "planned" (le statut "Réalisé" n'est valide qu'une fois approuvé). */
+/** Décision sur une ligne en attente ("approved"/"rejected"). Rejeter repasse l'impact en
+ *  "planned" (le statut "Réalisé" n'est valide qu'une fois approuvé). Refuse (exception) une
+ *  décision par le DEMANDEUR lui-même. */
 export function decideImpactRealized(
   imp: LeverImpact,
   decision: "approved" | "rejected",
-  user: Pick<AuthUser, "profiles" | "name"> | null | undefined
+  user:
+    (Pick<AuthUser, "profiles" | "name"> & Partial<Pick<AuthUser, "username">>) | null | undefined
 ): Partial<LeverImpact> {
+  if (isImpactRealizedRequester(imp, user)) {
+    throw new Error("Vous ne pouvez pas valider votre propre déclaration de réalisé");
+  }
   const now = new Date().toISOString();
+  const decider = {
+    decidedBy: user?.name,
+    ...(user?.username ? { decidedByUsername: user.username } : {}),
+    decidedAt: now,
+  };
   if (decision === "rejected") {
     return {
       status: "planned",
-      realizedApproval: { status: "rejected", decidedBy: user?.name, decidedAt: now },
+      realizedApproval: { ...imp.realizedApproval, status: "rejected", ...decider },
     };
   }
   return {
-    realizedApproval: {
-      ...imp.realizedApproval,
-      status: "approved",
-      decidedBy: user?.name,
-      decidedAt: now,
-    },
+    realizedApproval: { ...imp.realizedApproval, status: "approved", ...decider },
   };
 }

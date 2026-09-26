@@ -1570,7 +1570,7 @@ function AxisSection({
         <h2 className="text-sm font-bold uppercase tracking-wide text-text-primary">{axis.name}</h2>
         {axis.owner && (
           <span className="text-xs text-text-secondary">
-            {t("strategicAxes.sponsorShort", "Commanditaire")} :{" "}
+            {t("strategicAxes.sponsorShort", "Sponsor d'axe")} :{" "}
             {resolveUserFullName(axis.owner, users)}
           </span>
         )}

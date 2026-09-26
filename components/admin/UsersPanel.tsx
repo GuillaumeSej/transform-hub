@@ -333,6 +333,12 @@ export function UsersPanel({
   // Flag `disabled` du compte en cours d'édition : saveUser() fait un setDoc du document ENTIER,
   // il faut donc le reporter pour qu'une simple édition ne réactive pas un compte désactivé.
   const [editingDisabled, setEditingDisabled] = useState(false);
+  // Un admin d'ENTREPRISE (non global) ne peut ni retirer l'habilitation d'un AUTRE admin
+  // d'entreprise, ni le désactiver/supprimer (firestore.rules : `keepsPeerCompanyAdmin`) — ces
+  // actions sont réservées à un admin global. Libre sur son propre compte et les non-admins.
+  const isPeerCompanyAdmin = (u: Pick<AuthUser, "username" | "isCompanyAdmin">) =>
+    !user?.isGlobalAdmin && !!u.isCompanyAdmin && u.username !== user?.username;
+  const [editingPeerAdmin, setEditingPeerAdmin] = useState(false);
   // Le mot de passe n'est plus éditable ici (ni affiché) : un changement passe par l'action
   // « Réinitialiser le mot de passe » (lien à usage unique, l'admin ne voit jamais le mot de passe).
 
@@ -403,6 +409,7 @@ export function UsersPanel({
     setEditIdx(null);
     setOriginalUsername(null);
     setEditingDisabled(false);
+    setEditingPeerAdmin(false);
     setForm({
       username: "",
       firstName: "",
@@ -430,6 +437,7 @@ export function UsersPanel({
     setEditIdx(idx);
     setOriginalUsername(u.username);
     setEditingDisabled(u.disabled === true);
+    setEditingPeerAdmin(isPeerCompanyAdmin(u));
     setForm({
       username: u.username,
       firstName: u.firstName ?? "",
@@ -887,7 +895,11 @@ export function UsersPanel({
   /** Résumé compact des profils/habilitations d'un utilisateur pour la colonne "Profils" du
    *  tableau : libellés des profils métier séparés par des virgules, puis badges "Admin" /
    *  "Admin entreprise" quand les flags additifs sont actifs. Vide ("—") si aucun des deux. */
-  function profilesSummary(u: AuthUser): { profileLabels: string[]; badges: string[] } {
+  function profilesSummary(u: AuthUser): {
+    profileLabels: string[];
+    badges: string[];
+    legacyHr: boolean;
+  } {
     const profileLabels = (u.profiles ?? []).map((p) => {
       const opt = ALL_ROLE_OPTIONS.find((r) => r.value === p.role);
       return opt ? t(opt.labelKey, opt.label) : p.role;
@@ -895,7 +907,11 @@ export function UsersPanel({
     const badges: string[] = [];
     if (u.isGlobalAdmin) badges.push(t("adminUsers.badgeAdmin", "Admin"));
     if (u.isCompanyAdmin) badges.push(t("adminUsers.badgeCompanyAdmin", "Admin entreprise"));
-    return { profileLabels, badges };
+    // Profil Directeur RH legacy SANS programme (antérieur à la règle « un programme précis ») :
+    // toujours opérant en lecture (lu comme « tous programmes », voir lib/roleProfiles.ts), mais
+    // l'enregistrement est refusé tant qu'un programme n'est pas choisi — on le signale.
+    const legacyHr = (u.profiles ?? []).some((p) => p.role === "hr" && !p.programId);
+    return { profileLabels, badges, legacyHr };
   }
 
   return (
@@ -1205,12 +1221,28 @@ export function UsersPanel({
                         )}
                       >
                         {CROSS_TRACK_ROLE_OPTIONS.map((r) => (
-                          <option key={r.value} value={r.value}>
+                          <option
+                            key={r.value}
+                            value={r.value}
+                            // Un seul profil Directeur RH par utilisateur (assertValidProfiles).
+                            disabled={
+                              r.value === "hr" &&
+                              form.profiles.some((p, i) => i !== idx && p.role === "hr")
+                            }
+                          >
                             {t(r.labelKey, r.label)}
                           </option>
                         ))}
                       </optgroup>
                     </select>
+                    {profile.role === "hr" && rolePrograms.length === 0 && (
+                      <p className="flex-1 text-xs text-rag-red">
+                        {t(
+                          "adminUsers.hrNoProgram",
+                          "Aucun programme dans l'entreprise : créez d'abord un programme pour y rattacher le Directeur RH."
+                        )}
+                      </p>
+                    )}
                     {profile.role && rolePrograms.length > 0 && (
                       <select
                         value={profile.programId ?? ""}
@@ -1225,18 +1257,23 @@ export function UsersPanel({
                         }}
                         className="flex-1 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                       >
-                        <option value="">
-                          {isCrossTrackRole(profile.role)
-                            ? t("adminUsers.allPrograms", "Tous les programmes")
-                            : isStrategicRole(profile.role)
-                              ? t(
-                                  "adminUsers.allProgramsStrategic",
-                                  "Tous les programmes Stratégique"
-                                )
-                              : t(
-                                  "adminUsers.allProgramsPerformance",
-                                  "Tous les programmes Performance"
-                                )}
+                        {/* Directeur RH : un programme précis OBLIGATOIRE (assertValidProfiles) —
+                            pas d'option « Tous les programmes », seulement une invite à choisir
+                            (aussi affichée pour un profil legacy sans programme). */}
+                        <option value="" disabled={profile.role === "hr"}>
+                          {profile.role === "hr"
+                            ? t("adminUsers.chooseProgram", "Choisir un programme")
+                            : isCrossTrackRole(profile.role)
+                              ? t("adminUsers.allPrograms", "Tous les programmes")
+                              : isStrategicRole(profile.role)
+                                ? t(
+                                    "adminUsers.allProgramsStrategic",
+                                    "Tous les programmes Stratégique"
+                                  )
+                                : t(
+                                    "adminUsers.allProgramsPerformance",
+                                    "Tous les programmes Performance"
+                                  )}
                         </option>
                         {rolePrograms.map((p) => (
                           <option key={p.id} value={p.id}>
@@ -1272,9 +1309,18 @@ export function UsersPanel({
                 <input
                   type="checkbox"
                   checked={form.isCompanyAdmin}
+                  disabled={editingPeerAdmin}
                   onChange={(e) => setForm((f) => ({ ...f, isCompanyAdmin: e.target.checked }))}
                 />
                 {t("adminUsers.companyAdmin", "Administrateur de l'entreprise")}
+                {editingPeerAdmin && (
+                  <span className="text-[11px] font-normal text-text-secondary">
+                    {t(
+                      "adminUsers.peerAdminLocked",
+                      "(seul un administrateur global peut retirer cette habilitation)"
+                    )}
+                  </span>
+                )}
               </label>
             )}
             {canAssignGlobalAdmin && (
@@ -1467,7 +1513,7 @@ export function UsersPanel({
             {filterUsersByStatus(users, statusFilter)
               .filter((u) => fixedCompanyId || matchesFilter(u.companyId, companyFilter))
               .map((u, idx) => {
-                const { profileLabels, badges } = profilesSummary(u);
+                const { profileLabels, badges, legacyHr } = profilesSummary(u);
                 const isDisabled = u.disabled === true;
                 return (
                   <tr
@@ -1502,6 +1548,17 @@ export function UsersPanel({
                             {badge}
                           </span>
                         ))}
+                        {legacyHr && (
+                          <span
+                            className="rounded-full bg-rag-amber-light px-2 py-0.5 text-xs font-semibold text-rag-amber"
+                            title={t(
+                              "adminUsers.legacyHrHint",
+                              "Profil Directeur RH sans programme : modifiez l'utilisateur pour choisir son programme."
+                            )}
+                          >
+                            {t("adminUsers.badgeLegacyHr", "RH : programme à choisir")}
+                          </span>
+                        )}
                         {isDisabled && (
                           <span className="rounded-full bg-rag-red-light px-2 py-0.5 text-xs font-semibold text-rag-red">
                             {t("adminUsers.badgeDisabled", "Désactivé")}
@@ -1533,31 +1590,35 @@ export function UsersPanel({
                           <KeyRound size={14} />
                         </button>
                       )}
-                      <button
-                        onClick={() => requestToggleDisabled(u)}
-                        className={`mr-2 text-text-secondary ${
-                          isDisabled ? "hover:text-rag-green" : "hover:text-rag-red"
-                        }`}
-                        aria-label={
-                          isDisabled
-                            ? t("adminUsers.enableUser", "Réactiver")
-                            : t("adminUsers.disableUser", "Désactiver")
-                        }
-                        title={
-                          isDisabled
-                            ? t("adminUsers.enableUser", "Réactiver")
-                            : t("adminUsers.disableUser", "Désactiver")
-                        }
-                      >
-                        <Power size={14} />
-                      </button>
-                      <button
-                        onClick={() => remove(u.username, u.companyId ?? null)}
-                        className="text-text-secondary hover:text-rag-red"
-                        aria-label={t("common.delete", "Supprimer")}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {!isPeerCompanyAdmin(u) && (
+                        <button
+                          onClick={() => requestToggleDisabled(u)}
+                          className={`mr-2 text-text-secondary ${
+                            isDisabled ? "hover:text-rag-green" : "hover:text-rag-red"
+                          }`}
+                          aria-label={
+                            isDisabled
+                              ? t("adminUsers.enableUser", "Réactiver")
+                              : t("adminUsers.disableUser", "Désactiver")
+                          }
+                          title={
+                            isDisabled
+                              ? t("adminUsers.enableUser", "Réactiver")
+                              : t("adminUsers.disableUser", "Désactiver")
+                          }
+                        >
+                          <Power size={14} />
+                        </button>
+                      )}
+                      {!isPeerCompanyAdmin(u) && (
+                        <button
+                          onClick={() => remove(u.username, u.companyId ?? null)}
+                          className="text-text-secondary hover:text-rag-red"
+                          aria-label={t("common.delete", "Supprimer")}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

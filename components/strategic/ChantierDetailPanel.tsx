@@ -66,8 +66,8 @@ import {
   chantierShadesForAxis,
   displayMilestoneId,
   effectiveDueDate,
-  canDecideMilestone,
   currentMilestoneFillPct,
+  isProjetMember,
   milestoneTransitionState,
   numberIndicators,
   progressBucket,
@@ -82,6 +82,7 @@ import {
   approverLabel,
   createProjetFlow,
   deleteFlow,
+  directGate,
   milestoneFlow,
   newProjetId,
   pendingApprovals,
@@ -91,7 +92,9 @@ import {
 } from "@/lib/strategicApprovalFlows";
 import {
   hierarchyContextFor,
+  isLegacyMilestoneMarker,
   isPendingOn,
+  isPilotOrAdmin,
   stripUndefined,
   type GatedCategory,
   type StrategicApprovalKind,
@@ -102,7 +105,6 @@ import {
   chainLabel,
   chantierRights,
   conflictingFields,
-  directMilestoneAdvance,
   displayName,
   fillTemplate,
   flowOutcomeMessage,
@@ -407,7 +409,6 @@ type ChantierActionFormLabels = {
   name: string;
   owner: string;
   contributors: string;
-  sponsor: string;
   start: string;
   end: string;
   stage: string;
@@ -1577,6 +1578,9 @@ export function ChantierDetailPanel({
 
   const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const sa = useStrategicApprovalsApi();
+  /** Porte des flux : l'API de validation, ou — hors contexte — application directe pour le
+   *  pilote/admin SEULEMENT (les autres sont refusés, jamais d'application directe par défaut). */
+  const gate = sa ?? directGate(user, activeProgramId);
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
   /** Ferme le panneau PUIS navigue vers une page réellement différente (ex. la fiche d'axe) — le
@@ -1645,7 +1649,10 @@ export function ChantierDetailPanel({
     kind: "projet_update" | "chantier_update",
     target: StrategicApprovalTarget,
     category: GatedCategory
-  ) => !sa || !sa.needsApproval(kind, target, undefined, categoryPayload(category));
+  ) =>
+    sa
+      ? sa.route(kind, target, categoryPayload(category)).mode === "direct"
+      : isPilotOrAdmin(user, activeProgramId);
   const toastOutcome = (
     result: FlowResultLike,
     subject: string,
@@ -1674,7 +1681,6 @@ export function ChantierDetailPanel({
       description: ["strategicAxes.actionDescription", "Description"],
       owner: ["strategicAxes.actionOwner", "Responsable"],
       contributors: ["strategicFiche.contributors.label", "Contributeurs"],
-      sponsor: ["strategicChantierDetail.sponsor", "Sponsor"],
       start: ["strategicAxes.actionStart", "Début"],
       end: ["strategicAxes.actionEnd", "Fin"],
       deliverables: ["strategicAxes.deliverables", "Livrables"],
@@ -1686,7 +1692,6 @@ export function ChantierDetailPanel({
       chantierWeightPct: ["projetWeights.weight", "Poids (%)"],
       indicatorId: ["strategicChantierDetail.indicatorSelect.label", "KPI"],
       pilote: ["strategicChantierDetail.pilote", "Pilote"],
-      sponsorName: ["strategicChantierDetail.sponsor", "Sponsor"],
       allocatedBudget: ["strategicChantierDetail.envelope", "Enveloppe du chantier"],
       consumedFte: ["strategicChantierDetail.consumedFte", "ETP consommés"],
       confidentialityLevel: [
@@ -1719,7 +1724,7 @@ export function ChantierDetailPanel({
           )
         : [];
       const outcome = await deleteFlow(
-        sa,
+        gate,
         "chantier",
         { id: chantier.id, name: chantier.name },
         reason,
@@ -1761,7 +1766,7 @@ export function ChantierDetailPanel({
           )
         : [];
       const outcome = await deleteFlow(
-        sa,
+        gate,
         "projet",
         { id: action.id, name: action.name },
         reason,
@@ -1794,32 +1799,26 @@ export function ChantierDetailPanel({
         .join(", ") || "—"
     );
 
-  // ── Passage de jalon d'un projet (round "passage de jalon explicite") ─────────────────────────
+  // ── Passage de jalon d'un projet ──────────────────────────────────────────────────────────────
   // Handlers FACTORISÉS : utilisés à la fois par la check-list du projet (`MilestoneChecklistPanel`)
-  // et par la ligne d'état affichée sur la carte du projet (bandeau fermé) dès que la check-list du
-  // jalon courant est à 100 %. Flux : le propriétaire (ou un admin) DEMANDE le passage
-  // (`milestoneFlow` → `StrategicApproval` "milestone" adressée au pilote du chantier + marqueur
-  // `ChantierAction.milestoneApproval`), le pilote du chantier (ou admin/strategic_lead) CONFIRME
-  // (avance `currentMilestone`) ou REFUSE (vide le marqueur). Jamais d'avancée automatique.
+  // et par la ligne d'état affichée sur la carte du projet dès que la check-list du jalon courant est
+  // à 100 %. Flux UNIQUE (plus de circuit à approbateur unique) : un membre du projet (responsable
+  // OU contributeur) ou un niveau au-dessus DEMANDE le passage (`milestoneFlow` → demande
+  // "milestone" à chaîne N+1 puis N+2, le hook pose le marqueur d'affichage `milestoneApproval`) ;
+  // le décideur du palier COURANT confirme/refuse (`sa.approve` / `sa.reject`). Pilote/admin :
+  // passage appliqué directement. Marqueur SANS demande à chaîne = reliquat de l'ancien circuit :
+  // lecture seule, effaçable par un admin (`sa.clearLegacyMilestone`).
   const milestonePermsFor = (action: ChantierAction) => {
     const hasPendingDecidable = pendingApprovals(sa?.pending, "milestone", action.id).length > 0;
-    // Demande posée hors `StrategicApproval` (chemin direct, ex. le pilote est lui-même le
-    // propriétaire du projet) : décidable par le pilote du chantier, un admin ou le strategic_lead.
-    const legacyPending =
-      !!action.milestoneApproval &&
-      pendingApprovals(sa?.approvals, "milestone", action.id).length === 0;
-    // Même cascade que `resolveApprover("milestone")` : pilote, à défaut responsable d'axe.
-    const isChantierDecider = !!user && canDecideMilestone(chantier ?? undefined, user, data.axes);
-    const canApprove =
-      !readOnly &&
-      !!user &&
-      !!chantier &&
-      (hasPendingDecidable || (legacyPending && isChantierDecider));
+    const legacyPending = isLegacyMilestoneMarker(action, sa?.approvals);
+    const canApprove = !readOnly && !!user && !!chantier && hasPendingDecidable;
+    const isMember = !!user && isProjetMember(action, user.username);
     return {
-      canSubmit: !readOnly && !!user && (isAnyAdmin(user) || action.owner === user.username),
+      // Contributeurs compris (décision PO) ; au-dessus : sponsors de chantier/d'axe, pilote, admin.
+      canSubmit: !readOnly && !!user && (isAnyAdmin(user) || isMember || cRights.canEdit),
       canApprove,
-      // Rejeter/annuler : qui peut approuver, plus le propriétaire (annulation de sa demande).
-      canReject: !readOnly && !!user && (action.owner === user.username || canApprove),
+      // Refuser : décideur du palier courant ; reliquat de l'ancien circuit : admin (effacement).
+      canReject: canApprove || (!readOnly && legacyPending && isAnyAdmin(user)),
     };
   };
 
@@ -1828,30 +1827,22 @@ export function ChantierDetailPanel({
       if (!user) return;
       const target = { type: "projet" as const, id: action.id, name: action.name };
       const preview = sa ? sa.previewChain("milestone", target) : [];
-      const outcome = await milestoneFlow(sa, action, user, data.chantiers, data.chantierActions);
+      const outcome = await milestoneFlow(
+        gate,
+        action,
+        user,
+        data.chantiers,
+        data.chantierActions,
+        (patch) => data.updateChantierAction(action.id, patch)
+      );
       if (outcome === "pending") {
         // Demande à paliers créée (le hook pose lui-même le marqueur `milestoneApproval`).
         toastOutcome({ outcome }, action.name, preview);
         return;
       }
-      if (canDecideMilestone(chantier ?? undefined, user, data.axes)) {
-        // Chaîne vide (admin / pilote du plan) : passage APPLIQUÉ directement — plus de marqueur
-        // « en attente » posé puis confirmé par soi-même (ancien chemin).
-        await data.updateChantierAction(
-          action.id,
-          directMilestoneAdvance(action, user, data.chantiers, data.chantierActions, data.axes)
-        );
-        showToast(
-          t("strategicFiche.toast.milestoneApplied", "Passage de jalon appliqué"),
-          action.name,
-          "success"
-        );
-        return;
-      }
-      // Hors contexte de validation stratégique (aucune porte) : marqueur historique.
-      await data.requestMilestoneApproval(action.id);
+      // Admin / pilote du programme : passage APPLIQUÉ directement.
       showToast(
-        t("leverDetail.approval.requested", "Demande de validation envoyée"),
+        t("strategicFiche.toast.milestoneApplied", "Passage de jalon appliqué"),
         action.name,
         "success"
       );
@@ -1867,8 +1858,15 @@ export function ChantierDetailPanel({
   const confirmMilestoneTransition = async (action: ChantierAction) => {
     try {
       const pending = pendingApprovals(sa?.approvals, "milestone", action.id)[0];
-      if (sa && pending) await sa.approve(pending.id);
-      else await data.approveMilestoneGate(action.id);
+      if (!sa || !pending) {
+        throw new Error(
+          t(
+            "strategicApprovals.legacyMilestone.notDecidable",
+            "Aucune demande de passage de jalon à valider sur ce projet"
+          )
+        );
+      }
+      await sa.approve(pending.id);
       showToast(
         t("strategicChantierDetail.milestones.transition.confirmed", "Passage de jalon confirmé"),
         action.name,
@@ -1893,7 +1891,17 @@ export function ChantierDetailPanel({
           comment?.trim() ||
             t("strategicApprovals.rejectedFromSheet", "Refusé depuis la fiche du projet")
         );
-      } else await data.rejectMilestoneApproval(action.id);
+      } else if (sa && isLegacyMilestoneMarker(action, sa.approvals)) {
+        // Reliquat de l'ancien circuit : effacement (admin), le projet redemandera le passage.
+        await sa.clearLegacyMilestone(action.id);
+      } else {
+        throw new Error(
+          t(
+            "strategicApprovals.legacyMilestone.notDecidable",
+            "Aucune demande de passage de jalon à valider sur ce projet"
+          )
+        );
+      }
       showToast(
         t("leverDetail.approval.rejected", "Demande de validation rejetée"),
         action.name,
@@ -2347,7 +2355,7 @@ export function ChantierDetailPanel({
       conflictToast(conflicts);
       return null;
     }
-    const result = await updateProjetFlow(sa, action, patch, (p) =>
+    const result = await updateProjetFlow(gate, action, patch, (p) =>
       data.updateChantierAction(action.id, p)
     );
     if (!(quiet && result.outcome === "applied")) toastOutcome(result, action.name);
@@ -2392,7 +2400,7 @@ export function ChantierDetailPanel({
       conflictToast(conflicts);
       return null;
     }
-    const result = await updateChantierFlow(sa, chantier, patch, (p) =>
+    const result = await updateChantierFlow(gate, chantier, patch, (p) =>
       data.updateChantier(chantier.id, p)
     );
     if (!(quiet && result.outcome === "applied")) toastOutcome(result, chantier.name);
@@ -2578,9 +2586,9 @@ export function ChantierDetailPanel({
     />
   );
 
-  /** Désignation au niveau chantier (sponsor, pilote) : éditable par le pilote du plan / un admin
+  /** Désignation du sponsor de chantier (`pilote`) : éditable par le pilote du plan / un admin
    *  seulement (`canDesignate`), lecture seule avec infobulle sinon. */
-  const renderChantierPerson = (field: "sponsorName" | "pilote", label: string, id: string) => {
+  const renderChantierPerson = (field: "pilote", label: string, id: string) => {
     const value = effectiveChantier[field];
     const pending = chantierFieldPending(field);
     const editable = cRights.canDesignateSponsor && !pending;
@@ -2614,7 +2622,6 @@ export function ChantierDetailPanel({
     name: t("strategicAxes.actionName"),
     owner: t("strategicAxes.actionOwner"),
     contributors: t("strategicFiche.contributors.label", "Contributeurs"),
-    sponsor: t("strategicChantierDetail.sponsor"),
     start: t("strategicAxes.actionStart"),
     end: t("strategicAxes.actionEnd"),
     stage: t("strategicAxes.actionStage"),
@@ -3372,7 +3379,7 @@ export function ChantierDetailPanel({
                             )
                           : [];
                         const outcome = await createProjetFlow(
-                          sa,
+                          gate,
                           chantier,
                           action,
                           async () => {
@@ -4230,13 +4237,13 @@ export function ChantierDetailPanel({
           )}
           canApproveSelf={
             sa
-              ? !sa.needsApproval(
+              ? sa.route(
                   deleteTarget.kind === "chantier" ? "chantier_delete" : "projet_delete",
                   deleteTarget.kind === "chantier"
                     ? chantierTarget
                     : { type: "projet", id: deleteTarget.actionId }
-                )
-              : true
+                ).mode === "direct"
+              : isPilotOrAdmin(user, activeProgramId)
           }
           onConfirm={(reason) =>
             deleteTarget.kind === "chantier"

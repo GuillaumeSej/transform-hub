@@ -156,10 +156,10 @@ describe("chaîne de validation stratégique — jeu Acme", () => {
     const r = resolveApprover("projet_delete", { type: "projet", id: "CA-1", name: "SOC" }, data);
     expect(r).toMatchObject({ role: "chantier_owner", usernames: ["jean.dupont"] });
   });
-  it("le strategic_lead peut toujours escalader", () => {
+  it("plus d'escalade strategic_lead sur une demande legacy (approbateur ou admin seulement)", () => {
     expect(
       canDecide(by("test.cto"), approval("projet_create", "chantier", "CH-lean", "ryan.cole"), data)
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("tous les comptes (sponsors, responsables, lead) voient l'onglet Validation", () => {

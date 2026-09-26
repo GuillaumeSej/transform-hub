@@ -35,10 +35,12 @@ export function canFillIndicatorValue(
   indicator: Pick<
     Indicator,
     "axisId" | "chantierId" | "responsibleRoles" | "additionalAuthorizedUserIds" | "programId"
-  >,
+  > &
+    Partial<Pick<Indicator, "id">>,
   user: Parameters<typeof canFillIndicator>[1],
-  /** Axes/chantiers du programme — reconnaît le sponsor d'axe/de chantier (voir
-   *  `IndicatorFillContext`, lib/axisLogic.ts). */
+  /** Axes/chantiers/projets du programme — reconnaît le sponsor d'axe/de chantier et les membres
+   *  (responsable, contributeurs) d'un projet lié au KPI (voir `IndicatorFillContext`,
+   *  lib/axisLogic.ts ; l'`id` de l'indicateur est alors nécessaire). */
   ctx?: Parameters<typeof canFillIndicator>[2]
 ): boolean {
   return canFillIndicator(

@@ -71,11 +71,11 @@ const de: Record<string, string> = {
   "validation.sa.kind.projet_update": "Projektänderung",
   "validation.sa.kind.chantier_create": "Anlage eines Arbeitspakets",
   "validation.sa.kind.chantier_update": "Änderung eines Arbeitspakets",
-  "validation.sa.level.pilot": "Planleitung",
+  "validation.sa.level.pilot": "Leiter des Strategieplans",
   "validation.sa.level.axisSponsor": "Achsen-Sponsor",
   "validation.sa.level.chantierSponsor": "Arbeitspaket-Sponsor",
   "validation.sa.level.projectOwner": "Projektverantwortlicher",
-  "validation.sa.level.contributor": "Mitwirkender",
+  "validation.sa.level.contributor": "Projektbeteiligter",
   "validation.sa.chain": "Freigabekette",
   "validation.sa.then": "dann",
   "validation.sa.step.label": "Schritt",
@@ -412,7 +412,7 @@ const de: Record<string, string> = {
   "leverForm.confidentiality": "Vertraulichkeitsstufe",
   "leverForm.confidentialityNone": "Keine (für alle Profile sichtbar)",
   "leverForm.owner": "Verantwortlicher",
-  "leverForm.sponsor": "Sponsor",
+  "leverForm.sponsor": "Arbeitspaket-Leiter",
   "leverForm.initials": "Initialen",
   "leverForm.geography": "Region",
   "pnl.allRegions": "Alle Regionen",
@@ -441,7 +441,7 @@ const de: Record<string, string> = {
   "leverForm.updated": "Hebel aktualisiert",
   "leverForm.created": "Hebel erstellt",
   "leverForm.createdOutOfScope":
-    "„{name}“ wurde erstellt, erscheint aber nicht in Ihrer Liste: Sie sind weder verantwortlich noch Auftraggeber.",
+    "„{name}“ wurde erstellt, erscheint aber nicht in Ihrer Liste: Sie sind weder Hebel-Verantwortlicher noch Arbeitspaket-Leiter.",
   "leverForm.createFailedTitle": "Hebel konnte nicht erstellt werden",
   "leverForm.createFailedBody":
     "Der Hebel wurde nicht gespeichert. Prüfen Sie Ihre Berechtigungen für das Unternehmen und versuchen Sie es erneut.",
@@ -453,7 +453,7 @@ const de: Record<string, string> = {
   "leverDetail.notFound": "Hebel nicht gefunden.",
   "leverDetail.backToPipeline": "Zurück zur Pipeline",
   "leverDetail.outOfPerimeter":
-    "Eingeschränkter Zugriff — dieser Hebel liegt außerhalb Ihres Bereichs: Sie sind weder verantwortlich noch Auftraggeber.",
+    "Eingeschränkter Zugriff — dieser Hebel liegt außerhalb Ihres Bereichs: Sie sind weder Hebel-Verantwortlicher noch Arbeitspaket-Leiter.",
   "leverDetail.restrictedAccess":
     "Zugriff eingeschränkt — dieser Hebel ist als „{level}“ eingestuft, eine Vertraulichkeitsstufe, für die Ihr Profil nicht freigegeben ist.",
   "leverDetail.editLever": "Hebel bearbeiten",
@@ -469,18 +469,38 @@ const de: Record<string, string> = {
   "leverDetail.pastStageHint": "Stufe bereits erreicht — kein Zurückgehen möglich",
   "leverDetail.moveToStage": "Zu „{stage}“ wechseln",
   "leverDetail.approval.stageHint":
-    "Diese Stufe erfordert einen Freigabeantrag (Verantwortlicher → Sponsor oder CTO), siehe unten",
+    "Diese Stufe erfordert einen Freigabeantrag (Verantwortlicher → Arbeitspaket-Leiter oder CTO), siehe unten",
   "leverDetail.approval.submitHint":
-    "Dieser Hebel ist bereit für einen Freigabeantrag (Verantwortlicher → Sponsor oder CTO).",
+    "Dieser Hebel ist bereit für einen Freigabeantrag (Verantwortlicher → Arbeitspaket-Leiter oder CTO).",
   "leverDetail.approval.submit": "Zur Freigabe einreichen",
   "leverDetail.approval.requested": "Freigabeanfrage gesendet",
   "leverDetail.approval.pending":
-    "Freigabe ausstehend (Sponsor oder CTO), um zu „{stage}“ zu wechseln",
+    "Freigabe ausstehend (Arbeitspaket-Leiter oder CTO), um zu „{stage}“ zu wechseln",
   "leverDetail.approval.approve": "Freigeben",
   "leverDetail.approval.approved": "Antrag freigegeben",
   "leverDetail.approval.reject": "Ablehnen",
   "leverDetail.approval.rejected": "Freigabeanfrage abgelehnt",
   "leverDetail.approval.error": "Aktion nicht erlaubt",
+  "levers.approval.step": "Schritt {current}/{total} — wartet auf {names}",
+  "levers.approval.level.sponsor": "Workstream-Verantwortlicher",
+  "levers.approval.level.cto": "CTO",
+  "levers.approval.level.admin": "Admin",
+  "levers.approval.byAdmin": "von einem Admin freigegeben",
+  "levers.approval.submitHint":
+    "Dieser Hebel ist bereit für einen Freigabeantrag (doppelte Freigabe: Ebenen über dem Antragsteller, Workstream-Verantwortlicher dann CTO).",
+  "levers.approval.stageHint":
+    "Diese Phase erfordert einen Freigabeantrag (Workstream-Verantwortlicher dann CTO), siehe unten",
+  "levers.approval.pending": "Freigabeantrag für den Wechsel zu „{stage}“",
+  "levers.approval.ownRequest": "Ihr Antrag: Sie können ihn nicht selbst freigeben.",
+  "levers.approval.withdraw": "Antrag zurückziehen",
+  "levers.approval.withdrawn": "Antrag zurückgezogen",
+  "levers.approval.stepApproved": "Schritt freigegeben — an den nächsten Schritt weitergeleitet",
+  "levers.approval.sponsorLocked":
+    "Nur der CTO des Programms oder ein Admin kann den Sponsor ändern.",
+  "levers.approval.realizedOwn":
+    "Ihre Meldung: Sie muss von einem anderen Finance-Profil oder einem Admin freigegeben werden.",
+  "levers.approval.deletionAsAdmin":
+    "Kein Inhaber dieser Rolle für diesen Hebel: Sie handeln als Admin (Antrag und Bestätigung bleiben zwei verschiedene Personen).",
   "leverDetail.saveChanges": "Änderungen speichern",
   "leverDetail.editAction": "Maßnahme bearbeiten",
   "leverDetail.newAction": "Neue Maßnahme",
@@ -736,7 +756,7 @@ const de: Record<string, string> = {
   "adminProgramsPanel.newTitle": "Neues Programm",
   "adminProgramsPanel.nameLabel": "Programmname",
   "adminProgramsPanel.namePlaceholder": "Name",
-  "adminProgramsPanel.sponsor": "Sponsor",
+  "adminProgramsPanel.sponsor": "Programm-Sponsor",
   "adminProgramsPanel.owner": "Verantwortlicher",
   "adminProgramsPanel.ambitionLabel": "Ambition",
   "adminProgramsPanel.ambitionPlaceholder": "Z. B. Bis 2027 Marktführer werden",
@@ -895,7 +915,7 @@ const de: Record<string, string> = {
     "Konfiguration des historischen Programms des Unternehmens (Name, Sponsor, Geschäftsjahr, Finanzziele) und seiner Arbeitspakete — wird vom Dashboard und den Finanzberechnungen verwendet.",
   "adminProgramConfig.name": "Programmname",
   "adminProgramConfig.namePlaceholder": "Z. B.: Performanceplan 2026",
-  "adminProgramConfig.sponsor": "Sponsor",
+  "adminProgramConfig.sponsor": "Programm-Sponsor",
   "adminProgramConfig.currency": "Währung",
   "adminProgramConfig.target": "Gesamteinsparziel (€M)",
   "adminProgramConfig.baselineEBIT": "EBIT-Basiswert (€M)",
@@ -1086,6 +1106,14 @@ const de: Record<string, string> = {
   "adminUsers.groupStrategic": "Strategieplan",
   "adminUsers.groupCrossTrack": "Übergreifend (Performance + Strategie)",
   "adminUsers.allPrograms": "Alle Programme",
+  "adminUsers.chooseProgram": "Programm auswählen",
+  "adminUsers.hrNoProgram":
+    "Kein Programm im Unternehmen: Legen Sie zuerst ein Programm an, um den HR-Direktor zuzuordnen.",
+  "adminUsers.badgeLegacyHr": "HR: Programm auswählen",
+  "adminUsers.legacyHrHint":
+    "HR-Direktor-Profil ohne Programm: Bearbeiten Sie den Benutzer, um sein Programm auszuwählen.",
+  "adminUsers.peerAdminLocked":
+    "(nur ein globaler Administrator kann diese Berechtigung entziehen)",
   "adminUsers.allProgramsStrategic": "Alle Strategieprogramme",
   "adminUsers.allProgramsPerformance": "Alle Performance-Programme",
   "adminUsers.removeProfile": "Dieses Profil entfernen",
@@ -1556,7 +1584,7 @@ const de: Record<string, string> = {
   // Achsen-Detailblatt
   "strategicAxes.back": "Zurück zu den Achsen",
   "strategicAxes.notFound": "Achse nicht gefunden.",
-  "strategicAxes.sponsorShort": "Sponsor",
+  "strategicAxes.sponsorShort": "Achsen-Sponsor",
   "strategicAxes.owner": "Sponsor der Achse",
   "strategicAxes.editAxis": "Achse bearbeiten",
   "strategicAxes.editAxisModalTitle": "Achse bearbeiten",
@@ -1837,7 +1865,7 @@ const de: Record<string, string> = {
   "strategicDelete.consequences.projet":
     "Folgen: das Projekt und seine {jalons} Meilenstein(e) werden gelöscht. Nicht rückgängig zu machen.",
   "strategicDelete.reason": "Grund der Löschung (optional)",
-  "strategicDelete.approver.axis": "der Verantwortliche der Achse",
+  "strategicDelete.approver.axis": "der Achsen-Sponsor",
   "strategicDelete.approver.chantier": "der Sponsor des Arbeitspakets",
   "strategicDelete.approval.self": "Sie sind {role}: die Löschung wird sofort ausgeführt.",
   "strategicDelete.approval.needed":
@@ -1896,6 +1924,8 @@ const de: Record<string, string> = {
   "strategicImport.msg.missingColumns":
     "Pflichtspalte(n) fehlen: {columns} — Tabellenblatt ignoriert",
   "strategicImport.msg.unknownColumns": "Unbekannte Spalte(n), ignoriert: {columns}",
+  "strategicImport.msg.projectSponsorIgnored":
+    "Spalte „Sponsor“ der Projekte ignoriert: Projekte haben keinen Sponsor mehr (ein Projekt hat einen Projektverantwortlichen und Projektbeteiligte)",
   "strategicImport.msg.required": '"{column}" ist ein Pflichtfeld',
   "strategicImport.msg.tooLong": '"{column}" überschreitet {max} Zeichen ({length})',
   "strategicImport.msg.duplicateCode":
@@ -2106,7 +2136,8 @@ const de: Record<string, string> = {
   "kpi.section.openChantier": "Arbeitspaket öffnen",
   "kpi.noteOptional": "Kommentar (optional)",
   "kpi.qualitativeNote": "Beobachtung der Periode",
-  "kpi.valueSubmittedForApproval": "Wert zur Freigabe durch den Planverantwortlichen eingereicht",
+  "kpi.valueSubmittedForApproval":
+    "Wert zur Freigabe durch den Leiter des Strategieplans eingereicht",
   "kpi.pendingValidation": "Freigabe ausstehend",
   "kpi.pendingStep": "Schritt {current}/{total}",
   "kpi.valueSubmittedChain": "Wert zur Freigabe eingereicht: {chain}",
@@ -2132,26 +2163,27 @@ const de: Record<string, string> = {
   "kpi.measurement.route.edit.chantier":
     "Ihre Korrektur wird dem Sponsor des Arbeitspakets {name} vorgelegt.",
   "kpi.measurement.route.edit.axis": "Ihre Korrektur wird dem Sponsor der Achse {name} vorgelegt.",
-  "kpi.measurement.route.edit.plan": "Ihre Korrektur wird dem Planverantwortlichen vorgelegt.",
+  "kpi.measurement.route.edit.plan": "Ihre Korrektur wird dem Leiter des Strategieplans vorgelegt.",
   "kpi.measurement.route.delete.chantier":
     "Ihre Löschung wird dem Sponsor des Arbeitspakets {name} vorgelegt.",
   "kpi.measurement.route.delete.axis": "Ihre Löschung wird dem Sponsor der Achse {name} vorgelegt.",
-  "kpi.measurement.route.delete.plan": "Ihre Löschung wird dem Planverantwortlichen vorgelegt.",
+  "kpi.measurement.route.delete.plan":
+    "Ihre Löschung wird dem Leiter des Strategieplans vorgelegt.",
   "kpi.measurement.inform.axisPlan":
-    "Der Achsenverantwortliche und der Planverantwortliche werden informiert.",
-  "kpi.measurement.inform.axis": "Der Achsenverantwortliche wird informiert.",
-  "kpi.measurement.inform.plan": "Der Planverantwortliche wird informiert.",
+    "Der Achsen-Sponsor und der Leiter des Strategieplans werden informiert.",
+  "kpi.measurement.inform.axis": "Der Achsen-Sponsor wird informiert.",
+  "kpi.measurement.inform.plan": "Der Leiter des Strategieplans wird informiert.",
   "kpi.measurement.informAfter.axisPlan":
-    "Nach Annahme der Anfrage werden der Achsenverantwortliche und der Planverantwortliche informiert.",
+    "Nach Annahme der Anfrage werden der Achsen-Sponsor und der Leiter des Strategieplans informiert.",
   "kpi.measurement.informAfter.axis":
-    "Nach Annahme der Anfrage wird der Achsenverantwortliche informiert.",
+    "Nach Annahme der Anfrage wird der Achsen-Sponsor informiert.",
   "kpi.measurement.informAfter.plan":
-    "Nach Annahme der Anfrage wird der Planverantwortliche informiert.",
+    "Nach Annahme der Anfrage wird der Leiter des Strategieplans informiert.",
   "kpi.history.actions": "Aktionen",
   "kpi.history.correctedBy": "korrigiert von",
   "strategicDelete.pendingBy": "Löschung wartet auf Genehmigung durch {approver}",
   "strategicAxes.actionCreationPending":
-    "Projekt zur Freigabe durch den Achsenverantwortlichen eingereicht",
+    "Projekt zur Freigabe durch den Achsen-Sponsor eingereicht",
   "strategicAxes.pendingCreation": "Erstellung wartet auf Freigabe",
   "strategicAxes.form.axisName": "Name der Achse",
   "strategicAxes.form.axisNamePlaceholder": "Z. B. Operative Exzellenz",
@@ -2901,9 +2933,9 @@ const de: Record<string, string> = {
   "hr.pivot.dim.plannedMonth": "Monat (geplantes Datum)",
   "hr.pivot.dim.plannedQuarter": "Quartal (geplantes Datum)",
   "shared.topbar.pendingApprovals": "Ausstehende Freigaben",
-  "shared.topbar.approvalPending": "Ausstehend · Sponsor oder CTO · {stage}",
+  "shared.topbar.approvalPending": "Ausstehend · Arbeitspaket-Leiter oder CTO · {stage}",
   "shared.topbar.milestoneApprovalPending":
-    "Ausstehend · strategischer Leiter · Meilenstein {milestone}",
+    "Ausstehend · Leiter des Strategieplans · Meilenstein {milestone}",
   "leverDetail.trajectory.financial": "Finanzielle Auswirkung",
   "leverDetail.trajectory.fte": "VZÄ-Auswirkung",
   "leverDetail.trajectory.month": "Monat",
@@ -2997,7 +3029,7 @@ const de: Record<string, string> = {
   "dashboard.pivot.dim.type": "Hebeltyp",
   "dashboard.pivot.dim.ws": "Arbeitspaket",
   "dashboard.pivot.dim.owner": "Verantwortlicher",
-  "dashboard.pivot.dim.sponsor": "Sponsor",
+  "dashboard.pivot.dim.sponsor": "Arbeitspaket-Leiter",
   "dashboard.pivot.dim.geography": "Geografie",
   "dashboard.pivot.dim.country": "Land",
   "dashboard.pivot.dim.entity": "Einheit",
@@ -3089,6 +3121,27 @@ const de: Record<string, string> = {
   "strategicApprovals.phrase.projetUpdate": "die Änderung des Projekts „{name}“ ({fields})",
   "strategicApprovals.phrase.chantierUpdate": "die Änderung des Arbeitspakets „{name}“ ({fields})",
   "strategicApprovals.phrase.chantierCreate": "die Anlage des Arbeitspakets „{name}“",
+  "strategicApprovals.phrase.axeCreate": "die Anlage der Achse „{name}“",
+  "strategicApprovals.phrase.axeUpdate": "die Änderung der Achse „{name}“ ({fields})",
+  "strategicApprovals.phrase.indicatorUpdate":
+    "die Änderung des Ziels des Indikators „{name}“ ({fields})",
+  "strategicApprovals.phrase.staffingCreate":
+    "das Hinzufügen der Staffing-Zeile „{line}“ zu „{name}“",
+  "strategicApprovals.phrase.staffingUpdate":
+    "die Änderung der Staffing-Zeile „{line}“ von „{name}“",
+  "strategicApprovals.phrase.staffingDelete":
+    "das Löschen der Staffing-Zeile „{line}“ von „{name}“",
+  "strategicApprovals.kind.axe_create": "Anlage einer Achse",
+  "strategicApprovals.kind.axe_update": "Änderung einer Achse",
+  "strategicApprovals.kind.indicator_update": "KPI-Ziel",
+  "strategicApprovals.kind.staffing_update": "Staffing",
+  "strategicApprovals.level.admin": "Administrator",
+  "strategicApprovals.legacyMilestone.intro":
+    "Alte Meilenstein-Anfragen (abgeschaffter Ablauf): nur lesbar. Löschen Sie sie, damit das Projekt den Übergang über die Freigabekette neu beantragt.",
+  "strategicApprovals.legacyMilestone.clear": "Löschen",
+  "strategicApprovals.legacyMilestone.cleared": "Alte Meilenstein-Anfrage gelöscht",
+  "strategicApprovals.legacyMilestone.notDecidable":
+    "Keine Meilenstein-Anfrage zur Freigabe für dieses Projekt",
   // Motif du risque levier (lib/leverRiskText.ts), retour fiche levier, badge dépassement
   "risk.level.critical": "kritisch",
   "risk.level.high": "hoch",
@@ -3315,6 +3368,11 @@ const de: Record<string, string> = {
   "me.item.chantierCreateApproval": "Anlage eines Arbeitspakets freigeben",
   "me.item.projetUpdateApproval": "Projektänderung freigeben",
   "me.item.chantierUpdateApproval": "Änderung eines Arbeitspakets freigeben",
+  "me.item.axeCreateApproval": "Anlage einer Achse freigeben",
+  "me.item.axeUpdateApproval": "Änderung einer Achse freigeben",
+  "me.item.indicatorUpdateApproval": "Änderung eines Indikators freigeben",
+  "me.item.staffingUpdateApproval": "Änderung der Personalplanung freigeben",
+  "me.item.genericApproval": "Anfrage freigeben",
   "me.item.approvalStep": "Schritt {current}/{total}",
   "me.item.projetLate": "Projekt im Verzug",
   "me.item.projetDue": "Projektfälligkeit",
@@ -3328,11 +3386,13 @@ const de: Record<string, string> = {
   "me.role.sponsor": "Sponsor",
   "me.role.axisSponsor": "Achsen-Sponsor",
   "me.role.pilote": "Arbeitspaket-Sponsor",
-  "me.role.programOwner": "Programm-Owner",
+  "me.role.programOwner": "Programmverantwortlicher",
   "me.role.cto": "CTO",
   "me.role.admin": "Administrator",
   "me.role.finance": "Finanzen",
-  "me.role.strategicLead": "Strategische Leitung",
+  "me.role.strategicLead": "Leiter des Strategieplans",
+  "me.role.programSponsor": "Programm-Sponsor",
+  "me.role.contributor": "Projektbeteiligter",
   // ─── admin.onboarding (checklist « Mise en place » + échelle de confidentialité) ───
   "admin.onboarding.title": "Einrichtung",
   "admin.onboarding.progress": "{done}/{total} Schritte",

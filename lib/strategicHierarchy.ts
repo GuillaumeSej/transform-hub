@@ -17,6 +17,8 @@ import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
  *   - commentaires, descriptions, libellés → libres.
  * Un niveau vide (personne désignée) est SAUTÉ : on remonte au suivant. Au sommet (le pilote),
  * il n'y a plus personne au-dessus : la chaîne est vide → application directe (comme le CTO).
+ * Chaîne vide pour un AUTRE auteur que le pilote (aucun niveau au-dessus désigné) : jamais
+ * d'application directe — repli sur le(s) pilote(s), à défaut les admins (`fallbackApprovalChain`).
  *
  * Désignation (décision PO) : sponsors d'axe et de chantier sont définis en amont par le pilote
  * (ou un admin) ; le responsable projet est désigné par le niveau au-dessus (sponsor de chantier
@@ -77,7 +79,33 @@ export function authorLevel(username: string, ctx: HierarchyContext): StrategicL
   return null;
 }
 
-export type ApprovalStep = { level: StrategicLevel; usernames: string[] };
+/** Niveau d'un palier de validation : un niveau de la hiérarchie, ou `"admin"` — palier de REPLI
+ *  (voir `fallbackApprovalChain`) quand ni la hiérarchie ni aucun pilote ne peut valider. */
+export type ChainLevel = StrategicLevel | "admin";
+
+export type ApprovalStep = { level: ChainLevel; usernames: string[] };
+
+/**
+ * Chaîne effective d'une saisie SOUMISE à validation (auteur ni pilote du programme ni admin — ces
+ * deux-là appliquent directement, voir `resolveApprovalRoute` de lib/strategicApprovals.ts) :
+ *  - la chaîne hiérarchique si elle a au moins un palier ;
+ *  - sinon (aucun niveau au-dessus désigné) : UN palier « pilote » (pilotes du programme, hors
+ *    auteur) ;
+ *  - sinon (aucun pilote) : UN palier « admin » (`admins`, hors auteur — éventuellement vide :
+ *    n'importe quel admin peut décider ce palier).
+ * Jamais vide : une saisie d'un non-pilote n'est JAMAIS appliquée directement faute de valideur.
+ */
+export function fallbackApprovalChain(
+  chain: ApprovalStep[],
+  author: string,
+  pilots: string[],
+  admins: string[]
+): ApprovalStep[] {
+  if (chain.length) return chain;
+  const p = uniq(pilots).filter((u) => u !== author);
+  if (p.length) return [{ level: "pilot", usernames: p }];
+  return [{ level: "admin", usernames: uniq(admins).filter((u) => u !== author) }];
+}
 
 /**
  * Chaîne de validation d'une saisie de `author` sur cet objet : les `count` premiers niveaux NON

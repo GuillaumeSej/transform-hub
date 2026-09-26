@@ -170,7 +170,11 @@ export const DIMENSION_REGISTRY: DimensionDef[] = [
       ctx.workstreams?.find((w) => w.id === l.ws)?.name ?? l.ws ?? FALLBACK_LABEL,
   },
   { key: "owner", label: "Responsable", getValue: (l) => l.owner || FALLBACK_LABEL },
-  { key: "sponsor", label: "Commanditaire", getValue: (l) => l.sponsor || FALLBACK_LABEL },
+  {
+    key: "sponsor",
+    label: "Responsable de chantier",
+    getValue: (l) => l.sponsor || FALLBACK_LABEL,
+  },
   {
     key: "geography",
     label: "Géographie",

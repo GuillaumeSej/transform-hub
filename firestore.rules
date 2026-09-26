@@ -92,8 +92,17 @@ service cloud.firestore {
     // pour le même raisonnement côté lecture client). `.get(field, default)` évite une erreur
     // d'évaluation si le champ n'existe pas sur le document (nouveau format sans `role`, ou legacy
     // sans `isGlobalAdmin`).
+    // Compte DÉSACTIVÉ (`adminUsers.disabled == true`, posé par UsersPanel puis synchronisé par
+    // admin-api sur Firebase Auth) : traité comme NON connecté pour toutes les écritures scopées
+    // entreprise et les vérifications admin — un jeton Firebase encore valide (≤ 1 h après la
+    // désactivation, ou flag Auth pas encore synchronisé) ne doit plus rien pouvoir modifier.
+    function isEnabledProfile() {
+      return currentProfile().get('disabled', false) != true;
+    }
+
     function isSuperAdmin() {
       return isSignedIn()
+        && isEnabledProfile()
         && (currentProfile().get('isGlobalAdmin', false) == true
             || currentProfile().get('role', '') == 'admin');
     }
@@ -109,6 +118,7 @@ service cloud.firestore {
     // nouveau (`isCompanyAdmin: true`) / legacy (`role == 'admin_entreprise'`) que isSuperAdmin().
     function isCompanyAdmin(companyId) {
       return isSignedIn()
+        && isEnabledProfile()
         && (currentProfile().get('isCompanyAdmin', false) == true
             || currentProfile().get('role', '') == 'admin_entreprise')
         && myCompanyId() == companyId;
@@ -140,7 +150,7 @@ service cloud.firestore {
       return isSuperAdmin() || belongsToCompany(companyId);
     }
     function canWriteCompanyScoped(companyId) {
-      return isSuperAdmin() || belongsToCompany(companyId);
+      return isSuperAdmin() || (belongsToCompany(companyId) && isEnabledProfile());
     }
 
     // ─── companies/{companyId} — Company.id EST le tenant id (pas de champ companyId séparé) ────
@@ -189,6 +199,21 @@ service cloud.firestore {
       return data.get('isGlobalAdmin', false) == true || data.get('role', '') == 'admin';
     }
 
+    // Habilitation admin d'ENTREPRISE (nouveau format ou legacy). Un admin d'entreprise ne peut
+    // ni RETIRER cette habilitation à un AUTRE admin d'entreprise, ni le supprimer, ni le
+    // désactiver directement : ces actions passent par un admin global (ou admin-api, qui
+    // contourne ces règles et applique ses propres garde-fous). Il reste libre sur son PROPRE
+    // compte (`accountSlug == currentUsername()`) et sur les comptes non-admin.
+    function carriesCompanyAdmin(data) {
+      return data.get('isCompanyAdmin', false) == true || data.get('role', '') == 'admin_entreprise';
+    }
+    function keepsPeerCompanyAdmin(accountSlug) {
+      return accountSlug == currentUsername()
+        || !carriesCompanyAdmin(resource.data)
+        || (carriesCompanyAdmin(request.resource.data)
+            && request.resource.data.get('disabled', false) == resource.data.get('disabled', false));
+    }
+
     match /adminUsers/{accountSlug} {
       allow read: if isSuperAdmin()
         || accountSlug == currentUsername()
@@ -202,9 +227,12 @@ service cloud.firestore {
             && docCompanyId(request.resource.data) == docCompanyId(resource.data)
             && request.resource.data.get('isGlobalAdmin', false) != true
             && request.resource.data.get('role', '') != 'admin'
-            && !carriesGlobalAdmin(resource.data));
+            && !carriesGlobalAdmin(resource.data)
+            && keepsPeerCompanyAdmin(accountSlug));
       allow delete: if isSuperAdmin()
-        || (isCompanyAdmin(docCompanyId(resource.data)) && !carriesGlobalAdmin(resource.data));
+        || (isCompanyAdmin(docCompanyId(resource.data))
+            && !carriesGlobalAdmin(resource.data)
+            && (accountSlug == currentUsername() || !carriesCompanyAdmin(resource.data)));
     }
 
     // ─── adminApiAuditLog/{id} — journal des actions sur les COMPTES (renommage, suppression,
@@ -258,7 +286,18 @@ service cloud.firestore {
         && request.resource.data.programId.size() > 0;
       allow update: if canWriteCompanyScoped(resource.data.companyId)
         && request.resource.data.companyId == resource.data.companyId;
-      allow delete: if canWriteCompanyScoped(resource.data.companyId);
+      // Suppression = DOUBLE VALIDATION (lib/leversLogic.ts::requestLeverDeletion /
+      // approveLeverDeletion) : hors admin global, un levier ne peut être supprimé que s'il porte
+      // une demande `deletionRequest` en cours ET que c'est une AUTRE personne que le demandeur
+      // (`deletionRequest.requestedBy` = username applicatif) qui confirme. Le couple de rôles
+      // (CTO ↔ responsable de chantier) reste vérifié côté client. NB : `requestedBy` est le
+      // username HUMAIN (`AuthUser.username`), stocké tel quel dans `adminUsers.username` —
+      // `currentUsername()` est l'accountSlug (`username.companyId`), d'où la comparaison au champ.
+      allow delete: if isSuperAdmin()
+        || (canWriteCompanyScoped(resource.data.companyId)
+            && resource.data.get('deletionRequest', null) != null
+            && resource.data.deletionRequest.get('requestedBy', '')
+                 != currentProfile().get('username', currentUsername()));
     }
 
     // Collection legacy, plus jamais alimentée (fusionnée dans Lever.actions — voir

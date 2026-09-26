@@ -72,7 +72,6 @@ type LeverRow = Lever & {
 
 export function LeversPagePerformance() {
   const { user } = useRole();
-  const readOnly = isReadOnlyUser(user);
   const data = useBeTrackData(user?.companyId ?? null, user);
   // Vue scopée à UN programme Performance sélectionnable (voir le sélecteur plus bas) : le cycle
   // de vie étant désormais configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un
@@ -90,6 +89,13 @@ export function LeversPagePerformance() {
   // rester scopée au seul `selectedProgramId` du sélecteur local ci-dessus (qui continue de piloter
   // le référentiel de cycle de vie affiché — simplification assumée, cf. plus bas).
   const { isConsolidatedView, consolidatedPrograms } = useActiveProgram();
+  // Lecture seule PAR PROGRAMME (hr / comex_member n'éditent pas les leviers) ; vue consolidée :
+  // pas de programme unique, règle historique (tous profils COMEX).
+  const readOnly = isReadOnlyUser(
+    user,
+    isConsolidatedView ? null : selectedProgramId,
+    "performance"
+  );
   const { t } = useTranslation();
   const router = useRouter();
   const { showToast } = useToast();

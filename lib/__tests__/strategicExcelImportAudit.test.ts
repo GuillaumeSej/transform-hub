@@ -136,7 +136,10 @@ describe("#1 personnes : Owner/Pilote/Sponsor stockés en username", () => {
     expect(result.toCreate.axes[0].owner).toBe("marc.dubois");
     expect(result.toCreate.chantiers[0].pilote).toBe("iroy");
     expect(result.toCreate.actions[0].owner).toBe("iroy");
-    expect(result.toCreate.actions[0].sponsor).toBe("iroy");
+    // Ancienne colonne "Sponsor" des projets : tolérée mais ignorée, avec un avertissement.
+    expect(result.toCreate.actions[0].sponsor).toBeUndefined();
+    expect(result.warnings.filter((w) => w.code === "projectSponsorIgnored")).toHaveLength(1);
+    expect(result.warnings.filter((w) => w.code === "unknownColumns")).toEqual([]);
     expect(result.people).toEqual([]);
   });
 
@@ -145,7 +148,7 @@ describe("#1 personnes : Owner/Pilote/Sponsor stockés en username", () => {
       sheets({
         axes: [axis({ Owner: "DG" }), axis({ Code: "AX2", Nom: "Axe 2", Owner: "Équipe Data" })],
         chantiers: [chantier({ Pilote: "Claire Fontaine" })],
-        actions: [projet({ Owner: "Paul Martin", Sponsor: "Jean Dupont" })],
+        actions: [projet({ Owner: "Paul Martin", Contributeurs: "Jean Dupont" })],
       }),
       empty(),
       users
@@ -158,12 +161,15 @@ describe("#1 personnes : Owner/Pilote/Sponsor stockés en username", () => {
     expect(byName.get("Claire Fontaine")).toMatchObject({
       kind: "proposable",
       username: "claire.fontaine",
+      // Colonne « Sponsor de chantier » (ancien en-tête "Pilote") → rôle proposé.
+      suggestedRole: "chantier_owner",
     });
     // Collision : "paul.martin" existe déjà (autre personne) → suffixe signalé.
     expect(byName.get("Paul Martin")).toMatchObject({
       kind: "proposable",
       username: "paul.martin2",
       collisionWith: "paul.martin",
+      suggestedRole: "chantier_contributor",
     });
     // Homonymes : jamais proposé ni rattaché.
     expect(byName.get("Jean Dupont")?.kind).toBe("ambiguous");
@@ -190,6 +196,67 @@ describe("#1 personnes : Owner/Pilote/Sponsor stockés en username", () => {
       lastName: "Marchand",
       username: "elodie.marchand",
     });
+  });
+});
+
+describe("en-têtes alignés sur l'UI + rôle proposé à la création de compte", () => {
+  it("accepte les nouveaux en-têtes (Sponsor d'axe / Sponsor de chantier / Responsable projet)", () => {
+    const result = run(
+      sheets({
+        axes: [axis({ "Sponsor d'axe": "Alice Martin" })],
+        chantiers: [chantier({ "Sponsor de chantier": "Bruno Petit" })],
+        actions: [
+          projet({
+            "Responsable projet": "Chloé Durand",
+            "Contributeurs (séparés par ;)": "Denis Leroy; Alice Martin",
+          }),
+        ],
+      }),
+      empty(),
+      []
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.filter((w) => w.code === "unknownColumns")).toEqual([]);
+    expect(result.toCreate.axes[0].owner).toBe("Alice Martin");
+    expect(result.toCreate.chantiers[0].pilote).toBe("Bruno Petit");
+    expect(result.toCreate.actions[0].owner).toBe("Chloé Durand");
+    const role = new Map(result.people.map((p) => [p.name, p.suggestedRole]));
+    // Plus haut rôle de la hiérarchie quand une personne apparaît dans plusieurs colonnes.
+    expect(role.get("Alice Martin")).toBe("axis_sponsor");
+    expect(role.get("Bruno Petit")).toBe("chantier_owner");
+    expect(role.get("Chloé Durand")).toBe("chantier_contributor");
+    expect(role.get("Denis Leroy")).toBe("projet_contributor");
+  });
+
+  it("« Rôles responsables » accepte program_sponsor, program_owner, comex_member, hr, projet_contributor", () => {
+    const result = run(
+      sheets({
+        axes: [axis()],
+        indicateurs: [
+          kpi({
+            "Rôles responsables (séparés par ;)":
+              "program_sponsor;program_owner;comex_member;hr;projet_contributor",
+          }),
+        ],
+      })
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.toCreate.indicators[0].responsibleRoles).toEqual([
+      "program_sponsor",
+      "program_owner",
+      "comex_member",
+      "hr",
+      "projet_contributor",
+    ]);
+  });
+
+  it("l'export et le modèle n'ont plus de colonne « Sponsor » de projet", () => {
+    const wb = buildStrategicPlanExportWorkbook(empty(), stages, XLSX);
+    const projets = wb.Sheets["Projets"];
+    const header = XLSX.utils.sheet_to_json<unknown[]>(projets, { header: 1 })[0] as string[];
+    expect(header).toContain("Responsable projet");
+    expect(header).not.toContain("Sponsor");
+    expect(header).not.toContain("Owner");
   });
 });
 

@@ -38,8 +38,19 @@ import type { AuthUser, NavItem, Role, RoleDefinition } from "@/types";
  *  "validation" quand le rôle la porte (sinon il forme la section à lui seul). N'étant plus le 1er
  *  item de la nav, la page d'atterrissage post-connexion et le repli d'AppShell ne dérivent plus de
  *  `resolveUserNav(user)[0]` : voir `resolveLandingRoute` ci-dessous. Sans `programTypes` : commun
- *  aux deux plans. Même objet partagé partout — `resolveUserNav` ne garde de toute façon que sa
- *  1re occurrence. */
+ *  aux deux plans. Même objet partagé partout — `resolveUserNav` dédoublonne par id. */
+/** Dashboard du Plan Stratégique pour les profils stratégiques qui y ont droit (pilote, sponsor
+ *  d'axe) — même id/route que le dashboard exécutif Performance (`/dashboard` s'auto-route selon
+ *  le type du programme actif), restreint au type `strategic` : un profil Performance cumulé sans
+ *  dashboard (ex. `sponsor`) ne l'obtient pas sur ses programmes Performance (fusion des
+ *  `programTypes` dans `resolveUserNav`). */
+const STRATEGIC_DASHBOARD_NAV_ITEM: NavItem = {
+  id: "dashboard",
+  icon: "PieChart",
+  label: "nav.executiveDashboard",
+  programTypes: ["strategic"],
+};
+
 const ME_NAV_ITEM: NavItem = {
   id: "me",
   icon: "UserCircle",
@@ -86,10 +97,9 @@ const CTO_LIKE_NAV: RoleDefinition["nav"] = [
     id: "validation",
     icon: "ShieldCheck",
     label: "nav.validation",
-    // Plus de restriction `programTypes` : la page /validation est program-type-aware (portes de
-    // levier côté Performance, demandes de validation stratégique côté Stratégique) et
-    // `resolveUserNav` ne garde que la 1re occurrence d'un id — un item Performance-only masquait
-    // l'item Stratégique des profils cumulés.
+    // Pas de restriction `programTypes` : la page /validation est program-type-aware (portes de
+    // levier côté Performance, demandes de validation stratégique côté Stratégique). Les doublons
+    // d'id sont fusionnés par `resolveUserNav` (union des `programTypes`).
     section: "decision",
   },
   // Round 13 : plus de `programTypes` sur "hr-etp" — la base ETP est scopée ENTREPRISE, pas
@@ -250,6 +260,10 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.strategicLead.label",
     short: "roles.strategicLead.short",
     nav: [
+      // Dashboard stratégique (la route `/dashboard` s'auto-route selon le type du programme actif,
+      // voir app/(app)/dashboard/page.tsx) — 1er item : c'est la page d'arrivée du pilote (pas de
+      // « Mon espace » pour un profil de pilotage, voir `resolveLandingRoute`).
+      STRATEGIC_DASHBOARD_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -259,20 +273,9 @@ export const roles: Record<Role, RoleDefinition> = {
       { id: "kpi", icon: "LineChart", label: "nav.kpi", programTypes: ["strategic"] },
       { id: "effectifs", icon: "Users", label: "nav.effectifs", programTypes: ["strategic"] },
       ME_NAV_ITEM,
-      // Round "jalon validation gate" : le pilote stratégique est le SEUL approbateur des demandes
-      // de validation de jalon de projet (`ChantierAction.milestoneApproval`, voir
-      // `lib/axisLogic.ts::approveMilestoneGate`) — même route/id que `CTO_LIKE_NAV`'s "validation"
-      // ci-dessus (la PAGE elle-même est déjà program-type-aware, voir
-      // `app/(app)/validation/page.tsx`), ajoutée ICI (nav propre à `strategic_lead`) plutôt que
-      // d'ôter le `programTypes: ["performance"]` de `CTO_LIKE_NAV` : changement plus petit/ciblé,
-      // suffisant pour le cas courant (`strategic_lead` SEUL, sans profil Performance). Limite
-      // connue et acceptée : `resolveUserNav` ne garde que la PREMIÈRE occurrence d'un id (profils
-      // Performance résolus avant les profils Stratégiques) — un utilisateur cumulant un profil
-      // Performance (`cto`/`program_sponsor`/`program_owner`, seuls rôles à porter "validation" côté
-      // Performance) ET `strategic_lead` verrait donc l'item Performance-only l'emporter et
-      // resterait sans lien "Validation" en mode Stratégique ; combinaison jugée assez rare pour ne
-      // pas justifier de retravailler `resolveUserNav`/`CTO_LIKE_NAV` dans ce lot. `section:
-      // "decision"` — même regroupement que `CTO_LIKE_NAV`.
+      // Validation stratégique (demandes à valider, « Mes demandes », et — vue pilotage, voir
+      // `isPilotProfile` — « En attente chez d'autres »). Même id que les autres navs : les
+      // `programTypes` des doublons sont FUSIONNÉS par `resolveUserNav`.
       {
         id: "validation",
         icon: "ShieldCheck",
@@ -301,6 +304,7 @@ export const roles: Record<Role, RoleDefinition> = {
     label: "roles.axisSponsor.label",
     short: "roles.axisSponsor.short",
     nav: [
+      STRATEGIC_DASHBOARD_NAV_ITEM,
       {
         id: "levers",
         icon: "Target",
@@ -466,7 +470,8 @@ export const ADMIN_NAV_DEFINITIONS: { global: RoleDefinition; company: RoleDefin
   },
 };
 
-/** Union dédupliquée (par `NavItem.id`, première occurrence conservée) de la nav de TOUS les
+/** Union dédupliquée (par `NavItem.id`, première occurrence conservée, `programTypes` des doublons
+ *  fusionnés) de la nav de TOUS les
  *  profils/habilitations de l'utilisateur : TOUS les profils Plan Performance (round multi-profils
  *  multi-programmes — un utilisateur peut en avoir plusieurs, un par programme), TOUS les profils
  *  Plan Stratégique, admin global, admin entreprise — dans cet ordre. Point de passage UNIQUE pour
@@ -497,14 +502,35 @@ export function resolveUserNav(
   const isPilot = [...getPerformanceProfiles(user), ...getStrategicProfiles(user)].some((p) =>
     PILOT_ROLES_WITHOUT_ME.includes(p.role)
   );
-  const seen = new Set<string>();
+  // Dédoublonnage par id (1re occurrence conservée pour le libellé/l'icône/la section), mais avec
+  // FUSION des `programTypes` : la nav est ensuite filtrée par type de programme actif (Sidebar,
+  // AppShell) — garder aveuglément la 1re occurrence ferait qu'un item restreint à un type (ex.
+  // "validation" Performance-only d'un `sponsor`/`finance`) masquerait le même item apporté pour
+  // l'autre type par un profil cumulé (ex. `axis_sponsor`, `chantier_owner`). Règle : un doublon
+  // SANS `programTypes` (tous types) rend l'item visible partout ; sinon union des types.
+  const indexById = new Map<string, number>();
   const result: NavItem[] = [];
   for (const list of navLists) {
     for (const item of list) {
       if (isPilot && item.id === "me") continue;
-      if (seen.has(item.id)) continue;
-      seen.add(item.id);
-      result.push(item);
+      const existingIndex = indexById.get(item.id);
+      if (existingIndex === undefined) {
+        indexById.set(item.id, result.length);
+        result.push(item);
+        continue;
+      }
+      const existing = result[existingIndex];
+      const merged = mergeProgramTypes(existing.programTypes, item.programTypes);
+      // Le badge (ex. compteur de demandes stratégiques sur "validation") est aussi repris d'un
+      // doublon qui le porte : sinon l'item Performance d'un profil cumulé le perdrait.
+      const badge = existing.badge ?? item.badge;
+      if (merged !== existing.programTypes || badge !== existing.badge) {
+        const next: NavItem = { ...existing };
+        if (merged) next.programTypes = merged;
+        else delete next.programTypes;
+        if (badge) next.badge = badge;
+        result[existingIndex] = next;
+      }
     }
   }
   // Regroupement STABLE par section (pilotage sans section, puis "decision", puis "reference",
@@ -516,6 +542,18 @@ export function resolveUserNav(
     .map((item, index) => ({ item, index }))
     .sort((a, b) => sectionRank(a.item.section) - sectionRank(b.item.section) || a.index - b.index)
     .map(({ item }) => item);
+}
+
+/** Union de deux restrictions `programTypes` (`undefined` = tous types, absorbant). Renvoie `a`
+ *  inchangé (même référence) quand la fusion n'élargit rien. */
+function mergeProgramTypes(
+  a: NavItem["programTypes"],
+  b: NavItem["programTypes"]
+): NavItem["programTypes"] {
+  if (!a) return a;
+  if (!b) return undefined;
+  const missing = b.filter((type) => !a.includes(type));
+  return missing.length === 0 ? a : [...a, ...missing];
 }
 
 const SECTION_ORDER: (string | undefined)[] = [undefined, "decision", "reference"];
@@ -559,6 +597,16 @@ export function getDisplayRoleDefinition(
   if (user?.isGlobalAdmin) return ADMIN_NAV_DEFINITIONS.global;
   if (user?.isCompanyAdmin) return ADMIN_NAV_DEFINITIONS.company;
   return null;
+}
+
+/** Clé i18n du libellé complet d'un rôle métier (`Role`) ou d'une habilitation d'administration
+ *  (`"admin"` / `"admin_entreprise"`, buckets des résumés admin) — pour afficher un rôle à
+ *  l'utilisateur sans jamais exposer son identifiant technique. `undefined` pour une valeur
+ *  inconnue (rôle legacy supprimé) : l'appelant retombe alors sur la valeur brute. */
+export function roleLabelKey(role: string): string | undefined {
+  if (role === "admin") return ADMIN_NAV_DEFINITIONS.global.label;
+  if (role === "admin_entreprise") return ADMIN_NAV_DEFINITIONS.company.label;
+  return (roles as Record<string, RoleDefinition | undefined>)[role]?.label;
 }
 
 export const PAGE_ROUTES: Record<string, string> = {

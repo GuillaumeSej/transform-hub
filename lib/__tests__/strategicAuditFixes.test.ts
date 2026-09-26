@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  approveMilestoneGate,
-  canDecideMilestone,
+  assertMilestoneStillPassable,
   chantierDeclaredProgress,
   compareMeasurements,
   computeIndicatorDelta,
@@ -424,34 +423,17 @@ describe("milestone approval edge cases", () => {
     },
     milestoneApproval: { targetMilestone: "E1", requestedBy: "carl", requestedAt: "" },
   });
-  const axisOwner = { username: "alice", profiles: [] };
-  const axes = [{ id: "AX1", owner: "alice" }];
-
-  it("without chantier pilote, the axis owner can decide (same cascade as resolveApprover)", () => {
-    expect(canDecideMilestone(chantier({ pilote: undefined }), axisOwner, axes)).toBe(true);
-    expect(canDecideMilestone(chantier({ pilote: "bob" }), axisOwner, axes)).toBe(false);
-    const patch = approveMilestoneGate(
-      e0Complete,
-      axisOwner,
-      [chantier({ pilote: undefined })],
-      [e0Complete],
-      axes
-    );
-    expect(patch.milestones?.currentMilestone).toBe("E1");
-  });
 
   it("re-checks the gate at approval time", () => {
+    expect(() =>
+      assertMilestoneStillPassable(e0Complete, [chantier({ pilote: "bob" })], [e0Complete])
+    ).not.toThrow();
     const regressed = {
       ...e0Complete,
       milestones: { ...e0Complete.milestones!, checklists: { E0: full(["E0-A2"]) } },
     };
     expect(() =>
-      approveMilestoneGate(
-        regressed,
-        { username: "bob", profiles: [] },
-        [chantier({ pilote: "bob" })],
-        [regressed]
-      )
+      assertMilestoneStillPassable(regressed, [chantier({ pilote: "bob" })], [regressed])
     ).toThrow(/plus complet/);
   });
 });

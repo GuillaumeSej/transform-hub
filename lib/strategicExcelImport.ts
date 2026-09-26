@@ -59,8 +59,8 @@ import type {
  * valeur existante (upsert non destructif). Réimporter le même fichier = 0 création, 0 mise à jour.
  * L'export (`buildStrategicPlanExportWorkbook`) produit le même format : aller-retour = 0 changement.
  *
- * Personnes (Owner d'axe, Pilote de chantier, Owner/Sponsor/Contributeurs de projet, Responsables
- * de saisie d'un indicateur) : la visibilité
+ * Personnes (Sponsor d'axe, Sponsor de chantier, Responsable projet/Contributeurs de projet,
+ * Responsables de saisie d'un indicateur) : la visibilité
  * (`lib/axisLogic.ts`) et le routage des validations comparent ces champs au `username`. Chaque
  * cellule est donc rapprochée des comptes de l'entreprise (`options.users`) par identifiant,
  * e-mail (synthétique ou partie locale) ou nom affiché (insensible casse/accents) et REMPLACÉE par
@@ -79,11 +79,14 @@ import type {
 
 // ---------- En-têtes (modèle + export) ----------
 
+// Colonnes « personne » nommées comme dans l'UI (rôle porté) : "Sponsor d'axe", "Sponsor de
+// chantier", "Responsable projet". Les anciens en-têtes "Owner"/"Pilote" restent acceptés à
+// l'import (alias, voir `SHEET_SPECS`).
 export const STRATEGIC_AXIS_IMPORT_HEADERS = [
   "Code",
   "Nom",
   "Description",
-  "Owner",
+  "Sponsor d'axe",
   "Couleur",
   "Étape de maturité",
 ] as const;
@@ -93,7 +96,7 @@ export const STRATEGIC_CHANTIER_IMPORT_HEADERS = [
   "Codes Axes (séparés par ;)",
   "Nom",
   "Description",
-  "Pilote",
+  "Sponsor de chantier",
   "Étape de maturité",
   "Budget alloué",
   "Budget consommé",
@@ -107,15 +110,17 @@ export const STRATEGIC_ACTION_IMPORT_HEADERS = [
   "Code Chantier",
   "Nom",
   "Description",
-  "Owner",
-  "Sponsor",
+  "Responsable projet",
+  // (Ancienne colonne "Sponsor" de projet supprimée — `ChantierAction.sponsor` n'a plus de rôle :
+  //  encore tolérée à l'import, mais ignorée avec un avertissement `projectSponsorIgnored`.)
   "Date début",
   "Date fin",
   "Étape de maturité",
   "Budget",
   "Budget consommé",
   "Poids dans le chantier (%)",
-  // Facultatif : contributeurs projet (`ChantierAction.contributors`), rapprochés comme l'Owner.
+  // Facultatif : contributeurs projet (`ChantierAction.contributors`), rapprochés comme le
+  // responsable projet.
   "Contributeurs (séparés par ;)",
 ] as const;
 
@@ -140,7 +145,8 @@ export const STRATEGIC_INDICATOR_IMPORT_HEADERS = [
   // LEGACY (droit de saisie par rôle) : lu seulement si aucun "Responsables saisie" — voir
   // `canFillIndicator`, lib/axisLogic.ts.
   "Rôles responsables (séparés par ;)",
-  // Responsables de saisie NOMMÉS (`Indicator.additionalAuthorizedUserIds`), rapprochés comme l'Owner.
+  // Responsables de saisie NOMMÉS (`Indicator.additionalAuthorizedUserIds`), rapprochés comme les
+  // autres colonnes « personne ».
   "Responsables saisie (séparés par ;)",
 ] as const;
 
@@ -207,6 +213,9 @@ const ALL_ROLES: Role[] = [
   "finance",
   "hr",
   "ops",
+  "program_sponsor",
+  "program_owner",
+  "comex_member",
   "strategic_lead",
   "axis_sponsor",
   "chantier_owner",
@@ -234,6 +243,8 @@ export const STRATEGIC_IMPORT_MESSAGES = {
     "Aucune feuille reconnue dans ce classeur (attendu : Axes, Chantiers, Projets, Indicateurs) — utilisez le modèle",
   missingColumns: "Colonne(s) obligatoire(s) absente(s) : {columns} — feuille ignorée",
   unknownColumns: "Colonne(s) non reconnue(s), ignorée(s) : {columns}",
+  projectSponsorIgnored:
+    'Colonne "Sponsor" des projets ignorée : le sponsor de projet n\'existe plus (le projet a un responsable projet et des contributeurs)',
   required: '"{column}" est obligatoire',
   tooLong: '"{column}" dépasse {max} caractères ({length})',
   duplicateCode: 'Code "{code}" en doublon dans le fichier (déjà utilisé ligne {line})',
@@ -358,6 +369,12 @@ export type StrategicImportPerson = {
   kind: "proposable" | "ambiguous" | "not_a_person";
   /** Proposition de compte (kind "proposable" uniquement). */
   username?: string;
+  /** Rôle Plan Stratégique proposé pour le compte, déduit de la (des) colonne(s) où la personne
+   *  apparaît — la plus haute dans la hiérarchie : "Sponsor d'axe" → `axis_sponsor`, "Sponsor de
+   *  chantier" → `chantier_owner`, "Responsable projet" → `chantier_contributor`, "Contributeurs"
+   *  → `projet_contributor`. Absent (ex. responsable de saisie d'indicateur seulement) = au choix
+   *  de l'appelant. */
+  suggestedRole?: Role;
   firstName?: string;
   lastName?: string;
   /** Identifiant dérivé déjà pris (compte existant ou autre personne du fichier) : `username`
@@ -382,7 +399,7 @@ export type StrategicImportPreview = {
 };
 
 export type StrategicImportOptions = {
-  /** Comptes de l'entreprise ciblée (rapprochement Owner/Pilote/Sponsor). */
+  /** Comptes de l'entreprise ciblée (rapprochement des colonnes « personne »). */
   users?: { username: string; name: string }[];
   /** Horloge injectable (tests). */
   now?: Date;
@@ -596,9 +613,18 @@ export function proposeAccountForName(
   return { firstName, lastName, username: `${first}.${last}` };
 }
 
+/** Rang hiérarchique des rôles proposés à la création de compte (plus haut = plus fort). */
+const SUGGESTED_ROLE_RANK: Partial<Record<Role, number>> = {
+  projet_contributor: 1,
+  chantier_contributor: 2,
+  chantier_owner: 3,
+  axis_sponsor: 4,
+};
+
 type PersonResolver = {
-  /** Renvoie le username rapproché, ou le texte d'origine (et le mémorise comme non rapproché). */
-  resolve: (raw: string, sheet: StrategicImportSheet, rowNumber: number) => string;
+  /** Renvoie le username rapproché, ou le texte d'origine (et le mémorise comme non rapproché,
+   *  avec le rôle correspondant à la colonne — voir `StrategicImportPerson.suggestedRole`). */
+  resolve: (raw: string, sheet: StrategicImportSheet, rowNumber: number, role?: Role) => string;
   finish: (warn: WarnFn) => StrategicImportPerson[];
 };
 
@@ -621,6 +647,7 @@ function createPersonResolver(
       sheet: StrategicImportSheet;
       rowNumber: number;
       homonyms?: string[];
+      role?: Role;
     }
   >();
   const companySuffix = companyId ? `.${companyId.toLowerCase()}` : "";
@@ -648,13 +675,19 @@ function createPersonResolver(
   };
 
   return {
-    resolve(raw, sheet, rowNumber) {
+    resolve(raw, sheet, rowNumber, role) {
       const { username, homonyms } = match(raw);
       if (username) return username;
       const key = norm(raw);
       const entry = unmatched.get(key);
-      if (entry) entry.references += 1;
-      else unmatched.set(key, { name: raw, references: 1, sheet, rowNumber, homonyms });
+      if (entry) {
+        entry.references += 1;
+        if (role && (SUGGESTED_ROLE_RANK[role] ?? 0) > (SUGGESTED_ROLE_RANK[entry.role!] ?? 0)) {
+          entry.role = role;
+        }
+      } else {
+        unmatched.set(key, { name: raw, references: 1, sheet, rowNumber, homonyms, role });
+      }
       return raw;
     },
     finish(warn) {
@@ -700,6 +733,7 @@ function createPersonResolver(
           username,
           firstName: proposal.firstName,
           lastName: proposal.lastName,
+          ...(entry.role ? { suggestedRole: entry.role } : {}),
           ...(collisionWith ? { collisionWith } : {}),
         });
       }
@@ -708,7 +742,8 @@ function createPersonResolver(
   };
 }
 
-/** Réécrit Owner/Pilote/Sponsor des entités avec les usernames des comptes créés
+/** Réécrit les personnes (sponsor d'axe, sponsor de chantier, responsable/contributeurs projet,
+ *  responsables de saisie) des entités avec les usernames des comptes créés
  *  (`mapping` : clé `normalizePersonKey(texte)` → username). Pur, renvoie une copie. */
 export function applyPeopleMapping(
   writes: StrategicImportWrites,
@@ -785,7 +820,7 @@ const SHEET_SPECS: Record<SheetKey, SheetSpec> = {
   axes: {
     label: "Axes",
     headers: STRATEGIC_AXIS_IMPORT_HEADERS,
-    aliases: {},
+    aliases: { Owner: "Sponsor d'axe", Sponsor: "Sponsor d'axe", Responsable: "Sponsor d'axe" },
     required: ["Code", "Nom"],
   },
   chantiers: {
@@ -795,6 +830,9 @@ const SHEET_SPECS: Record<SheetKey, SheetSpec> = {
       "Code Axe": "Codes Axes (séparés par ;)",
       "Codes Axes": "Codes Axes (séparés par ;)",
       Dépendances: "Dépendances (Code:type, séparées par ;)",
+      Pilote: "Sponsor de chantier",
+      Owner: "Sponsor de chantier",
+      Sponsor: "Sponsor de chantier",
     },
     required: ["Code", "Codes Axes (séparés par ;)", "Nom"],
   },
@@ -805,7 +843,12 @@ const SHEET_SPECS: Record<SheetKey, SheetSpec> = {
       "Poids dans le chantier": "Poids dans le chantier (%)",
       Contributeurs: "Contributeurs (séparés par ;)",
       Contributeur: "Contributeurs (séparés par ;)",
+      Owner: "Responsable projet",
+      Responsable: "Responsable projet",
     },
+    // Ancienne colonne "Sponsor" : connue (pas d'avertissement « colonne inconnue ») mais ignorée
+    // (avertissement dédié `projectSponsorIgnored`).
+    extra: ["Sponsor"],
     required: ["Code", "Code Chantier", "Nom", "Date début", "Date fin"],
   },
   livrables: {
@@ -1071,11 +1114,12 @@ export function validateStrategicImportRows(
     sheet: StrategicImportSheet,
     rowNumber: number,
     row: Record<string, unknown>,
-    column: string
+    column: string,
+    role?: Role
   ): string | undefined | null => {
     const value = text(sheet, rowNumber, row, column);
     if (value === null) return null;
-    return value ? people.resolve(value, sheet, rowNumber) : undefined;
+    return value ? people.resolve(value, sheet, rowNumber, role) : undefined;
   };
 
   /** Liste de personnes séparées par ";" ou "," — chacune rapprochée comme `person` (non
@@ -1085,12 +1129,13 @@ export function validateStrategicImportRows(
     sheet: StrategicImportSheet,
     rowNumber: number,
     row: Record<string, unknown>,
-    column: string
+    column: string,
+    role?: Role
   ): string[] | undefined | null => {
     const value = text(sheet, rowNumber, row, column, { max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH });
     if (value === null) return null;
     if (!value) return undefined;
-    const resolved = splitPersonList(value).map((v) => people.resolve(v, sheet, rowNumber));
+    const resolved = splitPersonList(value).map((v) => people.resolve(v, sheet, rowNumber, role));
     return resolved.length > 0 ? Array.from(new Set(resolved)) : undefined;
   };
 
@@ -1138,7 +1183,7 @@ export function validateStrategicImportRows(
     if (color === null) continue;
     const stage = stageOf(sheet, rowNumber, row);
     if (stage === null) continue;
-    const owner = person(sheet, rowNumber, row, "Owner");
+    const owner = person(sheet, rowNumber, row, "Sponsor d'axe", "axis_sponsor");
     if (owner === null) continue;
 
     const fields = defined({ name, description, owner, color, stage });
@@ -1233,7 +1278,7 @@ export function validateStrategicImportRows(
     if (consumedBudget === null) continue;
     const consumedFte = optNumber(sheet, rowNumber, row, "ETP consommés", { min: 0 });
     if (consumedFte === null) continue;
-    const pilote = person(sheet, rowNumber, row, "Pilote");
+    const pilote = person(sheet, rowNumber, row, "Sponsor de chantier", "chantier_owner");
     if (pilote === null) continue;
 
     const match = matchExisting(exChantiers, usedChantiers, code, name, (c) =>
@@ -1450,10 +1495,16 @@ export function validateStrategicImportRows(
   const actionIdByCode = new Map<string, string>();
   const actionCodeSeen = new Map<string, number>();
   const usedActions = new Set<string>();
+  // Ancienne colonne "Sponsor" : tolérée mais IGNORÉE — un seul avertissement pour la feuille (1re
+  // ligne renseignée) ; `ChantierAction.sponsor` existant n'est jamais modifié par l'import.
+  let projectSponsorSeenAt: number | undefined;
 
   for (const { row, rowNumber } of prepared.actions) {
     if (isRowEmpty(row)) continue;
     const sheet = "Projets";
+    if (projectSponsorSeenAt === undefined && !isBlankCell(row["Sponsor"])) {
+      projectSponsorSeenAt = rowNumber;
+    }
     const code = text(sheet, rowNumber, row, "Code", { required: true });
     if (code === null) continue;
     if (!dupCheck(sheet, rowNumber, actionCodeSeen, code)) continue;
@@ -1486,18 +1537,21 @@ export function validateStrategicImportRows(
       max: 100,
     });
     if (chantierWeightPct === null) continue;
-    const owner = person(sheet, rowNumber, row, "Owner");
+    const owner = person(sheet, rowNumber, row, "Responsable projet", "chantier_contributor");
     if (owner === null) continue;
-    const sponsor = person(sheet, rowNumber, row, "Sponsor");
-    if (sponsor === null) continue;
-    const contributors = personList(sheet, rowNumber, row, "Contributeurs (séparés par ;)");
+    const contributors = personList(
+      sheet,
+      rowNumber,
+      row,
+      "Contributeurs (séparés par ;)",
+      "projet_contributor"
+    );
     if (contributors === null) continue;
 
     const fields = defined({
       name,
       description,
       owner,
-      sponsor,
       contributors,
       start,
       end,
@@ -1538,6 +1592,10 @@ export function validateStrategicImportRows(
     parsedActions.push({ rowNumber, code, action, existing: match?.entity });
     actionIdByCode.set(code.toLowerCase(), action.id);
     actionCodeSeen.set(code.toLowerCase(), rowNumber);
+  }
+
+  if (projectSponsorSeenAt !== undefined) {
+    warn("Projets", projectSponsorSeenAt, "projectSponsorIgnored");
   }
 
   const resolveActionCode = (raw: string): string | undefined =>
@@ -2055,10 +2113,10 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
   ["3. Obligatoire vs facultatif"],
   ['Obligatoires : "Code"/"Nom" de chaque feuille, dates de Projets (début <= fin).'],
   [
-    'Facultatifs : Description/Pilote/Owner/Sponsor, budgets (>= 0), poids (0 à 100), "Étape de maturité" (vide = 1re étape du programme), "Valeur initiale" des Indicateurs (mesure de référence datée de la période précédente), feuilles Livrables et ETP.',
+    'Facultatifs : Description, "Sponsor d\'axe", "Sponsor de chantier", "Responsable projet", budgets (>= 0), poids (0 à 100), "Étape de maturité" (vide = 1re étape du programme), "Valeur initiale" des Indicateurs (mesure de référence datée de la période précédente), feuilles Livrables et ETP.',
   ],
   [
-    "Owner/Pilote/Sponsor : saisissez l'identifiant BeTrack, l'e-mail ou le « Prénom Nom » d'un compte existant. Un nom inconnu est conservé en texte, signalé en avertissement et proposé à la création de compte.",
+    'Sponsor d\'axe / Sponsor de chantier / Responsable projet / Contributeurs : saisissez l\'identifiant BeTrack, l\'e-mail ou le « Prénom Nom » d\'un compte existant. Un nom inconnu est conservé en texte, signalé en avertissement et proposé à la création de compte (avec le rôle correspondant à sa colonne). Les anciens en-têtes "Owner"/"Pilote" restent acceptés ; l\'ancienne colonne "Sponsor" des projets est ignorée.',
   ],
   [
     'Projets : "Contributeurs" (facultatif) = plusieurs personnes séparées par ; ou ,. Indicateurs : "Responsables saisie" = personne(s) nommée(s) autorisée(s) à saisir les valeurs (au moins une, ou à défaut un rôle dans "Rôles responsables", ancien mode).',
@@ -2154,7 +2212,6 @@ export const STRATEGIC_ACTION_EXAMPLE_ROWS = [
     "Cartographier les flux de données existants",
     "État des lieux des sources et flux de données actuels.",
     "Marc Dubois",
-    "Isabelle Roy",
     "2026-01-15",
     "2026-03-31",
     "Planifié",
@@ -2169,7 +2226,6 @@ export const STRATEGIC_ACTION_EXAMPLE_ROWS = [
     "Déployer le portail RH self-service",
     "Mise en production du portail pour congés et attestations.",
     "Claire Fontaine",
-    "Karim Haddad",
     "2026-02-01",
     "2026-06-30",
     // Étape laissée VIDE à dessein — repli sur la 1re étape du programme.
@@ -2185,7 +2241,6 @@ export const STRATEGIC_ACTION_EXAMPLE_ROWS = [
     "Automatiser le reporting de production",
     "Mise en place de tableaux de bord automatisés pour le suivi de production.",
     "Marc Dubois",
-    "Isabelle Roy",
     "2026-04-01",
     "2026-09-30",
     "Défini",
@@ -2346,7 +2401,6 @@ export function buildStrategicPlanExportWorkbook(
         a.name,
         a.description ?? "",
         a.owner ?? "",
-        a.sponsor ?? "",
         a.start ?? "",
         a.end ?? "",
         stageLabel(a.status),

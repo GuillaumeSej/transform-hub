@@ -158,9 +158,18 @@ export function getActiveRole(
   return user.profiles[0].role;
 }
 
-/** Rôles qui ne donnent JAMAIS de droit d'édition sur les objets d'un plan : `comex_member`
- *  partout ; `hr` sur le Plan Stratégique (il édite la Base ETP, mais consulte le plan). */
+/** Zone fonctionnelle d'une page, pour `isReadOnlyUser` :
+ *  - `"plan"` (défaut) : objets du plan — leviers (Performance), axes/chantiers/projets
+ *    (Stratégique), dashboard ;
+ *  - `"hr"` : pages RH (mouvements RH, Base ETP) — celles que le Directeur RH alimente. */
+export type ReadOnlyArea = "plan" | "hr";
+
+/** Rôles qui ne donnent JAMAIS de droit d'édition sur les objets d'un PLAN, quelle que soit la
+ *  piste : `comex_member` (consultation), `hr` (il édite les pages RH — mouvements, Base ETP —
+ *  mais ne modifie ni les leviers Performance ni le plan stratégique). */
 const READ_ONLY_PLAN_ROLES: readonly Role[] = ["comex_member", "hr"];
+/** Sur les pages RH, seul `comex_member` est en consultation : `hr` y garde ses droits. */
+const READ_ONLY_HR_ROLES: readonly Role[] = ["comex_member"];
 
 /**
  * L'utilisateur est-il cantonné à la LECTURE SEULE, tous profils confondus ? Round 25 (gate
@@ -177,11 +186,19 @@ const READ_ONLY_PLAN_ROLES: readonly Role[] = ["comex_member", "hr"];
  *
  * Un admin (global ou entreprise) n'est JAMAIS en lecture seule, quels que soient ses profils
  * métier — même court-circuit qu'`isAnyAdmin` partout ailleurs dans ce fichier.
+ *
+ * Avec un `programId` (à privilégier — pages Performance comprises, ex.
+ * `isReadOnlyUser(user, lever.programId, "performance")`) : seuls les profils portant sur CE
+ * programme comptent — un `comex_member` qui cumule un autre profil sur un AUTRE programme reste
+ * donc en lecture seule sur les programmes où seul son profil COMEX s'applique. `area` distingue
+ * les pages RH (`"hr"` : le Directeur RH y édite) des pages du plan (`"plan"` : `hr` y est en
+ * lecture seule, leviers compris).
  */
 export function isReadOnlyUser(
   user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined,
   programId?: string | null,
-  programType?: ProgramType
+  programType?: ProgramType,
+  area: ReadOnlyArea = "plan"
 ): boolean {
   if (isAnyAdmin(user)) return false;
   const profiles = user?.profiles ?? [];
@@ -191,13 +208,48 @@ export function isReadOnlyUser(
   // Par programme (décision PO rôles Plan Stratégique) : seuls comptent les profils qui portent
   // sur CE programme — rattachés à lui, ou "tous programmes" de la piste du programme (toute piste
   // si `programType` n'est pas fourni). Lecture seule si l'utilisateur n'y a AUCUN profil, ou
-  // uniquement des profils `comex_member`/`hr`.
+  // uniquement des profils en consultation pour cette zone (voir `READ_ONLY_PLAN_ROLES` /
+  // `READ_ONLY_HR_ROLES`). Un profil `hr` legacy SANS `programId` (antérieur à la règle « un
+  // programme précis », voir `assertValidProfiles`) reste pris en compte comme « tous programmes ».
   const relevant = profiles.filter((p) => {
     if (p.programId) return p.programId === programId;
     if (!programType) return true;
     return programType === "strategic" ? isStrategicRole(p.role) : isPerformanceRole(p.role);
   });
-  return relevant.every((p) => READ_ONLY_PLAN_ROLES.includes(p.role));
+  const readOnlyRoles = area === "hr" ? READ_ONLY_HR_ROLES : READ_ONLY_PLAN_ROLES;
+  return relevant.every((p) => readOnlyRoles.includes(p.role));
+}
+
+/**
+ * L'utilisateur a-t-il un droit (profil ou habilitation) sur CE programme Performance, pour ouvrir
+ * directement la fiche d'un de ses leviers (`/levers/detail?id=…`, garde d'AppShell) ?
+ *  - admin (global/entreprise) : oui ;
+ *  - `cto` : oui (tous les programmes Performance, même règle que la vue consolidée) ;
+ *  - `program_sponsor`/`program_owner` : oui si désigné sponsor/owner du programme (`program`) ;
+ *  - tout profil rattaché à CE programme (y compris `comex_member`/`hr`, en lecture seule — voir
+ *    `isReadOnlyUser`) ;
+ *  - tout profil Performance (ou transverse) « tous programmes » (sans `programId`, legacy).
+ * Complète — sans la remplacer — `leverAccessDenialReason` (lib/leversLogic.ts : périmètre
+ * nominatif, confidentialité), qui ne vérifie pas le programme.
+ */
+export function canAccessPerformanceProgram(
+  user:
+    | (Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> & { username?: string })
+    | null
+    | undefined,
+  programId: string,
+  program?: Pick<Program, "sponsor" | "owner"> | null
+): boolean {
+  if (!user) return false;
+  if (isAnyAdmin(user)) return true;
+  if (hasRole(user, "cto")) return true;
+  if (program && user.username) {
+    if (hasRole(user, "program_sponsor") && program.sponsor === user.username) return true;
+    if (hasRole(user, "program_owner") && program.owner === user.username) return true;
+  }
+  return (user.profiles ?? []).some((p) =>
+    p.programId ? p.programId === programId : isPerformanceRole(p.role)
+  );
 }
 
 /**
@@ -264,6 +316,9 @@ export function assertValidProfiles(
     throw new Error(
       "Le profil Directeur RH doit être rattaché à un programme précis (pas « tous les programmes »)."
     );
+  }
+  if (profiles.filter((p) => p.role === "hr").length > 1) {
+    throw new Error("Un utilisateur ne peut avoir qu'un seul profil Directeur RH.");
   }
   for (const [trackLabel, isTrackRole, trackType] of [
     ["Plan Performance", isPerformanceRole, "performance"],

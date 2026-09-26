@@ -248,15 +248,11 @@ describe("canDecide", () => {
       false
     );
   });
-  it("strategic_lead et admin escaladent ; pas si déjà décidée", () => {
-    expect(canDecide(lead, approval(), data())).toBe(true);
-    expect(
-      canDecide(
-        user("r", undefined, undefined, { isGlobalAdmin: true }),
-        approval({ requestedBy: "r" }),
-        data()
-      )
-    ).toBe(true);
+  it("legacy : plus d'escalade strategic_lead ; admin oui sauf sur SA demande ; pas si déjà décidée", () => {
+    expect(canDecide(lead, approval(), data())).toBe(false);
+    const root = user("r", undefined, undefined, { isGlobalAdmin: true });
+    expect(canDecide(root, approval(), data())).toBe(true);
+    expect(canDecide(root, approval({ requestedBy: "r" }), data())).toBe(false);
     expect(canDecide(users[2], approval({ status: "approved" }), data())).toBe(false);
   });
   it("utilise l'approbateur stocké si la donnée courante est filtrée", () => {

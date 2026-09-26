@@ -168,7 +168,6 @@ const FILTER_PARAM_BY_DIMENSION: Partial<Record<string, string>> = {
 
 export function DashboardPagePerformance() {
   const { user } = useRole();
-  const readOnly = isReadOnlyUser(user);
   const data = useBeTrackData(user?.companyId ?? null);
   const { t } = useTranslation();
   const router = useRouter();
@@ -185,6 +184,12 @@ export function DashboardPagePerformance() {
   // agréger TOUS les programmes de `consolidatedPrograms` — voir `programScopedLevers` plus bas.
   const { activeProgramId, setActiveProgramId, isConsolidatedView, consolidatedPrograms } =
     useActiveProgram();
+  // Lecture seule sur le programme affiché ; vue consolidée : règle historique (tous profils COMEX).
+  const readOnly = isReadOnlyUser(
+    user,
+    isConsolidatedView ? null : selectedProgramId || null,
+    "performance"
+  );
 
   // Société courante — utilisée pour le budget CAPEX de référence (KPI ci-dessous) et
   // l'habilitation de confidentialité (filtrage des leviers visibles par profil).

@@ -16,6 +16,9 @@ import {
   editKpiValueFlow,
   milestoneFlow,
   pendingApprovals,
+  ApprovalForbiddenError,
+  ApprovalGateUnavailableError,
+  directGate,
   submitKpiValueFlow,
   type ApprovalGate,
 } from "@/lib/strategicApprovalFlows";
@@ -149,10 +152,22 @@ describe("KPI value flow", () => {
     expect(rej.saveMeasurements).toHaveLength(0);
     expect(rej.saveActions).toHaveLength(0);
   });
-  it("sans porte (hors contexte stratégique) : écriture directe", async () => {
+  it("sans porte (hors contexte stratégique) : REFUS — sauf pilote/admin via directGate", async () => {
     const add = vi.fn(async () => undefined);
-    expect(await submitKpiValueFlow(null, kpi, input, add)).toBe("applied");
-    expect(add).toHaveBeenCalledOnce();
+    await expect(submitKpiValueFlow(null, kpi, input, add)).rejects.toThrow(
+      ApprovalGateUnavailableError
+    );
+    expect(add).not.toHaveBeenCalled();
+    await expect(
+      submitKpiValueFlow(directGate(user("carl"), "P1"), kpi, input, add)
+    ).rejects.toThrow(ApprovalForbiddenError);
+    expect(add).not.toHaveBeenCalled();
+    const admin = user("root", undefined, { isCompanyAdmin: true });
+    expect(await submitKpiValueFlow(directGate(admin, "P1"), kpi, input, add)).toBe("applied");
+    expect(
+      await submitKpiValueFlow(directGate(user("lea", "strategic_lead"), "P1"), kpi, input, add)
+    ).toBe("applied");
+    expect(add).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -258,8 +273,8 @@ describe("milestone flow", () => {
     ...projet,
     milestones: { currentMilestone: "E0", passedMilestones: [], checklists: {} },
   } as ChantierAction;
-  it("sans porte : flux historique", async () => {
-    expect(await milestoneFlow(null, ready, owner, [chantier], [ready])).toBe("applied");
+  it("sans porte : refus (jamais d'application directe par défaut)", async () => {
+    await expect(milestoneFlow(null, ready, owner, [chantier], [ready])).rejects.toThrow();
   });
   it("prérequis non remplis : lève (aucune demande)", async () => {
     const { gate, store } = gateFor(owner);

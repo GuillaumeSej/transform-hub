@@ -15,7 +15,6 @@ import type {
   Chantier,
   ChantierAction,
   ChantierDependencyType,
-  ChantierMilestoneApproval,
   ChantierMilestoneState,
   ChantierStaffing,
   Deliverable,
@@ -491,6 +490,9 @@ export const KPI_NEVER_FILL_ROLES: readonly Role[] = ["comex_member", "hr"];
 export type IndicatorFillContext = {
   axes?: Pick<StrategicAxis, "id" | "owner">[];
   chantiers?: Pick<Chantier, "id" | "pilote">[];
+  /** Projets du programme : le responsable et les contributeurs d'un projet LIÉ au KPI
+   *  (`ChantierAction.indicatorId === indicator.id`) peuvent le renseigner. Absent = non reconnus. */
+  chantierActions?: Pick<ChantierAction, "indicatorId" | "owner" | "contributors">[];
 };
 
 /** Responsables NOMMÉS de la saisie d'un KPI (`Indicator.additionalAuthorizedUserIds`, usernames),
@@ -520,7 +522,10 @@ export function indicatorResponsibleUsernames(
  *    « usernames autorisés à saisir », aucune migration de données) ;
  *  - KPI de CHANTIER (`chantierId`) : le sponsor de ce chantier (`Chantier.pilote`) ;
  *    KPI d'AXE (sans `chantierId`) : le sponsor de cet axe (`StrategicAxis.owner`) — nécessite
- *    `ctx` (voir `IndicatorFillContext`).
+ *    `ctx` (voir `IndicatorFillContext`) ;
+ *  - le responsable et les contributeurs d'un PROJET lié au KPI (`ChantierAction.indicatorId`) —
+ *    nécessite `ctx.chantierActions` ; leur saisie est validée par le sponsor de chantier puis le
+ *    sponsor d'axe (lib/kpiCorrectionRouting.ts).
  *  - REPLI HISTORIQUE `responsibleRoles` : lu UNIQUEMENT quand l'indicateur n'a AUCUN responsable
  *    nommé (indicateurs antérieurs à cette règle) — un rôle ne donne plus jamais le droit de saisie
  *    à tous ses détenteurs dès qu'un responsable est désigné. Un rôle stratégique n'est compté que
@@ -531,7 +536,8 @@ export function canFillIndicator(
   indicator: Pick<
     Indicator,
     "responsibleRoles" | "additionalAuthorizedUserIds" | "programId" | "axisId" | "chantierId"
-  >,
+  > &
+    Partial<Pick<Indicator, "id">>,
   user:
     Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin" | "username"> | null | undefined,
   ctx?: IndicatorFillContext
@@ -551,6 +557,16 @@ export function canFillIndicator(
   } else {
     const axis = ctx?.axes?.find((a) => a.id === indicator.axisId);
     if (axis?.owner && axis.owner === user.username) return true;
+  }
+
+  const indicatorId = indicator.id;
+  if (
+    indicatorId &&
+    (ctx?.chantierActions ?? []).some(
+      (a) => a.indicatorId === indicatorId && isProjetMember(a, user.username)
+    )
+  ) {
+    return true;
   }
 
   if (named.length > 0) return false;
@@ -1226,7 +1242,7 @@ export function canPassMilestone(
  * `MILESTONE_CHECKLISTS[milestoneId]` puis actions personnalisées. Seule source de vérité pour
  * cette fusion (round "jalon validation gate") : consommée aussi bien par
  * `MilestoneChecklistPanel.tsx` (calcul du bouton "Valider le jalon", qui a déjà les trois moitiés
- * sous forme de props) que par `canPassMilestone`/`requestMilestoneApproval` ci-dessous (le
+ * sous forme de props) que par `canPassMilestone`/`milestonePassageTarget` ci-dessous (le
  * PRÉREQUIS avant de pouvoir même soumettre une demande de validation) — les deux ne doivent
  * jamais diverger sur ce qui compte comme "complet". Reprend exactement la logique locale
  * `mergedItems` qu'avait `MilestoneChecklistPanel.tsx` avant ce round, extraite ici pour que les
@@ -1269,21 +1285,19 @@ export function mergeMilestoneChecklistItems(
   return [...fixed, ...custom];
 }
 
-// ─── Jalon — porte de validation (round "jalon validation gate") ──────────────────────────────
+// ─── Jalon — passage de jalon (prérequis + application) ─────────────────────────────────────────
 //
-// Mirroir stratégique de `lib/leversLogic.ts::requestLeverApproval`/`approveLeverGate`/
-// `rejectLeverApproval` (mêmes noms de fonction, même découpage requête → approbation/rejet), avec
-// deux différences assumées :
-//  - le Plan Performance ne protège que 3 des transitions de statut d'un levier (avec un modèle à
-//    DEUX approbateurs possibles, sponsor OU cto) ; ici, TOUTES les transitions de jalon (E0→E1 …
-//    E3→E4) sont protégées, avec un SEUL rôle approbateur : `strategic_lead` (voir
-//    `isStrategicLeadOf` ci-dessous, pendant de `isLeverCtoOf`) ;
-//  - `lib/leversLogic.ts` opère sur un TABLEAU de leviers (le hook `useBeTrackData` maintient un
-//    état local optimiste) et retourne `{ levers, lever, auditEntries }` ; `useStrategicData` n'a
-//    pas cette couche (mutations écrites directement dans Firestore, voir son commentaire de tête)
-//    — ces trois fonctions opèrent donc sur UN SEUL projet et retournent soit la nouvelle valeur de
-//    `milestoneApproval` (requête), soit un PATCH `Partial<ChantierAction>` (approbation/rejet) que
-//    l'appelant (`lib/hooks/useStrategicData.ts`) passe tel quel à `updateChantierAction`.
+// Depuis le modèle à PALIERS (lib/strategicApprovals.ts), TOUT passage de jalon passe par une
+// demande `StrategicApproval` "milestone" à chaîne (N+1 puis N+2 au-dessus de l'auteur), sauf pour
+// le pilote du programme / un admin qui l'appliquent directement (`directMilestoneAdvance`,
+// lib/strategicFiche.ts). L'ancien circuit à approbateur UNIQUE (`requestMilestoneApproval` /
+// `approveMilestoneGate` / `rejectMilestoneApproval` / `canDecideMilestone`) est SUPPRIMÉ. Le
+// marqueur `ChantierAction.milestoneApproval` n'est plus qu'un miroir d'affichage posé par la
+// demande à chaîne (et retiré à sa clôture) ; un marqueur SANS demande à chaîne en attente est un
+// reliquat de l'ancien circuit : affiché en lecture seule, effaçable par un admin
+// (`legacyMilestoneMarkers` / `clearLegacyMilestoneMarker`, lib/strategicApprovals.ts).
+// Ce module ne garde que la logique PURE commune : prérequis (`milestonePassageTarget`), revérification
+// à la décision (`assertMilestoneStillPassable`) et avancée effective (`advanceMilestone`).
 
 /**
  * Un profil `strategic_lead` porte-t-il l'habilitation de pilote stratégique sur CE chantier (donc
@@ -1304,28 +1318,17 @@ export function isStrategicLeadOf(
 }
 
 /**
- * Soumet une demande de validation pour faire passer un projet à son JALON SUIVANT — appelable
- * uniquement par le propriétaire du projet (`ChantierAction.owner`) ou un admin, et UNIQUEMENT si
- * `canPassMilestone` est déjà satisfait pour le jalon COURANT (le verrou "tous les items à 100"
- * reste un PRÉREQUIS, pas remplacé par ce nouveau verrou d'approbation — les deux s'appliquent en
- * séquence). Pure : ne fait QUE calculer/valider la nouvelle valeur de `milestoneApproval`, ne mute
- * rien — c'est à l'appelant (`useStrategicData.ts`) de la persister via `updateChantierAction`.
- * Lève une erreur (jamais un simple `false`) sur toute condition non satisfaite, même convention que
- * `requestLeverApproval`.
+ * PRÉREQUIS d'un passage de jalon : le projet n'est pas au dernier jalon et la check-list du jalon
+ * COURANT est complète (`canPassMilestone`, fusion `mergeMilestoneChecklistItems`). Renvoie le jalon
+ * courant et le jalon visé ; lève (message FR) sinon. Ne vérifie PAS qui demande : l'habilitation
+ * (membre du projet ou niveau au-dessus, admin) est portée par la route de validation
+ * (`resolveApprovalRoute("milestone", …)`, lib/strategicApprovals.ts).
  */
-export function requestMilestoneApproval(
+export function milestonePassageTarget(
   action: ChantierAction,
-  user: Pick<AuthUser, "username" | "isGlobalAdmin" | "isCompanyAdmin">,
   allChantiers: Chantier[],
   allActions: ChantierAction[]
-): ChantierMilestoneApproval {
-  // Responsable OU contributeur du projet (décision PO : les contributeurs saisissent sur leur
-  // projet ; leur demande passe ensuite par la chaîne responsable projet → sponsor de chantier).
-  if (!isAnyAdmin(user) && !isProjetMember(action, user.username)) {
-    throw new Error(
-      `Seuls le responsable et les contributeurs du projet "${action.id}" (ou un admin) peuvent soumettre une demande de validation de jalon`
-    );
-  }
+): { from: MilestoneId; targetMilestone: MilestoneId } {
   const currentMilestone = action.milestones?.currentMilestone ?? "E0";
   const targetMilestone = MILESTONE_ORDER[MILESTONE_ORDER.indexOf(currentMilestone) + 1];
   if (!targetMilestone) {
@@ -1350,42 +1353,11 @@ export function requestMilestoneApproval(
       `Le jalon ${displayMilestoneId(currentMilestone)} du projet "${action.id}" n'est pas encore complet : ${reasons.join(", ")}`
     );
   }
-  return {
-    targetMilestone,
-    requestedBy: user.username,
-    requestedAt: new Date().toISOString(),
-  };
-}
-
-/**
- * Approuve la demande de validation en cours — vérifie que l'appelant est habilité (`strategic_lead`
- * scopé au programme du chantier parent, voir `isStrategicLeadOf`, ou admin). Fait RÉELLEMENT
- * avancer le jalon (`currentMilestone` → `milestoneApproval.targetMilestone`, l'ancien
- * `currentMilestone` poussé sur `passedMilestones` s'il n'y est pas déjà) et vide `milestoneApproval`
- * — c'est le SEUL chemin légitime vers une avancée de jalon, voir le commentaire de tête de cette
- * section. Chantier parent introuvable (référence orpheline) : traité comme non habilité plutôt que
- * de lever une exception distincte, seul un admin peut alors approuver.
- */
-/**
- * L'utilisateur peut-il DÉCIDER (confirmer/refuser) le passage de jalon d'un projet de ce chantier ?
- * Même cascade que `resolveApprover("milestone", …)` (lib/strategicApprovals.ts) : pilote du
- * chantier ; à défaut de pilote, le(s) responsable(s) de l'axe (`allAxes`, si fourni) ; toujours
- * admin et `strategic_lead` du programme (escalade). Chantier introuvable : admin seulement.
- */
-export function canDecideMilestone(
-  chantier: Pick<Chantier, "programId" | "pilote" | "axisIds"> | undefined,
-  user: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
-  allAxes: Pick<StrategicAxis, "id" | "owner">[] = []
-): boolean {
-  if (isAnyAdmin(user)) return true;
-  if (!chantier) return false;
-  if (isStrategicLeadOf(chantier, user)) return true;
-  if (chantier.pilote) return chantier.pilote === user.username;
-  return allAxes.some((a) => chantier.axisIds.includes(a.id) && a.owner === user.username);
+  return { from: currentMilestone, targetMilestone };
 }
 
 /** Vérifie, AU MOMENT DE LA DÉCISION, que la check-list du jalon courant est toujours complète
- *  (même fusion que `requestMilestoneApproval`) — elle a pu régresser depuis la demande. Lève
+ *  (même fusion que `milestonePassageTarget`) — elle a pu régresser depuis la demande. Lève
  *  sinon. */
 export function assertMilestoneStillPassable(
   action: ChantierAction,
@@ -1408,73 +1380,35 @@ export function assertMilestoneStillPassable(
   }
 }
 
-export function approveMilestoneGate(
-  action: ChantierAction,
-  user: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
-  allChantiers: Chantier[],
-  /** Fournis : la check-list est RE-VÉRIFIÉE au moment de l'approbation
-   *  (`assertMilestoneStillPassable`). */
-  allActions?: ChantierAction[],
-  /** Fournis : un responsable d'axe peut confirmer quand le chantier n'a pas de pilote
-   *  (`canDecideMilestone`). */
-  allAxes?: Pick<StrategicAxis, "id" | "owner">[]
+/**
+ * Patch qui fait RÉELLEMENT avancer le jalon : `currentMilestone` → `targetMilestone`, l'ancien
+ * jalon courant ajouté à `passedMilestones` s'il n'y est pas, marqueur `milestoneApproval` retiré.
+ * Lève si `targetMilestone` n'est pas strictement après le jalon courant (demande périmée).
+ * Pure : l'appelant persiste le patch.
+ */
+export function advanceMilestone(
+  action: Pick<ChantierAction, "milestones">,
+  targetMilestone: MilestoneId
 ): Pick<ChantierAction, "milestones" | "milestoneApproval"> {
-  const approval = action.milestoneApproval;
-  if (!approval) {
-    throw new Error(`Le projet "${action.id}" n'a pas de demande de validation de jalon en cours`);
-  }
-  const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
-  // Round "passage de jalon explicite" : le responsable (pilote) du CHANTIER est l'approbateur
-  // nominal d'un jalon (`resolveApprover("milestone", …)`, lib/strategicApprovals.ts) — il doit
-  // pouvoir confirmer aussi par ce chemin direct, pas seulement le `strategic_lead` ; sans pilote,
-  // le responsable d'axe (même cascade que `resolveApprover`).
-  if (!canDecideMilestone(parentChantier, user, allAxes)) {
-    throw new Error(`Vous n'êtes pas habilité à approuver cette demande de validation de jalon`);
-  }
-  if (allActions) assertMilestoneStillPassable(action, allChantiers, allActions);
-
   const before: ChantierMilestoneState = action.milestones ?? {
     currentMilestone: "E0",
     passedMilestones: [],
     checklists: {},
   };
+  if (
+    MILESTONE_ORDER.indexOf(targetMilestone) <= MILESTONE_ORDER.indexOf(before.currentMilestone)
+  ) {
+    throw new Error(
+      `Le projet est déjà au jalon ${displayMilestoneId(before.currentMilestone)} ou au-delà : demande périmée`
+    );
+  }
   const passedMilestones = before.passedMilestones.includes(before.currentMilestone)
     ? before.passedMilestones
     : [...before.passedMilestones, before.currentMilestone];
-
   return {
-    milestones: {
-      ...before,
-      currentMilestone: approval.targetMilestone,
-      passedMilestones,
-    },
+    milestones: { ...before, currentMilestone: targetMilestone, passedMilestones },
     milestoneApproval: undefined,
   };
-}
-
-/**
- * Rejette (annule) la demande en cours — habilité : `strategic_lead` du chantier parent, un admin,
- * OU le propriétaire du projet lui-même (mirroir de `rejectLeverApproval`, qui autorise de même le
- * porteur du levier à annuler sa propre demande). Vide `milestoneApproval` : le projet reste sur son
- * jalon courant, sans pénalité — une nouvelle demande peut être soumise plus tard via
- * `requestMilestoneApproval` dès que `canPassMilestone` est de nouveau satisfait.
- */
-export function rejectMilestoneApproval(
-  action: ChantierAction,
-  user: Pick<AuthUser, "username" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin">,
-  allChantiers: Chantier[],
-  allAxes?: Pick<StrategicAxis, "id" | "owner">[]
-): Pick<ChantierAction, "milestoneApproval"> {
-  if (!action.milestoneApproval) {
-    throw new Error(`Le projet "${action.id}" n'a pas de demande de validation de jalon en cours`);
-  }
-  const parentChantier = allChantiers.find((c) => c.id === action.chantierId);
-  const authorized =
-    action.owner === user.username || canDecideMilestone(parentChantier, user, allAxes);
-  if (!authorized) {
-    throw new Error(`Vous n'êtes pas habilité à rejeter cette demande de validation de jalon`);
-  }
-  return { milestoneApproval: undefined };
 }
 
 /**
@@ -1484,7 +1418,7 @@ export function rejectMilestoneApproval(
  *                    attend la confirmation du responsable du chantier (prioritaire sur tout le
  *                    reste — même si la check-list a régressé depuis) ;
  *  - `"ready"`       la check-list du jalon courant est complète (`canPassMilestone`, même fusion
- *                    que `requestMilestoneApproval`) et il existe un jalon suivant : la demande
+ *                    que `milestonePassageTarget`) et il existe un jalon suivant : la demande
  *                    « Demander la validation du passage en J{n+1} » peut être envoyée ;
  *  - `"final"`       check-list complète mais déjà au dernier jalon (J4) : plus rien à demander ;
  *  - `"in_progress"` check-list incomplète.

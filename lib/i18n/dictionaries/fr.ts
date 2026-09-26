@@ -99,11 +99,11 @@ const fr: Record<string, string> = {
   "validation.sa.kind.projet_update": "Modification de projet",
   "validation.sa.kind.chantier_create": "Création de chantier",
   "validation.sa.kind.chantier_update": "Modification de chantier",
-  "validation.sa.level.pilot": "Pilote",
+  "validation.sa.level.pilot": "Pilote du plan stratégique",
   "validation.sa.level.axisSponsor": "Sponsor d'axe",
   "validation.sa.level.chantierSponsor": "Sponsor de chantier",
   "validation.sa.level.projectOwner": "Responsable projet",
-  "validation.sa.level.contributor": "Contributeur",
+  "validation.sa.level.contributor": "Contributeur projet",
   "validation.sa.chain": "Chaîne de validation",
   "validation.sa.then": "puis",
   "validation.sa.step.label": "Étape",
@@ -449,7 +449,7 @@ const fr: Record<string, string> = {
   "leverForm.confidentialityNone": "Aucun (visible par tous les profils)",
   "leverForm.owner": "Responsable",
   "leverForm.ownerNone": "Aucun",
-  "leverForm.sponsor": "Commanditaire",
+  "leverForm.sponsor": "Responsable de chantier",
   "leverForm.initials": "Initiales",
   "leverForm.geography": "Région",
   "pnl.allRegions": "Toutes régions",
@@ -478,7 +478,7 @@ const fr: Record<string, string> = {
   "leverForm.updated": "Levier mis à jour",
   "leverForm.created": "Levier créé",
   "leverForm.createdOutOfScope":
-    "« {name} » a été créé, mais il n'apparaîtra pas dans votre liste : vous n'en êtes ni le responsable ni le commanditaire.",
+    "« {name} » a été créé, mais il n'apparaîtra pas dans votre liste : vous n'en êtes ni le responsable de levier ni le responsable de chantier.",
   "leverForm.createFailedTitle": "Échec de la création du levier",
   "leverForm.createFailedBody":
     "Le levier n'a pas été enregistré. Vérifiez vos droits sur l'entreprise et réessayez.",
@@ -490,7 +490,7 @@ const fr: Record<string, string> = {
   "leverDetail.notFound": "Levier introuvable.",
   "leverDetail.backToPipeline": "Retour aux leviers par étape",
   "leverDetail.outOfPerimeter":
-    "Accès restreint — ce levier n'est pas dans votre périmètre : vous n'en êtes ni le responsable ni le commanditaire.",
+    "Accès restreint — ce levier n'est pas dans votre périmètre : vous n'en êtes ni le responsable de levier ni le responsable de chantier.",
   "leverDetail.restrictedAccess":
     "Accès restreint — ce levier est classé « {level} », un niveau de confidentialité auquel votre profil n'est pas habilité.",
   "leverDetail.editLever": "Modifier le levier",
@@ -506,18 +506,38 @@ const fr: Record<string, string> = {
   "leverDetail.pastStageHint": "Étape déjà franchie — impossible de revenir en arrière",
   "leverDetail.moveToStage": "Passer en « {stage} »",
   "leverDetail.approval.stageHint":
-    "Cette étape nécessite une demande de validation (porteur → commanditaire ou CTO), voir ci-dessous",
+    "Cette étape nécessite une demande de validation (porteur → responsable de chantier ou CTO), voir ci-dessous",
   "leverDetail.approval.submitHint":
-    "Ce levier est prêt pour une demande de validation (porteur → commanditaire ou CTO).",
+    "Ce levier est prêt pour une demande de validation (porteur → responsable de chantier ou CTO).",
   "leverDetail.approval.submit": "Soumettre pour validation",
   "leverDetail.approval.requested": "Demande de validation envoyée",
   "leverDetail.approval.pending":
-    "En attente d'approbation (commanditaire ou CTO) pour passer en « {stage} »",
+    "En attente d'approbation (responsable de chantier ou CTO) pour passer en « {stage} »",
   "leverDetail.approval.approve": "Approuver",
   "leverDetail.approval.approved": "Demande approuvée",
   "leverDetail.approval.reject": "Rejeter",
   "leverDetail.approval.rejected": "Demande de validation rejetée",
   "leverDetail.approval.error": "Action impossible",
+  "levers.approval.step": "Étape {current}/{total} — attend {names}",
+  "levers.approval.level.sponsor": "Responsable de chantier",
+  "levers.approval.level.cto": "CTO",
+  "levers.approval.level.admin": "Admin",
+  "levers.approval.byAdmin": "débloqué par un admin",
+  "levers.approval.submitHint":
+    "Ce levier est prêt pour une demande de validation (double validation : niveaux au-dessus du demandeur, responsable de chantier puis CTO).",
+  "levers.approval.stageHint":
+    "Cette étape nécessite une demande de validation (responsable de chantier puis CTO), voir ci-dessous",
+  "levers.approval.pending": "Demande de validation pour passer en « {stage} »",
+  "levers.approval.ownRequest": "Votre demande : vous ne pouvez pas la valider vous-même.",
+  "levers.approval.withdraw": "Retirer la demande",
+  "levers.approval.withdrawn": "Demande retirée",
+  "levers.approval.stepApproved": "Étape validée — transmise à l'étape suivante",
+  "levers.approval.sponsorLocked":
+    "Seuls le CTO du programme ou un admin peuvent modifier le commanditaire.",
+  "levers.approval.realizedOwn":
+    "Votre déclaration : elle doit être validée par un autre profil Finance ou un admin.",
+  "levers.approval.deletionAsAdmin":
+    "Aucun titulaire pour ce rôle sur ce levier : vous agissez en tant qu'admin (la demande et la confirmation restent deux personnes différentes).",
   "leverDetail.saveChanges": "Enregistrer les modifications",
   "leverDetail.editAction": "Modifier l'action",
   "leverDetail.newAction": "Nouvelle action",
@@ -773,7 +793,7 @@ const fr: Record<string, string> = {
   "adminProgramsPanel.newTitle": "Nouveau programme",
   "adminProgramsPanel.nameLabel": "Nom du programme",
   "adminProgramsPanel.namePlaceholder": "Nom",
-  "adminProgramsPanel.sponsor": "Commanditaire",
+  "adminProgramsPanel.sponsor": "Commanditaire du programme",
   "adminProgramsPanel.owner": "Responsable",
   "adminProgramsPanel.ambitionLabel": "Ambition",
   "adminProgramsPanel.ambitionPlaceholder": "Ex. Devenir leader du marché d'ici 2027",
@@ -933,7 +953,7 @@ const fr: Record<string, string> = {
     "Configuration du programme historique de l'entreprise (nom, commanditaire, exercice, cibles financières) et de ses chantiers — utilisée par le tableau de bord et les calculs financiers.",
   "adminProgramConfig.name": "Nom du programme",
   "adminProgramConfig.namePlaceholder": "Ex : Plan de Performance 2026",
-  "adminProgramConfig.sponsor": "Commanditaire",
+  "adminProgramConfig.sponsor": "Commanditaire du programme",
   "adminProgramConfig.currency": "Devise",
   "adminProgramConfig.target": "Cible d'économies totale (€M)",
   "adminProgramConfig.baselineEBIT": "EBIT de référence (€M)",
@@ -1124,6 +1144,13 @@ const fr: Record<string, string> = {
   "adminUsers.groupStrategic": "Plan Stratégique",
   "adminUsers.groupCrossTrack": "Transverse (Performance + Stratégique)",
   "adminUsers.allPrograms": "Tous les programmes",
+  "adminUsers.chooseProgram": "Choisir un programme",
+  "adminUsers.hrNoProgram":
+    "Aucun programme dans l'entreprise : créez d'abord un programme pour y rattacher le Directeur RH.",
+  "adminUsers.badgeLegacyHr": "RH : programme à choisir",
+  "adminUsers.legacyHrHint":
+    "Profil Directeur RH sans programme : modifiez l'utilisateur pour choisir son programme.",
+  "adminUsers.peerAdminLocked": "(seul un administrateur global peut retirer cette habilitation)",
   "adminUsers.allProgramsStrategic": "Tous les programmes Stratégique",
   "adminUsers.allProgramsPerformance": "Tous les programmes Performance",
   "adminUsers.removeProfile": "Retirer ce profil",
@@ -1605,7 +1632,7 @@ const fr: Record<string, string> = {
   // Fiche détail d'un axe
   "strategicAxes.back": "Retour aux axes",
   "strategicAxes.notFound": "Axe introuvable.",
-  "strategicAxes.sponsorShort": "Sponsor",
+  "strategicAxes.sponsorShort": "Sponsor d'axe",
   // Rôle unique (round 28) : suppression de `StrategicAxis.sponsorName`, `owner` EST désormais le
   // sponsor de l'axe (décision explicite : plus de duplication sponsor COMEX / responsable au
   // niveau axe, contrairement à Chantier.sponsorName/Chantier.pilote).
@@ -1913,7 +1940,7 @@ const fr: Record<string, string> = {
   "strategicDelete.consequences.projet":
     "Conséquences : le projet et ses {jalons} jalon(s) seront supprimés. Action irréversible.",
   "strategicDelete.reason": "Motif de la suppression (facultatif)",
-  "strategicDelete.approver.axis": "le responsable de l'axe",
+  "strategicDelete.approver.axis": "le sponsor d'axe",
   "strategicDelete.approver.chantier": "le sponsor du chantier",
   "strategicDelete.approval.self":
     "Vous êtes {role} : la suppression sera appliquée immédiatement.",
@@ -1974,6 +2001,8 @@ const fr: Record<string, string> = {
   "strategicImport.msg.missingColumns":
     "Colonne(s) obligatoire(s) absente(s) : {columns} — feuille ignorée",
   "strategicImport.msg.unknownColumns": "Colonne(s) non reconnue(s), ignorée(s) : {columns}",
+  "strategicImport.msg.projectSponsorIgnored":
+    'Colonne "Sponsor" des projets ignorée : le sponsor de projet n\'existe plus (le projet a un responsable projet et des contributeurs)',
   "strategicImport.msg.required": '"{column}" est obligatoire',
   "strategicImport.msg.tooLong": '"{column}" dépasse {max} caractères ({length})',
   "strategicImport.msg.duplicateCode":
@@ -2185,7 +2214,7 @@ const fr: Record<string, string> = {
   "kpi.section.openChantier": "Ouvrir le chantier",
   "kpi.noteOptional": "Commentaire (optionnel)",
   "kpi.qualitativeNote": "Observation de la période",
-  "kpi.valueSubmittedForApproval": "Valeur soumise à validation du responsable du plan",
+  "kpi.valueSubmittedForApproval": "Valeur soumise à validation du pilote du plan stratégique",
   "kpi.pendingValidation": "En attente de validation",
   "kpi.pendingStep": "étape {current}/{total}",
   "kpi.valueSubmittedChain": "Valeur soumise à validation : {chain}",
@@ -2211,25 +2240,26 @@ const fr: Record<string, string> = {
   "kpi.measurement.route.edit.chantier":
     "Votre correction sera soumise au sponsor du chantier {name}.",
   "kpi.measurement.route.edit.axis": "Votre correction sera soumise au sponsor de l'axe {name}.",
-  "kpi.measurement.route.edit.plan": "Votre correction sera soumise au responsable du plan.",
+  "kpi.measurement.route.edit.plan": "Votre correction sera soumise au pilote du plan stratégique.",
   "kpi.measurement.route.delete.chantier":
     "Votre suppression sera soumise au sponsor du chantier {name}.",
   "kpi.measurement.route.delete.axis": "Votre suppression sera soumise au sponsor de l'axe {name}.",
-  "kpi.measurement.route.delete.plan": "Votre suppression sera soumise au responsable du plan.",
+  "kpi.measurement.route.delete.plan":
+    "Votre suppression sera soumise au pilote du plan stratégique.",
   "kpi.measurement.inform.axisPlan":
-    "Le responsable de l'axe et le responsable du plan seront informés.",
-  "kpi.measurement.inform.axis": "Le responsable de l'axe sera informé.",
-  "kpi.measurement.inform.plan": "Le responsable du plan sera informé.",
+    "Le sponsor d'axe et le pilote du plan stratégique seront informés.",
+  "kpi.measurement.inform.axis": "Le sponsor d'axe sera informé.",
+  "kpi.measurement.inform.plan": "Le pilote du plan stratégique sera informé.",
   "kpi.measurement.informAfter.axisPlan":
-    "Une fois la demande acceptée, le responsable de l'axe et le responsable du plan seront informés.",
+    "Une fois la demande acceptée, le sponsor d'axe et le pilote du plan stratégique seront informés.",
   "kpi.measurement.informAfter.axis":
-    "Une fois la demande acceptée, le responsable de l'axe sera informé.",
+    "Une fois la demande acceptée, le sponsor d'axe sera informé.",
   "kpi.measurement.informAfter.plan":
-    "Une fois la demande acceptée, le responsable du plan sera informé.",
+    "Une fois la demande acceptée, le pilote du plan stratégique sera informé.",
   "kpi.history.actions": "Actions",
   "kpi.history.correctedBy": "corrigé par",
   "strategicDelete.pendingBy": "Suppression en attente d'approbation de {approver}",
-  "strategicAxes.actionCreationPending": "Projet soumis à validation du responsable de l'axe",
+  "strategicAxes.actionCreationPending": "Projet soumis à validation du sponsor d'axe",
   "strategicAxes.pendingCreation": "Création en attente de validation",
   "strategicAxes.form.axisName": "Nom de l'axe",
   "strategicAxes.form.axisNamePlaceholder": "Ex. Excellence opérationnelle",
@@ -2784,7 +2814,7 @@ const fr: Record<string, string> = {
   "dashboard.pivot.dim.type": "Type de levier",
   "dashboard.pivot.dim.ws": "Chantier",
   "dashboard.pivot.dim.owner": "Responsable",
-  "dashboard.pivot.dim.sponsor": "Commanditaire",
+  "dashboard.pivot.dim.sponsor": "Responsable de chantier",
   "dashboard.pivot.dim.geography": "Géographie",
   "dashboard.pivot.dim.country": "Pays",
   "dashboard.pivot.dim.entity": "Entité",
@@ -3033,8 +3063,9 @@ const fr: Record<string, string> = {
   "hr.pivot.dim.plannedMonth": "Mois (date prévue)",
   "hr.pivot.dim.plannedQuarter": "Trimestre (date prévue)",
   "shared.topbar.pendingApprovals": "Validations en attente",
-  "shared.topbar.approvalPending": "En attente · commanditaire ou CTO · {stage}",
-  "shared.topbar.milestoneApprovalPending": "En attente · pilote stratégique · jalon {milestone}",
+  "shared.topbar.approvalPending": "En attente · responsable de chantier ou CTO · {stage}",
+  "shared.topbar.milestoneApprovalPending":
+    "En attente · pilote du plan stratégique · jalon {milestone}",
   "leverDetail.trajectory.financial": "Impact financier",
   "leverDetail.trajectory.fte": "Impact ETP",
   "leverDetail.trajectory.month": "Mois",
@@ -3172,6 +3203,27 @@ const fr: Record<string, string> = {
   "strategicApprovals.phrase.projetUpdate": "la modification du projet « {name} » ({fields})",
   "strategicApprovals.phrase.chantierUpdate": "la modification du chantier « {name} » ({fields})",
   "strategicApprovals.phrase.chantierCreate": "la création du chantier « {name} »",
+  "strategicApprovals.phrase.axeCreate": "la création de l'axe « {name} »",
+  "strategicApprovals.phrase.axeUpdate": "la modification de l'axe « {name} » ({fields})",
+  "strategicApprovals.phrase.indicatorUpdate":
+    "la modification de l'objectif de l'indicateur « {name} » ({fields})",
+  "strategicApprovals.phrase.staffingCreate":
+    "l'ajout de la ligne de staffing « {line} » de « {name} »",
+  "strategicApprovals.phrase.staffingUpdate":
+    "la modification de la ligne de staffing « {line} » de « {name} »",
+  "strategicApprovals.phrase.staffingDelete":
+    "la suppression de la ligne de staffing « {line} » de « {name} »",
+  "strategicApprovals.kind.axe_create": "Création d'axe",
+  "strategicApprovals.kind.axe_update": "Modification d'axe",
+  "strategicApprovals.kind.indicator_update": "Objectif KPI",
+  "strategicApprovals.kind.staffing_update": "Staffing",
+  "strategicApprovals.level.admin": "Administrateur",
+  "strategicApprovals.legacyMilestone.intro":
+    "Anciennes demandes de passage de jalon (circuit supprimé) : lecture seule. Effacez-les pour que le projet redemande le passage via le circuit de validation.",
+  "strategicApprovals.legacyMilestone.clear": "Effacer",
+  "strategicApprovals.legacyMilestone.cleared": "Ancienne demande de jalon effacée",
+  "strategicApprovals.legacyMilestone.notDecidable":
+    "Aucune demande de passage de jalon à valider sur ce projet",
   // Motif du risque levier (lib/leverRiskText.ts), retour fiche levier, badge dépassement
   "risk.level.critical": "critique",
   "risk.level.high": "élevé",
@@ -3395,6 +3447,11 @@ const fr: Record<string, string> = {
   "me.item.chantierCreateApproval": "Valider la création d'un chantier",
   "me.item.projetUpdateApproval": "Valider une modification de projet",
   "me.item.chantierUpdateApproval": "Valider une modification de chantier",
+  "me.item.axeCreateApproval": "Valider la création d'un axe",
+  "me.item.axeUpdateApproval": "Valider une modification d'axe",
+  "me.item.indicatorUpdateApproval": "Valider une modification d'indicateur",
+  "me.item.staffingUpdateApproval": "Valider une modification de staffing",
+  "me.item.genericApproval": "Valider une demande",
   "me.item.approvalStep": "Étape {current}/{total}",
   "me.item.projetLate": "Projet en retard",
   "me.item.projetDue": "Échéance du projet",
@@ -3408,11 +3465,13 @@ const fr: Record<string, string> = {
   "me.role.sponsor": "Sponsor",
   "me.role.axisSponsor": "Sponsor d'axe",
   "me.role.pilote": "Sponsor de chantier",
-  "me.role.programOwner": "Owner du programme",
+  "me.role.programOwner": "Responsable du programme",
   "me.role.cto": "CTO",
   "me.role.admin": "Administrateur",
   "me.role.finance": "Finance",
-  "me.role.strategicLead": "Pilote stratégique",
+  "me.role.strategicLead": "Pilote du plan stratégique",
+  "me.role.programSponsor": "Commanditaire du programme",
+  "me.role.contributor": "Contributeur projet",
   // ─── admin.onboarding (checklist « Mise en place » + échelle de confidentialité) ───
   "admin.onboarding.title": "Mise en place",
   "admin.onboarding.progress": "{done}/{total} étapes",

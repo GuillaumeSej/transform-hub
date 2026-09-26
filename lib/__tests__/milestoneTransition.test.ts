@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { milestoneTransitionState } from "@/lib/axisLogic";
 import {
-  approveMilestoneGate,
-  milestoneTransitionState,
-  rejectMilestoneApproval,
-} from "@/lib/axisLogic";
+  clearLegacyMilestoneMarker,
+  isLegacyMilestoneMarker,
+  legacyMilestoneMarkers,
+} from "@/lib/strategicApprovals";
 import { MILESTONE_CHECKLISTS } from "@/lib/milestoneChecklist";
 import type { Chantier, ChantierAction, MilestoneId } from "@/types";
 
@@ -136,7 +137,7 @@ describe("milestoneTransitionState", () => {
   });
 });
 
-describe("milestone gate — chantier pilote is an approver", () => {
+describe("legacy milestone markers (old single-approver path removed)", () => {
   const pending = makeAction({
     milestones: {
       currentMilestone: "E1",
@@ -149,23 +150,31 @@ describe("milestone gate — chantier pilote is an approver", () => {
       requestedAt: "2026-09-20T10:00:00.000Z",
     },
   });
+  const chainRequest = { kind: "milestone" as const, status: "pending" as const, targetId: "A1" };
 
-  it("the chantier pilote can confirm: milestone advances and pending state is cleared", () => {
-    const patch = approveMilestoneGate(pending, { username: "pilote1", profiles: [] }, [chantier]);
-    expect(patch.milestones?.currentMilestone).toBe("E2");
-    expect(patch.milestones?.passedMilestones).toEqual(["E0", "E1"]);
-    expect(patch.milestoneApproval).toBeUndefined();
+  it("a marker without a pending chained request is a legacy (read-only) marker", () => {
+    expect(isLegacyMilestoneMarker(pending, [])).toBe(true);
+    expect(legacyMilestoneMarkers([pending, makeAction({ id: "A2" })], [])).toEqual([pending]);
   });
 
-  it("the chantier pilote can refuse: pending state is cleared", () => {
+  it("a marker mirrored by a pending chained request is NOT legacy", () => {
+    expect(isLegacyMilestoneMarker(pending, [chainRequest])).toBe(false);
     expect(
-      rejectMilestoneApproval(pending, { username: "pilote1", profiles: [] }, [chantier])
-    ).toEqual({ milestoneApproval: undefined });
+      isLegacyMilestoneMarker(pending, [{ ...chainRequest, status: "approved" as const }])
+    ).toBe(true);
   });
 
-  it("an unrelated user can neither confirm nor refuse", () => {
-    const other = { username: "someone", profiles: [] };
-    expect(() => approveMilestoneGate(pending, other, [chantier])).toThrow();
-    expect(() => rejectMilestoneApproval(pending, other, [chantier])).toThrow();
+  it("only an admin can clear a legacy marker — never the chantier pilote nor the owner", () => {
+    expect(() => clearLegacyMilestoneMarker(pending, { isCompanyAdmin: false }, [])).toThrow();
+    const cleared = clearLegacyMilestoneMarker(pending, { isCompanyAdmin: true }, []);
+    expect(cleared.milestoneApproval).toBeUndefined();
+    expect(cleared.milestones?.currentMilestone).toBe("E1");
+    expect(chantier.pilote).toBe("pilote1");
+  });
+
+  it("refuses to clear a marker carried by a pending chained request", () => {
+    expect(() =>
+      clearLegacyMilestoneMarker(pending, { isGlobalAdmin: true }, [chainRequest])
+    ).toThrow();
   });
 });

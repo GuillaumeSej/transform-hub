@@ -18,7 +18,8 @@ import {
   type ImpactTypeKey,
 } from "@/lib/impactKinds";
 import {
-  canDecideImpactRealized,
+  canDecideImpactRealizedOn,
+  isImpactRealizedRequester,
   coerceImpactStatus,
   decideImpactRealized,
   impactStatusOf,
@@ -306,6 +307,7 @@ export function ImpactsEditor({
   canEdit = true,
   readOnly = false,
   scope,
+  programId,
 }: {
   impacts: LeverImpact[];
   onChange: (next: LeverImpact[]) => void;
@@ -314,11 +316,16 @@ export function ImpactsEditor({
   readOnly?: boolean;
   /** "financial" = tout sauf ETP ; "fte" = uniquement les lignes ETP. */
   scope: "financial" | "fte";
+  /** Programme du levier : les droits de validation finance du réalisé sont scopés programme. */
+  programId?: string;
 }) {
   const { t } = useTranslation();
   const { user } = useRole();
   const editable = canEdit && !readOnly;
-  const canDecide = canDecideImpactRealized(user);
+  // Validation finance du réalisé : profil finance du programme du levier (ou admin), jamais le
+  // demandeur lui-même (voir lib/impactStatus.ts::canDecideImpactRealizedOn).
+  const canDecide = (imp: LeverImpact) =>
+    canDecideImpactRealizedOn(user, programId ? { programId } : null, imp);
   const companyId = company?.id;
   const geoLevel = effectiveLeafLevel(company?.geographyHierarchyLevels ?? []);
   const showGeo = !!(geoLevel && companyId);
@@ -795,7 +802,15 @@ export function ImpactsEditor({
                                 "Demandé par {who} — en attente de validation par un profil Finance."
                               ).replace("{who}", imp.realizedApproval?.requestedBy ?? "?")}
                             </p>
-                            {canDecide && (
+                            {isImpactRealizedRequester(imp, user) && (
+                              <p className="text-tertiary">
+                                {t(
+                                  "levers.approval.realizedOwn",
+                                  "Votre déclaration : elle doit être validée par un autre profil Finance ou un admin."
+                                )}
+                              </p>
+                            )}
+                            {canDecide(imp) && (
                               <div className="flex gap-1.5">
                                 <button
                                   type="button"

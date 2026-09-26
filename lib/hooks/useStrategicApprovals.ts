@@ -15,13 +15,19 @@
  *   sa.mine      StrategicApproval[]  demandes émises par l'utilisateur (tous statuts)
  *   sa.history   StrategicApproval[]  demandes décidées visibles de l'utilisateur
  *   sa.alerts    Alert[]              alertes dérivées (à valider / en attente / décision)
+ *   sa.route(kind, target, payload?) => ApprovalRoute   (PRÉFÉRÉ — voir resolveApprovalRoute)
+ *        { mode: "direct" }            → appliquer directement (admin, pilote du programme, libre)
+ *        { mode: "request", chain }    → sa.request(...)
+ *        { mode: "retry", reason }     → utilisateurs non chargés : ne rien faire, réessayer
+ *        { mode: "forbidden", reason } → pas le droit (axes, objectif KPI, staffing, jalon)
  *   sa.needsApproval(kind, target, stage?, payload?) => boolean
- *        false → appliquer directement (admin, pilote du plan, catégorie libre) ; true → sa.request.
+ *        false → appliquer directement ; true → demande, OU retry/forbidden (ne jamais appliquer).
  *        `payload` requis pour "projet_update"/"chantier_update" (catégorie) et "chantier_create".
  *   sa.previewChain(kind, target, payload?) => ApprovalStep[]  « sera validé par X puis Y »
  *   sa.request(kind, target, payload, reason?) => Promise<StrategicApproval>
  *        kind    "milestone" | "kpi_value" | "projet_create" | "projet_update" | "projet_delete"
  *                | "chantier_create" | "chantier_update" | "chantier_delete"
+ *                | "axe_create" | "axe_update" | "indicator_update" | "staffing_update"
  *        target  { type: "axe"|"chantier"|"projet"|"indicateur", id, name? }
  *        payload milestone       { targetMilestone, fromMilestone? }          target = projet
  *                kpi_value       { period, value?, note?, measurementId?, remove? }
@@ -33,17 +39,24 @@
  *                chantier_create { chantier: Chantier (id déjà généré) }      target = axe principal
  *                chantier_update { patch, before, category }                  target = chantier
  *                chantier_delete { name? }                                    target = chantier
- *        Chaîne calculée et SNAPSHOTÉE à la création. Écrit la demande + une entrée d'audit ; pour
+ *                axe_create      { axis: StrategicAxis }                      target = axe (nouvel id)
+ *                axe_update      { patch, before, category }                  target = axe
+ *                indicator_update { patch, before } (objectif/cible/sens/échéancier) target = indicateur
+ *                staffing_update { op, line, before? }        target = projet (line.actionId) | chantier
+ *        Chaîne calculée et SNAPSHOTÉE à la création ; lève si la route n'est pas "request". Écrit la demande + une entrée d'audit ; pour
  *        "milestone" pose aussi `ChantierAction.milestoneApproval` (marqueur "en attente").
  *   sa.approve(id, comment?, adjust?) => Promise<void>
  *        Valide le palier COURANT : palier intermédiaire → la demande passe au palier suivant (rien
  *        n'est appliqué) ; dernier palier → effet appliqué (jalon/KPI/création/modification/
  *        suppression). Demandes LEGACY (sans chaîne) : décision unique, et l'ancien enchaînement
  *        "projet_create" palier "chantier" → "axis" (`nextProjetCreateApproval`) reste géré.
- *        `adjust` (correction KPI uniquement) : valeur AJUSTÉE par l'approbateur.
+ *        `adjust` (correction KPI uniquement) : valeur AJUSTÉE par l'approbateur — DERNIER palier
+ *        seulement (`canAdjustKpiValue`) ; lève à un palier intermédiaire.
  *   sa.reject(id, comment)   => Promise<void>   commentaire OBLIGATOIRE ; clôt la demande
  *   sa.kpiCorrectionRoute(indicator) => KpiCorrectionRoute   directe (pilote/admin) / demande / interdite
  *   sa.notifyKpiCorrection(target, payload, informUsernames) => enregistrement d'information
+ *   sa.legacyMilestones            ChantierAction[]  marqueurs de jalon reliquats (lecture seule)
+ *   sa.clearLegacyMilestone(actionId) => Promise<void>  admin : efface un marqueur reliquat
  * Toutes les méthodes lèvent une Error (message FR) si non habilité / périmé / déjà traité.
  */
 
@@ -55,7 +68,8 @@ import {
 } from "@/lib/firestore/strategicApprovals";
 import { saveChantierAction, deleteChantierAction } from "@/lib/firestore/chantierActions";
 import { deleteChantier, saveChantier } from "@/lib/firestore/chantiers";
-import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
+import { deleteChantierStaffing, saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
+import { saveStrategicAxis } from "@/lib/firestore/strategicAxes";
 import { saveIndicator } from "@/lib/firestore/indicators";
 import {
   deleteIndicatorMeasurement,
@@ -76,12 +90,17 @@ import {
   buildApprovalAlerts,
   buildApprovalAuditEntry,
   buildDirectKpiCorrectionRecord,
+  canAdjustKpiValue,
   canDecide,
+  clearLegacyMilestoneMarker,
   decideApproval,
+  legacyMilestoneMarkers,
   needsApproval as needsApprovalLogic,
   nextProjetCreateApproval,
   previewApprovalChain,
+  resolveApprovalRoute,
   type ApprovalEffects,
+  type ApprovalRoute,
   type ApprovalEvent,
   type KpiValueApprovalPayload,
   type ProjetCreateApprovalPayload,
@@ -109,6 +128,8 @@ async function runEffects(effects: ApprovalEffects): Promise<void> {
   for (const i of effects.saveIndicators) await saveIndicator(i);
   for (const s of effects.saveStaffing) await saveChantierStaffing(s);
   for (const c of effects.saveChantiers) await saveChantier(c);
+  for (const ax of effects.saveAxes) await saveStrategicAxis(ax);
+  for (const id of effects.deleteStaffingIds) await deleteChantierStaffing(id);
 }
 
 export type UseStrategicApprovalsArgs = {
@@ -170,6 +191,15 @@ export function useStrategicApprovals({
       );
     },
     [companyId]
+  );
+
+  const route = useCallback(
+    (
+      kind: StrategicApprovalKind,
+      target: StrategicApprovalTarget,
+      payload?: StrategicApprovalPayload
+    ): ApprovalRoute => resolveApprovalRoute(kind, user, target, dataRef.current, payload),
+    [user]
   );
 
   const needsApproval = useCallback(
@@ -272,6 +302,13 @@ export function useStrategicApprovals({
           adjust?.value !== undefined &&
           adjust.value !== kpiPayload.value
         ) {
+          // Seul le DERNIER palier peut ajuster la valeur (un palier intermédiaire approuve ou
+          // refuse ce que le palier suivant validera).
+          if (!canAdjustKpiValue(approval)) {
+            throw new Error(
+              "Seul le dernier valideur peut ajuster la valeur : approuvez ou refusez la demande"
+            );
+          }
           payloadPatch = {
             ...kpiPayload,
             value: adjust.value,
@@ -386,6 +423,33 @@ export function useStrategicApprovals({
     [decide]
   );
 
+  const legacyMilestones = useMemo(
+    () => legacyMilestoneMarkers(data.chantierActions, approvals),
+    [data.chantierActions, approvals]
+  );
+
+  /** Admin : efface un marqueur de jalon RELIQUAT (ancien circuit, sans demande à chaîne). */
+  const clearLegacyMilestone = useCallback(
+    async (actionId: string): Promise<void> => {
+      const action = dataRef.current.chantierActions.find((a) => a.id === actionId);
+      if (!action) throw new Error("Projet introuvable");
+      const cleared = clearLegacyMilestoneMarker(action, user, approvalsRef.current);
+      await saveChantierAction(cleared);
+      appendAuditEntries(companyId, [
+        {
+          ts: new Date().toISOString().slice(0, 16).replace("T", " "),
+          user: user?.name ?? user?.username ?? "—",
+          action: "approval_rejected",
+          entity: actionId,
+          field: "validation:milestone",
+          old: "pending",
+          new: `Ancienne demande de passage de jalon effacée (circuit supprimé) sur « ${action.name} »`,
+        },
+      ]).catch((err) => console.error("[betrack] audit validation stratégique :", err));
+    },
+    [user, companyId]
+  );
+
   return {
     loading,
     approvals,
@@ -394,6 +458,7 @@ export function useStrategicApprovals({
     history: buckets.history,
     pendingCount: buckets.pending.length,
     alerts,
+    route,
     needsApproval,
     previewChain,
     request,
@@ -401,5 +466,7 @@ export function useStrategicApprovals({
     notifyKpiCorrection,
     approve,
     reject,
+    legacyMilestones,
+    clearLegacyMilestone,
   };
 }
