@@ -198,9 +198,9 @@ export function LeverForm({
   // rattaché à du texte libre depuis ce formulaire, seulement à un compte de cette liste (ou
   // "Aucun").
   const companyUsers = useCompanyUsers(companyId);
-  // « Commanditaire » (sponsor du levier) : il confère des droits d'approbation (responsable de
+  // « Responsable de chantier » (sponsor du levier) : il confère des droits d'approbation (responsable de
   // chantier, voir lib/leversLogic.ts::isLeverSponsorOf) — seuls le CTO du programme du levier ou
-  // un admin peuvent le modifier (un porteur ne peut pas se désigner lui-même commanditaire).
+  // un admin peuvent le modifier (un porteur ne peut pas se désigner lui-même responsable de chantier).
   const { user: currentUser } = useRole();
   const canEditSponsor =
     isAnyAdmin(currentUser) ||
@@ -465,13 +465,13 @@ export function LeverForm({
         const next = { ...values, impacts: cleaned, type: values.type || leverTypes[0] || "" };
         if (isCreate) {
           next.status = firstStage;
-          // Plus de champ « Commanditaire » à la création : on ne garde que le pré-remplissage
+          // Plus de champ « Responsable de chantier » à la création : on ne garde que le pré-remplissage
           // éventuel de l'appelant (responsable de chantier qui crée son propre levier).
           next.sponsor = initialValues?.sponsor ?? "";
           next.sponsorInit = initialValues?.sponsorInit ?? "";
           next.sponsorUsername = initialValues?.sponsorUsername;
         } else if (!canEditSponsor) {
-          // Défense en profondeur : le sélecteur est désactivé, on renvoie le commanditaire d'origine.
+          // Défense en profondeur : le sélecteur est désactivé, on renvoie le responsable de chantier d'origine.
           next.sponsor = initialValues?.sponsor ?? "";
           next.sponsorInit = initialValues?.sponsorInit ?? "";
           next.sponsorUsername = initialValues?.sponsorUsername;
@@ -676,7 +676,7 @@ export function LeverForm({
           </div>
         </Field>
         <div />
-        {/* « Commanditaire » : absent du formulaire de CRÉATION (notion jugée inutile à la
+        {/* « Responsable de chantier » : absent du formulaire de CRÉATION (notion jugée inutile à la
             saisie) — conservé en édition pour les leviers qui en ont déjà un. */}
         {!isCreate && (
           <div className="col-span-1 sm:col-span-2">
@@ -692,7 +692,7 @@ export function LeverForm({
                     ? undefined
                     : t(
                         "levers.approval.sponsorLocked",
-                        "Seuls le CTO du programme ou un admin peuvent modifier le commanditaire."
+                        "Seuls le CTO du programme ou un admin peuvent modifier le responsable de chantier."
                       )
                 }
                 value={values.sponsorUsername ?? ""}

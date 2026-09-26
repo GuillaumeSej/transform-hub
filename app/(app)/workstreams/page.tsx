@@ -126,7 +126,7 @@ export default function WorkstreamsPage() {
         </span>
       ),
     },
-    { key: "sponsor", label: t("leverForm.sponsor", "Commanditaire") },
+    { key: "sponsor", label: t("leverForm.sponsor", "Responsable de chantier") },
     {
       key: "reforecastNet",
       label: t("workstreams.reforecastTarget", "Cible réactualisée €M"),

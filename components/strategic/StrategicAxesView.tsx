@@ -31,10 +31,13 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { canImportStrategicPlan, isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
-import { hierarchyContextFor } from "@/lib/strategicApprovals";
+import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
+import { createAxisFlow, directGate, newAxisId } from "@/lib/strategicApprovalFlows";
+import { canCreateAxis, hierarchyContextFor } from "@/lib/strategicApprovals";
+import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
 import { canDesignateAxisSponsor } from "@/lib/strategicFiche";
 import type { StrategicImportWrites } from "@/lib/strategicExcelImport";
-import type { Chantier, MilestoneId } from "@/types";
+import type { Chantier, MilestoneId, StrategicAxis } from "@/types";
 
 /**
  * Page « Axes stratégiques » — portefeuille des axes du programme actif, servie sur la MÊME route
@@ -86,6 +89,10 @@ export function StrategicAxesView() {
   const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
   const [newAxisOpen, setNewAxisOpen] = useState(false);
+  const sa = useStrategicApprovalsApi();
+  const toastApprovalError = useApprovalErrorToast();
+  // Décision PO : seuls le pilote du plan et les admins créent un axe (application directe).
+  const mayCreateAxis = !readOnly && canCreateAxis(user, activeProgramId);
 
   // Round 24 (Phase 4, Partie 1) : bascule d'onglet locale, sans persistance — voir le doc-comment
   // de tête de ce fichier.
@@ -346,7 +353,7 @@ export function StrategicAxesView() {
               onImport={handleImport}
             />
           )}
-          {!readOnly && (
+          {mayCreateAxis && (
             <Button variant="primary" onClick={() => setNewAxisOpen(true)}>
               <Plus size={13} /> {t("strategicAxes.newAxis")}
             </Button>
@@ -389,10 +396,27 @@ export function StrategicAxesView() {
           )}
           onCancel={() => setNewAxisOpen(false)}
           onSubmit={async (values: AxisFormValues) => {
-            const created = await data.createAxis(values);
-            setNewAxisOpen(false);
-            showToast(t("strategicAxes.axisCreated"), created.name, "success");
-            openAxis(created.id);
+            try {
+              // `createAxisFlow` : pilote/admin → direct ; tout autre acteur → refus (bouton masqué).
+              const today = new Date().toISOString().slice(0, 10);
+              const axis: StrategicAxis = {
+                ...values,
+                id: newAxisId(),
+                companyId: user?.companyId ?? "",
+                programId: activeProgramId ?? "",
+                createdAt: today,
+                lastUpdate: today,
+              };
+              let created: StrategicAxis | undefined;
+              await createAxisFlow(sa ?? directGate(user, activeProgramId), axis, async () => {
+                created = await data.createAxis(values);
+              });
+              setNewAxisOpen(false);
+              showToast(t("strategicAxes.axisCreated"), values.name, "success");
+              if (created) openAxis(created.id);
+            } catch (error) {
+              toastApprovalError(error);
+            }
           }}
         />
       </Modal>

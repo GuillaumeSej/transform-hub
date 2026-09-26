@@ -7,17 +7,34 @@ import type { KpiCorrectionRoute, KpiInformLevel } from "@/lib/kpiCorrectionRout
 /**
  * Explique ce qui va se passer pour une correction / suppression de mesure KPI (règles PO, voir
  * `lib/kpiCorrectionRouting.ts`) : soumission au responsable du chantier (ou repli axe/plan), et
- * responsables supérieurs informés.
+ * responsables supérieurs informés. Route "retry" (utilisateurs pas encore chargés) : message
+ * « données en cours de chargement, réessayez » — rien ne sera appliqué.
  */
 export function KpiCorrectionNotice({
   route,
   action,
+  chain,
 }: {
   route: KpiCorrectionRoute | null | undefined;
   action: "edit" | "delete";
+  /** Aperçu lisible de la chaîne complète (« Sponsor d'axe (X) puis Pilote (Y) ») — mode demande. */
+  chain?: string;
 }) {
   const { t } = useTranslation();
   if (!route || route.mode === "forbidden") return null;
+  if (route.mode === "retry") {
+    return (
+      <p className="flex items-start gap-1.5 rounded-md border border-rag-amber bg-rag-amber-light px-2.5 py-1.5 text-[11px] text-rag-amber">
+        <Info size={12} className="mt-0.5 shrink-0" aria-hidden="true" />
+        <span>
+          {t(
+            "strategicFiche.retry.message",
+            "Les données sont en cours de chargement : réessayez dans un instant."
+          )}
+        </span>
+      </p>
+    );
+  }
 
   const informText = (levels: KpiInformLevel[], afterApproval: boolean): string | null => {
     const key =
@@ -64,6 +81,9 @@ export function KpiCorrectionNotice({
       `kpi.measurement.route.${action}.${route.approver.level}`,
       fallbacks[action][route.approver.level]
     ).replace("{name}", names);
+    if (chain) {
+      main = `${main} ${t("kpi.willBeValidatedBy", "Sera validée par {chain}").replace("{chain}", chain)}.`;
+    }
     inform = informText(route.informLevels, true);
   } else {
     inform = informText(route.informLevels, false);

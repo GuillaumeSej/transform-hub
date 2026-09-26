@@ -49,7 +49,15 @@ import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicDa
 import { useToast } from "@/lib/hooks/useToast";
 import { PendingKpiValues } from "@/components/strategic/PendingKpiValues";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
-import { submitKpiValueFlow } from "@/lib/strategicApprovalFlows";
+import { PendingApprovalBadge } from "@/components/strategic/PendingApprovalBadge";
+import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
+import {
+  directGate,
+  submitKpiValueFlow,
+  updateIndicatorTargetFlow,
+} from "@/lib/strategicApprovalFlows";
+import { canEditIndicatorTarget, type IndicatorTargetPatch } from "@/lib/strategicApprovals";
+import { approvalErrorKind, pendingOfKind } from "@/lib/strategicApprovalUi";
 import { chainPreviewText, LEVEL_FALLBACK, levelLabelKey } from "@/lib/strategicApprovalView";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -72,9 +80,10 @@ import type {
  * mesure de la période courante, et le réajustement de l'objectif/seuil au fil de l'eau (la valeur
  * initiale étant posée par l'admin à la création de l'indicateur).
  *
- * Contrôle d'accès : `axisLogic.canFillIndicator(indicator, user)` est le SEUL point de vérité —
- * il gate à la fois le formulaire de mesure et l'édition d'objectif. Un utilisateur non autorisé
- * voit exactement les mêmes informations, en lecture seule, avec la liste des rôles habilités.
+ * Contrôle d'accès : `canFillIndicatorValue` gate le formulaire de mesure ; l'édition d'objectif /
+ * de trajectoire (pilotage) est gatée par `canEditIndicatorTarget` et passe par
+ * `updateIndicatorTargetFlow` (pilote/admin direct, sponsors → 2 validations). Un utilisateur non
+ * autorisé voit exactement les mêmes informations, en lecture seule.
  *
  * Statut de risque : jamais recalculé ici. `useStrategicData.addMeasurement` et `updateIndicator`
  * recalculent et persistent `Indicator.status` eux-mêmes (une mesure saisie ou un objectif modifié
@@ -111,6 +120,7 @@ function IndicatorCard({
   linkedChantiers,
   users,
   fillCtx,
+  targetCtx,
 }: {
   indicator: Indicator;
   /** Utilisateurs de l'entreprise : noms des responsables de saisie / des approbateurs. */
@@ -118,6 +128,9 @@ function IndicatorCard({
   /** Axes/chantiers du programme — REQUIS pour reconnaître le sponsor d'axe/de chantier comme
    *  saisisseur (`canFillIndicatorValue`). */
   fillCtx: IndicatorFillContext;
+  /** Axes/chantiers COMPLETS du programme — droit de modifier l'objectif / la trajectoire
+   *  (`canEditIndicatorTarget` : pilote/admin direct, sponsors → 2 validations). */
+  targetCtx: { axes: StrategicAxis[]; chantiers: Chantier[] };
   /** Mesures DE CET indicateur uniquement (déjà filtrées par l'appelant). */
   measurements: IndicatorMeasurement[];
   user: AuthUser | null;
@@ -143,8 +156,20 @@ function IndicatorCard({
   const { showToast } = useToast();
   const router = useRouter();
   const sa = useStrategicApprovalsApi();
+  const toastApprovalError = useApprovalErrorToast();
+  /** Porte des flux : l'API de validation, ou — hors contexte — application directe pour le
+   *  pilote/admin seuls (les autres reçoivent un refus explicite, jamais d'écriture). */
+  const gate = sa ?? directGate(user, indicator.programId);
 
   const canFill = canFillIndicatorValue(indicator, user, fillCtx);
+  // Objectif / trajectoire = pilotage (décision PO) : pas le même droit que la saisie de valeurs.
+  const canEditTarget = canEditIndicatorTarget(user, indicator, targetCtx);
+  const pendingTargetUpdates = pendingOfKind(
+    sa?.approvals,
+    "indicator_update",
+    "indicateur",
+    indicator.id
+  );
   const quantitative = indicator.kind === "quantitative";
   // Dernière mesure NUMÉRIQUE : statut/avancement ne doivent pas être masqués par un commentaire
   // seul saisi ensuite (voir `latestNumericMeasurement`).
@@ -236,9 +261,24 @@ function IndicatorCard({
       t("validation.sa.then", "puis")
     );
   })();
+  // « Sera validé par … » d'une modification d'objectif (vide = appliquée directement).
+  const targetApprovalPreview = (() => {
+    if (!sa || !canEditTarget) return "";
+    const steps = sa.previewChain(
+      "indicator_update",
+      { type: "indicateur", id: indicator.id, name: indicator.name },
+      { patch: { objective: indicator.objective }, before: { objective: indicator.objective } }
+    );
+    return chainPreviewText(
+      steps,
+      users,
+      (level) => t(levelLabelKey(level), LEVEL_FALLBACK[level]),
+      t("validation.sa.then", "puis")
+    );
+  })();
   useRegisterUnsavedChanges(
     `kpi:indicator:${indicator.id}`,
-    canFill && (measurementDirty || editingObjective)
+    (canFill && measurementDirty) || (canEditTarget && editingObjective)
   );
 
   const submitMeasurement = async () => {
@@ -298,7 +338,7 @@ function IndicatorCard({
       // Les champs optionnels sont OMIS plutôt que passés à `undefined` : Firestore rejette une
       // valeur `undefined` à l'écriture (pas d'`ignoreUndefinedProperties` sur cette instance).
       const outcome = await submitKpiValueFlow(
-        sa,
+        gate,
         indicator,
         {
           indicatorId: indicator.id,
@@ -328,6 +368,10 @@ function IndicatorCard({
         showToast(t("kpi.measurementSaved"), indicator.name, "success");
       }
     } catch (err) {
+      if (approvalErrorKind(err) !== "other") {
+        toastApprovalError(err);
+        return;
+      }
       showToast(
         err instanceof MeasurementPeriodCollisionError
           ? t(
@@ -423,18 +467,37 @@ function IndicatorCard({
       // la trajectoire est SUPPRIMÉE (sinon impossible de revenir d'une cible évolutive). Le sens
       // (`direction`) est enregistré même sans cible finale chiffrée (une trajectoire de paliers
       // en a tout autant besoin).
-      await updateIndicator(indicator.id, {
+      // `updateIndicatorTargetFlow` : pilote/admin → direct ; sponsors → demande à 2 paliers
+      // (rien n'est écrit tant qu'elle n'est pas validée).
+      const patch: IndicatorTargetPatch = {
         objective: trimmedObjective,
         ...(quantitative ? { direction: directionDraft } : {}),
         ...(quantitative && parsedTarget !== undefined ? { objectiveValue: parsedTarget } : {}),
         ...(quantitative
           ? { targetSchedule: parsedSchedule.length > 0 ? parsedSchedule : undefined }
           : {}),
-      });
+      };
+      const result = await updateIndicatorTargetFlow(gate, indicator, patch, (changed) =>
+        updateIndicator(indicator.id, changed)
+      );
       setEditingObjective(false);
-      showToast(t("kpi.objectiveSaved"), indicator.name, "success");
-    } catch {
-      showToast(t("kpi.saveError"), indicator.name, "error");
+      if (result.outcome === "pending") {
+        showToast(
+          targetApprovalPreview
+            ? t("kpi.objectiveSubmittedChain", "Objectif soumis à validation : {chain}").replace(
+                "{chain}",
+                targetApprovalPreview
+              )
+            : t("kpi.objectiveSubmitted", "Objectif soumis à validation"),
+          indicator.name,
+          "success"
+        );
+      } else if (result.outcome === "applied") {
+        showToast(t("kpi.objectiveSaved"), indicator.name, "success");
+      }
+    } catch (err) {
+      if (approvalErrorKind(err) !== "other") toastApprovalError(err);
+      else showToast(t("kpi.saveError"), indicator.name, "error");
     } finally {
       setSavingObjective(false);
     }
@@ -601,11 +664,16 @@ function IndicatorCard({
                   <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                     <Target size={13} /> {t("kpi.objective")}
                   </span>
-                  {canFill && !editingObjective && (
-                    <Button variant="ghost" size="sm" onClick={startEditObjective}>
-                      <Pencil size={12} /> {t("kpi.editObjective")}
-                    </Button>
-                  )}
+                  <span className="flex flex-wrap items-center justify-end gap-1.5">
+                    {pendingTargetUpdates.map((a) => (
+                      <PendingApprovalBadge key={a.id} approval={a} users={users} />
+                    ))}
+                    {canEditTarget && !editingObjective && pendingTargetUpdates.length === 0 && (
+                      <Button variant="ghost" size="sm" onClick={startEditObjective}>
+                        <Pencil size={12} /> {t("kpi.editObjective")}
+                      </Button>
+                    )}
+                  </span>
                 </div>
 
                 {editingObjective ? (
@@ -713,6 +781,14 @@ function IndicatorCard({
                           </div>
                         )}
                       </div>
+                    )}
+                    {targetApprovalPreview && (
+                      <p className="text-[11px] text-text-secondary">
+                        {t("kpi.willBeValidatedBy", "Sera validée par {chain}").replace(
+                          "{chain}",
+                          targetApprovalPreview
+                        )}
+                      </p>
                     )}
                     <div className="flex gap-2">
                       <Button
@@ -890,7 +966,12 @@ export function KpiPageClient() {
   // Round multi-sélection : chaque paramètre porte 0..n valeurs (`?axis=a,b`, encodées — voir
   // `lib/filterUtils.ts` ; une ancienne URL `?axis=a` reste valide). Vide = pas de filtre.
   // Contexte de `canFillIndicatorValue` : sans lui, sponsors d'axe/de chantier non reconnus.
-  const fillCtx = useMemo<IndicatorFillContext>(() => ({ axes, chantiers }), [axes, chantiers]);
+  // `chantierActions` : reconnaît aussi responsable/contributeurs d'un projet LIÉ au KPI.
+  const fillCtx = useMemo<IndicatorFillContext>(
+    () => ({ axes, chantiers, chantierActions }),
+    [axes, chantiers, chantierActions]
+  );
+  const targetCtx = useMemo(() => ({ axes, chantiers }), [axes, chantiers]);
   const axisParam = searchParams.get("axis");
   const chantierParam = searchParams.get("chantier");
   const ownerParam = searchParams.get("owner");
@@ -1245,6 +1326,7 @@ export function KpiPageClient() {
       linkedChantiers={chantiersByIndicatorId.get(indicator.id) ?? []}
       users={companyUsers}
       fillCtx={fillCtx}
+      targetCtx={targetCtx}
     />
   );
 

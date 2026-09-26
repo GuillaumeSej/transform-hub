@@ -1577,7 +1577,9 @@ export function UsersPanel({
                       >
                         <Pencil size={14} />
                       </button>
-                      {!isDisabled && (
+                      {/* Un admin d'entreprise ne réinitialise pas le mot de passe d'un AUTRE admin
+                          d'entreprise (refusé par admin-api, accountActionDenial). */}
+                      {!isDisabled && !isPeerCompanyAdmin(u) && (
                         <button
                           onClick={() => openResetLink(u)}
                           className="mr-2 text-text-secondary hover:text-bp-coral"

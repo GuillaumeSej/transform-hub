@@ -230,7 +230,7 @@ export function isReadOnlyUser(
  *    `isReadOnlyUser`) ;
  *  - tout profil Performance (ou transverse) « tous programmes » (sans `programId`, legacy).
  * Complète — sans la remplacer — `leverAccessDenialReason` (lib/leversLogic.ts : périmètre
- * nominatif, confidentialité), qui ne vérifie pas le programme.
+ * nominatif, confidentialité), qui s'appuie désormais sur elle (raison "program").
  */
 export function canAccessPerformanceProgram(
   user:

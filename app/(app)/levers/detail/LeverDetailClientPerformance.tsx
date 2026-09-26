@@ -219,7 +219,8 @@ export function LeverDetailClientPerformance() {
     lever,
     roleClearance,
     data.workstreams,
-    company?.confidentialityLevels
+    company?.confidentialityLevels,
+    programs
   );
 
   if (denialReason) {
@@ -230,10 +231,15 @@ export function LeverDetailClientPerformance() {
               "leverDetail.restrictedAccess",
               "Accès restreint — ce levier est classé « {level} », un niveau de confidentialité auquel votre profil n'est pas habilité."
             ).replace("{level}", lever.confidentialityLevel ?? "")
-          : t(
-              "leverDetail.outOfPerimeter",
-              "Accès restreint — ce levier n'est pas dans votre périmètre : vous n'en êtes ni le responsable ni le commanditaire."
-            )}{" "}
+          : denialReason === "program"
+            ? t(
+                "levers.access.outOfProgram",
+                "Accès restreint — ce levier appartient à un programme sur lequel vous n'avez aucun droit."
+              )
+            : t(
+                "leverDetail.outOfPerimeter",
+                "Accès restreint — ce levier n'est pas dans votre périmètre : vous n'en êtes ni le responsable de levier ni le responsable de chantier."
+              )}{" "}
         <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
           {t("leverDetail.backToPipeline", "Retour aux leviers par étape")}
         </button>
@@ -552,7 +558,7 @@ export function LeverDetailClientPerformance() {
                     : "leverDetail.approval.pending",
                   lever.approval.chain?.length
                     ? "Demande de validation pour passer en « {stage} »"
-                    : "En attente d'approbation (commanditaire ou CTO) pour passer en « {stage} »"
+                    : "En attente d'approbation (responsable de chantier ou CTO) pour passer en « {stage} »"
                 ).replace("{stage}", lifecycle.shortLabel(lever.approval.targetStatus))}
               </div>
               <div className="mt-1">
@@ -1045,7 +1051,7 @@ export function LeverDetailClientPerformance() {
                     <Avatar initials={lever.ownerInit} /> {lever.owner}
                   </span>
                 </OverviewField>
-                <OverviewField label={t("leverForm.sponsor", "Commanditaire")}>
+                <OverviewField label={t("leverForm.sponsor", "Responsable de chantier")}>
                   <span className="inline-flex items-center gap-2">
                     <Avatar initials={lever.sponsorInit} /> {lever.sponsor}
                   </span>

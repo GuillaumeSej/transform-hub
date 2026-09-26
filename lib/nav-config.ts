@@ -86,10 +86,12 @@ const CTO_LIKE_NAV: RoleDefinition["nav"] = [
   // program_owner) : il doublonnait Validation (leurs décisions) et le tableau de bord (alertes,
   // santé par programme). Leur seul apport propre, « Bloqué chez d'autres », vit désormais dans un
   // onglet de la page Validation. Page d'arrivée = tableau de bord (voir `resolveLandingRoute`).
-  // Portes de validation (voir lib/leversLogic.ts::approveLeverGate) : visible pour cto (tous les
-  // programmes) et program_sponsor/program_owner (visibilité restreinte à leurs programmes via
-  // lib/consolidatedProgramAccess.ts, même mécanisme que le reste de cette nav partagée),
-  // réservé au Plan Performance (pas de porte de validation côté Plan Stratégique). `section:
+  // Page Validation : seuls le responsable de chantier (rôle "sponsor") puis le CTO décident les
+  // portes de levier (double validation séquentielle, lib/leversLogic.ts::approveLeverGate ; admin
+  // en escalade) et la finance les réalisés. program_sponsor/program_owner N'APPROUVENT PAS : ils
+  // y consultent l'onglet « En attente chez d'autres » (suivi, restreint à leurs programmes via
+  // lib/consolidatedProgramAccess.ts). Côté Stratégique, la page liste les demandes de validation
+  // stratégiques (lib/strategicApprovals.ts). `section:
   // "decision"` regroupe l'item sous son propre séparateur, entre le pilotage courant (items sans
   // section) et les données de référence (`section: "reference"`, ex. "hr-etp" ci-dessous) — voir
   // Sidebar.tsx / SECTION_LABEL_KEYS.

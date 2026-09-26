@@ -133,8 +133,9 @@ export function useRealizedApprovalQueue(
 // `StrategicApproval` "milestone" à chaîne, déjà présente au bon palier dans
 // `useStrategicApprovals().pending`. Les marqueurs reliquats sont listés par
 // `useStrategicApprovals().legacyMilestones` (lecture seule, effaçables par un admin).
-// Les exports ci-dessous ne sont conservés que pour la compilation des appelants restants
-// (AppShell/Topbar, lib/myWorkspace.ts) : ils renvoient TOUJOURS une file vide. À retirer.
+// Les exports ci-dessous n'ont plus d'appelant applicatif (AppShell/Topbar et lib/myWorkspace.ts
+// les ont retirés) ; seuls des tests de non-régression les importent. Ils renvoient TOUJOURS une
+// file vide. À retirer.
 
 /** @deprecated Ancien circuit supprimé — conservé pour compatibilité de type. */
 export type MilestoneApprovalQueueEntry = {

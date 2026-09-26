@@ -426,7 +426,7 @@ export function LeversPagePerformance() {
       { key: "f_owner", label: t("leverForm.owner", "Responsable"), getValue: (l) => l.owner },
       {
         key: "f_sponsor",
-        label: t("leverForm.sponsor", "Commanditaire"),
+        label: t("leverForm.sponsor", "Responsable de chantier"),
         getValue: (l) => l.sponsor,
       },
       {

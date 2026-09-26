@@ -499,6 +499,8 @@ const en: Record<string, string> = {
   "levers.approval.withdrawn": "Request withdrawn",
   "levers.approval.stepApproved": "Step approved — passed on to the next step",
   "levers.approval.sponsorLocked": "Only the program CTO or an admin can change the sponsor.",
+  "levers.access.outOfProgram":
+    "Restricted access — this initiative belongs to a program you have no rights on.",
   "levers.approval.realizedOwn":
     "Your declaration: it must be approved by another Finance profile or an admin.",
   "levers.approval.deletionAsAdmin":
@@ -2102,7 +2104,7 @@ const en: Record<string, string> = {
   "kpi.section.openChantier": "Open the work package",
   "kpi.noteOptional": "Comment (optional)",
   "kpi.qualitativeNote": "Observation for the period",
-  "kpi.valueSubmittedForApproval": "Value submitted for approval by the strategic plan lead",
+  "kpi.valueSubmittedForApproval": "Value submitted for approval",
   "kpi.pendingValidation": "Pending approval",
   "kpi.pendingStep": "step {current}/{total}",
   "kpi.valueSubmittedChain": "Value submitted for approval: {chain}",
@@ -3505,6 +3507,13 @@ const en: Record<string, string> = {
     "Only the project owner, its contributors and higher levels can edit it.",
   "strategicFiche.rights.readOnlyBadge": "Read-only",
   "strategicFiche.delete.chain": "{chain}. The deletion only takes effect once fully approved.",
+  "kpi.objectiveSubmitted": "Target submitted for approval",
+  "kpi.objectiveSubmittedChain": "Target submitted for approval: {chain}",
+  "strategicFiche.retry.title": "Data still loading",
+  "strategicFiche.retry.message": "Data is still loading: please try again in a moment.",
+  "strategicFiche.error.generic": "The action could not be completed.",
+  "strategicFiche.staffing.pendingCreation": "Addition pending approval",
+  "strategicFiche.staffing.chooseProjet": "Choose a project",
 };
 
 export default en;

@@ -498,6 +498,8 @@ const es: Record<string, string> = {
   "levers.approval.stepApproved": "Etapa validada — transmitida a la etapa siguiente",
   "levers.approval.sponsorLocked":
     "Solo el CTO del programa o un admin pueden modificar el patrocinador.",
+  "levers.access.outOfProgram":
+    "Acceso restringido — esta palanca pertenece a un programa sobre el que no tiene ningún derecho.",
   "levers.approval.realizedOwn":
     "Su declaración: debe ser validada por otro perfil de Finanzas o un admin.",
   "levers.approval.deletionAsAdmin":
@@ -2131,8 +2133,7 @@ const es: Record<string, string> = {
   "kpi.section.openChantier": "Abrir el frente de trabajo",
   "kpi.noteOptional": "Comentario (opcional)",
   "kpi.qualitativeNote": "Observación del periodo",
-  "kpi.valueSubmittedForApproval":
-    "Valor enviado a validación del responsable del plan estratégico",
+  "kpi.valueSubmittedForApproval": "Valor enviado a validación",
   "kpi.pendingValidation": "Pendiente de validación",
   "kpi.pendingStep": "etapa {current}/{total}",
   "kpi.valueSubmittedChain": "Valor enviado a validación: {chain}",
@@ -3573,6 +3574,13 @@ const es: Record<string, string> = {
   "strategicFiche.rights.readOnlyBadge": "Solo lectura",
   "strategicFiche.delete.chain":
     "{chain}. La eliminación solo será efectiva tras la validación completa.",
+  "kpi.objectiveSubmitted": "Objetivo enviado a validación",
+  "kpi.objectiveSubmittedChain": "Objetivo enviado a validación: {chain}",
+  "strategicFiche.retry.title": "Datos cargándose",
+  "strategicFiche.retry.message": "Los datos se están cargando: vuelva a intentarlo en un momento.",
+  "strategicFiche.error.generic": "No se pudo realizar la acción.",
+  "strategicFiche.staffing.pendingCreation": "Alta pendiente de validación",
+  "strategicFiche.staffing.chooseProjet": "Elegir un proyecto",
 };
 
 export default es;

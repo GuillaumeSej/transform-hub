@@ -952,4 +952,24 @@ describe("leversLogic — sponsor de chantier et motif de refus d'accès", () =>
     ).toBe("confidentiality");
     expect(canUserViewLever(sponsor, lever, {}, workstreams)).toBe(false);
   });
+  it("refuse (motif « program ») un levier d'un programme sur lequel l'utilisateur n'a aucun droit", () => {
+    const ws = [{ id: "WS-OPS", sponsor: "Jean Dupont" }];
+    const onP2 = { ...sponsor, profiles: [{ role: "sponsor" as const, programId: "P2" }] };
+    const leverP1 = { ...lever, programId: "P1" };
+    expect(leverAccessDenialReason(onP2, leverP1, {}, ws)).toBe("program");
+    expect(leverAccessDenialReason(onP2, { ...lever, programId: "P2" }, {}, ws)).toBe(null);
+    // Lecture seule transverse rattachée au programme : autorisée.
+    const comex = { ...sponsor, profiles: [{ role: "comex_member" as const, programId: "P1" }] };
+    expect(leverAccessDenialReason(comex, leverP1, {}, ws)).toBe(null);
+    // program_sponsor désigné du programme (profil rattaché à un autre programme).
+    const ps = { ...sponsor, profiles: [{ role: "program_sponsor" as const, programId: "P2" }] };
+    expect(leverAccessDenialReason(ps, leverP1, {}, ws)).toBe("program");
+    expect(
+      leverAccessDenialReason(ps, leverP1, {}, ws, undefined, [
+        { id: "P1", sponsor: "jean.dupont", owner: undefined },
+      ])
+    ).toBe(null);
+    // Admin d'entreprise : jamais refusé pour le programme.
+    expect(leverAccessDenialReason({ ...onP2, isCompanyAdmin: true }, leverP1, {}, ws)).toBe(null);
+  });
 });

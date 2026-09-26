@@ -20,6 +20,7 @@ import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useSidebarCollapsed } from "@/lib/hooks/useSidebarCollapsed";
+import { useCurrentCompany } from "@/lib/hooks/useCurrentCompany";
 import {
   useApprovalQueue,
   useRealizedApprovalQueue,
@@ -66,7 +67,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   // `approval` en cours, structurellement absent en mode stratégique.
   const approvalQueue = useApprovalQueue(data, user);
   // Impacts cochés « Réalisé » en attente de la finance (audit C4) — vide hors profil finance.
-  const realizedApprovalQueue = useRealizedApprovalQueue(data, user);
+  // Entreprise courante passée pour le filtre de confidentialité : le badge doit compter EXACTEMENT
+  // la file de la page `/validation`.
+  const company = useCurrentCompany(user?.companyId);
+  const realizedApprovalQueue = useRealizedApprovalQueue(data, user, company);
   // Suppressions de leviers à confirmer (double validation CTO ↔ responsable de chantier).
   const deletionQueue = useDeletionQueue(data, user);
   const [ready, setReady] = useState(false);
@@ -104,8 +108,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     programId: activeProgramId,
     data: strategic,
   });
-  // (L'ancienne file des jalons `ChantierAction.milestoneApproval` — `useMilestoneApprovalQueue` —
-  // est dépréciée : les demandes de jalon passent par `strategicApprovals` ci-dessus.)
 
   const strategicNotifications = useMemo(() => {
     const alerts: Alert[] = [];
@@ -323,8 +325,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // par `allowedRoutes`) : sur un programme Performance, ouvrir un levier par URL directe exige un
   // profil/droit sur le programme DU LEVIER (`canAccessPerformanceProgram` — admin, cto, sponsor/
   // owner désigné du programme, ou tout profil rattaché à ce programme, `comex_member`/`hr` compris
-  // en lecture seule). Le périmètre nominatif et la confidentialité restent vérifiés par la page
-  // (`leverAccessDenialReason`). `?id=` est lu depuis `window.location` (pas de `useSearchParams`
+  // en lecture seule). La page applique la MÊME règle (`leverAccessDenialReason`, motif "program",
+  // message dédié si elle s'affiche avant cette redirection) en plus du périmètre nominatif et de
+  // la confidentialité. `?id=` est lu depuis `window.location` (pas de `useSearchParams`
   // dans la coquille, qui exigerait une frontière Suspense au niveau du layout) : réévalué au
   // chargement des leviers et à chaque changement de route — cas visé = l'URL saisie/partagée.
   const leverDetailId =

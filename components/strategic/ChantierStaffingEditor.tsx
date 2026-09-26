@@ -9,6 +9,7 @@ import {
   StaffingLineFields,
   type StaffingLineFormValue,
 } from "@/components/strategic/StaffingLineFields";
+import { PendingApprovalBadge } from "@/components/strategic/PendingApprovalBadge";
 import {
   deleteChantierStaffing,
   saveChantierStaffing,
@@ -17,16 +18,32 @@ import {
 import { colorForDepartment } from "@/lib/axisLogic";
 import { todayISO } from "@/lib/dateUtils";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
+import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
 import { useRole } from "@/lib/hooks/useRole";
+import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { isReadOnlyUser } from "@/lib/roleProfiles";
+import { directGate, newStaffingId, staffingFlow } from "@/lib/strategicApprovalFlows";
+import {
+  canEditStaffing,
+  isPilotOrAdmin,
+  type StaffingOp,
+  type StaffingUpdateApprovalPayload,
+  type StrategicApprovalTarget,
+} from "@/lib/strategicApprovals";
+import {
+  approvalErrorKind,
+  pendingStaffingCreations,
+  pendingStaffingForLine,
+} from "@/lib/strategicApprovalUi";
+import { chainLabel, fillTemplate, flowOutcomeMessage } from "@/lib/strategicFiche";
 import {
   isStaffingLineMissingDates,
   parseFte,
   validateStaffingLine,
 } from "@/lib/staffingLineValidation";
-import type { ChantierAction, ChantierStaffing } from "@/types";
+import type { AuthUser, Chantier, ChantierAction, ChantierStaffing, StrategicAxis } from "@/types";
 
 /**
  * Bloc « ETP mobilisés » d'une fiche chantier : la liste des lignes de staffing du chantier
@@ -60,11 +77,13 @@ import type { ChantierAction, ChantierStaffing } from "@/types";
  * historiques sans dates) : le formulaire se recharge avec ses valeurs et exige les mêmes règles.
  */
 
-/** Même politique d'id que `useStrategicData` (suffixe aléatoire) : jamais affiché, seulement une
- *  clé de document stable, et pas de lecture préalable de la collection pour trouver un numéro. */
-function newStaffingId(): string {
-  return `ST-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
+/*
+ * Validation (règle PO « staffing = pilotage ») : droits par ligne via `canEditStaffing` (ligne
+ * chantier → sponsor de chantier et au-dessus ; ligne projet → responsable projet et au-dessus ;
+ * comex/RH jamais) ; toute écriture passe par `staffingFlow` — pilote/admin appliquent directement,
+ * les autres créent une demande à 2 paliers (badge « en attente » sur la ligne, ajouts en attente
+ * listés sous le tableau). Sans droit : lecture seule.
+ */
 
 /** Ré-export (compat) : la règle vit désormais dans `lib/staffingLineValidation.ts`, partagée avec
  *  `StaffingDraftTable.tsx` et testée unitairement. */
@@ -86,6 +105,9 @@ export function ChantierStaffingEditor({
   scopedToActionId,
   onManageInStaffingTab,
   focusRequest,
+  chantier,
+  axes = [],
+  users = [],
 }: {
   companyId: string;
   programId: string;
@@ -108,12 +130,20 @@ export function ChantierStaffingEditor({
    *  fiche projet. Chaque nouvelle `key` pré-sélectionne ce projet dans le formulaire d'ajout
    *  (toujours modifiable) et surligne ses lignes. */
   focusRequest?: { actionId: string; key: number };
+  /** Chantier (sponsor, axes) — droits `canEditStaffing`. Absent : seuls pilote/admin éditent. */
+  chantier?: Pick<Chantier, "id" | "name" | "programId" | "pilote" | "axisIds">;
+  /** Axes du programme (reconnaît les sponsors d'axe du chantier). */
+  axes?: Pick<StrategicAxis, "id" | "owner">[];
+  /** Utilisateurs (noms affichés des valideurs). */
+  users?: AuthUser[];
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { user } = useRole();
+  const sa = useStrategicApprovalsApi();
+  const toastApprovalError = useApprovalErrorToast();
   const scoped = !!scopedToActionId;
-  const readOnly = isReadOnlyUser(user, programId, "strategic") || scoped;
+  const baseReadOnly = isReadOnlyUser(user, programId, "strategic") || scoped;
   const focusActionId = !scoped ? focusRequest?.actionId : undefined;
 
   const { departmentNames } = useCompanyDepartments(companyId);
@@ -180,6 +210,29 @@ export function ChantierStaffingEditor({
   // même projet) — et sans intérêt sur un chantier qui n'a aucun levier (`chantierActions` vide).
   const showProjetColumn = !scopedToActionId && chantierActions.length > 0;
 
+  // ── Droits (canEditStaffing) ────────────────────────────────────────────────────────────────
+  const canEditChantierLines =
+    !baseReadOnly &&
+    (chantier ? canEditStaffing(user, chantier, null, axes) : isPilotOrAdmin(user, programId));
+  const canEditProjetLines = (actionId: string) => {
+    if (baseReadOnly) return false;
+    const projet = actionById.get(actionId);
+    if (!chantier || !projet) return isPilotOrAdmin(user, programId);
+    return canEditStaffing(user, chantier, projet, axes);
+  };
+  const canEditLine = (entry: Pick<ChantierStaffing, "actionId">) =>
+    entry.actionId ? canEditProjetLines(entry.actionId) : canEditChantierLines;
+  /** Projets dont l'utilisateur peut saisir les lignes (sélecteur du formulaire). */
+  const editableActions = chantierActions.filter((a) => canEditProjetLines(a.id));
+  const readOnly = !canEditChantierLines && editableActions.length === 0;
+  const pendingCreations = scoped
+    ? []
+    : pendingStaffingCreations(sa?.approvals, chantierId).filter(
+        (a) => (a.payload as StaffingUpdateApprovalPayload).line?.programId === programId
+      );
+  const gate = sa ?? directGate(user, programId);
+  const chainJoiner = t("strategicFiche.chain.then", "puis");
+
   const selectedAction = actionDraft ? actionById.get(actionDraft) : undefined;
   const validation = validateStaffingLine(
     form,
@@ -208,6 +261,81 @@ export function ChantierStaffingEditor({
     setFormKey((k) => k + 1);
   };
 
+  /** Écrit une ligne via `staffingFlow` (direct pilote/admin, sinon demande à 2 paliers). */
+  const runStaffing = async (
+    op: StaffingOp,
+    line: ChantierStaffing,
+    before: ChantierStaffing | undefined,
+    applyDirect: () => Promise<unknown>
+  ): Promise<boolean> => {
+    const projet = line.actionId ? actionById.get(line.actionId) : undefined;
+    const targetName = projet?.name ?? chantier?.name;
+    const target: StrategicApprovalTarget = line.actionId
+      ? { type: "projet", id: line.actionId, name: targetName }
+      : { type: "chantier", id: line.chantierId, name: targetName };
+    const payload: StaffingUpdateApprovalPayload = {
+      op,
+      line,
+      ...(op !== "create" ? { before: before ?? line } : {}),
+    };
+    try {
+      const preview = sa ? sa.previewChain("staffing_update", target, payload) : [];
+      const outcome = await staffingFlow(gate, { op, line, before, targetName }, applyDirect);
+      if (outcome === "pending") {
+        const message = flowOutcomeMessage(
+          { outcome },
+          users,
+          {
+            applied: t("strategicFiche.toast.applied", "Appliqué"),
+            pending: t("strategicFiche.toast.pending", "Envoyé en validation : {chain}"),
+            partial: t("strategicFiche.toast.pending", "Envoyé en validation : {chain}"),
+            joiner: chainJoiner,
+          },
+          preview
+        );
+        if (message) showToast(message, line.function || targetName, "success");
+      }
+      return true;
+    } catch (error) {
+      if (approvalErrorKind(error) !== "other") toastApprovalError(error);
+      else showToast(t("staffing.saveError"), "", "error");
+      return false;
+    }
+  };
+
+  /** Aperçu « Sera validé par … » de la saisie en cours (vide = application directe). */
+  const submitPreview = (() => {
+    if (!sa || readOnly) return "";
+    const projetId = actionDraft || undefined;
+    const draftLine: ChantierStaffing = {
+      id: editing?.id ?? "preview",
+      companyId,
+      programId,
+      chantierId,
+      createdAt: todayISO(),
+      function: form.team,
+      fte: validation.fte ?? 0,
+      ...(projetId ? { actionId: projetId } : {}),
+    };
+    const target: StrategicApprovalTarget = projetId
+      ? { type: "projet", id: projetId }
+      : { type: "chantier", id: chantierId };
+    const label = chainLabel(
+      sa.previewChain("staffing_update", target, {
+        op: editing ? "update" : "create",
+        line: draftLine,
+        ...(editing ? { before: editing } : {}),
+      }),
+      users,
+      chainJoiner
+    );
+    return label
+      ? fillTemplate(t("strategicFiche.chain.preview", "Sera validé par {chain}"), {
+          chain: label,
+        })
+      : "";
+  })();
+
   const submit = async () => {
     if (!validation.valid || validation.fte === null) return;
     const note = form.note.trim();
@@ -230,34 +358,34 @@ export function ChantierStaffingEditor({
           function: "",
           fte: 0,
         };
+    // `setDoc` remplace le document : un champ optionnel vidé en édition est bien retiré.
+    // Champs optionnels OMIS plutôt que passés à `undefined` : Firestore rejette `undefined`.
+    const line: ChantierStaffing = {
+      ...base,
+      function: form.team,
+      fte: validation.fte,
+      startDate: form.startDate.trim(),
+      endDate: form.endDate.trim(),
+      ...(note !== "" ? { note } : {}),
+      ...(actionDraft !== "" ? { actionId: actionDraft } : {}),
+    };
+    // Ligne projet : le projet choisi doit être dans le périmètre de l'utilisateur ; ligne
+    // chantier : droit chantier requis (le sélecteur ne propose déjà que ces options).
+    if (!canEditLine(line)) return;
     setSaving(true);
     try {
-      // `setDoc` remplace le document : un champ optionnel vidé en édition est bien retiré.
-      // Champs optionnels OMIS plutôt que passés à `undefined` : Firestore rejette `undefined`.
-      await saveChantierStaffing({
-        ...base,
-        function: form.team,
-        fte: validation.fte,
-        startDate: form.startDate.trim(),
-        endDate: form.endDate.trim(),
-        ...(note !== "" ? { note } : {}),
-        ...(actionDraft !== "" ? { actionId: actionDraft } : {}),
-      });
-      resetForm();
-    } catch {
-      showToast(t("staffing.saveError"), "", "error");
+      const ok = await runStaffing(editing ? "update" : "create", line, editing ?? undefined, () =>
+        saveChantierStaffing(line)
+      );
+      if (ok) resetForm();
     } finally {
       setSaving(false);
     }
   };
 
-  const remove = async (id: string) => {
-    try {
-      await deleteChantierStaffing(id);
-      if (editing?.id === id) resetForm();
-    } catch {
-      showToast(t("staffing.saveError"), "", "error");
-    }
+  const remove = async (entry: ChantierStaffing) => {
+    const ok = await runStaffing("delete", entry, entry, () => deleteChantierStaffing(entry.id));
+    if (ok && editing?.id === entry.id) resetForm();
   };
 
   return (
@@ -297,76 +425,119 @@ export function ChantierStaffingEditor({
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {entries.map((entry) => (
-                <tr
-                  key={entry.id}
-                  className={`text-primary ${
-                    editing?.id === entry.id
-                      ? "bg-bp-coral/5"
-                      : focusActionId && entry.actionId === focusActionId
-                        ? "bg-rag-amber-light/70"
-                        : "bg-white"
-                  }`}
-                >
-                  <td className="px-2.5 py-1.5 font-medium">{entry.note || "—"}</td>
-                  <td className="px-2.5 py-1.5">
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        aria-hidden
-                        className={`h-2 w-2 shrink-0 rounded-full ${colorForDepartment(entry.function)}`}
-                      />
-                      {entry.function || t("staffing.teamPlaceholder", "À définir")}
-                    </span>
-                  </td>
-                  {isStaffingLineMissingDates(entry) ? (
-                    // Données antérieures à la règle « dates obligatoires » : un seul badge sur
-                    // les deux colonnes plutôt qu'une date partielle — clic = édition de la ligne.
-                    <td colSpan={2} className="px-2.5 py-1.5 text-tertiary">
-                      <MissingDatesBadge onClick={readOnly ? undefined : () => startEdit(entry)} />
+              {entries.map((entry) => {
+                const pendingLine = pendingStaffingForLine(sa?.approvals, entry.id);
+                const lineEditable = canEditLine(entry) && !pendingLine;
+                return (
+                  <tr
+                    key={entry.id}
+                    className={`text-primary ${
+                      editing?.id === entry.id
+                        ? "bg-bp-coral/5"
+                        : focusActionId && entry.actionId === focusActionId
+                          ? "bg-rag-amber-light/70"
+                          : "bg-white"
+                    }`}
+                  >
+                    <td className="px-2.5 py-1.5 font-medium">
+                      {entry.note || "—"}
+                      {pendingLine && (
+                        <PendingApprovalBadge
+                          approval={pendingLine}
+                          users={users}
+                          className="ml-1.5 align-middle"
+                        />
+                      )}
                     </td>
-                  ) : (
-                    <>
-                      <td className="px-2.5 py-1.5 text-tertiary">{entry.startDate}</td>
-                      <td className="px-2.5 py-1.5 text-tertiary">{entry.endDate}</td>
-                    </>
-                  )}
-                  <td className="px-2.5 py-1.5 text-right font-semibold">
-                    {formatFte(entry.fte || 0)} {t("staffing.fteUnit")}
-                  </td>
-                  {showProjetColumn && (
-                    <td className="px-2.5 py-1.5 text-tertiary">
-                      {entry.actionId
-                        ? (actionById.get(entry.actionId)?.name ?? t("staffing.actionNone"))
-                        : "—"}
+                    <td className="px-2.5 py-1.5">
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          aria-hidden
+                          className={`h-2 w-2 shrink-0 rounded-full ${colorForDepartment(entry.function)}`}
+                        />
+                        {entry.function || t("staffing.teamPlaceholder", "À définir")}
+                      </span>
                     </td>
-                  )}
-                  {!readOnly && (
-                    <td className="whitespace-nowrap px-2.5 py-1.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(entry)}
-                        aria-label={t("staffing.edit", "Modifier cette ligne")}
-                        title={t("staffing.edit", "Modifier cette ligne")}
-                        className="rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-primary"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => remove(entry.id)}
-                        aria-label={t("staffing.remove")}
-                        title={t("staffing.remove")}
-                        className="rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    {isStaffingLineMissingDates(entry) ? (
+                      // Données antérieures à la règle « dates obligatoires » : un seul badge sur
+                      // les deux colonnes plutôt qu'une date partielle — clic = édition de la ligne.
+                      <td colSpan={2} className="px-2.5 py-1.5 text-tertiary">
+                        <MissingDatesBadge
+                          onClick={lineEditable ? () => startEdit(entry) : undefined}
+                        />
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-2.5 py-1.5 text-tertiary">{entry.startDate}</td>
+                        <td className="px-2.5 py-1.5 text-tertiary">{entry.endDate}</td>
+                      </>
+                    )}
+                    <td className="px-2.5 py-1.5 text-right font-semibold">
+                      {formatFte(entry.fte || 0)} {t("staffing.fteUnit")}
                     </td>
-                  )}
-                </tr>
-              ))}
+                    {showProjetColumn && (
+                      <td className="px-2.5 py-1.5 text-tertiary">
+                        {entry.actionId
+                          ? (actionById.get(entry.actionId)?.name ?? t("staffing.actionNone"))
+                          : "—"}
+                      </td>
+                    )}
+                    {!readOnly && (
+                      <td className="whitespace-nowrap px-2.5 py-1.5 text-right">
+                        {lineEditable && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => startEdit(entry)}
+                              aria-label={t("staffing.edit", "Modifier cette ligne")}
+                              title={t("staffing.edit", "Modifier cette ligne")}
+                              className="rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-primary"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => remove(entry)}
+                              aria-label={t("staffing.remove")}
+                              title={t("staffing.remove")}
+                              className="rounded p-1 text-tertiary transition hover:bg-neutral-100 hover:text-bp-coral"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {pendingCreations.length > 0 && (
+        <ul className="mb-3 space-y-1">
+          {pendingCreations.map((a) => {
+            const line = (a.payload as StaffingUpdateApprovalPayload).line;
+            return (
+              <li
+                key={a.id}
+                className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-border bg-white px-2 py-1 text-[12px] text-secondary"
+              >
+                <span className="font-medium text-primary">{line.note || line.function}</span>
+                <span>
+                  {line.function} · {formatFte(line.fte || 0)} {t("staffing.fteUnit")}
+                  {line.actionId ? ` · ${actionById.get(line.actionId)?.name ?? ""}` : ""}
+                </span>
+                <span className="text-[10.5px] italic">
+                  {t("strategicFiche.staffing.pendingCreation", "Ajout en attente de validation")}
+                </span>
+                <PendingApprovalBadge approval={a} users={users} className="ml-auto" />
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       {!readOnly && (
@@ -397,8 +568,14 @@ export function ChantierStaffingEditor({
                     onChange={(e) => setActionDraft(e.target.value)}
                     className={SELECT_CLASS}
                   >
-                    <option value="">{t("staffing.actionNone")}</option>
-                    {chantierActions.map((action) => (
+                    {canEditChantierLines ? (
+                      <option value="">{t("staffing.actionNone")}</option>
+                    ) : (
+                      <option value="" disabled>
+                        {t("strategicFiche.staffing.chooseProjet", "Choisir un projet")}
+                      </option>
+                    )}
+                    {editableActions.map((action) => (
                       <option key={action.id} value={action.id}>
                         {action.name}
                       </option>
@@ -417,7 +594,12 @@ export function ChantierStaffingEditor({
                 variant="outline"
                 size="sm"
                 onClick={submit}
-                disabled={saving || departmentNames.length === 0 || !validation.valid}
+                disabled={
+                  saving ||
+                  departmentNames.length === 0 ||
+                  !validation.valid ||
+                  !canEditLine({ actionId: actionDraft || undefined })
+                }
               >
                 {editing ? <Save size={12} /> : <Plus size={12} />}{" "}
                 {editing ? t("staffing.saveEdit", "Enregistrer") : t("staffing.add")}
@@ -425,6 +607,11 @@ export function ChantierStaffingEditor({
             </div>
           </div>
         </>
+      )}
+      {!readOnly && submitPreview && (
+        <p className="mt-1.5 rounded-md border border-rag-amber-light bg-rag-amber-light/30 px-2 py-1 text-[11.5px] font-medium text-text-secondary">
+          {submitPreview}
+        </p>
       )}
       {!readOnly && <p className="mt-1.5 text-[11px] text-tertiary">{t("staffing.hint")}</p>}
       {scoped && onManageInStaffingTab && (

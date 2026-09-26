@@ -595,8 +595,8 @@ export function BusinessKpiCards({
   /** Saisie de valeur (KPI marché, responsabilité CTO) : bouton affiché seulement si `user` ET
    *  `addMeasurement` sont fournis et que `canFillIndicatorValue` l'autorise. */
   user?: AuthUser | null;
-  /** Axes/chantiers du programme : reconnaît le sponsor d'axe comme saisisseur (voir
-   *  `IndicatorFillContext`, lib/axisLogic.ts). */
+  /** Axes/chantiers/projets (`chantierActions`) du programme : reconnaît le sponsor d'axe et les
+   *  membres d'un projet lié comme saisisseurs (voir `IndicatorFillContext`, lib/axisLogic.ts). */
   fillCtx?: IndicatorFillContext;
   addMeasurement?: (input: IndicatorValueInput) => Promise<unknown>;
   /** Correction / suppression d'une mesure publiée — actions affichées seulement si fournies et

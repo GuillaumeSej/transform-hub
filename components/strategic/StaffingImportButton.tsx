@@ -17,8 +17,10 @@ import { readSpreadsheetFile } from "@/lib/excelFileRead";
 import { formatImportIssue } from "@/lib/importIssue";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
+import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { isPilotOrAdmin } from "@/lib/strategicApprovals";
 import type { Chantier, ChantierAction, ChantierStaffing } from "@/types";
 
 /** Trouve la feuille "ETP" insensible à la casse, avec repli sur la PREMIÈRE feuille du classeur —
@@ -49,6 +51,10 @@ function findStaffingSheet(
  * l'appelant (`EffectifsPageClient.tsx`) qui écrit chaque entrée via `saveChantierStaffing`
  * (upsert par id) en boucle, après confirmation — cette librairie/ce composant ne font AUCUN appel
  * Firestore.
+ *
+ * Droits (décision PO) : import en lot réservé au pilote du plan et aux admins (`isPilotOrAdmin`),
+ * appliqué directement pour eux ; le composant ne rend RIEN pour tout autre utilisateur (comex/RH
+ * compris) — l'appelant le masque aussi, ceci est un garde-fou.
  */
 export function StaffingImportButton({
   companyId,
@@ -78,6 +84,8 @@ export function StaffingImportButton({
 }) {
   const { showToast } = useToast();
   const { t } = useTranslation();
+  const { user } = useRole();
+  const allowed = isPilotOrAdmin(user, programId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<StaffingImportPreview | null>(null);
   const [fileName, setFileName] = useState("");
@@ -160,7 +168,7 @@ export function StaffingImportButton({
     p ? p.rows.filter((r) => r.isUpdate).length : 0;
 
   const confirmImport = async () => {
-    if (!preview || preview.rows.length === 0) return;
+    if (!allowed || !preview || preview.rows.length === 0) return;
     setImporting(true);
     try {
       await onImport(preview.rows.map((r) => r.entry));
@@ -182,6 +190,8 @@ export function StaffingImportButton({
       setImporting(false);
     }
   };
+
+  if (!allowed) return null;
 
   return (
     <>

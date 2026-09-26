@@ -91,6 +91,7 @@ import {
   type UpdateFlowResult,
 } from "@/lib/strategicApprovalFlows";
 import {
+  canEditStaffing,
   hierarchyContextFor,
   isLegacyMilestoneMarker,
   isPendingOn,
@@ -1951,6 +1952,19 @@ export function ChantierDetailPanel({
     ctx: hierarchyContextFor("chantier_update", { type: "chantier", id: chantierId }, approvalData),
   });
   const canEditProjetWeights = !!chantier && cRights.canEdit;
+  // Brouillon ETP à la création d'un projet (staffing = pilotage, `canEditStaffing`) : ligne projet
+  // → responsable projet et au-dessus. Un créateur qui ne désigne pas le responsable en devient le
+  // responsable (valeur initiale du formulaire) ; comex/RH : jamais. Les lignes voyagent dans la
+  // demande "projet_create" (2 validations) ou sont écrites directement par le pilote/admin.
+  const canDraftCreationStaffing =
+    !!chantier &&
+    !readOnly &&
+    canEditStaffing(
+      user,
+      chantier,
+      cRights.canDesignateProjectOwner || !user ? null : { owner: user.username, contributors: [] },
+      data.axes
+    );
   // Round 24 : un chantier appartient désormais potentiellement à PLUSIEURS axes (`axisIds`) —
   // toutes les résolutions ci-dessous, dans l'ordre de `data.axes` (même convention que
   // `chantiersByAxis` ailleurs dans le code).
@@ -3296,7 +3310,7 @@ export function ChantierDetailPanel({
                   currency={activeProgram?.currency}
                   chantierAllocatedBudget={chantier.allocatedBudget}
                   companyId={user?.companyId ?? ""}
-                  showStaffingDraft={actionForm.mode === "create"}
+                  showStaffingDraft={actionForm.mode === "create" && canDraftCreationStaffing}
                   labels={actionFormLabels}
                   {...projetFormGating}
                   onCancel={() => setActionForm(null)}
@@ -3359,6 +3373,8 @@ export function ChantierDetailPanel({
                         // `effects.saveActions` (vérifié, contrairement au brouillon ETP round 29,
                         // qui a besoin d'un champ de payload séparé car `ChantierStaffing` est une
                         // collection distincte).
+                        // Garde-fou : jamais de lignes ETP sans droit de staffing.
+                        if (!canDraftCreationStaffing) draftStaffing = [];
                         const pendingStaffing = draftStaffing.map((row) =>
                           draftRowToStaffing(
                             row,
@@ -4003,6 +4019,9 @@ export function ChantierDetailPanel({
                                 chantierActions={chantierActions}
                                 scopedToActionId={action.id}
                                 onManageInStaffingTab={() => manageStaffingInTab(action.id)}
+                                chantier={chantier}
+                                axes={data.axes}
+                                users={data.users}
                               />
                             </div>
                           </div>
@@ -4181,6 +4200,9 @@ export function ChantierDetailPanel({
             chantierId={chantier.id}
             chantierActions={chantierActions}
             focusRequest={staffingFocus}
+            chantier={chantier}
+            axes={data.axes}
+            users={data.users}
           />
         </div>
       </div>

@@ -533,7 +533,9 @@ const fr: Record<string, string> = {
   "levers.approval.withdrawn": "Demande retirée",
   "levers.approval.stepApproved": "Étape validée — transmise à l'étape suivante",
   "levers.approval.sponsorLocked":
-    "Seuls le CTO du programme ou un admin peuvent modifier le commanditaire.",
+    "Seuls le CTO du programme ou un admin peuvent modifier le responsable de chantier.",
+  "levers.access.outOfProgram":
+    "Accès restreint — ce levier appartient à un programme sur lequel vous n'avez aucun droit.",
   "levers.approval.realizedOwn":
     "Votre déclaration : elle doit être validée par un autre profil Finance ou un admin.",
   "levers.approval.deletionAsAdmin":
@@ -2214,7 +2216,7 @@ const fr: Record<string, string> = {
   "kpi.section.openChantier": "Ouvrir le chantier",
   "kpi.noteOptional": "Commentaire (optionnel)",
   "kpi.qualitativeNote": "Observation de la période",
-  "kpi.valueSubmittedForApproval": "Valeur soumise à validation du pilote du plan stratégique",
+  "kpi.valueSubmittedForApproval": "Valeur soumise à validation",
   "kpi.pendingValidation": "En attente de validation",
   "kpi.pendingStep": "étape {current}/{total}",
   "kpi.valueSubmittedChain": "Valeur soumise à validation : {chain}",
@@ -3667,6 +3669,14 @@ const fr: Record<string, string> = {
   "strategicFiche.rights.readOnlyBadge": "Lecture seule",
   "strategicFiche.delete.chain":
     "{chain}. La suppression ne sera effective qu'après validation complète.",
+  "kpi.objectiveSubmitted": "Objectif soumis à validation",
+  "kpi.objectiveSubmittedChain": "Objectif soumis à validation : {chain}",
+  "strategicFiche.retry.title": "Données en cours de chargement",
+  "strategicFiche.retry.message":
+    "Les données sont en cours de chargement : réessayez dans un instant.",
+  "strategicFiche.error.generic": "L'action n'a pas pu être effectuée.",
+  "strategicFiche.staffing.pendingCreation": "Ajout en attente de validation",
+  "strategicFiche.staffing.chooseProjet": "Choisir un projet",
 };
 
 export default fr;

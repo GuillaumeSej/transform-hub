@@ -32,6 +32,7 @@ export function AxisForm({
   compact = false,
   canEditOwner = true,
   ownerTooltip,
+  approvalHint,
 }: {
   /** Utilisateurs de l'entreprise, pour le `UserPicker` du responsable — même prop que
    *  `ChantierDetailPanel`/`ChantierAction` (voir `data.users`, `lib/hooks/useStrategicData.ts`). */
@@ -55,6 +56,9 @@ export function AxisForm({
    *  `ownerTooltip` expliquant qui peut la modifier. Défaut `true` (appelants historiques). */
   canEditOwner?: boolean;
   ownerTooltip?: string;
+  /** Aperçu « Sera validé par X » calculé sur les valeurs courantes (vide = application directe),
+   *  même contrat que `ChantierForm.approvalHint`. */
+  approvalHint?: (values: AxisFormValues) => string;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? "");
@@ -69,20 +73,23 @@ export function AxisForm({
 
   const canSubmit = name.trim().length > 0 && stage.length > 0 && !submitting;
 
+  const buildValues = (): AxisFormValues => ({
+    name: name.trim(),
+    // Clés OMISES (jamais `undefined`) quand vides : `setDoc` rejette toute valeur
+    // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
+    ...(description.trim() ? { description: description.trim() } : {}),
+    ...(owner ? { owner } : {}),
+    ...(confidentialityLevel ? { confidentialityLevel } : {}),
+    color,
+    stage,
+  });
+  const hint = approvalHint ? approvalHint(buildValues()) : "";
+
   const submit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      await onSubmit({
-        name: name.trim(),
-        // Clés OMISES (jamais `undefined`) quand vides : `setDoc` rejette toute valeur
-        // `undefined`, voir `optionalIndicatorFields` dans `components/admin/IndicatorsEditor.tsx`.
-        ...(description.trim() ? { description: description.trim() } : {}),
-        ...(owner ? { owner } : {}),
-        ...(confidentialityLevel ? { confidentialityLevel } : {}),
-        color,
-        stage,
-      });
+      await onSubmit(buildValues());
     } finally {
       setSubmitting(false);
     }
@@ -202,6 +209,12 @@ export function AxisForm({
             )}
           />
         </div>
+      )}
+
+      {hint && (
+        <p className="rounded-md border border-rag-amber-light bg-rag-amber-light/30 px-2 py-1 text-[11.5px] font-medium text-text-secondary">
+          {hint}
+        </p>
       )}
 
       <div className="flex gap-2">

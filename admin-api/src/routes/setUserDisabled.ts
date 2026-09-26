@@ -1,7 +1,7 @@
 import type { Auth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 import { Router } from "express";
-import { assertCanActOnTarget, authorizeAdminCaller } from "../lib/authz";
+import { assertCanManageAccount, authorizeAdminCaller } from "../lib/authz";
 import { normalizeUsername, usernameToSyntheticEmail, accountSlug } from "../lib/authLogic";
 import { setUserDisabledSchema } from "../lib/validation";
 import { ApiError, Errors, errorBody } from "../lib/errors";
@@ -14,8 +14,10 @@ import { isLastActiveCompanyAdmin, type AccountFlags } from "../lib/accountRules
  * service est injoignable) ET flag `disabled` du compte Firebase Auth (bloque l'émission de tout
  * nouveau jeton). À la désactivation, les refresh tokens sont en plus révoqués pour couper les
  * sessions ouvertes dès l'expiration de leur jeton d'ID courant (≤ 1 h).
- * Garde-fous : on ne se désactive pas soi-même, et on ne désactive pas le dernier admin
- * d'entreprise actif (l'entreprise n'aurait plus personne pour gérer ses comptes).
+ * Garde-fous : on ne se désactive pas soi-même, un admin d'entreprise ne désactive/réactive pas
+ * un AUTRE admin d'entreprise (admin global requis, voir authz.ts::assertCanManageAccount), et on
+ * ne désactive pas le dernier admin d'entreprise actif (l'entreprise n'aurait plus personne pour
+ * gérer ses comptes).
  */
 export function setUserDisabledRouter(auth: Auth, db: Firestore): Router {
   const router = Router();
@@ -34,16 +36,14 @@ export function setUserDisabledRouter(auth: Auth, db: Firestore): Router {
       const caller = await authorizeAdminCaller(auth, db, req.headers.authorization, companyId);
 
       const slug = accountSlug(username, companyId);
-      if (disabled && caller.slug === slug) {
-        throw Errors.forbidden("Vous ne pouvez pas désactiver votre propre compte.");
-      }
 
       const ref = db.collection("adminUsers").doc(slug);
       const snap = await ref.get();
       if (!snap.exists) {
         throw Errors.notFound(`Profil Firestore introuvable pour "${username}".`);
       }
-      assertCanActOnTarget(caller, snap.data());
+      // Soi-même (désactivation), admin global, pair admin d'entreprise : voir accountActionDenial.
+      assertCanManageAccount(caller, slug, snap.data(), disabled ? "disable" : "enable");
 
       if (disabled && companyId) {
         const companySnap = await db

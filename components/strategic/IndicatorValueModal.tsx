@@ -16,8 +16,11 @@ import {
   type MeasurementEditPatch,
 } from "@/lib/kpiHistory";
 import { parsePeriodForFrequency, periodFormatHint } from "@/lib/indicatorPeriod";
-import { editKpiValueFlow, submitKpiValueFlow } from "@/lib/strategicApprovalFlows";
+import { directGate, editKpiValueFlow, submitKpiValueFlow } from "@/lib/strategicApprovalFlows";
+import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
+import { approvalErrorKind } from "@/lib/strategicApprovalUi";
+import { chainPreviewText, LEVEL_FALLBACK, levelLabelKey } from "@/lib/strategicApprovalView";
 import { KpiCorrectionNotice } from "@/components/strategic/KpiCorrectionNotice";
 import type { KpiCorrectionRoute } from "@/lib/kpiCorrectionRouting";
 import type { AuthUser, Indicator, IndicatorMeasurement } from "@/types";
@@ -49,6 +52,7 @@ export function IndicatorValueModal({
   correctionRoute,
   initialDraft,
   replacing = false,
+  users = [],
 }: {
   indicator: Indicator;
   user: AuthUser;
@@ -66,10 +70,16 @@ export function IndicatorValueModal({
   initialDraft?: { value?: number; note?: string };
   /** `editing` est ouvert pour REMPLACER sa valeur par une nouvelle saisie (bandeau explicatif). */
   replacing?: boolean;
+  /** Utilisateurs de l'entreprise (noms des valideurs dans l'aperçu de chaîne). */
+  users?: AuthUser[];
 }) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const sa = useStrategicApprovalsApi();
+  const toastApprovalError = useApprovalErrorToast();
+  /** Porte des flux : l'API de validation, ou — hors contexte — application directe pour le
+   *  pilote/admin seuls (refus explicite pour les autres). */
+  const gate = sa ?? directGate(user, indicator.programId);
   const quantitative = indicator.kind === "quantitative";
   const [period, setPeriod] = useState(() => editing?.period ?? currentPeriod(indicator.frequency));
   const [value, setValue] = useState(() => {
@@ -90,6 +100,28 @@ export function IndicatorValueModal({
         : null;
   const canReplace = !!updateMeasurement && (route ? route.mode !== "forbidden" : true);
   const editingBaseline = !!target && isBaseline(target, measurements);
+  // « Sera validée par {sponsor d'axe} puis {pilote} » : chaîne RÉELLE d'une nouvelle valeur (vide
+  // = publiée directement). Correction : chaîne de la route de correction.
+  const chainText = (steps: Parameters<typeof chainPreviewText>[0]) =>
+    chainPreviewText(
+      steps,
+      users,
+      (level) => t(levelLabelKey(level), LEVEL_FALLBACK[level]),
+      t("validation.sa.then", "puis")
+    );
+  const approvalPreview = target
+    ? route?.mode === "request"
+      ? chainText(route.chain)
+      : ""
+    : sa
+      ? chainText(
+          sa.previewChain(
+            "kpi_value",
+            { type: "indicateur", id: indicator.id, name: indicator.name },
+            { period: period.trim() || currentPeriod(indicator.frequency) }
+          )
+        )
+      : "";
 
   const collisionMessage = (p: string) =>
     t(
@@ -107,7 +139,7 @@ export function IndicatorValueModal({
     setSaving(true);
     try {
       const outcome = await editKpiValueFlow(
-        sa,
+        gate,
         indicator,
         editing,
         { period: p, value: parsed ?? null, note: note.trim() === "" ? null : note },
@@ -126,6 +158,10 @@ export function IndicatorValueModal({
       );
       onOpenChange(false);
     } catch (err) {
+      if (approvalErrorKind(err) !== "other") {
+        toastApprovalError(err);
+        return;
+      }
       showToast(
         err instanceof MeasurementPeriodCollisionError
           ? collisionMessage(err.period)
@@ -183,7 +219,7 @@ export function IndicatorValueModal({
     setSaving(true);
     try {
       const outcome = await submitKpiValueFlow(
-        sa,
+        gate,
         indicator,
         {
           indicatorId: indicator.id,
@@ -199,7 +235,12 @@ export function IndicatorValueModal({
       setNote("");
       if (outcome === "pending") {
         showToast(
-          t("kpi.valueSubmittedForApproval", "Valeur soumise à validation du responsable du plan"),
+          approvalPreview
+            ? t("kpi.valueSubmittedChain", "Valeur soumise à validation : {chain}").replace(
+                "{chain}",
+                approvalPreview
+              )
+            : t("kpi.valueSubmittedForApproval", "Valeur soumise à validation"),
           indicator.name,
           "success"
         );
@@ -208,6 +249,10 @@ export function IndicatorValueModal({
       }
       onOpenChange(false);
     } catch (err) {
+      if (approvalErrorKind(err) !== "other") {
+        toastApprovalError(err);
+        return;
+      }
       showToast(
         err instanceof MeasurementPeriodCollisionError
           ? collisionMessage(err.period)
@@ -298,7 +343,15 @@ export function IndicatorValueModal({
               .replace("{value}", measurementLabel(target, indicator.unit))}
           </p>
         )}
-        {target && <KpiCorrectionNotice route={route} action="edit" />}
+        {!target && approvalPreview && (
+          <p className="text-[11px] text-text-secondary">
+            {t("kpi.willBeValidatedBy", "Sera validée par {chain}").replace(
+              "{chain}",
+              approvalPreview
+            )}
+          </p>
+        )}
+        {target && <KpiCorrectionNotice route={route} action="edit" chain={approvalPreview} />}
       </div>
     </Modal>
   );

@@ -20,6 +20,7 @@ import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
+import { isPilotOrAdmin } from "@/lib/strategicApprovals";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatCompactCurrency, formatPercent } from "@/lib/formatCompactAmount";
 import { formatCurrency, normalizeCurrency } from "@/lib/format";
@@ -364,7 +365,9 @@ export function EffectifsPageClient() {
         >
           {t("effectifs.viewBaseEtp")} <ArrowUpRight size={13} />
         </Link>
-        {activeProgram && programType === "strategic" && (
+        {/* Import Excel en lot : pilote du plan / admin uniquement (application directe) — masqué
+            pour tous les autres, comex/RH compris (décision PO : staffing = pilotage). */}
+        {activeProgram && programType === "strategic" && isPilotOrAdmin(user, activeProgramId) && (
           <StaffingImportButton
             companyId={user?.companyId}
             programId={activeProgramId}

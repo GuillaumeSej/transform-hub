@@ -497,6 +497,8 @@ const de: Record<string, string> = {
   "levers.approval.stepApproved": "Schritt freigegeben — an den nächsten Schritt weitergeleitet",
   "levers.approval.sponsorLocked":
     "Nur der CTO des Programms oder ein Admin kann den Sponsor ändern.",
+  "levers.access.outOfProgram":
+    "Eingeschränkter Zugriff — dieser Hebel gehört zu einem Programm, für das Sie keine Rechte haben.",
   "levers.approval.realizedOwn":
     "Ihre Meldung: Sie muss von einem anderen Finance-Profil oder einem Admin freigegeben werden.",
   "levers.approval.deletionAsAdmin":
@@ -2136,8 +2138,7 @@ const de: Record<string, string> = {
   "kpi.section.openChantier": "Arbeitspaket öffnen",
   "kpi.noteOptional": "Kommentar (optional)",
   "kpi.qualitativeNote": "Beobachtung der Periode",
-  "kpi.valueSubmittedForApproval":
-    "Wert zur Freigabe durch den Leiter des Strategieplans eingereicht",
+  "kpi.valueSubmittedForApproval": "Wert zur Freigabe eingereicht",
   "kpi.pendingValidation": "Freigabe ausstehend",
   "kpi.pendingStep": "Schritt {current}/{total}",
   "kpi.valueSubmittedChain": "Wert zur Freigabe eingereicht: {chain}",
@@ -3588,6 +3589,14 @@ const de: Record<string, string> = {
   "strategicFiche.rights.readOnlyBadge": "Nur Lesen",
   "strategicFiche.delete.chain":
     "{chain}. Die Löschung wird erst nach vollständiger Freigabe wirksam.",
+  "kpi.objectiveSubmitted": "Ziel zur Freigabe eingereicht",
+  "kpi.objectiveSubmittedChain": "Ziel zur Freigabe eingereicht: {chain}",
+  "strategicFiche.retry.title": "Daten werden geladen",
+  "strategicFiche.retry.message":
+    "Die Daten werden noch geladen: Bitte versuchen Sie es gleich erneut.",
+  "strategicFiche.error.generic": "Die Aktion konnte nicht ausgeführt werden.",
+  "strategicFiche.staffing.pendingCreation": "Hinzufügen wartet auf Freigabe",
+  "strategicFiche.staffing.chooseProjet": "Projekt auswählen",
 };
 
 export default de;

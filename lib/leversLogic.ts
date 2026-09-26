@@ -17,10 +17,12 @@ import type {
   LeverApprovalStep,
   LeverDeletionRequest,
   LifecycleStage,
+  Program,
   Role,
   Workstream,
 } from "@/types";
 import {
+  canAccessPerformanceProgram,
   getPerformanceProfiles,
   getStrategicProfiles,
   hasRole,
@@ -178,15 +180,25 @@ export function canUserViewLever(
     | "ws"
     | "companyId"
     | "confidentialityLevel"
-  >,
+  > &
+    Partial<Pick<Lever, "programId">>,
   roleClearance: Partial<Record<Role, string | string[]>> | undefined,
   workstreams: (Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string })[] = [],
   /** `Company.confidentialityLevels` — active la résolution hiérarchique (voir
    *  `resolveConfidentialityClearance`). */
-  confidentialityLevels?: string[]
+  confidentialityLevels?: string[],
+  /** Programmes de l'entreprise (sponsor/owner désignés) — voir `leverAccessDenialReason`. */
+  programs?: LeverProgramRef[]
 ): boolean {
   return (
-    leverAccessDenialReason(user, lever, roleClearance, workstreams, confidentialityLevels) === null
+    leverAccessDenialReason(
+      user,
+      lever,
+      roleClearance,
+      workstreams,
+      confidentialityLevels,
+      programs
+    ) === null
   );
 }
 
@@ -194,7 +206,11 @@ export function canUserViewLever(
  *  `canUserViewLever`, qui l'utilise. Distinguer le motif permet d'afficher un message juste :
  *  un porteur qui n'est pas responsable du levier voyait « niveau de confidentialité « » »
  *  (vide) alors que le levier n'était simplement pas dans son périmètre. */
-export type LeverAccessDenialReason = "no_user" | "other_company" | "perimeter" | "confidentiality";
+export type LeverAccessDenialReason =
+  "no_user" | "other_company" | "program" | "perimeter" | "confidentiality";
+
+/** Programme du levier, pour la garde « droit sur le programme » (`canAccessPerformanceProgram`). */
+export type LeverProgramRef = Pick<Program, "id" | "sponsor" | "owner">;
 
 export function leverAccessDenialReason(
   user:
@@ -219,17 +235,28 @@ export function leverAccessDenialReason(
     | "ws"
     | "companyId"
     | "confidentialityLevel"
-  >,
+  > &
+    Partial<Pick<Lever, "programId">>,
   roleClearance: Partial<Record<Role, string | string[]>> | undefined,
   workstreams: (Pick<Workstream, "id" | "sponsorUsername"> & { sponsor?: string })[] = [],
   /** `Company.confidentialityLevels` — active la résolution hiérarchique (voir
    *  `resolveConfidentialityClearance`). */
-  confidentialityLevels?: string[]
+  confidentialityLevels?: string[],
+  /** Programmes de l'entreprise : reconnaît le program_sponsor/program_owner DÉSIGNÉ du programme
+   *  du levier (`canAccessPerformanceProgram`). Absent : seuls les profils comptent. */
+  programs?: LeverProgramRef[]
 ): LeverAccessDenialReason | null {
   if (!user) return "no_user";
   if (user.isGlobalAdmin) return null;
   if (lever.companyId != null && user.companyId !== lever.companyId) return "other_company";
   if (user.isCompanyAdmin) return null;
+  // Droit sur le PROGRAMME du levier (même règle que la garde d'AppShell) : admin, cto, sponsor/
+  // owner désigné du programme, tout profil rattaché à ce programme (lecture seule comprise) ou
+  // profil Performance « tous programmes ». Levier sans programme (legacy) : pas de contrôle.
+  if (lever.programId) {
+    const program = programs?.find((p) => p.id === lever.programId) ?? null;
+    if (!canAccessPerformanceProgram(user, lever.programId, program)) return "program";
+  }
   if (hasRole(user, "lever") && !isLeverOwnedBy(lever, user)) return "perimeter";
   if (hasRole(user, "sponsor")) {
     const workstream = workstreams.find((w) => w.id === lever.ws);

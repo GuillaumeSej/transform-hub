@@ -2,7 +2,7 @@ import type { Auth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 import { Router } from "express";
 import { randomBytes } from "crypto";
-import { assertCanActOnTarget, authorizeAdminCaller } from "../lib/authz";
+import { assertCanManageAccount, authorizeAdminCaller } from "../lib/authz";
 import { normalizeUsername, usernameToSyntheticEmail, accountSlug } from "../lib/authLogic";
 import { passwordResetLinkSchema } from "../lib/validation";
 import { ApiError, Errors, errorBody } from "../lib/errors";
@@ -39,11 +39,12 @@ export function passwordResetLinkRouter(auth: Auth, db: Firestore): Router {
 
       const caller = await authorizeAdminCaller(auth, db, req.headers.authorization, companyId);
 
-      const snap = await db.collection("adminUsers").doc(accountSlug(username, companyId)).get();
+      const targetSlug = accountSlug(username, companyId);
+      const snap = await db.collection("adminUsers").doc(targetSlug).get();
       if (!snap.exists) {
         throw Errors.notFound(`Profil Firestore introuvable pour "${username}".`);
       }
-      assertCanActOnTarget(caller, snap.data());
+      assertCanManageAccount(caller, targetSlug, snap.data(), "reset_password");
       if ((snap.data() as { disabled?: boolean } | undefined)?.disabled === true) {
         throw Errors.conflict(
           "Ce compte est désactivé : réactivez-le avant de réinitialiser son mot de passe."

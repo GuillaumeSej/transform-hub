@@ -1,7 +1,7 @@
 import type { Auth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 import { Router } from "express";
-import { assertCanActOnTarget, authorizeAdminCaller } from "../lib/authz";
+import { assertCanManageAccount, authorizeAdminCaller } from "../lib/authz";
 import { normalizeUsername, usernameToSyntheticEmail, accountSlug } from "../lib/authLogic";
 import { renameUserSchema } from "../lib/validation";
 import { ApiError, Errors, errorBody } from "../lib/errors";
@@ -34,12 +34,10 @@ export function renameUserRouter(auth: Auth, db: Firestore): Router {
       // Verrou d'élévation, vérifié AVANT toute modification Auth : le document est recopié tel
       // quel (seul `username` change), donc aucun champ d'habilitation ne peut être injecté ici —
       // mais un admin d'entreprise ne doit pas pouvoir renommer/changer le mot de passe d'un
-      // compte admin global.
-      const preSnap = await db
-        .collection("adminUsers")
-        .doc(accountSlug(oldUsername, companyId))
-        .get();
-      assertCanActOnTarget(caller, preSnap.data());
+      // compte admin global, ni (admin d'entreprise) ceux d'un AUTRE admin d'entreprise.
+      const preSlug = accountSlug(oldUsername, companyId);
+      const preSnap = await db.collection("adminUsers").doc(preSlug).get();
+      assertCanManageAccount(caller, preSlug, preSnap.data(), "rename");
 
       const oldEmail = usernameToSyntheticEmail(oldUsername, companyId);
       const newEmail = usernameToSyntheticEmail(newUsername, companyId);

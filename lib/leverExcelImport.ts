@@ -16,7 +16,7 @@ import {
   parseCellDate,
   parseCellNumber,
 } from "@/lib/excelParse";
-import { canDecideImpactRealized, coerceImpactStatus } from "@/lib/impactStatus";
+import { coerceImpactStatus } from "@/lib/impactStatus";
 import { leverImpactsOf } from "@/lib/engine";
 import { leverImportPatch, normalizeLeverCode } from "@/lib/leversLogic";
 import type {
@@ -79,8 +79,9 @@ function slugifyWorkstreamName(name: string): string {
  * du fichier, mais chaque ligne est d'abord rapprochée d'un impact existant (type + libellé + date,
  * puis type + libellé) pour en conserver l'id, les commentaires et la validation finance ; les
  * impacts existants non rapprochés sont listés dans l'aperçu (suppression). Un impact importé
- * « Réalisé » passe en attente de validation finance, sauf s'il l'était déjà (approuvé) ou si
- * l'importateur a un profil finance (même règle que `lib/impactStatus.ts::realizedTogglePatch`).
+ * « Réalisé » passe TOUJOURS en attente de validation finance (demandeur = importateur, même s'il
+ * est finance ou admin), sauf s'il l'était déjà (même règle que
+ * `lib/impactStatus.ts::realizedTogglePatch`).
  *
  * Ré-import sans changement (M2) : un levier existant strictement identique au fichier est
  * compté « inchangé » et n'est ni écrit ni audité.
@@ -655,7 +656,7 @@ export type LeverImportRawSheets = {
 
 export type LeverImportOptions = {
   /** Utilisateur qui importe : décide du statut de validation finance des impacts « Réalisé ». */
-  importer?: Pick<AuthUser, "name" | "profiles"> | null;
+  importer?: (Pick<AuthUser, "name" | "profiles"> & Partial<Pick<AuthUser, "username">>) | null;
 };
 
 const LEVER_REQUIRED_FOR_NEW: LeverHeader[] = [
@@ -1451,9 +1452,14 @@ export function validateLeverImportRows(
             prev.realizedApproval?.status !== "rejected";
           if (!prevRealized) {
             const now = new Date().toISOString();
-            imp.realizedApproval = canDecideImpactRealized(importer)
-              ? { status: "approved", decidedBy: importer?.name, decidedAt: now }
-              : { status: "pending", requestedBy: importer?.name, requestedAt: now };
+            // TOUJOURS en attente (même finance/admin) : un AUTRE profil finance du programme,
+            // ou un admin, décide — l'importateur est le demandeur.
+            imp.realizedApproval = {
+              status: "pending",
+              requestedBy: importer?.name,
+              ...(importer?.username ? { requestedByUsername: importer.username } : {}),
+              requestedAt: now,
+            };
           }
         } else if (st === "planned") {
           delete imp.realizedApproval;

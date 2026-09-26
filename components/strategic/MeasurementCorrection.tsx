@@ -5,6 +5,7 @@ import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import { IndicatorValueModal } from "@/components/strategic/IndicatorValueModal";
 import { KpiCorrectionNotice } from "@/components/strategic/KpiCorrectionNotice";
+import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
 import { useToast } from "@/lib/hooks/useToast";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -14,7 +15,8 @@ import {
   measurementLabel,
   type MeasurementEditPatch,
 } from "@/lib/kpiHistory";
-import { deleteKpiValueFlow } from "@/lib/strategicApprovalFlows";
+import { deleteKpiValueFlow, directGate } from "@/lib/strategicApprovalFlows";
+import { approvalErrorKind } from "@/lib/strategicApprovalUi";
 import type { IndicatorFillContext } from "@/lib/axisLogic";
 import type { AuthUser, Indicator, IndicatorMeasurement } from "@/types";
 
@@ -55,9 +57,11 @@ export function useMeasurementCorrection({
    *  repli `canFillIndicatorValue` (hors contexte d'approbation). */
   fillCtx?: IndicatorFillContext;
 }): MeasurementCorrection {
+  // `fillCtx.chantierActions` : reconnaît aussi responsable/contributeurs d'un projet LIÉ au KPI.
   const { t } = useTranslation();
   const { showToast } = useToast();
   const sa = useStrategicApprovalsApi();
+  const toastApprovalError = useApprovalErrorToast();
   const [editing, setEditing] = useState<IndicatorMeasurement | null>(null);
   const [replaceDraft, setReplaceDraft] = useState<{ value?: number; note?: string } | null>(null);
   const [deleting, setDeleting] = useState<IndicatorMeasurement | null>(null);
@@ -73,8 +77,9 @@ export function useMeasurementCorrection({
     if (!deleting || !deleteMeasurement) return;
     setBusy(true);
     try {
+      // Hors contexte de validation : application directe pour pilote/admin, refus explicite sinon.
       const outcome = await deleteKpiValueFlow(
-        sa,
+        sa ?? directGate(user, indicator.programId),
         indicator,
         deleting,
         deleteMeasurement,
@@ -88,7 +93,11 @@ export function useMeasurementCorrection({
         "success"
       );
       setDeleting(null);
-    } catch {
+    } catch (error) {
+      if (approvalErrorKind(error) !== "other") {
+        toastApprovalError(error);
+        return;
+      }
       showToast(
         t("kpi.measurement.deleteError", "Échec de la suppression"),
         indicator.name,

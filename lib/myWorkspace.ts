@@ -24,8 +24,7 @@
  *      · « Bloqué chez d'autres » = validations en attente depuis plus de `blockedAfterDays` dont
  *        l'approbateur NOMINAL n'est pas l'utilisateur (il ne peut au mieux qu'escalader) — le
  *        temps d'attente vient des horodatages de demande existants (`LeverApproval.requestedAt`,
- *        `realizedApproval.requestedAt`, `ChantierMilestoneApproval.requestedAt`,
- *        `StrategicApproval.requestedAt`) ;
+ *        `realizedApproval.requestedAt`, `StrategicApproval.requestedAt`) ;
  *      · une validation que le pilote ne peut décider que par escalade (admin, strategic_lead) et
  *        qui n'est pas encore bloquée n'apparaît PAS dans « À faire » (exceptions d'abord) ;
  *      · alertes : seulement les `pilotTopAlerts` plus graves (rouge puis ambre, tri de
@@ -42,7 +41,12 @@ import { alertTitle } from "@/lib/alertText";
 import { targetAlerts } from "@/lib/notifications";
 import { movementAlerts, primaryAlertKindByMovement, type MovementAlertKind } from "@/lib/hrEngine";
 import { etpMovementDeepLink } from "@/lib/hrMovementLink";
-import { isLeverCtoOf, isLeverOwnedBy, isLeverSponsoredBy } from "@/lib/leversLogic";
+import {
+  filterAggregateVisibleLevers,
+  isLeverCtoOf,
+  isLeverOwnedBy,
+  isLeverSponsorOf,
+} from "@/lib/leversLogic";
 import { canDecideImpactRealized, isImpactRealizedPending } from "@/lib/impactStatus";
 import {
   chantierHealthState,
@@ -350,15 +354,15 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
   if (perf) {
     const wsById = new Map(perf.workstreams.map((w) => [w.id, w]));
 
-    // 1. Portes de validation de levier. Approbateur nominal = sponsor du workstream/levier OU cto
-    //    habilité (modèle à approbateur unique, lib/leversLogic.ts::approveLeverGate) ; un admin
-    //    ne décide que par escalade.
+    // 1. Portes de validation de levier. Approbateur nominal = responsable de chantier (rôle
+    //    "sponsor" requis, `isLeverSponsorOf`) OU cto habilité (double validation séquentielle,
+    //    lib/leversLogic.ts::approveLeverGate) ; un admin ne décide que par escalade.
     const decidable = new Set(resolveApprovalQueue(perf, user).map((l) => l.id));
     for (const lever of perf.levers) {
       const approval = lever.approval;
       if (!approval) continue;
       const ws = wsById.get(lever.ws);
-      const nominal = isLeverSponsoredBy(lever, ws, user) || isLeverCtoOf(lever, user);
+      const nominal = isLeverSponsorOf(lever, perf.workstreams, user) || isLeverCtoOf(lever, user);
       const waitingDays = daysSince(approval.requestedAt, today);
       const base = {
         source: "leverApproval" as const,
@@ -395,23 +399,25 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
       }
     }
 
-    // 2. Réalisés à valider — approbateur nominal = profil finance.
+    // 2. Réalisés à valider — approbateur nominal = profil finance (autre que le demandeur) ou
+    //    admin. L'entreprise courante sert au filtre de confidentialité (même file que la page
+    //    `/validation` et le badge du Topbar).
+    const company = (input.companies ?? []).find((c) => c.id === user.companyId) ?? null;
+    const realizedQueue = resolveRealizedApprovalQueue(perf, user, company);
     const realizedDecidable = new Set(
-      resolveRealizedApprovalQueue(perf, user).map(
-        ({ lever, impact }) => `${lever.id}:${impact.id}`
-      )
+      realizedQueue.map(({ lever, impact }) => `${lever.id}:${impact.id}`)
     );
     // Vue pilotage : TOUS les réalisés en attente (même filtre que le résolveur) pour repérer
     // ceux bloqués chez la finance ; sinon seulement ceux que l'utilisateur peut décider.
     const pendingRealized = pilotView
-      ? perf.levers
+      ? filterAggregateVisibleLevers(perf.levers, user, company)
           .filter((lever) => lever.status !== "cancelled")
           .flatMap((lever) =>
             (lever.impacts ?? [])
               .filter((impact) => isImpactRealizedPending(impact))
               .map((impact) => ({ lever, impact }))
           )
-      : resolveRealizedApprovalQueue(perf, user);
+      : realizedQueue;
     for (const { lever, impact } of pendingRealized) {
       const key = `${lever.id}:${impact.id}`;
       const waitingDays = daysSince(impact.realizedApproval?.requestedAt, today);
@@ -435,7 +441,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
         });
       } else if (
         pilotView &&
-        !canDecideImpactRealized(user) &&
+        !canDecideImpactRealized(user, lever) &&
         isStale(waitingDays) &&
         inPilotScope(lever.programId)
       ) {
@@ -675,7 +681,11 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
       const responsible =
         owner === user.username ||
         (indicator.additionalAuthorizedUserIds ?? []).includes(user.username);
-      if (!responsible || !canFillIndicatorValue(indicator, user, { axes, chantiers })) continue;
+      if (
+        !responsible ||
+        !canFillIndicatorValue(indicator, user, { axes, chantiers, chantierActions })
+      )
+        continue;
       const period = missingMeasurementPeriod(indicator, measurements, today);
       if (!period) continue;
       todo.push({
@@ -762,10 +772,9 @@ function buildPerimeter(
   const roleContributor = t("me.role.contributor", "Contributeur projet");
 
   if (perf) {
-    const wsById = new Map(perf.workstreams.map((w) => [w.id, w]));
     for (const lever of perf.levers) {
       const owned = isLeverOwnedBy(lever, user);
-      const sponsored = !owned && isLeverSponsoredBy(lever, wsById.get(lever.ws), user);
+      const sponsored = !owned && isLeverSponsorOf(lever, perf.workstreams, user);
       if (!owned && !sponsored) continue;
       out.push({
         id: `lever:${lever.id}`,

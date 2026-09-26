@@ -29,14 +29,33 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
-import { createChantierFlow, newChantierId, pendingApprovals } from "@/lib/strategicApprovalFlows";
-import { hierarchyContextFor, type ChantierCreateApprovalPayload } from "@/lib/strategicApprovals";
+import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
+import {
+  createChantierFlow,
+  directGate,
+  newChantierId,
+  pendingApprovals,
+  updateAxisFlow,
+} from "@/lib/strategicApprovalFlows";
+import {
+  canEditAxis,
+  hierarchyContextFor,
+  type ChantierCreateApprovalPayload,
+  type StrategicApprovalPayload,
+} from "@/lib/strategicApprovals";
+import {
+  approvalErrorKind,
+  canCreateChantierOnAxis,
+  pendingOfKind,
+} from "@/lib/strategicApprovalUi";
 import {
   canDesignateAxisSponsor,
   chainLabel,
   chantierRights,
+  conflictingFields,
   fillTemplate,
   flowOutcomeMessage,
+  gatedCategoriesOf,
 } from "@/lib/strategicFiche";
 import { PendingApprovalBadge } from "@/components/strategic/PendingApprovalBadge";
 import type { Chantier, Indicator, IndicatorMeasurement } from "@/types";
@@ -85,6 +104,7 @@ export function AxisDetailClient() {
 
   const data = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const sa = useStrategicApprovalsApi();
+  const toastApprovalError = useApprovalErrorToast();
   const stages = useMaturityStages(activeProgramId, user?.companyId ?? null);
 
   // Échelle de confidentialité de l'entreprise — pour le sélecteur des modales d'édition d'axe et
@@ -233,6 +253,76 @@ export function AxisDetailClient() {
     ),
   };
   const chainJoiner = t("strategicFiche.chain.then", "puis");
+  // Porte de validation : hors contexte (`sa` null), application directe pour pilote/admin seuls.
+  const gate = sa ?? directGate(user, activeProgramId);
+  // Décisions PO : axe modifié par le pilote (direct) ou par SON sponsor (validé par le pilote) ;
+  // « Nouveau chantier » : sponsor de chantier et au-dessus sur cet axe.
+  const mayEditAxis = !readOnly && canEditAxis(user, axis);
+  const mayCreateChantier = !readOnly && canCreateChantierOnAxis(user, axis, data.chantiers);
+  const axisTarget = { type: "axe" as const, id: axis.id, name: axis.name };
+  const pendingAxisUpdates = pendingOfKind(sa?.approvals, "axe_update", "axe", axis.id);
+  /** Aperçu « Sera validé par … » d'une modification d'axe (vide = application directe). */
+  const axisUpdateHint = (values: AxisFormValues): string => {
+    if (!sa) return "";
+    const categories = gatedCategoriesOf("axe", axis, values);
+    const labels = Array.from(
+      new Set(
+        categories
+          .map((category) => {
+            const payload = {
+              patch: {},
+              before: {},
+              category,
+            } as unknown as StrategicApprovalPayload;
+            const route = sa.route("axe_update", axisTarget, payload);
+            return route.mode === "request" ? chainLabel(route.chain, data.users, chainJoiner) : "";
+          })
+          .filter(Boolean)
+      )
+    );
+    return labels.length
+      ? fillTemplate(t("strategicFiche.chain.preview", "Sera validé par {chain}"), {
+          chain: labels.join(" ; "),
+        })
+      : "";
+  };
+  const submitAxisUpdate = async (values: AxisFormValues) => {
+    try {
+      const conflicts = conflictingFields(sa?.approvals, axisTarget, "axe", axis, values);
+      if (conflicts.length) {
+        showToast(
+          t("leverDetail.approval.error", "Action impossible"),
+          t(
+            "strategicFiche.pending.conflictTooltip",
+            "Une demande de validation est déjà en attente sur ce champ : attendez sa décision avant de le modifier à nouveau."
+          ),
+          "error"
+        );
+        return;
+      }
+      const result = await updateAxisFlow(gate, axis, values, (patch) =>
+        data.updateAxis(axis.id, patch)
+      );
+      setEditAxisOpen(false);
+      if (result.outcome === "noop") return;
+      if (result.outcome === "applied") {
+        showToast(t("strategicAxes.axisUpdated"), values.name, "success");
+        return;
+      }
+      const message = flowOutcomeMessage(result, data.users, {
+        applied: t("strategicFiche.toast.applied", "Appliqué"),
+        pending: t("strategicFiche.toast.pending", "Envoyé en validation : {chain}"),
+        partial: t(
+          "strategicFiche.toast.partial",
+          "Appliqué en partie — le reste est envoyé en validation : {chain}"
+        ),
+        joiner: chainJoiner,
+      });
+      if (message) showToast(message, values.name, "success");
+    } catch (error) {
+      toastApprovalError(error);
+    }
+  };
   /** Chantier complet (id stable) soumis à `createChantierFlow`. */
   const buildChantier = (values: ChantierFormValues): Chantier => ({
     dependencies: [],
@@ -284,11 +374,16 @@ export function AxisDetailClient() {
             {resolveUserFullName(axis.owner, data.users) ?? t("strategicAxes.unassigned")}
           </div>
         </div>
-        {!readOnly && (
-          <Button variant="outline" onClick={() => setEditAxisOpen(true)}>
-            <Pencil size={13} /> {t("strategicAxes.editAxis")}
-          </Button>
-        )}
+        <div className="flex flex-col items-end gap-1.5">
+          {mayEditAxis && (
+            <Button variant="outline" onClick={() => setEditAxisOpen(true)}>
+              <Pencil size={13} /> {t("strategicAxes.editAxis")}
+            </Button>
+          )}
+          {pendingAxisUpdates.map((a) => (
+            <PendingApprovalBadge key={a.id} approval={a} users={data.users} />
+          ))}
+        </div>
       </div>
 
       <Modal
@@ -306,11 +401,8 @@ export function AxisDetailClient() {
           canEditOwner={canEditAxisOwner}
           ownerTooltip={designationTooltip.axisSponsor}
           onCancel={() => setEditAxisOpen(false)}
-          onSubmit={async (values: AxisFormValues) => {
-            await data.updateAxis(axis.id, values);
-            setEditAxisOpen(false);
-            showToast(t("strategicAxes.axisUpdated"), values.name, "success");
-          }}
+          approvalHint={axisUpdateHint}
+          onSubmit={submitAxisUpdate}
         />
       </Modal>
 
@@ -360,7 +452,7 @@ export function AxisDetailClient() {
         <CardHeader
           title={t("strategicAxes.ganttSection")}
           actions={
-            !readOnly && (
+            mayCreateChantier && (
               <Button variant="outline" size="sm" onClick={() => setNewChantierOpen(true)}>
                 <Plus size={12} /> {t("strategicAxes.newChantier")}
               </Button>
@@ -445,7 +537,7 @@ export function AxisDetailClient() {
                   : rest;
               const preview = chantierCreatePreview(input);
               let createdId: string | undefined;
-              const outcome = await createChantierFlow(sa, buildChantier(input), async () => {
+              const outcome = await createChantierFlow(gate, buildChantier(input), async () => {
                 const created = await data.createChantier(input);
                 createdId = created.id;
               });
@@ -468,6 +560,10 @@ export function AxisDetailClient() {
               showToast(t("strategicAxes.chantierCreated"), input.name, "success");
               if (createdId) openChantier(createdId);
             } catch (error) {
+              if (approvalErrorKind(error) !== "other") {
+                toastApprovalError(error);
+                return;
+              }
               console.error("[betrack] échec de création du chantier :", error);
               showToast(
                 t("strategicAxes.chantierSaveErrorTitle"),

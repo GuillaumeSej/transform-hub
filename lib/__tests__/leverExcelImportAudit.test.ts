@@ -402,7 +402,7 @@ describe("M5/M6 — rapprochement des impacts et validation finance", () => {
     expect(preview.impactsRemoved).toEqual([{ code: "PROC-001", labels: ["Licence"] }]);
   });
 
-  it("un nouvel impact importé « Réalisé » attend la validation finance (sauf importateur finance)", () => {
+  it("un nouvel impact importé « Réalisé » attend TOUJOURS la validation finance (même importateur finance/admin)", () => {
     const rows = {
       leviers: [],
       actions: null,
@@ -425,10 +425,19 @@ describe("M5/M6 — rapprochement des impacts et validation finance", () => {
       status: "pending",
       requestedBy: "Léa",
     });
-    const direct = validateLeverImportRows(rows, ctx([lever()]), "c1", programs, undefined, null, {
-      importer: finance,
-    });
-    expect(direct.toUpsert[0].impacts![0].realizedApproval).toMatchObject({ status: "approved" });
+    for (const importer of [
+      finance,
+      { name: "Adam", username: "adam", profiles: [], isCompanyAdmin: true } as unknown as AuthUser,
+    ]) {
+      const res = validateLeverImportRows(rows, ctx([lever()]), "c1", programs, undefined, null, {
+        importer,
+      });
+      // Demandeur = importateur : il ne pourra pas décider lui-même (lib/impactStatus.ts).
+      expect(res.toUpsert[0].impacts![0].realizedApproval).toMatchObject({
+        status: "pending",
+        requestedBy: importer.name,
+      });
+    }
   });
 });
 

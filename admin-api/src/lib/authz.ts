@@ -2,6 +2,7 @@ import type { Auth } from "firebase-admin/auth";
 import type { Firestore } from "firebase-admin/firestore";
 import { accountSlugFromEmail } from "./authLogic";
 import { Errors } from "./errors";
+import { accountActionDenial, type AccountAction, type AccountFlags } from "./accountRules";
 
 type CallerProfile = {
   uid: string;
@@ -13,7 +14,7 @@ type CallerProfile = {
   isGlobalAdmin: boolean;
 };
 
-type TargetAccountData = { isGlobalAdmin?: boolean; role?: string } | undefined;
+type TargetAccountData = ({ isGlobalAdmin?: boolean } & AccountFlags) | undefined;
 
 /** Le document `adminUsers` cible porte-t-il l'habilitation admin BearingPoint (global) —
  *  nouveau format `isGlobalAdmin` ou legacy `role: "admin"` ? */
@@ -33,6 +34,24 @@ export function assertCanActOnTarget(caller: CallerProfile, targetData: TargetAc
       "Seul un administrateur global peut agir sur un compte administrateur global."
     );
   }
+}
+
+/**
+ * Garde-fous complets avant toute action sur un compte (voir `accountRules.ts::accountActionDenial`) :
+ * verrou admin global (`assertCanActOnTarget`), jamais de suppression/désactivation de son propre
+ * compte, et protection des PAIRS admins d'entreprise (un admin d'entreprise ne supprime, ne
+ * désactive/réactive, ne renomme ni ne réinitialise le mot de passe d'un autre admin d'entreprise) —
+ * même protection que firestore.rules (`adminUsers`). 403 sinon.
+ */
+export function assertCanManageAccount(
+  caller: CallerProfile,
+  targetSlug: string,
+  targetData: TargetAccountData,
+  action: AccountAction
+): void {
+  assertCanActOnTarget(caller, targetData);
+  const denial = accountActionDenial(caller, targetSlug, targetData, action);
+  if (denial) throw Errors.forbidden(denial);
 }
 
 /**
