@@ -1,4 +1,5 @@
 import type { AuditEntry } from "@/types";
+import { formatAuditValue } from "@/lib/auditFormat";
 
 /**
  * Logique pure de construction des entrées d'audit du Plan Stratégique (axes/chantiers/projets/
@@ -68,8 +69,8 @@ export function buildUpdateAuditEntries<T extends Record<string, unknown>>(
         action: "updated",
         entity,
         field: String(k),
-        old: String(before[k] ?? ""),
-        new: String(after[k] ?? ""),
+        old: formatAuditValue(before[k]),
+        new: formatAuditValue(after[k]),
       })
     );
 }

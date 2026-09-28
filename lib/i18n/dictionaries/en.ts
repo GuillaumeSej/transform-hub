@@ -441,6 +441,7 @@ const en: Record<string, string> = {
   "leverForm.risk": "Risk",
   "leverForm.capex": "CAPEX",
   "leverForm.fteImpact": "Estimated impact (FTE)",
+  "leverForm.popImpacted": "Impacted population (people)",
   "leverForm.updated": "Initiative updated",
   "leverForm.created": "Initiative created",
   "leverForm.createdOutOfScope":

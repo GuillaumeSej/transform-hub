@@ -55,7 +55,6 @@ function lever(overrides: Partial<Lever> = {}): Lever {
     opexRec: 0.1,
     capex: 0.3,
     fteImpact: -1,
-    popImpacted: "",
     companyId: "c1",
     dependencies: [],
     description: "Description d'origine",

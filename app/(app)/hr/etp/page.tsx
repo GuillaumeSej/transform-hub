@@ -230,7 +230,7 @@ export default function BaseEtpPage() {
   // Page RH (Base ETP scopée ENTREPRISE, mouvements) : zone "hr" — le Directeur RH y édite, seul
   // un profil exclusivement COMEX est en consultation.
   const readOnly = isReadOnlyUser(user, null, undefined, "hr");
-  const data = useBeTrackData(user?.companyId ?? null);
+  const data = useBeTrackData(user?.companyId ?? null, user);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();

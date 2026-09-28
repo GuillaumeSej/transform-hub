@@ -64,7 +64,6 @@ function makeLever(overrides: Partial<Lever>): Lever {
     opexRec: 0,
     capex: 0,
     fteImpact: -4,
-    popImpacted: "",
     dependencies: [],
     description: "",
     createdAt: "2026-01-01",

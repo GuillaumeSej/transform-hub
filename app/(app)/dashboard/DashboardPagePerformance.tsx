@@ -169,7 +169,7 @@ const FILTER_PARAM_BY_DIMENSION: Partial<Record<string, string>> = {
 
 export function DashboardPagePerformance() {
   const { user } = useRole();
-  const data = useBeTrackData(user?.companyId ?? null);
+  const data = useBeTrackData(user?.companyId ?? null, user);
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();

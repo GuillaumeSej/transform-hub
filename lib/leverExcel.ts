@@ -81,7 +81,7 @@ export function leverToExcelRow(
     "Impact estimé (ETP)": lever.fteImpact,
     "Réalisé à date (ETP)": engine.realizedFte(lever),
     "Gains one-off (€M)": engine.leverImpactTotals(lever).oneOffGains,
-    "Population impactée": data.workstreams.find((w) => w.id === lever.popImpacted)?.name ?? "",
+    "Population impactée": typeof lever.popImpacted === "number" ? lever.popImpacted : "",
     "CAPEX (€M)": lever.capex,
     "OPEX one-off (€M)": lever.opexOneOff,
     "OPEX récurrent (€M/an)": lever.opexRec,

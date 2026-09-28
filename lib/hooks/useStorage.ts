@@ -89,13 +89,10 @@ function emptyProgramConfig(): programDb.ProgramSeed {
  * (program + workstreams), dernier périmètre historiquement en localStorage, a été migrée —
  * voir lib/firestore/programConfig.ts.
  *
- * `currentUser` (optionnel, round "cascade de validation") : la plupart des mutations ci-dessous
- * attribuent encore leurs entrées d'audit à `DEMO_USER` (limitation pré-existante, hors périmètre
- * de ce round) — mais `requestLeverApproval`/`approveLeverGate`/`rejectLeverApproval` ont
- * BESOIN du profil réel de l'utilisateur (nom, username, rôles, admin) pour vérifier qui a le
- * droit d'agir sur la demande de validation (voir `lib/leversLogic.ts`). Les appelants qui
- * n'utilisent pas ces 3 fonctions peuvent continuer à omettre ce paramètre sans rien changer à
- * leur comportement actuel.
+ * `currentUser` : utilisateur connecté. Ses entrées de journal d'audit sont signées de son nom
+ * (`auditUserRef`, audit DB-17 — elles l'étaient toutes « Utilisateur démo ») ; les circuits de
+ * validation (`requestLeverApproval`/`approveLeverGate`/…) en ont en outre BESOIN pour vérifier
+ * qui a le droit d'agir. Tous les appelants le passent ; `DEMO_USER` ne reste qu'un repli.
  */
 export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser | null) {
   // État initial VIDE — aucune donnée mock/démo n'est injectée ici : une entreprise démarre sans
@@ -110,6 +107,10 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   // chargé" de "vraiment inexistant" et d'éviter un flash "Levier introuvable" juste après la
   // création d'un levier, le temps que la page de détail reçoive sa propre souscription.
   const [leversLoaded, setLeversLoaded] = useState(false);
+  // Auteur des entrées de journal : l'utilisateur connecté (ref, pour ne pas multiplier les
+  // dépendances des mutations ci-dessous) — même convention que le Plan stratégique (`user.name`).
+  const auditUserRef = useRef(DEMO_USER);
+  auditUserRef.current = currentUser?.name || currentUser?.username || DEMO_USER;
   const [programConfig, setProgramConfig] = useState<programDb.ProgramSeed>(() =>
     emptyProgramConfig()
   );
@@ -335,7 +336,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         leversRef.current,
         id,
         patch,
-        DEMO_USER,
+        auditUserRef.current,
         workflowOptionsFor(id)
       );
       leversRef.current = result.levers;
@@ -488,7 +489,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
       const result = leversLogic.createLever(
         leversRef.current,
         { ...input, companyId: scopedCompanyId },
-        DEMO_USER
+        auditUserRef.current
       );
       await leversDb.saveLever(result.lever);
       // La souscription Firestore a pu livrer le nouveau levier pendant l'attente : ne pas le
@@ -505,7 +506,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
 
   const upsertLeverByCode = useCallback(
     (input: Omit<Lever, "id" | "createdAt" | "lastUpdate">) => {
-      const result = leversLogic.upsertLeverByCode(leversRef.current, input, DEMO_USER);
+      const result = leversLogic.upsertLeverByCode(leversRef.current, input, auditUserRef.current);
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
@@ -522,7 +523,11 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
    *  « Import Excel terminé » alors que rien n'était enregistré. */
   const importLevers = useCallback(
     async (inputs: Omit<Lever, "id" | "createdAt" | "lastUpdate">[]) => {
-      const result = leversLogic.bulkUpsertLeversByCode(leversRef.current, inputs, DEMO_USER);
+      const result = leversLogic.bulkUpsertLeversByCode(
+        leversRef.current,
+        inputs,
+        auditUserRef.current
+      );
       await leversDb.saveLeversBatch(result.changedLevers);
       // La souscription Firestore a pu livrer une partie des écritures pendant l'attente :
       // repartir de l'état le plus récent et y remplacer/ajouter les leviers écrits.
@@ -560,7 +565,12 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
 
   const createAction = useCallback(
     (scope: { leverId: string }, input: Omit<LeverAction, "id">) => {
-      const result = leversLogic.createAction(leversRef.current, scope, input, DEMO_USER);
+      const result = leversLogic.createAction(
+        leversRef.current,
+        scope,
+        input,
+        auditUserRef.current
+      );
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
@@ -576,7 +586,13 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
 
   const updateAction = useCallback(
     (scope: { leverId: string }, actionId: string, patch: Partial<LeverAction>) => {
-      const result = leversLogic.updateAction(leversRef.current, scope, actionId, patch, DEMO_USER);
+      const result = leversLogic.updateAction(
+        leversRef.current,
+        scope,
+        actionId,
+        patch,
+        auditUserRef.current
+      );
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
@@ -603,7 +619,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
 
   const applyCascadeShift = useCallback(
     (shifts: CascadeShift[]) => {
-      const result = leversLogic.applyCascadeShift(leversRef.current, shifts, DEMO_USER);
+      const result = leversLogic.applyCascadeShift(leversRef.current, shifts, auditUserRef.current);
       leversRef.current = result.levers;
       setLevers(result.levers);
       persistAudit(result.auditEntries);
@@ -677,7 +693,12 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
 
   const updateWorkforceMovement = useCallback(
     (id: string, patch: Partial<WorkforceMovement>) => {
-      const result = workforceLogic.updateMovement(movementsRef.current, id, patch, DEMO_USER);
+      const result = workforceLogic.updateMovement(
+        movementsRef.current,
+        id,
+        patch,
+        auditUserRef.current
+      );
       movementsRef.current = result.movements;
       setMovements(result.movements);
       persistAudit(result.auditEntries);
@@ -691,7 +712,11 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
 
   const createWorkforceMovement = useCallback(
     (input: Omit<WorkforceMovement, "id">) => {
-      const result = workforceLogic.createMovement(movementsRef.current, input, DEMO_USER);
+      const result = workforceLogic.createMovement(
+        movementsRef.current,
+        input,
+        auditUserRef.current
+      );
       movementsRef.current = result.movements;
       setMovements(result.movements);
       persistAudit(result.auditEntries);
@@ -706,7 +731,11 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   /** Validation RH d'un mouvement déjà Réalisé : date réelle + flag hrValidated, en un clic. */
   const validateMovement = useCallback(
     (id: string) => {
-      const result = workforceLogic.validateMovement(movementsRef.current, id, DEMO_USER);
+      const result = workforceLogic.validateMovement(
+        movementsRef.current,
+        id,
+        auditUserRef.current
+      );
       movementsRef.current = result.movements;
       setMovements(result.movements);
       persistAudit(result.auditEntries);
@@ -720,7 +749,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
 
   const deleteWorkforceMovement = useCallback(
     (id: string) => {
-      const result = workforceLogic.deleteMovement(movementsRef.current, id, DEMO_USER);
+      const result = workforceLogic.deleteMovement(movementsRef.current, id, auditUserRef.current);
       movementsRef.current = result.movements;
       setMovements(result.movements);
       persistAudit(result.auditEntries);
@@ -734,7 +763,11 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   /** Créé (import Excel, recrutement intégré) ou met à jour (édition inline) un employé. */
   const upsertEmployee = useCallback(
     (input: Employee | (Omit<Employee, "id"> & { id?: string })) => {
-      const result = workforceLogic.upsertEmployee(employeesRef.current, input, DEMO_USER);
+      const result = workforceLogic.upsertEmployee(
+        employeesRef.current,
+        input,
+        auditUserRef.current
+      );
       employeesRef.current = result.employees;
       setEmployees(result.employees);
       persistAudit(result.auditEntries);
@@ -756,7 +789,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         movementsRef.current,
         oldId,
         newId,
-        DEMO_USER
+        auditUserRef.current
       );
       if (result.employee.id === oldId) return result;
       await workforceDb.saveWorkforceBatch(companyId, {
@@ -786,7 +819,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         movementsRef.current,
         importedEmployees,
         importedMovements,
-        DEMO_USER
+        auditUserRef.current
       );
       const employeesChanged = importedEmployees.length > 0;
       const meta = employeesChanged

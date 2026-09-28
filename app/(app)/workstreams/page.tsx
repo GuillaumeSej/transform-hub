@@ -44,7 +44,7 @@ type Row = Lever & {
 export default function WorkstreamsPage() {
   const { t } = useTranslation();
   const { user } = useRole();
-  const data = useBeTrackData(user?.companyId ?? null);
+  const data = useBeTrackData(user?.companyId ?? null, user);
   // Vue scopée à UN programme Performance sélectionnable (voir le sélecteur plus bas) : le cycle
   // de vie étant désormais configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un
   // scope unique pour résoudre le bon référentiel — d'où `usePerformanceProgramSelector`, qui

@@ -438,6 +438,7 @@ const de: Record<string, string> = {
   "leverForm.risk": "Risiko",
   "leverForm.capex": "CAPEX",
   "leverForm.fteImpact": "Geschätzte Auswirkung (VZÄ)",
+  "leverForm.popImpacted": "Betroffene Personen (Anzahl)",
   "leverForm.updated": "Hebel aktualisiert",
   "leverForm.created": "Hebel erstellt",
   "leverForm.createdOutOfScope":

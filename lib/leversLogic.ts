@@ -1,4 +1,5 @@
 import * as engine from "@/lib/engine";
+import { formatAuditValue } from "@/lib/auditFormat";
 import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
 import { migrateLeverImpacts } from "@/lib/leverImpactMigration";
 import type { CascadeShift } from "@/lib/engine";
@@ -692,8 +693,8 @@ export function updateLever(
           action: "updated",
           entity: id,
           field: String(field),
-          old: before[field] as string | number,
-          new: after[field] as string | number,
+          old: formatAuditValue(before[field]),
+          new: formatAuditValue(after[field]),
         })
       );
     }

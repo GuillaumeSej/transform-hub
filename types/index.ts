@@ -304,11 +304,10 @@ export type Lever = {
   opexRec: number; // €M/an
   capex: number; // €M
   fteImpact: number; // positive = hires, negative = departures
-  /** Workstream.id de la population RH concernée par ce levier — catégoriel (round "population
-   *  impactée = qui", pas "combien"), remplace l'ancien champ numérique (effectif) qui ne
-   *  s'agrégeait de toute façon nulle part dans l'UI (voir engine.programSummary). Chaîne vide =
-   *  non renseigné. */
-  popImpacted: string;
+  /** Population impactée : NOMBRE de personnes concernées par le levier (décision 2026-09-28 —
+   *  c'est ce que portent les données ; l'essai « id de chantier » n'a jamais été renseigné).
+   *  Absent = non renseigné. */
+  popImpacted?: number;
   // Plan initial figé automatiquement au passage à l'étape "validated" — plus jamais modifiable ensuite.
   lockedPlan?: FinancialSnapshot;
   // Prévisions réactualisées, éditables uniquement à partir de l'étape "in_progress" (initialisées

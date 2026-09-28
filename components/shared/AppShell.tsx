@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   } = useActiveProgram();
   const router = useRouter();
   const pathname = usePathname();
-  const data = useBeTrackData(user?.companyId ?? null);
+  const data = useBeTrackData(user?.companyId ?? null, user);
   const notifications = useNotifications(data, user);
   // File d'attente de validation en cascade (owner -> sponsor -> cto, voir
   // lib/hooks/useApprovalQueue.ts) : uniquement pertinente pour le Plan Performance (les leviers,

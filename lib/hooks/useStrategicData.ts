@@ -546,6 +546,8 @@ export function useStrategicData(
   chantiersRef.current = allChantiers;
   const actionsRef = useRef(allActions);
   actionsRef.current = allActions;
+  const staffingRef = useRef(allStaffing);
+  staffingRef.current = allStaffing;
 
   // ── Mutations ─────────────────────────────────────────────────────────────────────────────
 
@@ -671,6 +673,13 @@ export function useStrategicData(
     async (id) => {
       const existing = actionsRef.current.find((a) => a.id === id);
       await deleteChantierAction(id);
+      // Suppression en CASCADE des lignes de staffing du projet : elles restaient comptées au
+      // niveau du chantier (orphelines, audit DB-14 / KPI-02).
+      await Promise.all(
+        staffingRef.current
+          .filter((s) => s.actionId === id)
+          .map((s) => deleteChantierStaffing(s.id))
+      );
       if (existing) {
         logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "projet", existing.name)]);
       }

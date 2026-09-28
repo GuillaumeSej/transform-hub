@@ -59,6 +59,23 @@ describe("rollupBudgets", () => {
   });
 });
 
+describe("rollupBudgets — chantier sans projet (audit STR-09)", () => {
+  it("lit la saisie du chantier s'il n'a aucun projet, l'ignore sinon", () => {
+    const r = rollupBudgets(
+      [{ id: "A1" }],
+      [
+        { id: "C1", axisIds: ["A1"], allocatedBudget: 999, consumedBudget: 999 },
+        { id: "RPA", axisIds: ["A1"], allocatedBudget: 1_100_000, consumedBudget: 385_000 },
+      ],
+      [{ id: "P1", chantierId: "C1", budget: 100, consumedBudget: 40 }]
+    );
+    expect(r.chantiers.get("C1")).toEqual({ allocated: 100, consumed: 40 });
+    expect(r.chantiers.get("RPA")).toEqual({ allocated: 1_100_000, consumed: 385_000 });
+    expect(r.axes.get("A1")).toEqual({ allocated: 1_100_100, consumed: 385_040 });
+    expect(r.programme).toEqual({ allocated: 1_100_100, consumed: 385_040 });
+  });
+});
+
 describe("budgetAxisIdOf", () => {
   it("premier axe de axisIds présent dans la liste connue", () => {
     expect(budgetAxisIdOf({ axisIds: ["X", "A2", "A1"] }, new Set(["A1", "A2"]))).toBe("A2");

@@ -1,6 +1,7 @@
 "use client";
 
 import { MultiSelect } from "@/components/shared/MultiSelect";
+import { displayAuditValue } from "@/lib/auditFormat";
 import { useEffect, useState } from "react";
 import { Users, Target, Briefcase, FileSpreadsheet, Activity, History } from "lucide-react";
 import type { Company, AuthUser, Program, Lever, AuditEntry } from "@/types";
@@ -130,7 +131,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const haystack =
-        `${entry.user} ${entry.entity} ${entry.field} ${entry.old} ${entry.new}`.toLowerCase();
+        `${entry.user} ${entry.entity} ${entry.field} ${displayAuditValue(entry.old)} ${displayAuditValue(entry.new)}`.toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;
@@ -299,15 +300,15 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
                   <td className="px-4 py-2.5 text-text-secondary">{entry.field}</td>
                   <td
                     className="px-4 py-2.5 text-text-secondary max-w-[120px] truncate"
-                    title={String(entry.old)}
+                    title={displayAuditValue(entry.old)}
                   >
-                    {String(entry.old)}
+                    {displayAuditValue(entry.old)}
                   </td>
                   <td
                     className="px-4 py-2.5 text-text-secondary max-w-[120px] truncate"
-                    title={String(entry.new)}
+                    title={displayAuditValue(entry.new)}
                   >
-                    {String(entry.new)}
+                    {displayAuditValue(entry.new)}
                   </td>
                 </tr>
               ))}

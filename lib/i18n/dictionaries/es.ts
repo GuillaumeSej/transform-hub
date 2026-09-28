@@ -439,6 +439,7 @@ const es: Record<string, string> = {
   "leverForm.risk": "Riesgo",
   "leverForm.capex": "CAPEX",
   "leverForm.fteImpact": "Impacto estimado (FTE)",
+  "leverForm.popImpacted": "Población afectada (personas)",
   "leverForm.updated": "Palanca actualizada",
   "leverForm.created": "Palanca creada",
   "leverForm.createdOutOfScope":

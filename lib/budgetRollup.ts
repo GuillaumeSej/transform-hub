@@ -12,9 +12,10 @@ import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
  *  - AXE : somme des chantiers qui lui sont ATTRIBUÉS (voir ci-dessous) ;
  *  - PROGRAMME : somme de TOUS les projets distincts (= somme des axes + `unattributed`).
  *
- * Les saisies manuelles au niveau chantier (`Chantier.allocatedBudget`, `Chantier.consumedBudget`)
- * ne sont JAMAIS lues ici : `allocatedBudget` n'est plus qu'une « enveloppe du chantier » (plafond
- * indicatif, comparé à la somme des projets à la création d'un projet), pas un budget alloué.
+ * Saisies manuelles au niveau chantier (`Chantier.allocatedBudget`, `Chantier.consumedBudget`) :
+ * lues UNIQUEMENT pour un chantier qui n'a AUCUN projet (décision 2026-09-28, audit STR-09 — CH-rpa
+ * affichait 0 € au lieu de ses 1,1 M€). Dès qu'un chantier a un projet, seule la somme de ses
+ * projets compte, et `allocatedBudget` n'est plus qu'une « enveloppe » indicative.
  *
  * Chantiers multi-axes (`Chantier.axisIds`) — règle d'attribution : le budget COMPLET d'un chantier
  * est attribué à UN SEUL axe, son axe primaire, c'est-à-dire le PREMIER id de `axisIds` présent
@@ -64,7 +65,8 @@ function add(target: BudgetFigures, source: BudgetFigures): void {
 
 export function rollupBudgets(
   axes: Pick<StrategicAxis, "id">[],
-  chantiers: Pick<Chantier, "id" | "axisIds">[],
+  chantiers: (Pick<Chantier, "id" | "axisIds"> &
+    Partial<Pick<Chantier, "allocatedBudget" | "consumedBudget">>)[],
   actions: Pick<ChantierAction, "id" | "chantierId" | "budget" | "consumedBudget">[],
   attributionAxes?: Pick<StrategicAxis, "id">[]
 ): BudgetRollup {
@@ -94,6 +96,25 @@ export function rollupBudgets(
     if (!axisId) add(unattributed, figures);
     else {
       // Axe d'attribution non affiché (hors `axes`) : compté au programme seulement.
+      const axisTotal = axisTotals.get(axisId);
+      if (axisTotal) add(axisTotal, figures);
+    }
+  }
+
+  // Chantier SANS projet : sa saisie propre (voir doc ci-dessus).
+  const withProjects = new Set(actions.map((a) => a.chantierId));
+  for (const chantier of chantiers) {
+    if (withProjects.has(chantier.id)) continue;
+    const figures = {
+      allocated: chantier.allocatedBudget ?? 0,
+      consumed: chantier.consumedBudget ?? 0,
+    };
+    if (!figures.allocated && !figures.consumed) continue;
+    add(chantierTotals.get(chantier.id)!, figures);
+    add(programme, figures);
+    const axisId = chantierAxisId.get(chantier.id);
+    if (!axisId) add(unattributed, figures);
+    else {
       const axisTotal = axisTotals.get(axisId);
       if (axisTotal) add(axisTotal, figures);
     }

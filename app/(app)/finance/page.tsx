@@ -35,7 +35,7 @@ import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/l
 export default function FinancePage() {
   const { t } = useTranslation();
   const { user } = useRole();
-  const data = useBeTrackData(user?.companyId ?? null);
+  const data = useBeTrackData(user?.companyId ?? null, user);
 
   // Arborescence financière (optionnelle) de l'entreprise — même pattern que le dashboard
   // (app/(app)/dashboard/DashboardPagePerformance.tsx) pour que le widget "Impact P&L par compte"

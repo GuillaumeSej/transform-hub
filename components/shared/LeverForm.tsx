@@ -126,7 +126,6 @@ function emptyValues(data: BeTrackData): LeverFormValues {
     opexRec: 0,
     capex: 0,
     fteImpact: 0,
-    popImpacted: "",
     description: "",
   };
 }
@@ -977,13 +976,19 @@ export function LeverForm({
         </>
       )}
 
-      {/* Section "Impact RH" (population impactée = quel workstream/département) retirée du
-       *  formulaire de création : tant que le plan d'actions chiffré n'existe pas encore, on ne
-       *  sait pas précisément QUEL workstream/département est affecté par l'impact RH — cette
-       *  information n'a de sens qu'au niveau des actions/impacts (voir `ActionImpact`), pas au
-       *  niveau du business case initial du levier. `popImpacted` reste un champ de type
-       *  (`LeverFormValues`/`Lever`) pour la compat des données existantes, mais n'est plus édité
-       *  ici. */}
+      {/* Population impactée : nombre de personnes concernées (décision 2026-09-28). */}
+      <Field label={t("leverForm.popImpacted", "Population impactée (personnes)")}>
+        <input
+          className={inputClass}
+          type="number"
+          min={0}
+          step={1}
+          value={values.popImpacted ?? ""}
+          onChange={(e) =>
+            set("popImpacted", e.target.value === "" ? undefined : Number(e.target.value))
+          }
+        />
+      </Field>
 
       <SectionTitle>{t("leverForm.sectionDescription")}</SectionTitle>
       <textarea

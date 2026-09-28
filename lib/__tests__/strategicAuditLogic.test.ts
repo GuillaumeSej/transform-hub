@@ -102,13 +102,24 @@ describe("strategicAuditLogic — buildUpdateAuditEntries", () => {
     expect(entries[0].field).toBe("axisIds");
     // `old`/`new` are stringified via `String(...)` (not `JSON.stringify`) — same convention as
     // `workforceLogic.updateMovement`.
-    expect(entries[0].old).toBe(String(before.axisIds));
-    expect(entries[0].new).toBe(String(after.axisIds));
+    expect(entries[0].old).toBe(before.axisIds.join(", "));
+    expect(entries[0].new).toBe(after.axisIds.join(", "));
 
     // A same-VALUE array passed as a new reference is not treated as a change (JSON.stringify
     // comparison, not `!==` on the reference).
     const samePatch: Partial<Fixture> = { axisIds: ["AX-1"] };
     const sameAfter: Fixture = { ...before, axisIds: ["AX-1"] };
     expect(buildUpdateAuditEntries("bob", before.id, samePatch, before, sameAfter)).toHaveLength(0);
+  });
+});
+
+describe("formatAuditValue — plus de « [object Object] » dans le journal (audit DB-17)", () => {
+  it("résume objets et listes d'objets", async () => {
+    const { formatAuditValue, displayAuditValue } = await import("@/lib/auditFormat");
+    expect(formatAuditValue({ financial: 3, human: 2 })).toBe('{"financial":3,"human":2}');
+    expect(formatAuditValue([{ id: "i1" }, { id: "i2" }])).toBe("2 éléments");
+    expect(formatAuditValue({ id: "x", label: "Gain" })).toBe("Gain");
+    expect(formatAuditValue(undefined)).toBe("");
+    expect(displayAuditValue("[object Object]")).toBe("(détail non enregistré)");
   });
 });

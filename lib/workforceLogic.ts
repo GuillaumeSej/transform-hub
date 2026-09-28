@@ -5,6 +5,7 @@ import type {
   SocialScheme,
   WorkforceMovement,
 } from "@/types";
+import { formatAuditValue } from "@/lib/auditFormat";
 import type { WorkforceMeta } from "@/lib/firestore/workforce";
 
 /**
@@ -131,8 +132,8 @@ export function updateMovement(
         action: "updated",
         entity: id,
         field: `mouvement RH · ${String(k)}`,
-        old: String(before[k] ?? ""),
-        new: String(after[k] ?? ""),
+        old: formatAuditValue(before[k]),
+        new: formatAuditValue(after[k]),
       })
     );
 
@@ -233,8 +234,8 @@ export function upsertEmployee(
           action: "updated",
           entity: before.id,
           field: `employé · ${String(k)}`,
-          old: String(before[k] ?? ""),
-          new: String(after[k] ?? ""),
+          old: formatAuditValue(before[k]),
+          new: formatAuditValue(after[k]),
         })
       ),
     };

@@ -167,7 +167,7 @@ export default function HrDashboardPage() {
   // Date de référence UNIQUE des calculs RH (B1) : date locale réelle, plus de date démo figée.
   const today = hr.hrToday();
   const { user } = useRole();
-  const data = useBeTrackData(user?.companyId ?? null);
+  const data = useBeTrackData(user?.companyId ?? null, user);
   const router = useRouter();
   // Vue consolidée multi-programmes (fondation chantier CTO, voir lib/hooks/useActiveProgram.tsx) :
   // demande métier explicite — SEUL le suivi des mouvements RH ci-dessous doit s'étendre à tous les

@@ -864,7 +864,6 @@ export function validateLeverImportRows(
           opexRec: 0,
           capex: 0,
           fteImpact: 0,
-          popImpacted: "",
           companyId: companyId ?? null,
           dependencies: [],
           description: "",
@@ -1009,13 +1008,10 @@ export function validateLeverImportRows(
     }
 
     if (hasL("Population impactée")) {
-      const popRaw = str(row["Population impactée"]);
-      if (!popRaw) values.popImpacted = "";
-      else {
-        const pop = findWorkstream(popRaw);
-        if (pop) values.popImpacted = pop.id;
-        else warn("Leviers", rowNumber, "unknownPopulation", { value: popRaw });
-      }
+      // Nombre de personnes (décision 2026-09-28) ; cellule vide = non renseigné.
+      const n = readNumber("Leviers", rowNumber, "Population impactée", row["Population impactée"]);
+      if (n === null) return reject();
+      values.popImpacted = n === undefined ? undefined : Math.max(0, Math.round(n));
     }
 
     const depHeader = "Dépendances (ID:type, séparées par ;)";
