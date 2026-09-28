@@ -677,6 +677,8 @@ const en: Record<string, string> = {
   "hr.current": "Current",
   "hr.target": "Target",
   "hr.gapVsTarget": "Gap vs target",
+  "hr.workstreamBaselineMissing":
+    "No baseline headcount per workstream in the FTE base: the Workstream view cannot be computed.",
   "hr.progress": "Progress",
   "hr.vsTarget": "vs target",
   "hr.widget.movementsTable": "Movements summary",

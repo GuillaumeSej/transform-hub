@@ -65,6 +65,25 @@ describe("gapEntriesAt — pas de dérive d'arrondi vs la courbe globale (bug li
     expect(summedRealized).toBe(global?.gap.delay);
   });
 
+  it("réalisé / planifié / réactualisé du détail = valeurs de la courbe (audit DASH-06)", () => {
+    // 3 leviers à 0,04 M€ de réalisé chacun : arrondis un par un (0,0) ils donnaient 0, contre
+    // 0,1 sur la courbe ; ils étaient même écartés du détail.
+    const levers = [
+      makeLateLever("A", 0.05, 0.04),
+      makeLateLever("B", 0.05, 0.04),
+      makeLateLever("C", 0.05, 0.04),
+    ];
+    const data = { program: { fyStart: "2026-01-01" }, levers } as unknown as BeTrackData;
+    const today = new Date("2026-06-01");
+    const global = engine.savingsSeries(data, "month", today).find((p) => p.month === "Mar 2026")!;
+    const entries = gapEntriesAt(data, "month", "Mar 2026", today);
+    const r1 = (n: number) => Math.round(n * 10) / 10;
+    expect(entries).toHaveLength(3);
+    expect(r1(entries.reduce((s, e) => s + (e.after ?? 0), 0))).toBe(global.actual);
+    expect(r1(entries.reduce((s, e) => s + (e.before ?? 0), 0))).toBe(global.planned);
+    expect(r1(entries.reduce((s, e) => s + (e.reforecast ?? 0), 0))).toBe(global.reforecast);
+  });
+
   it("inclut les leviers annulés (étiquetés) : total du détail = écart du badge (gap.total)", () => {
     const cancelled = {
       id: "X",

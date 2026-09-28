@@ -804,8 +804,10 @@ function movementFteValue(
 }
 
 /** Contributions dimensionnelles d'un mouvement. Les transferts départementaux sortent du
- * département source et entrent dans le département cible ; pays/workstream utilisent le type
- * explicite entrant/sortant, faute de destination distincte dans le modèle. */
+ * département source et entrent dans le département cible. En pays / chantier, le modèle n'a pas
+ * de destination (`toCountry`/`toWorkstream`) : un transfert y est NEUTRE, comme sur l'effectif
+ * total (`fteEffect`) — le signer par son type (entrant +, sortant −) faisait que la somme des
+ * pays ne retombait plus sur l'effectif global (112,2 contre 109, audit HR-05). */
 function dimensionalContributions(
   movement: WorkforceMovement,
   dimension: WorkforceDimension,
@@ -824,6 +826,7 @@ function dimensionalContributions(
   }
   const key = dimension === "country" ? movement.country : movement.workstream;
   if (!key) return [];
+  if (movement.type === "Transfert entrant" || movement.type === "Transfert sortant") return [];
   return [{ key, delta: signedFteForType(movement.type, fte) }];
 }
 

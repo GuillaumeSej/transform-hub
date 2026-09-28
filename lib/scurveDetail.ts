@@ -62,18 +62,22 @@ export function gapEntriesAt(
     const p = engine
       .savingsSeries({ ...data, levers: [l] }, granularity, today)
       .find((x) => x.month === month);
-    if (!p || p.actual === null) continue;
-    if (p.gap.total === 0 && p.planned === 0 && p.actual === 0) continue;
+    if (!p || p.raw.actual === null) continue;
+    // Test sur les valeurs NON arrondies : un levier à 0,04 M€ était écarté du détail alors qu'il
+    // compte dans la courbe (audit DASH-06).
+    const zero = (n: number) => Math.abs(n) < 1e-9;
+    if (zero(p.gap.totalRaw) && zero(p.raw.planned) && zero(p.raw.actual)) continue;
     out.push({
       leverId: l.id,
       name: l.name,
       wsId: l.ws,
       geographyLeafId: l.geographyLeafId,
       geography: l.geography,
-      before: p.planned,
-      after: p.actual,
-      reforecast: p.reforecast,
-      // Valeurs NON ARRONDIES (`*Raw`) : cette fonction est rejouée une fois PAR LEVIER puis
+      before: p.raw.planned,
+      after: p.raw.actual,
+      reforecast: p.raw.reforecast,
+      // Valeurs NON ARRONDIES (`raw`, `*Raw`) — y compris planifié / réalisé / réactualisé (audit
+      // DASH-06 : leur somme arrondie par levier donnait 11,0 contre 10,7 M€ sur la courbe) : cette fonction est rejouée une fois PAR LEVIER puis
       // sommée par `groupEntries`/`drilldownTotals` (lib/savingsDrilldown.ts), qui arrondissent
       // déjà une seule fois à l'AFFICHAGE final — sommer des valeurs pré-arrondies ici ferait
       // dériver ce total de l'écart global affiché sur le graphe (calculé, lui, sur tous les

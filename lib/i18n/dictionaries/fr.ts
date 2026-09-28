@@ -713,6 +713,8 @@ const fr: Record<string, string> = {
   "hr.current": "Actuel",
   "hr.target": "Cible",
   "hr.gapVsTarget": "Écart vs cible",
+  "hr.workstreamBaselineMissing":
+    "Aucun effectif de référence par chantier dans la base ETP : la vue Chantier ne peut pas être calculée.",
   "hr.progress": "Avancement",
   "hr.vsTarget": "vs cible",
   "hr.widget.movementsTable": "Synthèse des mouvements",

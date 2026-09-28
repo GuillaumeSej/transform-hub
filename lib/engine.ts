@@ -1528,6 +1528,10 @@ export type SavingsSeriesPoint = {
   /** Réalisé apporté par cette seule période (pour le pont / barres). */
   actualDelta: number;
   gap: SavingsSeriesGap;
+  /** `planned`/`reforecast`/`actual` NON ARRONDIS — pour tout appelant qui SOMME des points
+   *  (détail par levier de `gapEntriesAt`), même principe que `SavingsSeriesGap.totalRaw` : sommer
+   *  des valeurs arrondies à 0,1 M€ faisait dériver le détail de la courbe (audit DASH-06). */
+  raw: { planned: number; reforecast: number; actual: number | null };
 };
 
 /** Un levier est "en retard" au sens de l'écart de trajectoire (S-curve/Finance) SI ET SEULEMENT SI
@@ -1624,6 +1628,7 @@ export function savingsSeries(
       reforecast: r1(reforecast[i]),
       actual: shown ? r1(cumActual) : null,
       actualDelta: r1(actualDelta[i]),
+      raw: { planned: planned[i], reforecast: reforecast[i], actual: shown ? cumActual : null },
       gap: shown
         ? {
             total: r1(cumActual - planned[i]),

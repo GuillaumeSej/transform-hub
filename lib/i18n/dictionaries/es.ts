@@ -674,6 +674,8 @@ const es: Record<string, string> = {
   "hr.current": "Actual",
   "hr.target": "Objetivo",
   "hr.gapVsTarget": "Desviación vs objetivo",
+  "hr.workstreamBaselineMissing":
+    "No hay plantilla de referencia por frente en la base de ETC: la vista Frente no puede calcularse.",
   "hr.progress": "Avance",
   "hr.vsTarget": "vs objetivo",
   "hr.widget.movementsTable": "Síntesis de los movimientos",

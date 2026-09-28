@@ -1,6 +1,8 @@
 import { cn } from "@/lib/utils";
 
-/** Barre de progression avec code couleur — porté depuis `.pbar` du prototype legacy. */
+/** Barre de progression avec code couleur — porté depuis `.pbar` du prototype legacy. La barre est
+ *  bornée à 0-100 %, mais le libellé affiche la valeur RÉELLE (un avancement négatif ou supérieur à
+ *  100 % n'est plus masqué, audit HR-05). */
 export function ProgressBar({
   pct,
   showLabel = true,
@@ -22,7 +24,7 @@ export function ProgressBar({
       </div>
       {showLabel && (
         <span className="min-w-[36px] text-right text-[11px] font-semibold text-secondary">
-          {clamped}%
+          {Math.round(pct)}%
         </span>
       )}
     </div>

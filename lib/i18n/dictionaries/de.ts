@@ -675,6 +675,8 @@ const de: Record<string, string> = {
   "hr.current": "Aktuell",
   "hr.target": "Ziel",
   "hr.gapVsTarget": "Abweichung vs. Ziel",
+  "hr.workstreamBaselineMissing":
+    "Keine Referenz-FTE je Arbeitspaket in der FTE-Basis: Die Arbeitspaket-Ansicht kann nicht berechnet werden.",
   "hr.progress": "Fortschritt",
   "hr.vsTarget": "vs. Ziel",
   "hr.widget.movementsTable": "Zusammenfassung der Bewegungen",

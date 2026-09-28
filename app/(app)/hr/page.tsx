@@ -1548,9 +1548,14 @@ export default function HrDashboardPage() {
               : "department";
         // Baselines par dimension restreintes au périmètre + tous les mouvements du périmètre
         // (actuel / cible indépendants de la plage). Non scopable → note à la place (M3).
-        const positionRows = absoluteAvailable
-          ? hr.ftePositionsByDimension(scopedWf, dimension)
-          : [];
+        // Vue Chantier sans effectif de référence par chantier : les lignes n'auraient aucun sens
+        // (référence 0, avancements à 200 % ou 1 000 %) — note à la place (audit HR-05).
+        const hasWorkstreamBaselines = (scopedWf.workstreamBaselines ?? []).length > 0;
+        const workstreamUnavailable = dimension === "workstream" && !hasWorkstreamBaselines;
+        const positionRows =
+          absoluteAvailable && !workstreamUnavailable
+            ? hr.ftePositionsByDimension(scopedWf, dimension)
+            : [];
         return renderWidgetShell(
           instance,
           <Card className="mb-0 h-full">
@@ -1576,6 +1581,14 @@ export default function HrDashboardPage() {
             <CardBody flush>
               {!absoluteAvailable && (
                 <p className="px-3 py-3 text-[11.5px] text-tertiary">{baselineNote}</p>
+              )}
+              {absoluteAvailable && workstreamUnavailable && (
+                <p className="px-3 py-3 text-[11.5px] text-tertiary">
+                  {t(
+                    "hr.workstreamBaselineMissing",
+                    "Aucun effectif de référence par chantier dans la base ETP : la vue Chantier ne peut pas être calculée."
+                  )}
+                </p>
               )}
               <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full border-collapse text-[12.5px]">
@@ -1627,7 +1640,9 @@ export default function HrDashboardPage() {
                             {d.gapToTarget.toLocaleString(intlTag())}
                           </td>
                           <td className="w-[180px] px-3 py-2.5">
-                            <ProgressBar pct={Math.max(0, Math.min(100, pct))} />
+                            {/* Valeur réelle passée telle quelle : la barre se borne à 0-100 %,
+                                le libellé affiche le vrai % (audit HR-05). */}
+                            <ProgressBar pct={pct} />
                           </td>
                         </tr>
                       );
@@ -1666,7 +1681,7 @@ export default function HrDashboardPage() {
                           </div>
                         ))}
                       </dl>
-                      <ProgressBar pct={Math.max(0, Math.min(100, pct))} />
+                      <ProgressBar pct={pct} />
                     </div>
                   );
                 })}

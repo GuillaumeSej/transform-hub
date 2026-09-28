@@ -591,6 +591,43 @@ describe("hrEngine — ftePositionsByDimension", () => {
     });
   });
 
+  it("keeps transfers neutral by country: Σ countries = global headcount (audit HR-05)", () => {
+    const wf = makeWorkforce({
+      totalFTE: 100,
+      countryBaselines: [
+        { key: "France", label: "France", fte: 60 },
+        { key: "Germany", label: "Germany", fte: 40 },
+      ],
+      movements: [
+        makeMovement({
+          id: "T1",
+          type: "Transfert entrant",
+          country: "France",
+          fte: 2,
+          status: "Réalisé",
+        }),
+        makeMovement({
+          id: "T2",
+          type: "Transfert sortant",
+          country: "Germany",
+          fte: 1,
+          status: "Réalisé",
+        }),
+        makeMovement({
+          id: "A1",
+          type: "Attrition",
+          country: "Germany",
+          fte: 1,
+          status: "Réalisé",
+        }),
+      ],
+    });
+    const rows = ftePositionsByDimension(wf, "country");
+    expect(rows.find((r) => r.key === "France")?.current).toBe(60);
+    expect(rows.find((r) => r.key === "Germany")?.current).toBe(39);
+    expect(rows.reduce((sum, r) => sum + r.current, 0)).toBe(99);
+  });
+
   it("moves FTE from source to destination for department transfers", () => {
     const wf = makeWorkforce({
       departments: [
