@@ -13,7 +13,8 @@ import {
   normalizeLegacyProfiles,
 } from "@/lib/roleProfiles";
 import { resolveConfidentialityClearance } from "@/lib/leversLogic";
-import type { ProfileAssignment, Program } from "@/types";
+import { canDecideImpactRealizedOn } from "@/lib/impactStatus";
+import type { LeverImpact, ProfileAssignment, Program } from "@/types";
 
 describe("program_sponsor / program_owner — fondation vue consolidée (nouveaux rôles Plan Performance)", () => {
   it("are Performance-track roles, not Strategic", () => {
@@ -300,6 +301,105 @@ describe("isReadOnlyUser — Performance program (hr / comex cross-track)", () =
     };
     expect(isReadOnlyUser(user, "p1", "performance")).toBe(true);
     expect(isReadOnlyUser(user, "p2", "performance")).toBe(false);
+  });
+});
+
+describe("isReadOnlyUser — Contrôleur financier (finance) read-only on Plan Transfo levers", () => {
+  it("finance-only on a Performance program is read-only on the plan (levers)", () => {
+    const fin = { profiles: [{ role: "finance" as const, programId: "p1" }] };
+    expect(isReadOnlyUser(fin, "p1", "performance")).toBe(true);
+    expect(isReadOnlyUser(fin, "p1", "performance", "plan")).toBe(true);
+    // Profil finance « tous programmes » (sans programId) : idem.
+    expect(isReadOnlyUser({ profiles: [{ role: "finance" as const }] }, "p1", "performance")).toBe(
+      true
+    );
+    // finance + hr / comex : toujours lecture seule sur le plan.
+    expect(
+      isReadOnlyUser(
+        {
+          profiles: [
+            { role: "finance" as const, programId: "p1" },
+            { role: "comex_member" as const, programId: "p1" },
+          ],
+        },
+        "p1",
+        "performance"
+      )
+    ).toBe(true);
+  });
+
+  it("finance + an editing role on the same program keeps edit rights", () => {
+    for (const role of ["cto", "sponsor", "lever", "program_owner", "program_sponsor"] as const) {
+      const user = {
+        profiles: [
+          { role: "finance" as const, programId: "p1" },
+          { role, programId: "p1" },
+        ],
+      };
+      expect(isReadOnlyUser(user, "p1", "performance")).toBe(false);
+    }
+    // cto « tous programmes » + finance rattaché au programme.
+    const ctoFin = {
+      profiles: [{ role: "cto" as const }, { role: "finance" as const, programId: "p1" }],
+    };
+    expect(isReadOnlyUser(ctoFin, "p1", "performance")).toBe(false);
+    // Rôle d'édition sur un AUTRE programme : ne déverrouille pas p1.
+    const elsewhere = {
+      profiles: [
+        { role: "finance" as const, programId: "p1" },
+        { role: "lever" as const, programId: "p2" },
+      ],
+    };
+    expect(isReadOnlyUser(elsewhere, "p1", "performance")).toBe(true);
+    expect(isReadOnlyUser(elsewhere, "p2", "performance")).toBe(false);
+  });
+
+  it("consolidated view (no programId, performance plan): finance-only stays read-only", () => {
+    const fin = {
+      profiles: [
+        { role: "finance" as const, programId: "p1" },
+        { role: "finance" as const, programId: "p2" },
+      ],
+    };
+    expect(isReadOnlyUser(fin, null, "performance")).toBe(true);
+    expect(
+      isReadOnlyUser({ profiles: [...fin.profiles, { role: "cto" as const }] }, null, "performance")
+    ).toBe(false);
+    // Sans type de programme : comportement historique inchangé.
+    expect(isReadOnlyUser(fin)).toBe(false);
+  });
+
+  it("admin with a finance profile is never read-only", () => {
+    expect(
+      isReadOnlyUser(
+        { profiles: [{ role: "finance" as const, programId: "p1" }], isCompanyAdmin: true },
+        "p1",
+        "performance"
+      )
+    ).toBe(false);
+  });
+
+  it("finance keeps its HR-area rights (only comex is read-only there)", () => {
+    const fin = { profiles: [{ role: "finance" as const, programId: "p1" }] };
+    expect(isReadOnlyUser(fin, "p1", "performance", "hr")).toBe(false);
+  });
+
+  it("read-only finance can still decide a pending realized impact (separate gate)", () => {
+    const fin = {
+      name: "Fin",
+      username: "fin",
+      profiles: [{ role: "finance" as const, programId: "p1" }],
+    };
+    expect(isReadOnlyUser(fin, "p1", "performance")).toBe(true);
+    const imp = {
+      id: "i1",
+      label: "gain",
+      type: "saving",
+      amount: 10,
+      status: "done",
+      realizedApproval: { status: "pending", requestedBy: "Owner", requestedByUsername: "owner" },
+    } as LeverImpact;
+    expect(canDecideImpactRealizedOn(fin, { programId: "p1" }, imp)).toBe(true);
   });
 });
 

@@ -18,6 +18,9 @@ import {
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useProgramChangeReset } from "@/lib/hooks/useProgramChangeReset";
+import { resolveProgramType } from "@/lib/axisLogic";
+import { ProgramTypeMismatchNotice } from "@/components/shared/ProgramTypeMismatchNotice";
 import { hasAnyRole } from "@/lib/roleProfiles";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import * as hr from "@/lib/hrEngine";
@@ -85,11 +88,7 @@ import type {
   SocialScheme,
   WorkforceMovement,
 } from "@/types";
-import {
-  subscribeCompanies,
-  subscribeHierarchyNodes,
-  subscribePrograms,
-} from "@/lib/firestore/admin";
+import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { buildMovementTableRows, type HrMovementTableRow } from "@/lib/hrMovementTable";
 import { executionLabel, movementStatusLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
 import { movementSocialSchemePatch, movementStatusPatch } from "@/lib/workforceLogic";
@@ -201,39 +200,29 @@ export default function HrDashboardPage() {
   // AVANT toute navigation depuis le bandeau d'alertes. `null` = fermée ; `kind: null` = toutes.
   const [alertsModal, setAlertsModal] = useState<{ kind: MovementAlertKind | null } | null>(null);
 
-  // ─── Sélecteur de programme (source unique = collection Firestore multi-programmes) ─────
-  // Le dashboard RH s'abonne à la même collection `programs` que le dashboard exécutif (voir
-  // subscribePrograms de lib/firestore/admin.ts). L'ancien fallback sur [data.program]
-  // (slot mono-programme ProgramConfig, id "PRG-2026") a été retiré Août 2026 : il ne
-  // pointait pas vers le même id que celui utilisé côté leviers et mouvements ("p1"), ce qui
-  // faisait apparaître un sélecteur avec un programme fantôme qui n'était l'ancre d'aucun
-  // mouvement scopé.
-  const [programs, setPrograms] = useState<Program[]>([]);
-  useEffect(() => {
-    const unsub = subscribePrograms(
-      (all) =>
-        setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all),
-      user?.companyId ?? null
-    );
-    return unsub;
-  }, [user?.companyId]);
-  const [selectedProgramId, setSelectedProgramId] = useState<string>("");
-  // Sélection par défaut : on privilégie le programme réellement référencé par les mouvements RH
-  // (le plus fréquent parmi `movement.programId`) plutôt que `programs[0]` au hasard — sinon, si
-  // le premier programme retourné par `subscribePrograms` ne porte aucun mouvement (programme créé
-  // après coup, ou mouvements liés à un autre programme), TOUT le dashboard reste vide alors que
-  // le tableau RH / Base ETP (qui ne filtrent pas par programme) affichent bien des données.
-  useEffect(() => {
-    if (selectedProgramId || programs.length === 0) return;
-    const counts = new Map<string, number>();
-    for (const m of data.workforce.movements) {
-      if (m.programId) counts.set(m.programId, (counts.get(m.programId) ?? 0) + 1);
-    }
-    const mostUsedId = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0];
-    const match = mostUsedId ? programs.find((p) => p.id === mostUsedId) : undefined;
-    setSelectedProgramId((match ?? programs[0]).id);
-  }, [programs, selectedProgramId, data.workforce.movements]);
-  const activeProgram = programs.find((p) => p.id === selectedProgramId) ?? programs[0] ?? null;
+  // ─── Programme = programme actif GLOBAL (Topbar) ─────────────────────────────────────────
+  // Décision PO (audit fix #1) : plus de sélection locale (ni l'ancien défaut « programme le plus
+  // référencé par les mouvements », ni la liste de TOUS les programmes, stratégiques compris). Le
+  // dashboard RH est réservé au Plan Performance : programme actif Performance → scope ; programme
+  // actif Stratégique → message + bascule (voir le rendu) ; vue consolidée → tous les programmes
+  // consolidés. `programs` (tous types) ne sert plus qu'à résoudre des NOMS de programmes.
+  const {
+    programs,
+    authorizedPrograms,
+    activeProgram: globalActiveProgram,
+    setActiveProgramId,
+  } = useActiveProgram();
+  const activeIsStrategic =
+    !!globalActiveProgram && resolveProgramType(globalActiveProgram) === "strategic";
+  const activeProgram: Program | null =
+    globalActiveProgram && !activeIsStrategic ? globalActiveProgram : null;
+  const selectedProgramId = activeProgram?.id ?? "";
+  // Liste du sélecteur de la barre de période : simple vue du Topbar (programmes Performance
+  // sélectionnables, écrit dans le même état global).
+  const selectablePerformancePrograms = useMemo(
+    () => authorizedPrograms.filter((p) => resolveProgramType(p) === "performance"),
+    [authorizedPrograms]
+  );
   // Dashboard RH scopé à UN programme (voir sélecteur ci-dessus) — le cycle de vie est désormais
   // une config par programme (lib/firestore/admin.ts).
   const lifecycle = useLifecycleLabels(activeProgram?.id);
@@ -432,6 +421,14 @@ export default function HrDashboardPage() {
   // Filtres synchronisés dans l'URL via le hook partagé `useMultiFilterBarState`
   // (lib/hooks/useMultiFilterBarState.ts), comme les autres pages à `DropdownFilterBar`.
   const { activeFilters, setFilters: setActiveFilters } = useMultiFilterBarState(filterDefs);
+  // Changement de programme actif (Topbar) : filtres et plage de dates choisis sur le programme
+  // précédent remis à zéro (la plage par défaut suit de nouveau les données).
+  useProgramChangeReset(() => {
+    setActiveFilters({});
+    userRangeRef.current = false;
+    setDateFromISO(movementDateRange.from);
+    setDateToISO(movementDateRange.to);
+  });
 
   const wf = data.workforce;
 
@@ -1900,6 +1897,17 @@ export default function HrDashboardPage() {
     }
   };
 
+  // Programme actif = Plan Stratégique : ce dashboard (Plan Performance) ne choisit pas un autre
+  // programme dans le dos du Topbar — il l'explique et propose de basculer.
+  if (activeIsStrategic) {
+    return (
+      <ProgramTypeMismatchNotice
+        expected="performance"
+        title={t("nav.hrDashboard", "Tableau de bord RH")}
+      />
+    );
+  }
+
   return (
     <div className="animate-fade-up">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-5">
@@ -2410,8 +2418,8 @@ export default function HrDashboardPage() {
             : {
                 kind: "select",
                 value: selectedProgramId,
-                options: programs.map((p) => ({ value: p.id, label: p.name })),
-                onChange: setSelectedProgramId,
+                options: selectablePerformancePrograms.map((p) => ({ value: p.id, label: p.name })),
+                onChange: (id) => setActiveProgramId(id),
               }
         }
         fromISO={dateFromISO}

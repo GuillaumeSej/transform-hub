@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
 import { useMyWorkspace } from "@/lib/hooks/useMyWorkspace";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { programSwitchForLink } from "@/lib/activeProgramSelection";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import {
@@ -41,6 +43,13 @@ export default function MyWorkspacePage() {
   const router = useRouter();
   const { user } = useRole();
   const { workspace, loading } = useMyWorkspace();
+  const {
+    activeProgramId,
+    authorizedPrograms,
+    isConsolidatedView,
+    consolidatedPrograms,
+    setActiveProgramId,
+  } = useActiveProgram();
   const [plan, setPlan] = useState<PlanFilter>("all");
   // Filtre de catégorie (barre de répartition) : `null` = tous les blocs.
   const [category, setCategory] = useState<WorkspaceCategory | null>(null);
@@ -63,7 +72,23 @@ export default function MyWorkspacePage() {
   const filterLabel = active ? categoryLabel(active, t) : null;
   const clearFilter = () => setCategory(null);
 
-  const navigate = (href: string) => router.push(href);
+  // Programme actif UNIQUE (décision PO, audit fix #1) : les éléments du portail peuvent venir
+  // d'un autre programme que celui du Topbar (ex. projets stratégiques listés alors qu'un Plan
+  // Performance est actif — `useMyWorkspace` charge alors le 1er programme stratégique autorisé).
+  // Approche retenue (la plus simple qui reste correcte) : chaque lien porte son `programId`, qu'on
+  // ACTIVE juste avant `router.push` — les deux mises à jour sont regroupées dans le même rendu,
+  // la page cible s'affiche donc directement sur le bon programme (et le bon type de nav).
+  const navigate = (href: string, programId?: string) => {
+    const switchTo = programSwitchForLink({
+      targetProgramId: programId,
+      activeProgramId,
+      isConsolidatedView,
+      consolidatedProgramIds: consolidatedPrograms.map((p) => p.id),
+      selectableProgramIds: authorizedPrograms.map((p) => p.id),
+    });
+    if (switchTo) setActiveProgramId(switchTo);
+    router.push(href);
+  };
 
   // Au changement de filtre : amène le bloc ciblé dans la vue (sans masquer la barre si possible).
   useEffect(() => {

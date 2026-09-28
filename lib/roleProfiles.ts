@@ -166,8 +166,12 @@ export type ReadOnlyArea = "plan" | "hr";
 
 /** Rôles qui ne donnent JAMAIS de droit d'édition sur les objets d'un PLAN, quelle que soit la
  *  piste : `comex_member` (consultation), `hr` (il édite les pages RH — mouvements, Base ETP —
- *  mais ne modifie ni les leviers Performance ni le plan stratégique). */
-const READ_ONLY_PLAN_ROLES: readonly Role[] = ["comex_member", "hr"];
+ *  mais ne modifie ni les leviers Performance ni le plan stratégique), `finance` (Contrôleur
+ *  financier, décision PO : consultation des leviers Plan Transfo — ni création, ni import, ni
+ *  édition du levier/de ses actions/impacts, ni changement d'étape. Il garde la page Finance et la
+ *  DÉCISION sur les impacts réalisés, portée par `canDecideImpactRealized[On]`
+ *  (lib/impactStatus.ts), volontairement indépendante de ce flag). */
+const READ_ONLY_PLAN_ROLES: readonly Role[] = ["comex_member", "hr", "finance"];
 /** Sur les pages RH, seul `comex_member` est en consultation : `hr` y garde ses droits. */
 const READ_ONLY_HR_ROLES: readonly Role[] = ["comex_member"];
 
@@ -203,8 +207,17 @@ export function isReadOnlyUser(
   if (isAnyAdmin(user)) return false;
   const profiles = user?.profiles ?? [];
   if (profiles.length === 0) return false;
-  // Sans programme : comportement historique (tous profils `comex_member`).
-  if (programId == null) return profiles.every((p) => p.role === "comex_member");
+  if (programId == null) {
+    // Plan Performance sans programme unique (vue consolidée multi-programmes) : même règle que
+    // par programme, appliquée à TOUS les profils Performance de l'utilisateur — sinon un profil
+    // finance/hr présent sur plusieurs programmes retrouverait l'édition en vue consolidée.
+    if (programType === "performance" && area === "plan") {
+      const perf = profiles.filter((p) => isPerformanceRole(p.role));
+      if (perf.length > 0) return perf.every((p) => READ_ONLY_PLAN_ROLES.includes(p.role));
+    }
+    // Sinon : comportement historique (tous profils `comex_member`).
+    return profiles.every((p) => p.role === "comex_member");
+  }
   // Par programme (décision PO rôles Plan Stratégique) : seuls comptent les profils qui portent
   // sur CE programme — rattachés à lui, ou "tous programmes" de la piste du programme (toute piste
   // si `programType` n'est pas fourni). Lecture seule si l'utilisateur n'y a AUCUN profil, ou

@@ -628,3 +628,16 @@ export const PAGE_ROUTES: Record<string, string> = {
   "admin-history": "/admin/history",
   validation: "/validation",
 };
+
+/**
+ * Routes Plan Performance qui gèrent ELLES-MÊMES un programme actif du mauvais type (message
+ * `ProgramTypeMismatchNotice` + bouton de bascule, décision PO audit fix #1) : le garde-fou de
+ * routes d'AppShell ne les redirige pas quand un Plan Stratégique est actif — à condition que
+ * l'utilisateur y ait droit hors filtre de type (nav non filtrée). Elles restent masquées de la
+ * Sidebar en mode stratégique ; seul un lien direct / un changement de programme sur place y mène.
+ */
+export const PROGRAM_TYPE_AWARE_ROUTES: ReadonlySet<string> = new Set([
+  "/hr",
+  "/finance",
+  "/workstreams",
+]);

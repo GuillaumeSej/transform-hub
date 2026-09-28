@@ -45,6 +45,10 @@ export type WorkspaceItem = {
   waitingOn?: string;
   /** Route interne vers le détail (ex. `/levers/detail?id=…`, `/validation`). */
   href: string;
+  /** Programme de l'élément : la page active ce programme (programme actif global) AVANT de
+   *  suivre `href` quand il diffère du programme actif — ex. un projet stratégique listé alors
+   *  que le Topbar est sur un Plan Performance (`/levers?chantier=…` n'a de sens qu'en mode
+   *  stratégique). Voir `programSwitchForLink` (lib/activeProgramSelection.ts). */
   programId?: string;
 };
 
@@ -62,6 +66,8 @@ export type WorkspacePerimeterEntry = {
   /** Avancement 0-100 si pertinent. */
   progressPct?: number;
   href: string;
+  /** Programme de l'entrée — même rôle que `WorkspaceItem.programId`. */
+  programId?: string;
 };
 
 export type MyWorkspace = {

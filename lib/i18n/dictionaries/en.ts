@@ -2399,6 +2399,10 @@ const en: Record<string, string> = {
   // ─── Program type (Topbar program selector) ───────────────────────────────
   "programType.performance": "Performance",
   "programType.strategic": "Strategic",
+  "programScope.typeMismatch":
+    "This page covers “{type}” programs, but the active program (selector at the top of the page) is of another type.",
+  "programScope.switchTo": "Switch to {program}",
+  "programScope.noProgramOfType": "No program of this type is available to you.",
 
   // ─── Strategic dashboard ──────────────────────────────────────────────────
   // Edit-mode chrome (Customise / Done / Add widget / Reset) reuses the generic `dashboard.*`

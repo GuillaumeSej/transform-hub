@@ -785,6 +785,7 @@ function buildPerimeter(
         health: leverHealth(lever, alerts),
         progressPct: lever.progress,
         href: leverHref(lever.id),
+        programId: lever.programId,
       });
     }
   }
@@ -810,6 +811,7 @@ function buildPerimeter(
           chantierActions.filter((a) => own.some((c) => c.id === a.chantierId)).map(progressOf)
         ),
         href: leverHref(axis.id),
+        programId: strategic.programId,
       });
     }
     for (const chantier of chantiers) {
@@ -827,6 +829,7 @@ function buildPerimeter(
           chantierActions.filter((a) => a.chantierId === chantier.id).map(progressOf)
         ),
         href: chantierHref(chantier.id),
+        programId: chantier.programId ?? strategic.programId,
       });
     }
     const chantierById = new Map(chantiers.map((c) => [c.id, c]));
@@ -852,6 +855,7 @@ function buildPerimeter(
             : "green",
         progressPct: pct,
         href: projetHref(action.chantierId, action.id),
+        programId: chantier?.programId ?? strategic.programId,
       });
     }
   }
@@ -912,7 +916,10 @@ function buildPilotPerimeter(
         role,
         health,
         progressPct,
-        href: `/dashboard?program=${encodeURIComponent(program.id)}`,
+        // Pas de `?program=` : le lien porte `programId`, que la page « Mon espace » active
+        // (programme actif global) AVANT de naviguer — voir `programSwitchForLink`.
+        href: "/dashboard",
+        programId: program.id,
       };
     })
     .sort(sortPerimeter);

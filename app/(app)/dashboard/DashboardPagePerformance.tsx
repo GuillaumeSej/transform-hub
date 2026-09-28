@@ -2,8 +2,9 @@
 
 import { DateInput } from "@/components/shared/DateInput";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useProgramChangeReset } from "@/lib/hooks/useProgramChangeReset";
 import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter, serializeFilterValues, toggleInSelection } from "@/lib/filterUtils";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
@@ -28,12 +29,9 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import {
-  subscribeCompanies,
-  subscribeHierarchyNodes,
-  subscribePrograms,
-} from "@/lib/firestore/admin";
-import type { Company, HierarchyLevelDef, HierarchyNode, Program } from "@/types";
+import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
+import { resolveProgramType } from "@/lib/axisLogic";
+import type { Company, HierarchyLevelDef, HierarchyNode } from "@/types";
 import * as engine from "@/lib/engine";
 import {
   METRIC_REGISTRY,
@@ -172,19 +170,23 @@ export function DashboardPagePerformance() {
   const data = useBeTrackData(user?.companyId ?? null, user);
   const { t } = useTranslation();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  // Dashboard scopé à UN programme (voir sélecteur de programme plus bas) — le cycle de vie est
-  // désormais une config par programme (lib/firestore/admin.ts), d'où la lecture anticipée de
-  // `?program=` pour alimenter `useLifecycleLabels` avec le bon scope.
-  const selectedProgramId = searchParams.get("program") ?? "";
-  const lifecycle = useLifecycleLabels(selectedProgramId || undefined);
-  // Contexte global "programme actif" — synchronisé dans les deux sens avec le `?program=` de
-  // cette page (voir plus bas). `isConsolidatedView`/`consolidatedPrograms` pilotent le mode "vue
-  // consolidée" (fondation chantier CTO multi-programmes, voir lib/consolidatedProgramAccess.ts) :
-  // au lieu d'un unique `selectedProgramId`, les leviers/alertes/KPI de CE dashboard doivent alors
-  // agréger TOUS les programmes de `consolidatedPrograms` — voir `programScopedLevers` plus bas.
-  const { activeProgramId, setActiveProgramId, isConsolidatedView, consolidatedPrograms } =
-    useActiveProgram();
+  // Dashboard scopé au programme actif GLOBAL (sélecteur du Topbar, décision PO audit fix #1) —
+  // plus de `?program=` lu par la page : un ancien lien `/dashboard?program=…` est consommé par
+  // `ActiveProgramProvider` (il pose le programme actif puis disparaît de l'URL). La route
+  // `/dashboard` n'affiche cette vue que pour un programme Performance (ou la vue consolidée) :
+  // voir app/(app)/dashboard/page.tsx. `isConsolidatedView`/`consolidatedPrograms` : au lieu d'un
+  // programme unique, les leviers/alertes/KPI agrègent TOUS les programmes consolidés — voir
+  // `programScopedLevers` plus bas.
+  // `programs` : programmes de l'entreprise (ventilation « par programme », noms).
+  const { programs, activeProgram, isConsolidatedView, consolidatedPrograms } = useActiveProgram();
+  // Repli sans programme actif résolu (admin global : ni contexte entreprise ni sélecteur) :
+  // premier programme Performance — comportement historique.
+  const selectedProgramId = isConsolidatedView
+    ? ""
+    : (activeProgram?.id ??
+      programs.find((p) => resolveProgramType(p) === "performance")?.id ??
+      "");
+  const lifecycle = useLifecycleLabels(selectedProgramId || consolidatedPrograms[0]?.id);
   // Lecture seule sur le programme affiché ; vue consolidée : règle historique (tous profils COMEX).
   const readOnly = isReadOnlyUser(
     user,
@@ -223,52 +225,6 @@ export function DashboardPagePerformance() {
       levers: visibleLevers,
     };
   }, [data, visibleLevers]);
-
-  // Programmes de l'entreprise — pour la ventilation "par programme" (en plus de "par
-  // workstream") et pour le sélecteur de programme du dashboard (voir plus bas).
-  const [programs, setPrograms] = useState<Program[]>([]);
-  useEffect(() => {
-    const unsub = subscribePrograms(
-      (all) =>
-        setPrograms(user?.companyId ? all.filter((p) => p.companyId === user.companyId) : all),
-      user?.companyId ?? null
-    );
-    return unsub;
-  }, [user?.companyId]);
-
-  // ── Sélecteur de programme (scope du dashboard) ─────────────────────────────
-  // Le dashboard exécutif est scopé à UN programme sélectionné, porté par l'URL (?program=) pour
-  // rester partageable/rechargeable (calculé plus haut, avant `lifecycle`, qui en a besoin).
-  // Auto-sélection du premier programme disponible si l'URL n'en précise aucun et qu'au moins un
-  // programme existe (évite un dashboard vide inutilement pour les entreprises n'ayant qu'un seul
-  // programme).
-
-  // Synchronisation bidirectionnelle avec le contexte global "programme actif" : l'URL reste la
-  // source de vérité DE CETTE PAGE (partageable/rechargeable), mais le programme choisi ici doit
-  // aussi piloter la nav et les autres pages — et, à l'inverse, arriver sur le dashboard depuis
-  // une autre page doit conserver le programme déjà actif plutôt que repartir du premier de la
-  // liste. D'où l'ancrage sur `activeProgramId` (qui retombe lui-même sur le premier programme
-  // disponible, voir useActiveProgram) plutôt que sur `programs[0]` directement.
-  useEffect(() => {
-    // Vue consolidée : ce dashboard n'a pas besoin d'un `?program=` (il lit `isConsolidatedView`/
-    // `consolidatedPrograms` du contexte directement, voir ProgramSwitcher) — ne pas y forcer
-    // `CONSOLIDATED_PROGRAM_ID`, qui ne correspond à aucun `programId` réel de levier.
-    if (isConsolidatedView) return;
-    if (!selectedProgramId && (activeProgramId || programs.length > 0)) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("program", activeProgramId ?? programs[0].id);
-      router.replace(`/dashboard?${params.toString()}`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProgramId, programs, activeProgramId, isConsolidatedView]);
-
-  useEffect(() => {
-    // Ne PAS resynchroniser depuis une URL `?program=` restée sur un ancien programme pendant que
-    // la vue consolidée est active (sélectionnée depuis le Topbar, qui ne touche pas ce paramètre
-    // — voir ProgramSwitcher) : sans cette garde, ce seul effet ramenait aussitôt le contexte hors
-    // de la vue consolidée dès le premier rendu (mount, ou rechargement de page).
-    if (selectedProgramId && !isConsolidatedView) setActiveProgramId(selectedProgramId);
-  }, [selectedProgramId, isConsolidatedView, setActiveProgramId]);
 
   // Leviers scopés au programme sélectionné — appliqué AVANT le filtrage de la barre de filtres
   // (les options de filtres ne doivent refléter que les leviers du programme courant), mais reste
@@ -498,6 +454,13 @@ export function DashboardPagePerformance() {
   const ALERTS_PER_PAGE = 5;
   const [alertPage, setAlertPage] = useState(0);
   const [alertTypeFilter, setAlertTypeFilter] = useState<string[]>([]);
+  // Changement de programme actif (Topbar) : filtres de la barre (URL) et filtre de type d'alerte
+  // du programme précédent remis à zéro.
+  useProgramChangeReset(() => {
+    setFilters({});
+    setAlertTypeFilter([]);
+    setAlertPage(0);
+  });
   const [alertShowResolved, setAlertShowResolved] = useState(false);
   const [manualAlertOpen, setManualAlertOpen] = useState(false);
   const { alerts: allAlerts } = useNotifications(visibleData, user);

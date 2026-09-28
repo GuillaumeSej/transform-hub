@@ -17,6 +17,7 @@ import { StaffingRateSection } from "@/components/strategic/StaffingRateSection"
 import { EMPTY_BUDGET, rollupBudgets } from "@/lib/budgetRollup";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useProgramChangeReset } from "@/lib/hooks/useProgramChangeReset";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
@@ -152,6 +153,12 @@ export function EffectifsPageClient() {
    *  `CostByHierarchyChart`, simplifié ici sans `levelKey`/`parentId` puisque l'ordre des niveaux
    *  est fixe et connu d'avance). */
   const [budgetDrillPath, setBudgetDrillPath] = useState<{ id: string; label: string }[]>([]);
+  // Changement de programme actif (Topbar) : le chemin de drill (axes/chantiers de l'ancien
+  // programme) n'a plus de sens — retour au niveau racine.
+  useProgramChangeReset(() => {
+    setBudgetDrillPath([]);
+    setAvailableTeam(null);
+  });
 
   /** Round 25 (RBAC), porté round 26 sur le nouveau `budgetDrillPath` : pour `axis_sponsor`, `axes`
    *  ne contient déjà plus que SON/SES propre(s) axe(s) (scoping du hook) — le donut « Répartition

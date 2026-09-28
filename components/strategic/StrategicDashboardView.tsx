@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useProgramChangeReset } from "@/lib/hooks/useProgramChangeReset";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
@@ -670,6 +671,8 @@ export function StrategicDashboardView() {
    *  convention : on ne stocke que l'id, les chantiers/le budget de l'axe sont recalculés depuis
    *  `chantiersByAxis` (ci-dessous) plutôt que capturés au clic. */
   const [budgetDonutAxisId, setBudgetDonutAxisId] = useState<string | null>(null);
+  // Changement de programme actif (Topbar) : l'axe ouvert appartient à l'ancien programme.
+  useProgramChangeReset(() => setBudgetDonutAxisId(null));
 
   /**
    * Numéro global unique par indicateur — porté depuis `StrategicAxesView.tsx`, alimente

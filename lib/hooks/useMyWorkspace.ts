@@ -22,9 +22,12 @@ import type { BeTrackData, Company } from "@/types";
  * sur le moteur pur `buildMyWorkspace` (lib/myWorkspace.ts).
  *
  * Plan Stratégique : `useStrategicData` ne charge qu'UN programme à la fois. On prend le programme
- * actif s'il est stratégique ; sinon, pour un utilisateur ayant un profil stratégique, son premier
- * programme stratégique autorisé (pour que ses projets/validations remontent même quand il navigue
- * sur un Plan Performance). Aucun abonnement stratégique sinon.
+ * ACTIF (Topbar) s'il est stratégique ; sinon, pour un utilisateur ayant un profil stratégique, son
+ * premier programme stratégique autorisé (pour que ses projets/validations remontent même quand il
+ * navigue sur un Plan Performance). Aucun abonnement stratégique sinon.
+ * Chaque élément porte son `programId` : la page active ce programme AVANT de suivre le lien
+ * (`programSwitchForLink`), un lien stratégique (`/kpi`, `/levers?chantier=…`) ouvre donc toujours
+ * le bon programme, même depuis un Plan Performance actif.
  */
 export function useMyWorkspace(): { workspace: MyWorkspace; loading: boolean } {
   const { t } = useTranslation();

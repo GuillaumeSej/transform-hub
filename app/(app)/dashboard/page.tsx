@@ -9,9 +9,12 @@ import { StrategicDashboardView } from "@/components/strategic/StrategicDashboar
  *  selon le programme actif. Le dashboard Performance historique est inchangé dans
  *  `DashboardPagePerformance.tsx`.
  *
- *  Suspense : `DashboardPagePerformance` lit `useSearchParams()` (le `?program=`), ce que Next.js
- *  exige d'envelopper en prerender — la frontière vivait implicitement dans l'ancien fichier de
- *  page, elle est explicitée ici. */
+ *  Programme affiché = programme actif GLOBAL (Topbar) ; un ancien lien `/dashboard?program=…`
+ *  est consommé par `ActiveProgramProvider` (il pose le programme actif, stratégique compris,
+ *  puis disparaît de l'URL) — ce routeur bascule donc naturellement sur la bonne vue.
+ *
+ *  Suspense : `DashboardPagePerformance` lit `useSearchParams()` (filtres `f_*` via
+ *  `useMultiFilterBarState`), ce que Next.js exige d'envelopper en prerender. */
 export default function DashboardPage() {
   const { programType } = useActiveProgram();
   return (

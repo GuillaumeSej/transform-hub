@@ -9,6 +9,8 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { usePerformanceProgramSelector } from "@/lib/hooks/usePerformanceProgramSelector";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useProgramChangeReset } from "@/lib/hooks/useProgramChangeReset";
+import { stripParams } from "@/lib/activeProgramSelection";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
@@ -73,22 +75,21 @@ type LeverRow = Lever & {
 export function LeversPagePerformance() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null, user);
-  // Vue scopée à UN programme Performance sélectionnable (voir le sélecteur plus bas) : le cycle
-  // de vie étant désormais configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un
-  // scope unique pour résoudre le bon référentiel — d'où `usePerformanceProgramSelector`, qui
-  // porte à la fois la liste des programmes Performance et la sélection courante.
+  // Vue scopée au programme actif GLOBAL (sélecteur du Topbar, décision PO audit fix #1) : le cycle
+  // de vie étant configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un scope unique
+  // pour résoudre le bon référentiel — `usePerformanceProgramSelector` n'est plus qu'une vue
+  // « Performance » de `useActiveProgram`, sans état local.
   const {
     programs,
     performancePrograms,
     selectedProgramId,
     loaded: programsLoaded,
-  } = usePerformanceProgramSelector(user?.companyId);
-  const lifecycle = useLifecycleLabels(selectedProgramId);
+  } = usePerformanceProgramSelector();
   // Vue consolidée multi-programmes (fondation chantier CTO, voir lib/hooks/useActiveProgram.tsx) :
-  // quand active, la page doit agréger les leviers de TOUS les `consolidatedPrograms` plutôt que de
-  // rester scopée au seul `selectedProgramId` du sélecteur local ci-dessus (qui continue de piloter
-  // le référentiel de cycle de vie affiché — simplification assumée, cf. plus bas).
+  // la page agrège les leviers de TOUS les `consolidatedPrograms`. Le référentiel de cycle de vie
+  // affiché est alors celui du premier programme consolidé (simplification assumée).
   const { isConsolidatedView, consolidatedPrograms } = useActiveProgram();
+  const lifecycle = useLifecycleLabels(selectedProgramId ?? consolidatedPrograms[0]?.id);
   // Lecture seule PAR PROGRAMME (hr / comex_member n'éditent pas les leviers) ; vue consolidée :
   // pas de programme unique, règle historique (tous profils COMEX).
   const readOnly = isReadOnlyUser(
@@ -792,6 +793,15 @@ export function LeversPagePerformance() {
   // abandonnés avait sa propre recherche, vide, et listait donc tous les abandonnés quel que soit
   // le terme saisi au-dessus (ex. « PROC » laissait DIG-002) — export compris.
   const [leverSearch, setLeverSearch] = useState("");
+
+  // Changement de programme actif (Topbar) : les filtres `f_*` (chantiers, responsables, niveaux
+  // d'arborescence… du programme précédent) et la recherche n'ont plus de sens — remis à zéro.
+  // Jamais au premier rendu : un lien profond (`/levers?f_ws=…` depuis le dashboard) est conservé.
+  useProgramChangeReset(() => {
+    setLeverSearch("");
+    const qs = stripParams(searchParams.toString(), (key) => key.startsWith("f_"));
+    router.replace(`/levers${qs ? `?${qs}` : ""}`);
+  });
   const searchedCancelledRows = cancelledRows.filter((r) => matchesLeverSearch(r, leverSearch));
   const showCancelledTable = searchedCancelledRows.length > 0;
   // Export = exactement ce qui est affiché : en vue Tableau, les lignes des deux tableaux (actifs

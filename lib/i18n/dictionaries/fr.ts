@@ -2539,6 +2539,10 @@ const fr: Record<string, string> = {
   // ─── Type de programme (sélecteur de programme du Topbar) ─────────────────
   "programType.performance": "Performance",
   "programType.strategic": "Stratégique",
+  "programScope.typeMismatch":
+    "Cette page concerne les programmes de type « {type} », mais le programme actif (sélecteur en haut de page) est d'un autre type.",
+  "programScope.switchTo": "Basculer sur {program}",
+  "programScope.noProgramOfType": "Aucun programme de ce type ne vous est accessible.",
 
   // ─── Dashboard stratégique ────────────────────────────────────────────────
   // Le chrome du mode édition (Personnaliser / Terminer / Ajouter un widget / Réinitialiser)

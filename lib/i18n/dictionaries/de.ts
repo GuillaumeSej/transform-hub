@@ -2444,6 +2444,10 @@ const de: Record<string, string> = {
   // ─── Programmtyp (Programmauswahl in der Topbar) ──────────────────────────
   "programType.performance": "Performance",
   "programType.strategic": "Strategie",
+  "programScope.typeMismatch":
+    "Diese Seite betrifft Programme vom Typ „{type}“, aber das aktive Programm (Auswahl oben auf der Seite) ist von einem anderen Typ.",
+  "programScope.switchTo": "Zu {program} wechseln",
+  "programScope.noProgramOfType": "Ihnen ist kein Programm dieses Typs zugänglich.",
 
   // ─── Strategie-Dashboard ──────────────────────────────────────────────────
   // Die Bedienelemente des Bearbeitungsmodus (Anpassen / Fertig / Widget hinzufügen /

@@ -4,6 +4,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { subscribePrograms } from "@/lib/firestore/admin";
 import { resolveProgramType } from "@/lib/axisLogic";
 import { getConsolidatedPerformancePrograms } from "@/lib/consolidatedProgramAccess";
+import {
+  CONSOLIDATED_PROGRAM_ID,
+  readProgramParam,
+  resolveActiveSelection,
+  selectablePrograms,
+  stripProgramParam,
+} from "@/lib/activeProgramSelection";
+import { getAuthorizedPrograms } from "@/lib/roleProfiles";
 import { useRole } from "@/lib/hooks/useRole";
 import type { Program, ProgramType } from "@/types";
 import { setFormatCurrency } from "@/lib/format";
@@ -11,15 +19,12 @@ import { setFormatCurrency } from "@/lib/format";
 /**
  * Valeur sentinelle de `activeProgramId`/`setActiveProgramId` qui active le mode "vue consolidée"
  * (fondation chantier CTO multi-programmes) : au lieu d'un programme unique, les pages consommatrices
- * (dashboard exécutif, page leviers, dashboard RH) doivent alors agréger TOUS les programmes de
- * `consolidatedPrograms` ci-dessous plutôt que de lire `activeProgram`. Choisie plutôt qu'un
- * `id: null` (déjà utilisé pour "aucune sélection restaurée") ou un objet `Program` factice, pour
- * rester une simple `string` — persistable telle quelle dans le MÊME localStorage que les vrais ids
- * de programme (voir `storageKey` plus bas), sans schéma de stockage distinct à gérer. Le préfixe
- * `__`/suffixe `__` évite toute collision avec un id Firestore réel (générés `p${Date.now()}` par
- * `ProgramsPanel.tsx`, jamais sous cette forme).
+ * (dashboard exécutif, page leviers, dashboard RH, finance) agrègent alors TOUS les programmes de
+ * `consolidatedPrograms` ci-dessous plutôt que de lire `activeProgram`. Simple `string` persistable
+ * dans le MÊME localStorage que les vrais ids (voir `storageKey` plus bas). Définie dans le module
+ * pur `lib/activeProgramSelection.ts` (testé), ré-exportée ici pour les appelants historiques.
  */
-export const CONSOLIDATED_PROGRAM_ID = "__consolidated__";
+export { CONSOLIDATED_PROGRAM_ID };
 
 /**
  * Contexte global "programme actif" — le programme sélectionné détermine désormais la NATURE des
@@ -27,10 +32,19 @@ export const CONSOLIDATED_PROGRAM_ID = "__consolidated__";
  * du dashboard exécutif. Il doit donc vivre au-dessus des pages (monté dans
  * `app/(app)/layout.tsx`), et non dans l'état local du dashboard comme c'était le cas avant.
  *
- * Sélection : le programme actif est mémorisé par `activeProgramId` ; en l'absence de sélection
- * explicite (premier chargement, ou programme devenu invalide après suppression), on retombe sur
- * le PREMIER programme de l'entreprise de l'utilisateur — même repli que le sélecteur historique
- * du dashboard, pour que rien ne change pour un utilisateur mono-programme.
+ * SOURCE UNIQUE (décision PO, audit fix #1) : ce contexte est LE programme actif de toute l'app,
+ * piloté par le sélecteur du Topbar (`ProgramSwitcher`). Aucune page ne choisit plus son programme
+ * elle-même (plus de sélecteur local indépendant, plus de `?program=` lu par une page).
+ *
+ * Sélection : le programme actif est mémorisé par `activeProgramId` ; seuls les programmes
+ * AUTORISÉS (`getAuthorizedPrograms`) sont sélectionnables, la vue consolidée seulement si
+ * l'utilisateur y a droit (`getConsolidatedPerformancePrograms`) — voir `resolveActiveSelection`
+ * (lib/activeProgramSelection.ts). Sans sélection valide (premier chargement, programme supprimé,
+ * droit retiré), on retombe sur le PREMIER programme autorisé.
+ *
+ * Lien entrant `?program=<id>` (ex. anciens liens `/dashboard?program=…`) : lu au chargement, il
+ * POSE le programme actif (s'il est sélectionnable) puis est retiré de l'URL — le Topbar reste
+ * ensuite seul maître de la sélection.
  *
  * `programType` est le champ réellement consommé par la nav (`lib/nav-config.ts`) et les routeurs
  * de page : il vaut "performance" tant qu'aucun programme n'est résolu, de sorte qu'un incident de
@@ -39,6 +53,9 @@ export const CONSOLIDATED_PROGRAM_ID = "__consolidated__";
 type ActiveProgramContextValue = {
   /** Tous les programmes visibles par l'utilisateur courant (son entreprise, ou tous si admin). */
   programs: Program[];
+  /** Programmes que l'utilisateur peut SÉLECTIONNER un à un (`getAuthorizedPrograms`, repli sur
+   *  `programs` si aucun ne l'est explicitement) — seule liste à proposer dans un sélecteur. */
+  authorizedPrograms: Program[];
   /** Programme actif résolu, ou null tant qu'aucun programme n'est disponible OU que la vue
    *  consolidée (`isConsolidatedView`) est active — dans ce dernier cas, lire `consolidatedPrograms`
    *  à la place. */
@@ -81,6 +98,11 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [firestoreLoading, setFirestoreLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // `?program=` d'un lien entrant, prioritaire sur le choix mémorisé tant qu'il n'a pas été
+  // validé/consommé (voir l'effet plus bas) — lu dans le MÊME effet que le localStorage, avant que
+  // `restored` ne passe à true, pour que le garde-fou de routes d'AppShell ne décide jamais sur
+  // l'ancien programme.
+  const [urlProgramId, setUrlProgramId] = useState<string | null>(null);
   // Distinct de `firestoreLoading` : reste `false` tant que la lecture localStorage (ci-dessous)
   // n'a pas eu lieu pour l'entreprise courante. Sans cette distinction, `programType` retombe
   // brièvement sur "performance" (aucune sélection restaurée pour l'instant) pendant la fenêtre
@@ -106,6 +128,22 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
     if (!companyId) return;
     setRestored(false);
     try {
+      const fromUrl = readProgramParam(window.location.search);
+      if (fromUrl) {
+        setUrlProgramId(fromUrl);
+        // Retire le paramètre de l'URL (Next 14.2 synchronise `history.replaceState` avec son
+        // routeur) : un rechargement ultérieur ne doit pas réimposer ce programme par-dessus un
+        // choix fait entre-temps dans le Topbar.
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${stripProgramParam(window.location.search)}${window.location.hash}`
+        );
+      }
+    } catch {
+      // URL illisible — sans effet, on s'en tient au choix mémorisé.
+    }
+    try {
       setSelectedId(window.localStorage.getItem(storageKey(companyId)));
     } catch {
       // Stockage indisponible (navigation privée, quota) — comportement de repli identique à
@@ -127,34 +165,47 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
 
   const loading = firestoreLoading || !restored;
 
-  // Vue consolidée sélectionnée ? Même garde-fou `companyId` qu'`activeProgram` ci-dessous : un
-  // admin global n'a pas de contexte "entreprise" cohérent pour agréger quoi que ce soit.
-  const isConsolidatedView = !!companyId && selectedId === CONSOLIDATED_PROGRAM_ID;
+  // Programmes sélectionnables et périmètre consolidé de l'utilisateur — la résolution ci-dessous
+  // n'accepte QUE ceux-là (un id mémorisé ou reçu par l'URL hors périmètre est ignoré).
+  const authorizedPrograms = useMemo(() => getAuthorizedPrograms(user, programs), [user, programs]);
+  const selectable = useMemo(
+    () => selectablePrograms(programs, authorizedPrograms),
+    [programs, authorizedPrograms]
+  );
+  const consolidatablePrograms = useMemo(
+    () => getConsolidatedPerformancePrograms(user, programs),
+    [user, programs]
+  );
 
-  const consolidatedPrograms = useMemo(() => {
-    if (!isConsolidatedView) return [];
-    return getConsolidatedPerformancePrograms(user, programs);
-  }, [isConsolidatedView, user, programs]);
+  // Un admin global (companyId null) n'a pas de contexte "entreprise" : il ne faut jamais lui
+  // attribuer arbitrairement le premier programme d'une entreprise au hasard (ni une vue
+  // consolidée). Les pages qui dépendent de `activeProgram` savent déjà dégrader proprement en son
+  // absence (cas déjà rencontré pour un utilisateur normal sans aucun programme).
+  const selection = useMemo(
+    () =>
+      companyId
+        ? resolveActiveSelection({
+            candidates: [urlProgramId, selectedId],
+            programs,
+            authorizedPrograms,
+            canConsolidate: consolidatablePrograms.length > 0,
+          })
+        : ({ kind: "none" } as const),
+    [companyId, urlProgramId, selectedId, programs, authorizedPrograms, consolidatablePrograms]
+  );
 
-  const activeProgram = useMemo(() => {
-    // Un admin global (companyId null) n'a pas de contexte "entreprise" : il ne faut jamais lui
-    // attribuer arbitrairement le premier programme d'une entreprise au hasard (voir le
-    // sélecteur de programme, retiré du Topbar pour cette même raison). Les pages qui dépendent
-    // de `activeProgram` savent déjà dégrader proprement en son absence (cas déjà rencontré pour
-    // un utilisateur normal sans aucun programme).
-    if (!companyId) return null;
-    if (programs.length === 0) return null;
-    // Vue consolidée : pas de programme unique actif — les pages consommatrices doivent lire
-    // `consolidatedPrograms` à la place. Un simple `programs.find` échouerait silencieusement ici
-    // (aucun programme ne porte l'id sentinelle) et retomberait sur `programs[0]` par le `??`
-    // ci-dessous, ce qui masquerait la vue consolidée derrière un programme arbitraire — d'où ce
-    // retour explicite.
-    if (selectedId === CONSOLIDATED_PROGRAM_ID) return null;
-    return programs.find((p) => p.id === selectedId) ?? programs[0];
-  }, [companyId, programs, selectedId]);
+  const isConsolidatedView = selection.kind === "consolidated";
+  const consolidatedPrograms = useMemo(
+    () => (isConsolidatedView ? consolidatablePrograms : []),
+    [isConsolidatedView, consolidatablePrograms]
+  );
+  // Vue consolidée : pas de programme unique actif — les pages lisent `consolidatedPrograms`.
+  const activeProgram = selection.kind === "program" ? selection.program : null;
 
   const setActiveProgramId = useCallback(
     (id: string | null) => {
+      // Un choix explicite l'emporte définitivement sur un `?program=` entrant.
+      setUrlProgramId(null);
       setSelectedId(id);
       if (!companyId) return;
       try {
@@ -168,9 +219,29 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
     [companyId]
   );
 
+  // Consommation du `?program=` entrant une fois les programmes chargés : sélectionnable → devient
+  // le choix mémorisé (comme un clic dans le Topbar) ; sinon ignoré (le choix mémorisé demeure).
+  useEffect(() => {
+    if (!urlProgramId || firestoreLoading || !companyId) return;
+    const valid =
+      urlProgramId === CONSOLIDATED_PROGRAM_ID
+        ? consolidatablePrograms.length > 0
+        : selectable.some((p) => p.id === urlProgramId);
+    if (valid) setActiveProgramId(urlProgramId);
+    else setUrlProgramId(null);
+  }, [
+    urlProgramId,
+    firestoreLoading,
+    companyId,
+    selectable,
+    consolidatablePrograms,
+    setActiveProgramId,
+  ]);
+
   const value = useMemo<ActiveProgramContextValue>(
     () => ({
       programs,
+      authorizedPrograms: selectable,
       activeProgram,
       activeProgramId: isConsolidatedView ? CONSOLIDATED_PROGRAM_ID : (activeProgram?.id ?? null),
       programType: resolveProgramType(activeProgram),
@@ -179,7 +250,15 @@ export function ActiveProgramProvider({ children }: { children: React.ReactNode 
       isConsolidatedView,
       consolidatedPrograms,
     }),
-    [programs, activeProgram, setActiveProgramId, loading, isConsolidatedView, consolidatedPrograms]
+    [
+      programs,
+      selectable,
+      activeProgram,
+      setActiveProgramId,
+      loading,
+      isConsolidatedView,
+      consolidatedPrograms,
+    ]
   );
 
   // Devise par défaut des helpers de formatage (lib/format.ts, `engine.fmtCurr`) — posée pendant

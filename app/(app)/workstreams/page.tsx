@@ -6,6 +6,8 @@ import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { usePerformanceProgramSelector } from "@/lib/hooks/usePerformanceProgramSelector";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { ProgramTypeMismatchNotice } from "@/components/shared/ProgramTypeMismatchNotice";
 import * as engine from "@/lib/engine";
 import { Card, CardBody } from "@/components/shared/Card";
 import { StageBadge } from "@/components/shared/StageBadge";
@@ -45,17 +47,19 @@ export default function WorkstreamsPage() {
   const { t } = useTranslation();
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null, user);
-  // Vue scopée à UN programme Performance sélectionnable (voir le sélecteur plus bas) : le cycle
-  // de vie étant désormais configuré par programme (lib/hooks/useLifecycleLabels.ts), il faut un
-  // scope unique pour résoudre le bon référentiel — d'où `usePerformanceProgramSelector`, qui
-  // porte à la fois la liste des programmes Performance et la sélection courante.
+  // Périmètre = programme actif GLOBAL (sélecteur du Topbar, décision PO audit fix #1) — plus de
+  // sélecteur local. `usePerformanceProgramSelector` n'est qu'une vue « Performance » de
+  // `useActiveProgram` ; la vue consolidée agrège les programmes du périmètre consolidé (même règle
+  // que Finance, `filterProgramScopedLevers`).
   const {
     performancePrograms,
     selectedProgramId,
-    setSelectedProgramId,
+    activeIsStrategic,
     loaded: programsLoaded,
-  } = usePerformanceProgramSelector(user?.companyId);
-  const lifecycle = useLifecycleLabels(selectedProgramId);
+  } = usePerformanceProgramSelector();
+  const { isConsolidatedView, consolidatedPrograms } = useActiveProgram();
+  // Référentiel de cycle de vie : programme actif, ou premier programme consolidé.
+  const lifecycle = useLifecycleLabels(selectedProgramId ?? consolidatedPrograms[0]?.id);
   const router = useRouter();
   const [company, setCompany] = useState<Company | undefined>();
   useEffect(
@@ -73,7 +77,11 @@ export default function WorkstreamsPage() {
   // supprimé) y étaient ajoutés, ce qui la faisait diverger du dashboard.
   const visibleLevers = filterProgramScopedLevers(
     filterAggregateVisibleLevers(data.levers, user, company),
-    { programId: selectedProgramId }
+    {
+      programId: selectedProgramId,
+      isConsolidatedView,
+      consolidatedProgramIds: consolidatedPrograms.map((p) => p.id),
+    }
   ).filter((lever) =>
     canUserViewLever(
       user,
@@ -156,6 +164,17 @@ export default function WorkstreamsPage() {
     },
   ];
 
+  // Programme actif = Plan Stratégique (page réservée au Plan Performance) : message + bascule
+  // plutôt qu'un choix silencieux d'un autre programme.
+  if (activeIsStrategic) {
+    return (
+      <ProgramTypeMismatchNotice
+        expected="performance"
+        title={t("nav.workstreamDashboard", "Suivi des chantiers")}
+      />
+    );
+  }
+
   // Entreprise sans aucun Plan Performance : pas de programme sur lequel scoper la table, donc
   // rien à afficher (même repli que le dashboard exécutif, voir DashboardPagePerformance).
   if (programsLoaded && performancePrograms.length === 0) {
@@ -189,23 +208,12 @@ export default function WorkstreamsPage() {
             "workstreams.subtitle",
             "Vue de tous les leviers du programme, tous chantiers confondus."
           )}
-          {performancePrograms.length > 1 ? (
-            <select
-              value={selectedProgramId ?? ""}
-              onChange={(e) => setSelectedProgramId(e.target.value)}
-              className="ml-1 rounded-sm border border-border bg-white px-2 py-0.5 text-[12px] font-semibold text-primary focus:border-bp-coral focus:outline-none"
-            >
-              {performancePrograms.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            performancePrograms[0] && (
-              <strong className="text-primary">{performancePrograms[0].name}</strong>
-            )
-          )}
+          {/* Programme = celui du Topbar (lecture seule ici, pas de sélecteur concurrent). */}
+          <strong className="text-primary">
+            {isConsolidatedView
+              ? t("topbar.consolidatedViewShort", "Vue consolidée")
+              : (performancePrograms.find((p) => p.id === selectedProgramId)?.name ?? "")}
+          </strong>
         </div>
       </div>
 

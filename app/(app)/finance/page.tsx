@@ -14,6 +14,9 @@ import { FinanceHierarchyTable } from "@/components/finance/FinanceHierarchyTabl
 import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useProgramChangeReset } from "@/lib/hooks/useProgramChangeReset";
+import { resolveProgramType } from "@/lib/axisLogic";
+import { ProgramTypeMismatchNotice } from "@/components/shared/ProgramTypeMismatchNotice";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import * as engine from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -277,6 +280,18 @@ export default function FinancePage() {
   const [pnlQuarter, setPnlQuarter] = useState("");
   const [pnlMonth, setPnlMonth] = useState("");
 
+  // Changement de programme actif (Topbar) : filtres de page, cascade géo du widget P&L et période
+  // (réalignée sur l'exercice du NOUVEAU programme) remis à zéro.
+  useProgramChangeReset(() => {
+    setFinanceFilters({});
+    setPnlFilterGeo([]);
+    setPnlFilterCountry([]);
+    setPnlFilterEntity([]);
+    setPnlYear(fyYear);
+    setPnlQuarter("");
+    setPnlMonth("");
+  });
+
   const pnlPeriodFilter: engine.PnlPeriodFilter | undefined = useMemo(() => {
     if (!pnlYear) return undefined;
     return {
@@ -312,6 +327,17 @@ export default function FinancePage() {
   // `data.pnlAccounts` (référentiel de comptes), donc n'apparaît jamais via la boucle qui itère
   // sur ce référentiel ci-dessous : on l'affiche séparément, uniquement si plan/réalisé != 0 pour
   // ne pas polluer l'affichage d'une entreprise où tout est bien attribué.
+
+  // Programme actif = Plan Stratégique : module réservé au Plan Performance — message + bascule.
+  if (activeProgram && resolveProgramType(activeProgram) === "strategic") {
+    return (
+      <ProgramTypeMismatchNotice
+        expected="performance"
+        title={t("nav.financeModule", "Finance Module")}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">

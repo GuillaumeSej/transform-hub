@@ -38,7 +38,9 @@ import {
 } from "@/components/workspace/WorkspaceParts";
 import { formatDate } from "@/lib/format";
 
-type Navigate = (href: string) => void;
+/** Suit un lien du portail ; `programId` (programme de l'élément) est activé comme programme actif
+ *  global avant la navigation quand il diffère (voir app/(app)/me/page.tsx). */
+type Navigate = (href: string, programId?: string) => void;
 
 const fill = (template: string, n: number) => template.replace("{n}", String(n));
 
@@ -279,7 +281,7 @@ export function TodoSection({
                 const due = dueLabel(item, t);
                 return (
                   <li key={item.id}>
-                    <RowButton onClick={() => navigate(item.href)}>
+                    <RowButton onClick={() => navigate(item.href, item.programId)}>
                       <SourceIcon source={item.source} severity={item.severity} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[13px] font-semibold text-primary">
@@ -354,7 +356,7 @@ export function BlockedSection({
         <ul className="divide-y divide-border">
           {items.map((item) => (
             <li key={item.id}>
-              <RowButton onClick={() => navigate(item.href)}>
+              <RowButton onClick={() => navigate(item.href, item.programId)}>
                 <SourceIcon source={item.source} severity={item.severity} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold text-primary">
@@ -439,7 +441,7 @@ export function UpcomingSection({
                       />
                       <button
                         type="button"
-                        onClick={() => navigate(item.href)}
+                        onClick={() => navigate(item.href, item.programId)}
                         className="group flex w-full cursor-pointer items-start gap-2.5 py-1.5 pl-3 pr-1 text-left transition hover:bg-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-bp-coral"
                       >
                         <span className="w-12 shrink-0 pt-px text-[11px] font-semibold text-secondary">
@@ -500,7 +502,10 @@ export function PerimeterSection({
         <ul className="divide-y divide-border">
           {entries.map((entry) => (
             <li key={`${entry.kind}:${entry.id}`}>
-              <RowButton onClick={() => navigate(entry.href)} className="items-start">
+              <RowButton
+                onClick={() => navigate(entry.href, entry.programId)}
+                className="items-start"
+              >
                 <span className="pt-1">
                   <HealthDot health={entry.health} t={t} />
                 </span>

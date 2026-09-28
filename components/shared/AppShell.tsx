@@ -14,7 +14,12 @@ import {
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
 import { cleanupLegacyStorage } from "@/lib/legacyStorageCleanup";
-import { PAGE_ROUTES, resolveLandingRoute, resolveUserNav } from "@/lib/nav-config";
+import {
+  PAGE_ROUTES,
+  PROGRAM_TYPE_AWARE_ROUTES,
+  resolveLandingRoute,
+  resolveUserNav,
+} from "@/lib/nav-config";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
@@ -293,6 +298,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           (item) => !item.programTypes || item.programTypes.includes(programType)
         );
     const allowedRoutes = new Set(navItems.map((item) => PAGE_ROUTES[item.id]));
+    // Page Performance ouverte avec un Plan Stratégique actif : elle affiche son propre message de
+    // bascule (voir PROGRAM_TYPE_AWARE_ROUTES) plutôt qu'une redirection silencieuse — seulement si
+    // l'utilisateur y a droit hors filtre de type de programme.
+    if (
+      PROGRAM_TYPE_AWARE_ROUTES.has(pathname) &&
+      unfilteredNavItems.some((item) => PAGE_ROUTES[item.id] === pathname)
+    ) {
+      allowedRoutes.add(pathname);
+    }
     const isLeverDetail = pathname.startsWith("/levers/");
     // Hub de détail entreprise (/admin/companies/detail?id=...) : jamais dans la nav (on y accède
     // en cliquant "Gérer" depuis la liste, comme pour /levers/detail ci-dessus) et réservé au

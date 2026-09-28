@@ -2,7 +2,6 @@
 
 import { useDismissable } from "@/lib/hooks/useDismissable";
 import { useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, FolderKanban, LayoutGrid } from "lucide-react";
 import { CONSOLIDATED_PROGRAM_ID, useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
@@ -10,14 +9,17 @@ import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { resolveProgramType } from "@/lib/axisLogic";
 import { getConsolidatedPerformancePrograms } from "@/lib/consolidatedProgramAccess";
-import { getAuthorizedPrograms, hasRole } from "@/lib/roleProfiles";
+import { hasRole } from "@/lib/roleProfiles";
 
 /**
  * Sélecteur de PROGRAMME ACTIF dans le Topbar — même pattern de dropdown que le sélecteur de
  * langue voisin (bouton + panneau, fermeture au `onBlur` du conteneur).
  *
+ * SOURCE UNIQUE du programme actif de toute l'app (décision PO, audit fix #1) : aucune page n'a
+ * plus son propre sélecteur indépendant.
+ *
  * Round multi-profils : ne liste QUE les programmes que l'utilisateur est autorisé à voir
- * (`getAuthorizedPrograms`, lib/roleProfiles.ts) — un admin (global ou entreprise) voit tous les
+ * (`authorizedPrograms` du contexte = `getAuthorizedPrograms`, lib/roleProfiles.ts) — un admin (global ou entreprise) voit tous les
  * programmes de l'entreprise, un utilisateur "normal" voit ceux couverts par ses profils (ex. un
  * CTO avec un profil Plan Performance ET un profil Plan Stratégique peut basculer entre les deux ;
  * un utilisateur mono-profil ne voit que les programmes de son type). Ne s'affiche jamais pour un
@@ -40,18 +42,21 @@ import { getAuthorizedPrograms, hasRole } from "@/lib/roleProfiles";
  * `isConsolidatedView`.
  */
 export function ProgramSwitcher() {
-  const { programs, activeProgram, activeProgramId, isConsolidatedView, setActiveProgramId } =
-    useActiveProgram();
+  const {
+    programs,
+    authorizedPrograms,
+    activeProgram,
+    activeProgramId,
+    isConsolidatedView,
+    setActiveProgramId,
+  } = useActiveProgram();
   const { t } = useTranslation();
   const { user } = useRole();
   const { confirmDiscard } = useUnsavedChanges();
-  const router = useRouter();
-  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   useDismissable(open, () => setOpen(false), rootRef);
 
-  const authorizedPrograms = getAuthorizedPrograms(user, programs);
   const consolidatedPrograms = getConsolidatedPerformancePrograms(user, programs);
   const canConsolidate = consolidatedPrograms.length >= 1;
 
@@ -75,20 +80,9 @@ export function ProgramSwitcher() {
 
     setActiveProgramId(id);
     setOpen(false);
-    // Le dashboard exécutif porte SON scope dans l'URL (`?program=`, pour rester partageable) et
-    // se réaligne sur ce paramètre. Changer de programme depuis le Topbar en étant sur cette page
-    // doit donc aussi mettre le paramètre à jour, sinon la page continuerait d'afficher l'ancien
-    // programme. `window.location.search` plutôt que `useSearchParams()` : ce hook forcerait une
-    // frontière Suspense sur TOUTES les pages du groupe (app) au build statique, alors qu'ici la
-    // lecture n'a lieu qu'au clic. Pas de mise à jour `?program=` pour la sélection "vue
-    // consolidée" : le dashboard exécutif lit `isConsolidatedView`/`consolidatedPrograms` du
-    // contexte directement, pas ce paramètre (un lot ultérieur de la page dashboard décidera si
-    // elle veut, elle aussi, un paramètre d'URL dédié partageable).
-    if (pathname === "/dashboard" && id !== CONSOLIDATED_PROGRAM_ID) {
-      const params = new URLSearchParams(window.location.search);
-      params.set("program", id);
-      router.replace(`/dashboard?${params.toString()}`);
-    }
+    // Programme actif UNIQUE (décision PO, audit fix #1) : toutes les pages lisent ce contexte et
+    // se réalignent d'elles-mêmes (filtres dérivés du programme remis à zéro, voir
+    // `useProgramChangeReset`) — plus aucun paramètre d'URL à resynchroniser ici.
   };
 
   return (

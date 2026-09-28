@@ -392,7 +392,9 @@ describe("buildMyWorkspace", () => {
       ["program:p1", "program", "red"],
       ["program:p2", "program", "green"], // chantier chargé, sans signal
     ]);
-    expect(ws.perimeter[0].href).toBe("/dashboard?program=p1");
+    // Plus de `?program=` : le lien porte le programme, activé par la page avant la navigation.
+    expect(ws.perimeter[0]).toMatchObject({ href: "/dashboard", programId: "p1" });
+    expect(ws.perimeter[1]).toMatchObject({ href: "/dashboard", programId: "p2" });
   });
 
   it("dédoublonne un même objet remonté plusieurs fois (garde le plus grave)", () => {

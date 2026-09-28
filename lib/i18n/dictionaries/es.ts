@@ -2438,6 +2438,10 @@ const es: Record<string, string> = {
   // ─── Tipo de programa (selector de programa de la Topbar) ─────────────────
   "programType.performance": "Rendimiento",
   "programType.strategic": "Estratégico",
+  "programScope.typeMismatch":
+    "Esta página se refiere a los programas de tipo «{type}», pero el programa activo (selector en la parte superior de la página) es de otro tipo.",
+  "programScope.switchTo": "Cambiar a {program}",
+  "programScope.noProgramOfType": "No tiene acceso a ningún programa de este tipo.",
 
   // ─── Cuadro de mando estratégico ──────────────────────────────────────────
   // Los controles del modo edición (Personalizar / Terminar / Añadir widget / Restablecer)
