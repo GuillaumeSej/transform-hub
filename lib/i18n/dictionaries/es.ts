@@ -1682,6 +1682,8 @@ const es: Record<string, string> = {
   "strategicChantierDetail.consumedBudget": "Presupuesto consumido",
   "strategicChantierDetail.envelope": "Dotación del proyecto",
   "strategicChantierDetail.budgetFromProjets": "Suma de los presupuestos de sus iniciativas",
+  "strategicChantierDetail.budgetFromChantier":
+    "Presupuesto registrado en el frente (ningún proyecto presupuestado)",
   "strategicChantierDetail.consumedFte": "ETC consumidos",
   "strategicChantierDetail.confidentialityLevel": "Nivel de confidencialidad",
   "strategicChantierDetail.confidentialityLevelNone": "Ninguno (visible para todos)",

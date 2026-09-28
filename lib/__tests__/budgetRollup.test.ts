@@ -60,14 +60,18 @@ describe("rollupBudgets", () => {
 });
 
 describe("rollupBudgets — chantier sans projet (audit STR-09)", () => {
-  it("lit la saisie du chantier s'il n'a aucun projet, l'ignore sinon", () => {
+  it("lit la saisie du chantier si aucun projet ne porte de budget, l'ignore sinon", () => {
     const r = rollupBudgets(
       [{ id: "A1" }],
       [
         { id: "C1", axisIds: ["A1"], allocatedBudget: 999, consumedBudget: 999 },
         { id: "RPA", axisIds: ["A1"], allocatedBudget: 1_100_000, consumedBudget: 385_000 },
       ],
-      [{ id: "P1", chantierId: "C1", budget: 100, consumedBudget: 40 }]
+      [
+        { id: "P1", chantierId: "C1", budget: 100, consumedBudget: 40 },
+        // Projet SANS budget : le chantier garde sa saisie propre (cas réel de CH-rpa).
+        { id: "P2", chantierId: "RPA" },
+      ]
     );
     expect(r.chantiers.get("C1")).toEqual({ allocated: 100, consumed: 40 });
     expect(r.chantiers.get("RPA")).toEqual({ allocated: 1_100_000, consumed: 385_000 });

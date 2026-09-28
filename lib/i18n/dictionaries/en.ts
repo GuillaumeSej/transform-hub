@@ -1668,6 +1668,8 @@ const en: Record<string, string> = {
   "strategicChantierDetail.consumedBudget": "Consumed budget",
   "strategicChantierDetail.envelope": "Work package envelope",
   "strategicChantierDetail.budgetFromProjets": "Sum of its projects' budgets",
+  "strategicChantierDetail.budgetFromChantier":
+    "Budget entered on the workstream (no budgeted project)",
   "strategicChantierDetail.consumedFte": "Consumed FTEs",
   "strategicChantierDetail.confidentialityLevel": "Confidentiality level",
   "strategicChantierDetail.confidentialityLevelNone": "None (visible to everyone)",

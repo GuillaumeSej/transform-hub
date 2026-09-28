@@ -1685,6 +1685,8 @@ const de: Record<string, string> = {
   "strategicChantierDetail.consumedBudget": "Verbrauchtes Budget",
   "strategicChantierDetail.envelope": "Rahmen des Arbeitspakets",
   "strategicChantierDetail.budgetFromProjets": "Summe der Budgets seiner Projekte",
+  "strategicChantierDetail.budgetFromChantier":
+    "Auf dem Arbeitspaket erfasstes Budget (kein budgetiertes Projekt)",
   "strategicChantierDetail.consumedFte": "Verbrauchte VZÄ",
   "strategicChantierDetail.confidentialityLevel": "Vertraulichkeitsstufe",
   "strategicChantierDetail.confidentialityLevelNone": "Keine (für alle sichtbar)",

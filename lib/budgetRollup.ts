@@ -13,9 +13,10 @@ import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
  *  - PROGRAMME : somme de TOUS les projets distincts (= somme des axes + `unattributed`).
  *
  * Saisies manuelles au niveau chantier (`Chantier.allocatedBudget`, `Chantier.consumedBudget`) :
- * lues UNIQUEMENT pour un chantier qui n'a AUCUN projet (décision 2026-09-28, audit STR-09 — CH-rpa
- * affichait 0 € au lieu de ses 1,1 M€). Dès qu'un chantier a un projet, seule la somme de ses
- * projets compte, et `allocatedBudget` n'est plus qu'une « enveloppe » indicative.
+ * lues UNIQUEMENT pour un chantier dont AUCUN projet ne porte de budget (pas de projet, ou projets
+ * sans budget ni consommé — décision 2026-09-28, audit STR-09 : CH-rpa affichait 0 € au lieu de
+ * ses 1,1 M€). Dès qu'un projet du chantier porte un montant, seule la somme des projets compte, et
+ * `allocatedBudget` n'est plus qu'une « enveloppe » indicative.
  *
  * Chantiers multi-axes (`Chantier.axisIds`) — règle d'attribution : le budget COMPLET d'un chantier
  * est attribué à UN SEUL axe, son axe primaire, c'est-à-dire le PREMIER id de `axisIds` présent
@@ -101,8 +102,12 @@ export function rollupBudgets(
     }
   }
 
-  // Chantier SANS projet : sa saisie propre (voir doc ci-dessus).
-  const withProjects = new Set(actions.map((a) => a.chantierId));
+  // Chantier dont aucun projet ne porte de budget : sa saisie propre (voir doc ci-dessus).
+  const withProjects = new Set(
+    actions
+      .filter((a) => (a.budget ?? 0) > 0 || (a.consumedBudget ?? 0) > 0)
+      .map((a) => a.chantierId)
+  );
   for (const chantier of chantiers) {
     if (withProjects.has(chantier.id)) continue;
     const figures = {

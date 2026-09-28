@@ -2982,10 +2982,21 @@ export function ChantierDetailPanel({
                     </span>
                   </div>
                   <p className="mt-0.5 text-[11px] text-tertiary">
-                    {t(
-                      "strategicChantierDetail.budgetFromProjets",
-                      "Somme des budgets de ses projets"
-                    )}
+                    {/* Aucun projet budgété : c'est la saisie du chantier qui s'affiche
+                        (rollupBudgets, audit STR-09) — le libellé le dit. */}
+                    {chantierActions.some(
+                      (a) =>
+                        a.chantierId === chantier.id &&
+                        ((a.budget ?? 0) > 0 || (a.consumedBudget ?? 0) > 0)
+                    )
+                      ? t(
+                          "strategicChantierDetail.budgetFromProjets",
+                          "Somme des budgets de ses projets"
+                        )
+                      : t(
+                          "strategicChantierDetail.budgetFromChantier",
+                          "Budget saisi sur le chantier (aucun projet budgété)"
+                        )}
                   </p>
                   <BudgetVsActualBar
                     className="mt-2"
