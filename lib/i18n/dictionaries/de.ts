@@ -529,6 +529,10 @@ const de: Record<string, string> = {
   "leverDetail.impactedLeversHint":
     "Diese Hebel hängen vom verzögerten Element ab. Ihre Termine werden nie automatisch geändert: wenden Sie sich an deren Verantwortlichen.",
   "leverDetail.progressLabel": "Fortschritt",
+  "leverDetail.progressLabelLever": "Fortschritt des Hebels",
+  "leverDetail.progressLabelLeverSub": "Maßnahmenplan",
+  "leverDetail.progressBarHint":
+    "Fortschritt des Maßnahmenplans des Hebels (abgeschlossene Maßnahmen)",
   "leverDetail.financialRealization": "Finanzielle Realisierung",
   "leverDetail.financialRealizationSub": "netto realisiert / netto aktualisiert",
   "leverDetail.financialRealizationFormula":

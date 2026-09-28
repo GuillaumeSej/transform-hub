@@ -934,15 +934,63 @@ export function LeverDetailClientPerformance() {
           <CardBody>
             {/* ── 1. Bandeau exécutif ─────────────────────────────────────── */}
             <div className="mb-6 flex flex-wrap items-center gap-6 rounded-lg border border-border bg-neutral-50 p-4">
-              {/* « Avancement » = plan d'action (même valeur que la liste, le Kanban et
-                  l'arborescence — engine.leverProgressPct) ; la réalisation financière est une
-                  autre notion, affichée sous son propre libellé à côté du réactualisé. */}
-              <RadialProgress
-                pct={engine.leverProgressPct(lever)}
-                size={140}
-                strokeWidth={12}
-                label={t("leverDetail.progressLabel", "Avancement")}
-              />
+              {/* Deux notions distinctes, calculs INCHANGÉS — seule leur présentation change :
+                  - « Avancement du levier » = plan d'action (engine.leverProgressPct, même valeur
+                    que la liste, le Kanban et l'arborescence) → barre pleine largeur en tête ;
+                  - « Réalisation financière » = réalisé net ÷ réactualisé net
+                    (engine.displayedProgressPct) → cercle, à côté des montants qu'il compare. */}
+              <div
+                className="w-full"
+                title={t(
+                  "leverDetail.progressBarHint",
+                  "Avancement du plan d'action du levier (actions réalisées)"
+                )}
+              >
+                <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                  <span className="text-[12px] font-semibold uppercase tracking-wide text-secondary">
+                    {t("leverDetail.progressLabelLever", "Avancement du levier")}
+                    <span className="ml-2 font-normal normal-case tracking-normal text-tertiary">
+                      {t("leverDetail.progressLabelLeverSub", "plan d'action")}
+                    </span>
+                  </span>
+                  <span className="text-[15px] font-bold tabular-nums text-primary">
+                    {engine.leverProgressPct(lever)} %
+                  </span>
+                </div>
+                <div
+                  className="h-2.5 w-full overflow-hidden rounded-full bg-neutral-200"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={engine.leverProgressPct(lever)}
+                  aria-label={t("leverDetail.progressLabelLever", "Avancement du levier")}
+                >
+                  <div
+                    className="h-full rounded-full bg-neutral-800 transition-[width]"
+                    style={{
+                      width: `${Math.max(0, Math.min(100, engine.leverProgressPct(lever)))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+              <div
+                title={t(
+                  "leverDetail.financialRealizationFormula",
+                  "Réalisation financière = réalisé à date (net) ÷ réactualisé (net)"
+                )}
+              >
+                <RadialProgress
+                  pct={engine.displayedProgressPct(lever)}
+                  size={140}
+                  strokeWidth={12}
+                  showUncapped
+                  label={t("leverDetail.financialRealization", "Réalisation financière")}
+                  sublabel={t(
+                    "leverDetail.financialRealizationSub",
+                    "réalisé net / réactualisé net"
+                  )}
+                />
+              </div>
               <div className="flex flex-1 flex-wrap gap-x-8 gap-y-4">
                 <BigStat
                   label={t("leverDetail.realizedToDate", "Réalisé à date (net)")}
@@ -979,15 +1027,6 @@ export function LeverDetailClientPerformance() {
                       provisionalHint={t("leverDetail.notYetReforecast", "non réactualisé")}
                     />
                   }
-                />
-                <BigStat
-                  label={t("leverDetail.financialRealization", "Réalisation financière")}
-                  value={`${engine.displayedProgressPct(lever)} %`}
-                  sub={t("leverDetail.financialRealizationSub", "réalisé net / réactualisé net")}
-                  title={t(
-                    "leverDetail.financialRealizationFormula",
-                    "Réalisation financière = réalisé à date (net) ÷ réactualisé (net)"
-                  )}
                 />
                 <BigStat
                   label={t("levers.columnMaturity", "Maturité")}

@@ -531,6 +531,9 @@ const en: Record<string, string> = {
   "leverDetail.impactedLeversHint":
     "These initiatives depend on the delayed item. Their dates are never changed automatically: reach out to their owner.",
   "leverDetail.progressLabel": "Progress",
+  "leverDetail.progressLabelLever": "Lever progress",
+  "leverDetail.progressLabelLeverSub": "action plan",
+  "leverDetail.progressBarHint": "Progress of the lever's action plan (completed actions)",
   "leverDetail.financialRealization": "Financial realization",
   "leverDetail.financialRealizationSub": "net realized / net reforecast",
   "leverDetail.financialRealizationFormula":

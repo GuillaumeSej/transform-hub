@@ -566,6 +566,9 @@ const fr: Record<string, string> = {
   "leverDetail.impactedLeversHint":
     "Ces leviers dépendent de l'élément retardé. Leurs dates ne sont jamais modifiées automatiquement : rapprochez-vous de leur responsable.",
   "leverDetail.progressLabel": "Avancement",
+  "leverDetail.progressLabelLever": "Avancement du levier",
+  "leverDetail.progressLabelLeverSub": "plan d'action",
+  "leverDetail.progressBarHint": "Avancement du plan d'action du levier (actions réalisées)",
   "leverDetail.financialRealization": "Réalisation financière",
   "leverDetail.financialRealizationSub": "réalisé net / réactualisé net",
   "leverDetail.financialRealizationFormula":
