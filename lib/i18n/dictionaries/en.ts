@@ -2593,13 +2593,14 @@ const en: Record<string, string> = {
   "finance.calc.seeDetail": "See calculation detail",
   "finance.calc.clickHint": "Click for the calculation detail",
   "finance.calc.formula.gross":
-    "Σ of recurring gains dated in the period (gain date, else lever start)",
+    "Σ of recurring gains dated in the period (gain date, else lever end)",
   "finance.calc.formula.opexRec":
-    "Annual run-rate of recurring OPEX started in the period (lever start)",
+    "Annual run-rate of recurring OPEX started in the period (entered date, else lever start)",
   "finance.calc.formula.net": "Net savings = Gross savings − Recurring OPEX",
   "finance.calc.formula.capex":
     "At deployment date, or smoothed pro rata over the smoothing months",
-  "finance.calc.formula.oneoff": "One-off costs, at lever start date",
+  "finance.calc.formula.oneoff":
+    "One-off costs, at their entered date (otherwise the initiative start)",
   "finance.calc.formula.invest": "Investment cost = CAPEX + One-off OPEX",
   "finance.calc.formula.result": "Net result = Net savings − CAPEX − One-off OPEX (chart bar)",
   "finance.calc.formula.cumul": "Cumulative = Σ of net results from the first period to this one",

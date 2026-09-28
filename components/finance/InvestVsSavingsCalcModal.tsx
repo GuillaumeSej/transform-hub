@@ -66,7 +66,7 @@ export function InvestVsSavingsCalcModal({
           value: fmt(calc.grossSavings),
           formula: t(
             "finance.calc.formula.gross",
-            "Σ des gains récurrents datés sur la période (date de gain, sinon début du levier)"
+            "Σ des gains récurrents datés sur la période (date de gain, sinon fin du levier)"
           ),
         },
         {
@@ -76,7 +76,7 @@ export function InvestVsSavingsCalcModal({
           value: fmt(calc.opexRec),
           formula: t(
             "finance.calc.formula.opexRec",
-            "Run-rate annuel des OPEX récurrents démarrés sur la période (début du levier)"
+            "Run-rate annuel des OPEX récurrents démarrés sur la période (date saisie, sinon début du levier)"
           ),
         },
         {
@@ -103,7 +103,10 @@ export function InvestVsSavingsCalcModal({
           sign: "−",
           label: t("finance.calc.opexOneOff", "OPEX ponctuels"),
           value: fmt(calc.opexOneOff),
-          formula: t("finance.calc.formula.oneoff", "Coûts one-off, à la date de début du levier"),
+          formula: t(
+            "finance.calc.formula.oneoff",
+            "Coûts one-off, à leur date saisie (à défaut, début du levier)"
+          ),
         },
         {
           key: "invest",

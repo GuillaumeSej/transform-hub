@@ -139,8 +139,9 @@ export function updateMovement(
   return { movements: next, movement: after, auditEntries };
 }
 
-/** Validation RH : confirme que le mouvement a réellement eu lieu — passe le statut à Réalisé,
- * fixe la date réelle si absente, et pose le flag hrValidated. */
+/** Validation RH : confirme qu'un mouvement déclaré « Réalisé » a réellement eu lieu — fixe la
+ * date réelle si absente et pose le flag hrValidated. Refusée pour un mouvement planifié, à faire
+ * ou abandonné (audit HR-14 : le bouton « ✓ Valider » les passait en Réalisé d'un clic). */
 export function validateMovement(
   movements: WorkforceMovement[],
   id: string,
@@ -149,9 +150,11 @@ export function validateMovement(
   const idx = movements.findIndex((m) => m.id === id);
   if (idx === -1) throw new Error(`Mouvement "${id}" introuvable`);
   const before = movements[idx];
+  if (before.status !== "Réalisé") {
+    throw new Error(`Mouvement "${id}" non réalisé (${before.status}) : validation RH impossible`);
+  }
   const after: WorkforceMovement = {
     ...before,
-    status: "Réalisé",
     actualDate: before.actualDate ?? nowDate(),
     hrValidated: true,
   };

@@ -981,7 +981,9 @@ export default function BaseEtpPage() {
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rag-green-dark">
             <CheckCircle2 size={13} /> {t("etp.validatedLabel", "Validé")}
           </span>
-        ) : readOnly ? (
+        ) : readOnly || r.movement.status !== "Réalisé" ? (
+          // Validation RH = confirmer un mouvement RÉALISÉ ; rien à valider sur un mouvement
+          // planifié, à faire ou abandonné (audit HR-14).
           <span className="text-[11px] text-tertiary">—</span>
         ) : (
           <Button

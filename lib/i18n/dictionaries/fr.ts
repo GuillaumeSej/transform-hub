@@ -2740,13 +2740,13 @@ const fr: Record<string, string> = {
   "finance.calc.seeDetail": "Voir le détail du calcul",
   "finance.calc.clickHint": "Cliquer pour le détail du calcul",
   "finance.calc.formula.gross":
-    "Σ des gains récurrents datés sur la période (date de gain, sinon début du levier)",
+    "Σ des gains récurrents datés sur la période (date de gain, sinon fin du levier)",
   "finance.calc.formula.opexRec":
-    "Run-rate annuel des OPEX récurrents démarrés sur la période (début du levier)",
+    "Run-rate annuel des OPEX récurrents démarrés sur la période (date saisie, sinon début du levier)",
   "finance.calc.formula.net": "Gains nets = Gains bruts − OPEX récurrents",
   "finance.calc.formula.capex":
     "À la date de déploiement, ou lissé au prorata des mois de la période de lissage",
-  "finance.calc.formula.oneoff": "Coûts one-off, à la date de début du levier",
+  "finance.calc.formula.oneoff": "Coûts one-off, à leur date saisie (à défaut, début du levier)",
   "finance.calc.formula.invest": "Coût d'investissement = CAPEX + OPEX ponctuels",
   "finance.calc.formula.result":
     "Résultat net = Gains nets − CAPEX − OPEX ponctuels (barre du graphique)",

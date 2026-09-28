@@ -92,7 +92,16 @@ export async function ensureDefaultMaturityStages(
   companyId: string,
   programId: string
 ): Promise<MaturityStageConfig[]> {
-  const existing = await getDocs(query(maturityStagesCol(), where("programId", "==", programId)));
+  // Filtre `companyId` OBLIGATOIRE : les règles Firestore n'autorisent la lecture que des étapes
+  // de l'entreprise de l'appelant — une requête sur le seul `programId` était refusée en bloc pour
+  // un admin d'entreprise, qui ne pouvait donc pas créer de programme stratégique (audit DB-12).
+  const existing = await getDocs(
+    query(
+      maturityStagesCol(),
+      where("programId", "==", programId),
+      where("companyId", "==", companyId)
+    )
+  );
   if (!existing.empty) return [];
 
   const stages: MaturityStageConfig[] = DEFAULT_MATURITY_STAGES.map((stage) => ({

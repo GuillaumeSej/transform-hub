@@ -703,7 +703,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     [persistAudit, companyId]
   );
 
-  /** Validation RH : statut Réalisé + date réelle + flag hrValidated, en un clic. */
+  /** Validation RH d'un mouvement déjà Réalisé : date réelle + flag hrValidated, en un clic. */
   const validateMovement = useCallback(
     (id: string) => {
       const result = workforceLogic.validateMovement(movementsRef.current, id, DEMO_USER);

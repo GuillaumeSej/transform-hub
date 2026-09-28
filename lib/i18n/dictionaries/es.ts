@@ -2636,12 +2636,13 @@ const es: Record<string, string> = {
   "finance.calc.seeDetail": "Ver el detalle del cálculo",
   "finance.calc.clickHint": "Haz clic para ver el detalle del cálculo",
   "finance.calc.formula.gross":
-    "Σ de ganancias recurrentes fechadas en el periodo (fecha de ganancia, si no inicio de la palanca)",
+    "Σ de las ganancias recurrentes fechadas en el periodo (fecha de ganancia, si no fin de la palanca)",
   "finance.calc.formula.opexRec":
-    "Run-rate anual de los OPEX recurrentes iniciados en el periodo (inicio de la palanca)",
+    "Run-rate anual de los OPEX recurrentes iniciados en el periodo (fecha registrada, si no inicio de la palanca)",
   "finance.calc.formula.net": "Ganancias netas = Ganancias brutas − OPEX recurrentes",
   "finance.calc.formula.capex": "En la fecha de despliegue, o prorrateado en los meses de alisado",
-  "finance.calc.formula.oneoff": "Costes puntuales, en la fecha de inicio de la palanca",
+  "finance.calc.formula.oneoff":
+    "Costes puntuales, en su fecha registrada (si no, inicio de la palanca)",
   "finance.calc.formula.invest": "Coste de inversión = CAPEX + OPEX puntuales",
   "finance.calc.formula.result":
     "Resultado neto = Ganancias netas − CAPEX − OPEX puntuales (barra del gráfico)",

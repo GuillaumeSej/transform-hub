@@ -71,3 +71,20 @@ describe("currentFteByDepartment — disponible = base + mouvements réalisés (
     expect(currentFteByDepartment(base, moves)).toEqual({ RD: 8, Prod: 8 });
   });
 });
+
+describe("validateMovement — réservé aux mouvements réalisés (audit HR-14)", () => {
+  it("valide un mouvement réalisé sans changer son statut, refuse les autres", async () => {
+    const { validateMovement } = await import("@/lib/workforceLogic");
+    const moves = [
+      move({ id: "R", status: "Réalisé", actualDate: "2026-05-01" }),
+      move({ id: "P", status: "Planifié" }),
+      move({ id: "A", status: "Abandonné" }),
+    ];
+    const ok = validateMovement(moves, "R", "rh");
+    expect(ok.movement.hrValidated).toBe(true);
+    expect(ok.movement.status).toBe("Réalisé");
+    expect(ok.movement.actualDate).toBe("2026-05-01");
+    expect(() => validateMovement(moves, "P", "rh")).toThrow();
+    expect(() => validateMovement(moves, "A", "rh")).toThrow();
+  });
+});

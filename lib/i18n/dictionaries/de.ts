@@ -2643,13 +2643,13 @@ const de: Record<string, string> = {
   "finance.calc.seeDetail": "Berechnungsdetail anzeigen",
   "finance.calc.clickHint": "Klicken für das Berechnungsdetail",
   "finance.calc.formula.gross":
-    "Σ der wiederkehrenden Einsparungen in der Periode (Einsparungsdatum, sonst Hebelstart)",
+    "Σ der wiederkehrenden Einsparungen im Zeitraum (Einsparungsdatum, sonst Hebelende)",
   "finance.calc.formula.opexRec":
-    "Jährliche Run-Rate der in der Periode gestarteten wiederkehrenden OPEX (Hebelstart)",
+    "Jährliche Run-Rate der im Zeitraum gestarteten wiederkehrenden OPEX (erfasstes Datum, sonst Hebelbeginn)",
   "finance.calc.formula.net": "Nettoeinsparungen = Bruttoeinsparungen − wiederkehrende OPEX",
   "finance.calc.formula.capex":
     "Zum Bereitstellungsdatum oder anteilig über die Glättungsmonate verteilt",
-  "finance.calc.formula.oneoff": "Einmalkosten, zum Startdatum des Hebels",
+  "finance.calc.formula.oneoff": "Einmalige Kosten zum erfassten Datum (sonst Hebelbeginn)",
   "finance.calc.formula.invest": "Investitionskosten = CAPEX + einmalige OPEX",
   "finance.calc.formula.result":
     "Nettoergebnis = Nettoeinsparungen − CAPEX − einmalige OPEX (Diagrammbalken)",

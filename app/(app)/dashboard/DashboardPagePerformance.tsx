@@ -63,6 +63,7 @@ import {
   leverHealthCounts,
   type LeverHealthDimension,
 } from "@/lib/leverHealth";
+import { parseLocalDate } from "@/lib/impactStatus";
 import { generateAlerts } from "@/lib/alertEngine";
 import { riskLevelLabel } from "@/lib/leverRiskText";
 import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
@@ -639,11 +640,20 @@ export function DashboardPagePerformance() {
 
   const trajSCurve = useMemo(() => {
     const full = engine.savingsSeries(filteredData, trajGranularity);
-    const start = new Date(trajRangeStart);
-    const end = new Date(trajRangeEnd);
+    // Bornes lues en date LOCALE (`parseLocalDate`), comme les périodes (`labelToDate`) :
+    // `new Date("2026-01-01")` vaut minuit UTC, soit 1 h du matin à Paris, après le 1er janvier
+    // 00 h local de la première période — janvier / T1 disparaissait en UTC+ (audit DASH-02).
+    // Une période est gardée dès qu'elle RECOUPE la plage.
+    const start = parseLocalDate(trajRangeStart);
+    const end = parseLocalDate(trajRangeEnd);
     return full.filter((p) => {
-      const d = labelToDate(p.month, trajGranularity);
-      return d >= start && d <= end;
+      const periodStart = labelToDate(p.month, trajGranularity);
+      const periodEnd = new Date(
+        periodStart.getFullYear(),
+        periodStart.getMonth() + (trajGranularity === "quarter" ? 3 : 1),
+        0
+      );
+      return periodEnd >= start && periodStart <= end;
     });
   }, [filteredData, trajGranularity, trajRangeStart, trajRangeEnd, labelToDate]);
 

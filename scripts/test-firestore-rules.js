@@ -22,7 +22,17 @@ const {
   assertSucceeds,
   assertFails,
 } = require("@firebase/rules-unit-testing");
-const { doc, getDoc, setDoc, updateDoc, deleteDoc } = require("firebase/firestore");
+const {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} = require("firebase/firestore");
 
 const USERS = {
   root: { isGlobalAdmin: true, username: "root" },
@@ -49,6 +59,7 @@ async function seed(db) {
       deletionRequest: { requestedBy: "cto" },
     });
   await setDoc(doc(db, "levers/L4"), { companyId: "c1", programId: "p1", name: "w" });
+  await setDoc(doc(db, "maturityStageConfigs/s1"), { companyId: "c1", programId: "sp1" });
   await setDoc(doc(db, "adminApiAuditLog/a1"), { companyId: "c1" });
   await setDoc(doc(db, "adminApiAuditLog/a2"), { companyId: "c2" });
   for (const id of [
@@ -218,6 +229,21 @@ async function run(as, t) {
     "personne n'écrit le journal depuis le client",
     assertFails(setDoc(doc(root, "adminApiAuditLog/a3"), { companyId: "c1" }))
   );
+
+  // DB-12 : étapes de maturité d'un programme (création d'un programme stratégique)
+  const stagesOf = (db, withCompany) =>
+    getDocs(
+      query(
+        collection(db, "maturityStageConfigs"),
+        where("programId", "==", "sp1"),
+        ...(withCompany ? [where("companyId", "==", "c1")] : [])
+      )
+    );
+  await t(
+    "admin d'entreprise lit les étapes filtrées par entreprise",
+    assertSucceeds(stagesOf(ca, true))
+  );
+  await t("requête d'étapes sans filtre entreprise refusée", assertFails(stagesOf(ca, false)));
 
   // Double validation de suppression d'un levier
   await t("suppression sans demande refusée", assertFails(deleteDoc(doc(cto, "levers/L1"))));
