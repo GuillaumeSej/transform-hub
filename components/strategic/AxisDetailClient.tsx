@@ -22,6 +22,8 @@ import {
   resolveUserFullName,
 } from "@/lib/axisLogic";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useBackOrFallback } from "@/lib/hooks/useBackOrFallback";
+import { canOpenRoute } from "@/lib/routeAccess";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
@@ -94,10 +96,14 @@ import {
 
 export function AxisDetailClient() {
   const { user } = useRole();
-  const { activeProgramId } = useActiveProgram();
+  const { activeProgramId, programType, loading: programsLoading } = useActiveProgram();
   const readOnly = isReadOnlyUser(user, activeProgramId, "strategic");
   const { t } = useTranslation();
   const router = useRouter();
+  /** Audit fix #3 : « Retour » sans historique in-app (lien ouvert directement) → liste des axes. */
+  const goBack = useBackOrFallback("/levers");
+  /** Audit fix #3 : pas de clic vers `/kpi` pour un profil qui ne peut pas l'ouvrir (ex. RH). */
+  const canOpenKpi = canOpenRoute(user, "/kpi", programsLoading ? undefined : programType);
   const searchParams = useSearchParams();
   const { showToast } = useToast();
   const id = searchParams.get("id") ?? "";
@@ -177,7 +183,7 @@ export function AxisDetailClient() {
    *  `useStrategicData`), une seule ligne à dupliquer ne justifie pas une extraction. */
   const isAxisSponsor = data.strategicRole === "axis_sponsor";
   const isIndicatorClickable = (indicator: Pick<Indicator, "chantierId">) =>
-    !(isAxisSponsor && indicator.chantierId);
+    canOpenKpi && !(isAxisSponsor && indicator.chantierId);
 
   if (data.loading) {
     return (
@@ -191,7 +197,7 @@ export function AxisDetailClient() {
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
         {t("strategicAxes.notFound")}{" "}
-        <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
+        <button onClick={goBack} className="font-medium text-bp-coral hover:underline">
           {t("strategicAxes.back")}
         </button>
       </div>
@@ -349,7 +355,7 @@ export function AxisDetailClient() {
   return (
     <div className="animate-fade-up">
       <button
-        onClick={() => router.back()}
+        onClick={goBack}
         className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:text-primary hover:underline"
       >
         <ArrowLeft size={13} /> {t("strategicAxes.back")}

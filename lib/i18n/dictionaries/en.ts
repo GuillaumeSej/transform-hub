@@ -3574,6 +3574,21 @@ const en: Record<string, string> = {
   "strategicFiche.error.generic": "The action could not be completed.",
   "strategicFiche.staffing.pendingCreation": "Addition pending approval",
   "strategicFiche.staffing.chooseProjet": "Choose a project",
+  // ─── Liens profonds stratégiques (audit fix #3) ───────────────────────────
+  "strategicLinks.effectifsSubtitle":
+    "FTEs assigned to the programme's work packages, by team. In “Mobilised vs available”, click a team to filter on it, then open the list of its available employees.",
+  "strategicLinks.kpiIndicatorNotFound": "Indicator not found in the current view",
+  "strategicLinks.openTarget": "Open",
+  "strategicLinks.leverOtherProgram":
+    "Initiative from a Performance plan, not accessible from the active programme",
+  "saveError.title": "Save failed",
+  "saveError.permission": "You are not allowed to make this change",
+  "saveError.network": "Connection lost, change not saved",
+  "saveError.generic": "The change could not be saved. Please try again.",
+  "notFound.title": "Page not found",
+  "notFound.message":
+    "The requested page does not exist or has been moved. Check the address or go back to the home page.",
+  "notFound.home": "Back to home",
 };
 
 export default en;

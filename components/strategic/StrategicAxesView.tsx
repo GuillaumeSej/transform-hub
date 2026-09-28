@@ -24,6 +24,7 @@ import {
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { writeStrategicImport } from "@/lib/firestore/strategicImportWrite";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { canOpenRoute } from "@/lib/routeAccess";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
@@ -77,7 +78,9 @@ import type { Chantier, MilestoneId, StrategicAxis } from "@/types";
 
 export function StrategicAxesView() {
   const { user } = useRole();
-  const { activeProgramId, loading: programsLoading } = useActiveProgram();
+  const { activeProgramId, programType, loading: programsLoading } = useActiveProgram();
+  /** Audit fix #3 : pas de lien vers `/kpi` pour un profil qui ne peut pas l'ouvrir (ex. RH). */
+  const canOpenKpi = canOpenRoute(user, "/kpi", programsLoading ? undefined : programType);
   const readOnly = isReadOnlyUser(user, activeProgramId, "strategic");
   const { t } = useTranslation();
   const router = useRouter();
@@ -317,21 +320,27 @@ export function StrategicAxesView() {
                   n: data.indicators.length,
                   label: t("strategicAxes.indicatorsCount"),
                   title: t("strategicAxes.tree.goKpi", "Voir les indicateurs (KPI)"),
-                  onClick: () => router.push("/kpi"),
+                  onClick: canOpenKpi ? () => router.push("/kpi") : undefined,
                 },
-              ] as const
+              ] as { n: number; label: string; title: string; onClick?: () => void }[]
             ).map((item, i) => (
               <span key={item.label} className="inline-flex items-center gap-1.5">
                 {i > 0 && <span aria-hidden>·</span>}
-                <button
-                  type="button"
-                  title={item.title}
-                  onClick={item.onClick}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 transition hover:border-border hover:bg-neutral-100 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
-                >
-                  <span className="font-semibold text-primary">{item.n}</span> {item.label}
-                  <ChevronRight size={12} className="text-tertiary" aria-hidden />
-                </button>
+                {!item.onClick ? (
+                  <span className="px-1.5 py-0.5">
+                    <span className="font-semibold text-primary">{item.n}</span> {item.label}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    title={item.title}
+                    onClick={item.onClick}
+                    className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 transition hover:border-border hover:bg-neutral-100 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                  >
+                    <span className="font-semibold text-primary">{item.n}</span> {item.label}
+                    <ChevronRight size={12} className="text-tertiary" aria-hidden />
+                  </button>
+                )}
               </span>
             ))}
           </div>

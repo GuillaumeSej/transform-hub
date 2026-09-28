@@ -43,8 +43,10 @@ export type WorkspaceItem = {
   waitingDays?: number;
   /** Personne chez qui l'élément est bloqué (vue CTO, `AuthUser.username` ou libellé). */
   waitingOn?: string;
-  /** Route interne vers le détail (ex. `/levers/detail?id=…`, `/validation`). */
-  href: string;
+  /** Route interne vers le détail (ex. `/levers/detail?id=…`, `/validation`) — TOUJOURS une page
+   *  que l'utilisateur peut ouvrir (`canOpenRoute`, repli sur le détail de l'objet) ; absente =
+   *  ligne non cliquable (aucune page ouvrable pour cet objet). */
+  href?: string;
   /** Programme de l'élément : la page active ce programme (programme actif global) AVANT de
    *  suivre `href` quand il diffère du programme actif — ex. un projet stratégique listé alors
    *  que le Topbar est sur un Plan Performance (`/levers?chantier=…` n'a de sens qu'en mode
@@ -65,7 +67,8 @@ export type WorkspacePerimeterEntry = {
   health: WorkspaceHealth;
   /** Avancement 0-100 si pertinent. */
   progressPct?: number;
-  href: string;
+  /** Même contrat que `WorkspaceItem.href` (absent = non cliquable). */
+  href?: string;
   /** Programme de l'entrée — même rôle que `WorkspaceItem.programId`. */
   programId?: string;
 };

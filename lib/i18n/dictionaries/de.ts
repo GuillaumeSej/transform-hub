@@ -3658,6 +3658,21 @@ const de: Record<string, string> = {
   "strategicFiche.error.generic": "Die Aktion konnte nicht ausgeführt werden.",
   "strategicFiche.staffing.pendingCreation": "Hinzufügen wartet auf Freigabe",
   "strategicFiche.staffing.chooseProjet": "Projekt auswählen",
+  // ─── Liens profonds stratégiques (audit fix #3) ───────────────────────────
+  "strategicLinks.effectifsSubtitle":
+    "Eingesetzte VZÄ auf den Arbeitspaketen des Programms, nach Team. Klicken Sie unter „Eingesetzt vs. verfügbar“ auf ein Team, um danach zu filtern, und öffnen Sie dann die Liste seiner verfügbaren Mitarbeitenden.",
+  "strategicLinks.kpiIndicatorNotFound": "Indikator in der aktuellen Ansicht nicht gefunden",
+  "strategicLinks.openTarget": "Öffnen",
+  "strategicLinks.leverOtherProgram":
+    "Hebel eines Performance-Plans, vom aktiven Programm aus nicht zugänglich",
+  "saveError.title": "Speichern fehlgeschlagen",
+  "saveError.permission": "Sie sind nicht berechtigt, diese Änderung vorzunehmen",
+  "saveError.network": "Verbindung verloren, Änderung nicht gespeichert",
+  "saveError.generic": "Die Änderung konnte nicht gespeichert werden. Bitte erneut versuchen.",
+  "notFound.title": "Seite nicht gefunden",
+  "notFound.message":
+    "Die angeforderte Seite existiert nicht oder wurde verschoben. Prüfen Sie die Adresse oder kehren Sie zur Startseite zurück.",
+  "notFound.home": "Zurück zur Startseite",
 };
 
 export default de;

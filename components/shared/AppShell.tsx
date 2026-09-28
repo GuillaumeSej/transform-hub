@@ -14,12 +14,9 @@ import {
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
 import { cleanupLegacyStorage } from "@/lib/legacyStorageCleanup";
-import {
-  PAGE_ROUTES,
-  PROGRAM_TYPE_AWARE_ROUTES,
-  resolveLandingRoute,
-  resolveUserNav,
-} from "@/lib/nav-config";
+import { resolveLandingRoute, resolveUserNav } from "@/lib/nav-config";
+import { canOpenRoute } from "@/lib/routeAccess";
+import { useTrackInAppNavigation } from "@/lib/hooks/useBackOrFallback";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
@@ -63,6 +60,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   } = useActiveProgram();
   const router = useRouter();
   const pathname = usePathname();
+  // Historique interne pour les boutons « Retour » (`useBackOrFallback`).
+  useTrackInAppNavigation();
   const data = useBeTrackData(user?.companyId ?? null, user);
   const notifications = useNotifications(data, user);
   // File d'attente de validation en cascade (owner -> sponsor -> cto, voir
@@ -120,8 +119,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     // `getLeverById` en mode stratégique (les scopes sont des chantiers/indicateurs, pas des
     // leviers). On mémorise donc la destination au moment où l'alerte est construite, là où on a
     // encore le contexte (axe parent du chantier).
-    const routes: Record<string, string> = {};
+    const routes: Record<string, string | undefined> = {};
     if (!isStrategic) return { alerts, routes };
+    // Destination retenue SEULEMENT si l'utilisateur peut ouvrir la page (même règle que la garde
+    // de route ci-dessous) — sinon l'alerte reste affichée mais n'est pas cliquable, au lieu d'un
+    // clic renvoyé sans explication vers « Mon espace » (audit fix #3).
+    const reachable = (...hrefs: (string | undefined)[]) =>
+      hrefs.find((href) => !!href && canOpenRoute(user, href, "strategic"));
 
     const today = new Date().toISOString().slice(0, 10);
     const companyId = user?.companyId ?? null;
@@ -153,7 +157,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         source: "auto",
         companyId,
       });
-      routes[id] = axisId ? `/levers/detail?id=${axisId}` : "/levers";
+      routes[id] = reachable(axisId ? `/levers/detail?id=${axisId}` : undefined, "/levers");
     }
 
     // 2. Indicateurs à risque — statut LIVE (`resolveIndicatorStatus`, trois états, audit fix #2) :
@@ -184,7 +188,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         source: "auto",
         companyId,
       });
-      routes[id] = "/kpi";
+      // Indicateur ciblé sur la page Indicateurs ; sans accès à /kpi, fiche de l'axe porteur.
+      routes[id] = reachable(
+        `/kpi?indicator=${encodeURIComponent(indicator.id)}`,
+        indicator.axisId ? `/levers/detail?id=${indicator.axisId}` : undefined
+      );
     }
 
     // 3. Dépassement du budget prévisionnel TOTAL du programme actif (round 28) —
@@ -226,13 +234,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           source: "auto",
           companyId,
         });
-        routes[id] = "/dashboard";
+        routes[id] = reachable("/dashboard");
       }
     }
 
     for (const alert of strategicApprovals.alerts) {
       alerts.push(alert);
-      routes[alert.id] = APPROVAL_ALERT_ROUTE;
+      routes[alert.id] = reachable(APPROVAL_ALERT_ROUTE);
     }
 
     return { alerts, routes };
@@ -245,7 +253,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     strategic.indicators,
     strategic.measurements,
     strategic.fullScope,
-    user?.companyId,
+    user,
     t,
   ]);
 
@@ -298,28 +306,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       : unfilteredNavItems.filter(
           (item) => !item.programTypes || item.programTypes.includes(programType)
         );
-    const allowedRoutes = new Set(navItems.map((item) => PAGE_ROUTES[item.id]));
-    // Page Performance ouverte avec un Plan Stratégique actif : elle affiche son propre message de
-    // bascule (voir PROGRAM_TYPE_AWARE_ROUTES) plutôt qu'une redirection silencieuse — seulement si
-    // l'utilisateur y a droit hors filtre de type de programme.
-    if (
-      PROGRAM_TYPE_AWARE_ROUTES.has(pathname) &&
-      unfilteredNavItems.some((item) => PAGE_ROUTES[item.id] === pathname)
-    ) {
-      allowedRoutes.add(pathname);
-    }
-    const isLeverDetail = pathname.startsWith("/levers/");
-    // Hub de détail entreprise (/admin/companies/detail?id=...) : jamais dans la nav (on y accède
-    // en cliquant "Gérer" depuis la liste, comme pour /levers/detail ci-dessus) et réservé au
-    // global admin — les autres profils n'ont pas /admin/companies dans leur nav, donc
-    // allowedRoutes.has() suffirait déjà à les bloquer, mais on le rend explicite ici.
-    const isCompanyDetail = pathname === "/admin/companies/detail";
-    const companyDetailAllowed = isCompanyDetail && !!user.isGlobalAdmin;
-    // « Mon profil » (/profile) : ouvert depuis le bloc utilisateur de la Sidebar, jamais dans la
-    // nav, et accessible à TOUT utilisateur connecté quel que soit son profil (consultation de son
-    // compte + changement de mot de passe) — liste blanche explicite.
-    const isProfilePage = pathname === "/profile";
-    if (!isLeverDetail && !companyDetailAllowed && !isProfilePage && !allowedRoutes.has(pathname)) {
+    // Règle d'accès partagée (`canOpenRoute`, lib/routeAccess.ts) — la MÊME que celle qui masque
+    // les liens vers les pages non ouvrables dans l'app : nav résolue filtrée par le type du
+    // programme actif (non filtrée pendant le chargement), pages Performance program-type-aware
+    // (message de bascule plutôt que redirection), fiche levier `/levers/…`, « Mon profil »
+    // `/profile` (tout utilisateur connecté) et hub entreprise `/admin/companies/detail` (global
+    // admin uniquement).
+    if (!canOpenRoute(user, pathname, programsLoading ? undefined : programType)) {
       // Repli sur la première page RÉELLEMENT autorisée (nav filtrée elle ne peut plus être vide
       // ici, voir le retour anticipé ci-dessus) : renvoyer vers `navItems[0]` SANS le filtre par
       // type de programme pourrait pointer une page elle-même interdite pour le type de programme
@@ -371,6 +364,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     programType,
     router,
   ]);
+
+  // Destination d'une alerte de la cloche — `undefined` = alerte affichée mais NON cliquable
+  // (aucune page ouvrable pour cet utilisateur, audit fix #3). Stratégique : routes calculées à la
+  // construction (chantier → fiche de l'axe, indicateur → `/kpi?indicator=…` ou fiche de l'axe).
+  // Performance : TOUJOURS la fiche du levier concerné ; alerte sans levier (scope chantier) →
+  // bibliothèque si ouvrable, sinon rien.
+  const alertHref = (alert: Alert): string | undefined => {
+    if (isStrategic) return strategicNotifications.routes[alert.id];
+    const leverId = data.getLeverById(alert.scope)?.id;
+    if (leverId) return `/levers/detail?id=${leverId}`;
+    return canOpenRoute(user, "/levers", programsLoading ? undefined : programType)
+      ? "/levers"
+      : undefined;
+  };
 
   if (loading || !user || !ready) return null;
 
@@ -450,15 +457,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           approvalQueue={approvalQueue.queue}
           realizedApprovalQueue={realizedApprovalQueue.queue}
           deletionQueue={deletionQueue.queue}
+          alertHref={alertHref}
           onAlertClick={(alert) => {
-            if (isStrategic) {
-              // Une alerte stratégique ne pointe jamais un levier : cascade de dépendance → fiche
-              // de l'axe portant le chantier impacté, indicateur à risque → page Indicateurs.
-              router.push(strategicNotifications.routes[alert.id] ?? "/levers");
-              return;
-            }
-            const leverId = data.getLeverById(alert.scope)?.id;
-            router.push(leverId ? `/levers/detail?id=${leverId}` : "/levers");
+            const href = alertHref(alert);
+            if (href) router.push(href);
           }}
           onMenuClick={() => setMobileNavOpen((v) => !v)}
         />

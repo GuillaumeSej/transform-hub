@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { CheckCircle2, Download, FileSpreadsheet, PencilLine, X } from "lucide-react";
-import type { MaturityStageConfig } from "@/types";
+import type { MaturityStageConfig, Program } from "@/types";
 import { Button } from "@/components/shared/Button";
 import {
   StrategicImportButton,
@@ -38,11 +38,16 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
  */
 export function StrategicPlanOnboarding({
   companyId,
+  program,
   onManual,
   onOpenProgram,
   onDismiss,
 }: {
   companyId: string;
+  /** Programme stratégique DÉJÀ créé (vide) à compléter par l'import — ex. CTA « Importer le plan
+   *  stratégique » de `ProgramsPanel` juste après la création : l'import réutilise son id et ses
+   *  paramètres au lieu de créer un second programme. Absent = nouveau programme (id pré-alloué). */
+  program?: Program;
   onManual: () => void;
   onOpenProgram: (programId: string) => void;
   onDismiss: () => void;
@@ -50,16 +55,18 @@ export function StrategicPlanOnboarding({
   const { t } = useTranslation();
   // Id alloué une fois pour toutes (même format que `ProgramsPanel.save`) : les entités prévisualisées
   // portent déjà ce `programId`, qui doit donc rester stable entre l'aperçu et la confirmation.
-  const [programId] = useState(() => `p${Date.now()}`);
+  const [programId] = useState(() => program?.id ?? `p${Date.now()}`);
   const [programName, setProgramName] = useState(
-    t("strategicOnboarding.defaultProgramName", "Plan stratégique")
+    () => program?.name ?? t("strategicOnboarding.defaultProgramName", "Plan stratégique")
   );
   const [imported, setImported] = useState(false);
   // Paramètres du programme créé à la confirmation (auparavant codés en dur 2026-01/2026-12/€M) :
   // valeurs par défaut = année civile en cours, "€M".
-  const [fyStart, setFyStart] = useState(() => `${new Date().getFullYear()}-01`);
-  const [fyEnd, setFyEnd] = useState(() => `${new Date().getFullYear()}-12`);
-  const [currency, setCurrency] = useState("€M");
+  const [fyStart, setFyStart] = useState(
+    () => program?.fyStart || `${new Date().getFullYear()}-01`
+  );
+  const [fyEnd, setFyEnd] = useState(() => program?.fyEnd || `${new Date().getFullYear()}-12`);
+  const [currency, setCurrency] = useState(() => program?.currency || "€M");
   const periodInvalid =
     !/^\d{4}-\d{2}$/.test(fyStart) || !/^\d{4}-\d{2}$/.test(fyEnd) || fyStart > fyEnd;
 
@@ -80,6 +87,8 @@ export function StrategicPlanOnboarding({
       );
     }
     await saveProgram({
+      // Programme existant : ses autres champs (sponsor, owner, budget…) sont conservés.
+      ...program,
       id: programId,
       companyId,
       name: programName.trim() || t("strategicOnboarding.defaultProgramName", "Plan stratégique"),
@@ -88,7 +97,7 @@ export function StrategicPlanOnboarding({
       fyEnd,
       baselineEBIT: 0,
       revenue: 0,
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: program?.createdAt ?? new Date().toISOString().slice(0, 10),
       type: "strategic",
     });
     await ensureDefaultMaturityStages(companyId, programId);

@@ -42,6 +42,16 @@ import { formatDate } from "@/lib/format";
  *  global avant la navigation quand il diffère (voir app/(app)/me/page.tsx). */
 type Navigate = (href: string, programId?: string) => void;
 
+/** Callback de navigation d'une ligne, ou `undefined` quand l'objet n'a aucune page ouvrable
+ *  (`href` absent, voir `reachableHref` dans lib/myWorkspace.ts) — ligne alors non cliquable. */
+function linkTo(
+  navigate: Navigate,
+  target: { href?: string; programId?: string }
+): (() => void) | undefined {
+  const { href, programId } = target;
+  return href ? () => navigate(href, programId) : undefined;
+}
+
 const fill = (template: string, n: number) => template.replace("{n}", String(n));
 
 // ─── Répartition (barre 100 % empilée + tuiles-légende) ─────────────────────────────────────────
@@ -281,7 +291,7 @@ export function TodoSection({
                 const due = dueLabel(item, t);
                 return (
                   <li key={item.id}>
-                    <RowButton onClick={() => navigate(item.href, item.programId)}>
+                    <RowButton onClick={linkTo(navigate, item)}>
                       <SourceIcon source={item.source} severity={item.severity} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[13px] font-semibold text-primary">
@@ -356,7 +366,7 @@ export function BlockedSection({
         <ul className="divide-y divide-border">
           {items.map((item) => (
             <li key={item.id}>
-              <RowButton onClick={() => navigate(item.href, item.programId)}>
+              <RowButton onClick={linkTo(navigate, item)}>
                 <SourceIcon source={item.source} severity={item.severity} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold text-primary">
@@ -441,8 +451,9 @@ export function UpcomingSection({
                       />
                       <button
                         type="button"
-                        onClick={() => navigate(item.href, item.programId)}
-                        className="group flex w-full cursor-pointer items-start gap-2.5 py-1.5 pl-3 pr-1 text-left transition hover:bg-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-bp-coral"
+                        onClick={linkTo(navigate, item)}
+                        disabled={!item.href}
+                        className="group flex w-full cursor-pointer disabled:cursor-default disabled:hover:bg-transparent items-start gap-2.5 py-1.5 pl-3 pr-1 text-left transition hover:bg-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-bp-coral"
                       >
                         <span className="w-12 shrink-0 pt-px text-[11px] font-semibold text-secondary">
                           {d ? formatDate(d, { weekday: "short", day: "numeric" }) : "—"}
@@ -502,10 +513,7 @@ export function PerimeterSection({
         <ul className="divide-y divide-border">
           {entries.map((entry) => (
             <li key={`${entry.kind}:${entry.id}`}>
-              <RowButton
-                onClick={() => navigate(entry.href, entry.programId)}
-                className="items-start"
-              >
+              <RowButton onClick={linkTo(navigate, entry)} className="items-start">
                 <span className="pt-1">
                   <HealthDot health={entry.health} t={t} />
                 </span>

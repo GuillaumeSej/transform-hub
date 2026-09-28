@@ -19,6 +19,9 @@ import { derivePnlAccounts } from "@/lib/hierarchyLogic";
 import { migrateLeversImpacts } from "@/lib/leverImpactMigration";
 import type { CascadeShift } from "@/lib/engine";
 import { mockData } from "@/data/mockData";
+import { useToast } from "@/lib/hooks/useToast";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import { markSaveErrorReported, saveErrorToast } from "@/lib/saveErrors";
 import type {
   AuditEntry,
   Alert,
@@ -85,7 +88,14 @@ function emptyProgramConfig(): programDb.ProgramSeed {
  *
  * TOUTE la donnée métier vit dans Firestore et est partagée en temps réel entre utilisateurs
  * via `onSnapshot` : chaque mutation met à jour l'état local de façon optimiste (retour
- * synchrone immédiat) puis persiste dans Firestore en tâche de fond. La config programme
+ * synchrone immédiat) puis persiste dans Firestore en tâche de fond. En cas d'échec de
+ * l'écriture, l'état optimiste est ANNULÉ (rollback) et un toast d'erreur explicite est affiché
+ * (droits / connexion / générique, voir lib/saveErrors.ts) — plus jamais d'échec silencieux.
+ * Pour n'afficher un toast de succès QU'APRÈS enregistrement effectif, un appelant attend
+ * `await data.whenSaved(valeurRetournée)` (rejette en cas d'échec, toast d'erreur déjà affiché
+ * par le hook) ; les mutations sans valeur de retour renvoient directement cette promesse.
+ * Ces promesses sont déjà « gérées » : les ignorer ne produit pas d'unhandled rejection.
+ * Le journal d'audit n'est écrit qu'une fois l'écriture principale réussie. La config programme
  * (program + workstreams), dernier périmètre historiquement en localStorage, a été migrée —
  * voir lib/firestore/programConfig.ts.
  *
@@ -260,6 +270,110 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     [companyId]
   );
 
+  // ── Suivi des écritures optimistes ─────────────────────────────────────────────────────────
+  // Toast d'échec (droits / connexion / générique) — via ref pour ne pas faire dépendre chaque
+  // mutation de `t`/`showToast`.
+  const { t } = useTranslation();
+  const { showToast } = useToast();
+  const reportSaveErrorRef = useRef<(err: unknown, context: string) => void>(() => {});
+  reportSaveErrorRef.current = (err, context) => {
+    console.error(`[betrack] échec d'enregistrement (${context}) :`, err);
+    const toast = saveErrorToast(err, t);
+    showToast(toast.title, toast.message, "error");
+    markSaveErrorReported(err);
+  };
+  // Promesse d'enregistrement de chaque valeur retournée par une mutation optimiste (voir
+  // `whenSaved`) — WeakMap : aucune fuite, l'entrée disparaît avec la valeur.
+  const pendingSavesRef = useRef(new WeakMap<object, Promise<void>>());
+
+  /** Branche une écriture Firestore : succès → journal d'audit ; échec → rollback de l'état
+   *  optimiste + toast d'erreur, puis rejet. La promesse renvoyée est marquée « gérée » (aucune
+   *  unhandled rejection si l'appelant l'ignore) ; `key` l'associe à la valeur retournée par la
+   *  mutation pour `whenSaved`. */
+  const trackSave = useCallback(
+    (
+      write: Promise<unknown>,
+      opts: { context: string; rollback: () => void; auditEntries?: AuditEntry[]; key?: object }
+    ): Promise<void> => {
+      const saved = write.then(
+        () => {
+          if (opts.auditEntries) persistAudit(opts.auditEntries);
+        },
+        (err: unknown) => {
+          opts.rollback();
+          reportSaveErrorRef.current(err, opts.context);
+          throw err;
+        }
+      );
+      saved.catch(() => {});
+      if (opts.key) pendingSavesRef.current.set(opts.key, saved);
+      return saved;
+    },
+    [persistAudit]
+  );
+
+  /** Promesse d'enregistrement d'une valeur retournée par une mutation optimiste (levier, action,
+   *  mouvement, alerte…) : résout une fois l'écriture Firestore confirmée, rejette si elle a
+   *  échoué (état déjà annulé et toast d'erreur déjà affiché — l'appelant se contente de ne pas
+   *  afficher son toast de succès). Résout immédiatement pour une valeur inconnue. */
+  const whenSaved = useCallback((value: unknown): Promise<void> => {
+    if (value && typeof value === "object") {
+      const pending = pendingSavesRef.current.get(value);
+      if (pending) return pending;
+    }
+    return Promise.resolve();
+  }, []);
+
+  /** Annule localement les leviers `written` (remis à leur version `previous`, retirés s'ils
+   *  n'existaient pas) — seulement s'ils n'ont pas été modifiés depuis (sinon une mutation
+   *  ultérieure ou la souscription Firestore, qui annule elle-même une écriture refusée, fait foi). */
+  const rollbackLevers = useCallback(
+    (written: Lever[], previous: Map<string, Lever | undefined>) => {
+      const writtenById = new Map(written.map((l) => [l.id, l]));
+      let changed = false;
+      const next: Lever[] = [];
+      for (const l of leversRef.current) {
+        const w = writtenById.get(l.id);
+        if (w && (l === w || JSON.stringify(l) === JSON.stringify(w))) {
+          changed = true;
+          const prev = previous.get(l.id);
+          if (prev) next.push(prev);
+        } else {
+          next.push(l);
+        }
+      }
+      if (changed) {
+        leversRef.current = next;
+        setLevers(next);
+      }
+    },
+    []
+  );
+
+  /** Applique de façon optimiste le résultat d'une mutation de levier(s) puis persiste chaque
+   *  levier modifié — rollback + toast en cas d'échec, audit après succès. */
+  const commitLevers = useCallback(
+    (
+      nextLevers: Lever[],
+      changed: Lever[],
+      auditEntries: AuditEntry[],
+      key?: object
+    ): Promise<void> => {
+      const previous = new Map(
+        changed.map((l) => [l.id, leversRef.current.find((x) => x.id === l.id)] as const)
+      );
+      leversRef.current = nextLevers;
+      setLevers(nextLevers);
+      return trackSave(Promise.all(changed.map((l) => leversDb.saveLever(l))), {
+        context: "levier",
+        rollback: () => rollbackLevers(changed, previous),
+        auditEntries,
+        key,
+      });
+    },
+    [trackSave, rollbackLevers]
+  );
+
   const data = useMemo(
     () => {
       const company = companies.find((item) => item.id === companyId);
@@ -339,13 +453,10 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         auditUserRef.current,
         workflowOptionsFor(id)
       );
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      void commitLevers(result.levers, [result.lever], result.auditEntries, result.lever);
       return result.lever;
     },
-    [persistAudit, workflowOptionsFor]
+    [commitLevers, workflowOptionsFor]
   );
 
   /** Point d'entrée UI de la demande de validation (voir lib/leversLogic.ts pour la logique
@@ -366,13 +477,10 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         workstreams: programConfig.workstreams,
         users,
       });
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      void commitLevers(result.levers, [result.lever], result.auditEntries, result.lever);
       return result.lever;
     },
-    [persistAudit, currentUser, workflowOptionsFor, programConfig.workstreams]
+    [commitLevers, currentUser, workflowOptionsFor, programConfig.workstreams]
   );
 
   const approveLeverGate = useCallback(
@@ -385,13 +493,10 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         currentUser,
         programConfig.workstreams
       );
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      void commitLevers(result.levers, [result.lever], result.auditEntries, result.lever);
       return result.lever;
     },
-    [persistAudit, currentUser, programConfig.workstreams]
+    [commitLevers, currentUser, programConfig.workstreams]
   );
 
   const rejectLeverApproval = useCallback(
@@ -405,13 +510,10 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         reason,
         programConfig.workstreams
       );
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      void commitLevers(result.levers, [result.lever], result.auditEntries, result.lever);
       return result.lever;
     },
-    [persistAudit, currentUser, programConfig.workstreams]
+    [commitLevers, currentUser, programConfig.workstreams]
   );
 
   // Suppression à double validation (CTO ↔ responsable de chantier) — voir
@@ -427,13 +529,10 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         reason,
         users
       );
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      void commitLevers(result.levers, [result.lever], result.auditEntries, result.lever);
       return result.lever;
     },
-    [persistAudit, currentUser, programConfig.workstreams]
+    [commitLevers, currentUser, programConfig.workstreams]
   );
 
   const approveLeverDeletion = useCallback(
@@ -466,13 +565,10 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         programConfig.workstreams,
         users
       );
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      void commitLevers(result.levers, [result.lever], result.auditEntries, result.lever);
       return result.lever;
     },
-    [persistAudit, currentUser, programConfig.workstreams]
+    [commitLevers, currentUser, programConfig.workstreams]
   );
 
   /** Création NON optimiste (contrairement aux autres mutations de ce hook) : l'écriture Firestore
@@ -507,13 +603,10 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
   const upsertLeverByCode = useCallback(
     (input: Omit<Lever, "id" | "createdAt" | "lastUpdate">) => {
       const result = leversLogic.upsertLeverByCode(leversRef.current, input, auditUserRef.current);
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      leversDb.saveLever(result.lever).catch((err) => console.error("[betrack] lever :", err));
+      void commitLevers(result.levers, [result.lever], result.auditEntries, result);
       return result;
     },
-    [persistAudit]
+    [commitLevers]
   );
 
   /** Import Excel en masse (leviers + actions + impacts) — voir lib/leverExcelImport.ts pour la
@@ -571,17 +664,15 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         input,
         auditUserRef.current
       );
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      if (result.changedLever) {
-        leversDb
-          .saveLever(result.changedLever)
-          .catch((err) => console.error("[betrack] lever :", err));
-      }
+      void commitLevers(
+        result.levers,
+        result.changedLever ? [result.changedLever] : [],
+        result.auditEntries,
+        result.action
+      );
       return result.action;
     },
-    [persistAudit]
+    [commitLevers]
   );
 
   const updateAction = useCallback(
@@ -593,84 +684,96 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         patch,
         auditUserRef.current
       );
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      if (result.changedLever) {
-        leversDb
-          .saveLever(result.changedLever)
-          .catch((err) => console.error("[betrack] lever :", err));
-      }
+      void commitLevers(
+        result.levers,
+        result.changedLever ? [result.changedLever] : [],
+        result.auditEntries,
+        result.action
+      );
       return result.action;
     },
-    [persistAudit]
+    [commitLevers]
   );
 
-  const deleteAction = useCallback((scope: { leverId: string }, actionId: string) => {
-    const result = leversLogic.deleteAction(leversRef.current, scope, actionId);
-    leversRef.current = result.levers;
-    setLevers(result.levers);
-    if (result.changedLever) {
-      leversDb
-        .saveLever(result.changedLever)
-        .catch((err) => console.error("[betrack] lever :", err));
-    }
-  }, []);
+  /** Renvoie la promesse d'enregistrement (voir `whenSaved`). */
+  const deleteAction = useCallback(
+    (scope: { leverId: string }, actionId: string): Promise<void> => {
+      const result = leversLogic.deleteAction(leversRef.current, scope, actionId);
+      return commitLevers(result.levers, result.changedLever ? [result.changedLever] : [], []);
+    },
+    [commitLevers]
+  );
 
   const applyCascadeShift = useCallback(
-    (shifts: CascadeShift[]) => {
+    /** Renvoie la promesse d'enregistrement (voir `whenSaved`). */
+    (shifts: CascadeShift[]): Promise<void> => {
       const result = leversLogic.applyCascadeShift(leversRef.current, shifts, auditUserRef.current);
-      leversRef.current = result.levers;
-      setLevers(result.levers);
-      persistAudit(result.auditEntries);
-      result.changedLevers.forEach((l) =>
-        leversDb.saveLever(l).catch((err) => console.error("[betrack] lever :", err))
-      );
+      return commitLevers(result.levers, result.changedLevers, result.auditEntries);
     },
-    [persistAudit]
+    [commitLevers]
   );
 
   const addComment = useCallback(
     (leverId: string, text: string, user: AuthUser) => {
-      const result = leversLogic.addComment(commentsRef.current, leverId, text, user.name);
+      const previous = commentsRef.current;
+      const result = leversLogic.addComment(previous, leverId, text, user.name);
       commentsRef.current = result.comments;
       setComments(result.comments);
-      persistAudit([result.auditEntry]);
-      leversDb
-        .saveComments(companyId, result.comments)
-        .catch((err) => console.error("[betrack] commentaire :", err));
+      void trackSave(leversDb.saveComments(companyId, result.comments), {
+        context: "commentaire",
+        rollback: () => {
+          if (commentsRef.current !== result.comments) return;
+          commentsRef.current = previous;
+          setComments(previous);
+        },
+        auditEntries: [result.auditEntry],
+        key: result.leverComments,
+      });
       return result.leverComments;
     },
-    [persistAudit, companyId]
+    [trackSave, companyId]
   );
 
-  const createManualAlert = useCallback((input: ManualAlertInput, user: AuthUser) => {
-    const createdAt = new Date().toISOString();
-    const alert: Alert = {
-      ...input,
-      id: `MANUAL-${crypto.randomUUID()}`,
-      ts: createdAt,
-      // Simple champ d'audit (string libre, pas le type Role) — priorité aux habilitations admin,
-      // sinon le premier profil métier de l'utilisateur (round multi-profils).
-      actorRole: user.isGlobalAdmin
-        ? "admin"
-        : user.isCompanyAdmin
-          ? "admin_entreprise"
-          : (user.profiles[0]?.role ?? "inconnu"),
-      owner: user.name,
-      source: "manual",
-      companyId: user.companyId,
-      createdByUsername: user.username.trim().toLowerCase(),
-      createdAt,
-      resolved: false,
-    };
-    setAlerts((current) => [...current, alert]);
-    alertsDb.saveManualAlert(alert).catch((err) => console.error("[betrack] alerte :", err));
-    return alert;
-  }, []);
+  const createManualAlert = useCallback(
+    (input: ManualAlertInput, user: AuthUser) => {
+      const createdAt = new Date().toISOString();
+      const alert: Alert = {
+        ...input,
+        id: `MANUAL-${crypto.randomUUID()}`,
+        ts: createdAt,
+        // Simple champ d'audit (string libre, pas le type Role) — priorité aux habilitations admin,
+        // sinon le premier profil métier de l'utilisateur (round multi-profils).
+        actorRole: user.isGlobalAdmin
+          ? "admin"
+          : user.isCompanyAdmin
+            ? "admin_entreprise"
+            : (user.profiles[0]?.role ?? "inconnu"),
+        owner: user.name,
+        source: "manual",
+        companyId: user.companyId,
+        createdByUsername: user.username.trim().toLowerCase(),
+        createdAt,
+        resolved: false,
+      };
+      setAlerts((current) => [...current, alert]);
+      void trackSave(alertsDb.saveManualAlert(alert), {
+        context: "alerte",
+        rollback: () => setAlerts((current) => current.filter((a) => a !== alert)),
+        key: alert,
+      });
+      return alert;
+    },
+    [trackSave]
+  );
 
   const setAlertResolved = useCallback(
-    (alertId: string, resolved: boolean, user: AuthUser, alertCompanyId?: string | null) => {
+    /** Renvoie la promesse d'enregistrement (voir `whenSaved`). */
+    (
+      alertId: string,
+      resolved: boolean,
+      user: AuthUser,
+      alertCompanyId?: string | null
+    ): Promise<void> => {
       const state: AlertState = {
         alertId,
         companyId: alertCompanyId ?? user.companyId,
@@ -683,81 +786,102 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
           : {}),
       };
       const stateKey = `${state.companyId ?? "global"}__${alertId}`;
-      setAlertStates((current) => ({ ...current, [stateKey]: state }));
-      alertsDb
-        .saveAlertState(state)
-        .catch((err) => console.error("[betrack] état d'alerte :", err));
+      let previous: AlertState | undefined;
+      setAlertStates((current) => {
+        previous = current[stateKey];
+        return { ...current, [stateKey]: state };
+      });
+      return trackSave(alertsDb.saveAlertState(state), {
+        context: "état d'alerte",
+        rollback: () =>
+          setAlertStates((current) => {
+            if (current[stateKey] !== state) return current;
+            const next = { ...current };
+            if (previous) next[stateKey] = previous;
+            else delete next[stateKey];
+            return next;
+          }),
+      });
     },
-    []
+    [trackSave]
+  );
+
+  /** Applique de façon optimiste une nouvelle liste de mouvements puis la persiste — rollback
+   *  (si rien ne l'a modifiée depuis) + toast en cas d'échec, audit après succès. */
+  const commitMovements = useCallback(
+    (
+      previous: WorkforceMovement[],
+      next: WorkforceMovement[],
+      auditEntries: AuditEntry[],
+      key?: object
+    ): Promise<void> => {
+      movementsRef.current = next;
+      setMovements(next);
+      return trackSave(workforceDb.saveMovements(companyId, next), {
+        context: "mouvement",
+        rollback: () => {
+          if (movementsRef.current !== next) return;
+          movementsRef.current = previous;
+          setMovements(previous);
+        },
+        auditEntries,
+        key,
+      });
+    },
+    [trackSave, companyId]
   );
 
   const updateWorkforceMovement = useCallback(
     (id: string, patch: Partial<WorkforceMovement>) => {
+      const previous = movementsRef.current;
       const result = workforceLogic.updateMovement(
         movementsRef.current,
         id,
         patch,
         auditUserRef.current
       );
-      movementsRef.current = result.movements;
-      setMovements(result.movements);
-      persistAudit(result.auditEntries);
-      workforceDb
-        .saveMovements(companyId, result.movements)
-        .catch((err) => console.error("[betrack] mouvement :", err));
+      void commitMovements(previous, result.movements, result.auditEntries, result.movement);
       return result.movement;
     },
-    [persistAudit, companyId]
+    [commitMovements]
   );
 
   const createWorkforceMovement = useCallback(
     (input: Omit<WorkforceMovement, "id">) => {
+      const previous = movementsRef.current;
       const result = workforceLogic.createMovement(
         movementsRef.current,
         input,
         auditUserRef.current
       );
-      movementsRef.current = result.movements;
-      setMovements(result.movements);
-      persistAudit(result.auditEntries);
-      workforceDb
-        .saveMovements(companyId, result.movements)
-        .catch((err) => console.error("[betrack] mouvement :", err));
+      void commitMovements(previous, result.movements, result.auditEntries, result.movement);
       return result.movement;
     },
-    [persistAudit, companyId]
+    [commitMovements]
   );
 
   /** Validation RH d'un mouvement déjà Réalisé : date réelle + flag hrValidated, en un clic. */
   const validateMovement = useCallback(
     (id: string) => {
+      const previous = movementsRef.current;
       const result = workforceLogic.validateMovement(
         movementsRef.current,
         id,
         auditUserRef.current
       );
-      movementsRef.current = result.movements;
-      setMovements(result.movements);
-      persistAudit(result.auditEntries);
-      workforceDb
-        .saveMovements(companyId, result.movements)
-        .catch((err) => console.error("[betrack] mouvement :", err));
+      void commitMovements(previous, result.movements, result.auditEntries, result.movement);
       return result.movement;
     },
-    [persistAudit, companyId]
+    [commitMovements]
   );
 
   const deleteWorkforceMovement = useCallback(
     (id: string) => {
+      const previous = movementsRef.current;
       const result = workforceLogic.deleteMovement(movementsRef.current, id, auditUserRef.current);
-      movementsRef.current = result.movements;
-      setMovements(result.movements);
-      persistAudit(result.auditEntries);
-      workforceDb
-        .saveMovements(companyId, result.movements)
-        .catch((err) => console.error("[betrack] mouvement :", err));
+      return commitMovements(previous, result.movements, result.auditEntries);
     },
-    [persistAudit, companyId]
+    [commitMovements]
   );
 
   /** Créé (import Excel, recrutement intégré) ou met à jour (édition inline) un employé. */
@@ -768,15 +892,22 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         input,
         auditUserRef.current
       );
+      const previous = employeesRef.current;
       employeesRef.current = result.employees;
       setEmployees(result.employees);
-      persistAudit(result.auditEntries);
-      workforceDb
-        .saveEmployees(companyId, result.employees)
-        .catch((err) => console.error("[betrack] employé :", err));
+      void trackSave(workforceDb.saveEmployees(companyId, result.employees), {
+        context: "employé",
+        rollback: () => {
+          if (employeesRef.current !== result.employees) return;
+          employeesRef.current = previous;
+          setEmployees(previous);
+        },
+        auditEntries: result.auditEntries,
+        key: result.employee,
+      });
       return result.employee;
     },
-    [persistAudit, companyId]
+    [trackSave, companyId]
   );
 
   /** Renommage réel d'un matricule (voir `workforceLogic.renameEmployee`) — NON optimiste :
@@ -858,14 +989,22 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
         d.name === name ? { ...d, ...patch } : d
       );
       const nextMeta = { ...currentMeta, departments };
+      const previous = workforceMetaRef.current;
       workforceMetaRef.current = nextMeta;
       setWorkforceMeta(nextMeta);
-      workforceDb
-        .saveWorkforceMeta(companyId, nextMeta)
-        .catch((err) => console.error("[betrack] workforce meta :", err));
-      return departments.find((d) => d.name === name)!;
+      const department = departments.find((d) => d.name === name)!;
+      void trackSave(workforceDb.saveWorkforceMeta(companyId, nextMeta), {
+        context: "workforce meta",
+        rollback: () => {
+          if (workforceMetaRef.current !== nextMeta) return;
+          workforceMetaRef.current = previous;
+          setWorkforceMeta(previous);
+        },
+        key: department,
+      });
+      return department;
     },
-    [companyId]
+    [trackSave, companyId]
   );
 
   return {
@@ -876,6 +1015,7 @@ export function useBeTrackData(companyId?: string | null, currentUser?: AuthUser
     leversLoaded,
     getComments: (leverId: string) => comments[leverId] ?? [],
     getLeverById: (id: string) => data.levers.find((l) => l.id === id),
+    whenSaved,
     updateLever,
     requestLeverApproval,
     approveLeverGate,

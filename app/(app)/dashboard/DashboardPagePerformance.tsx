@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
+import { useCanOpenRoute } from "@/lib/hooks/useCanOpenRoute";
+import { leversDrilldownParams } from "@/lib/leversDrilldown";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
@@ -146,31 +148,16 @@ function pivotDimensionLabel(
   return d.key.includes(":") ? d.label : t(`dashboard.pivot.dim.${d.key}`, d.label);
 }
 
-/** Correspondance dimension → paramètre de filtre de `/levers` (`f_xxx`, voir
- * `LeversPagePerformance.tsx`), pour le clic de drill-down depuis un graphique du builder
- * générique vers la liste des leviers.
- * Uniquement les dimensions qui ont un équivalent dans la barre de filtres du dashboard — les
- * autres dimensions (ex. sponsor, risque, projet) naviguent simplement sans filtre additionnel
- * plutôt que d'échouer. */
-const FILTER_PARAM_BY_DIMENSION: Partial<Record<string, string>> = {
-  function: "f_function",
-  ws: "f_ws",
-  owner: "f_owner",
-  geography: "f_geography",
-  country: "f_country",
-  entity: "f_entity",
-  sponsor: "f_sponsor",
-  risk: "f_risk",
-  pnl: "f_pnl",
-  type: "f_type",
-  status: "f_status",
-};
-
 export function DashboardPagePerformance() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null, user);
   const { t } = useTranslation();
   const router = useRouter();
+  // Liens sortants (KPI → /finance, /hr, drill-downs → /levers) : rendus cliquables SEULEMENT si
+  // l'utilisateur peut ouvrir la page cible (même règle que la garde d'AppShell) — sinon un
+  // comex_member cliquait « CAPEX & coûts » et était renvoyé sans explication vers « Mon espace ».
+  const canOpen = useCanOpenRoute();
+  const leversOpenable = canOpen("/levers");
   // Dashboard scopé au programme actif GLOBAL (sélecteur du Topbar, décision PO audit fix #1) —
   // plus de `?program=` lu par la page : un ancien lien `/dashboard?program=…` est consommé par
   // `ActiveProgramProvider` (il pose le programme actif puis disparaît de l'URL). La route
@@ -660,6 +647,7 @@ export function DashboardPagePerformance() {
   // `f_hierarchy_xxx`…, voir `LeversPagePerformance.tsx`), alors que les clés de `filterDefs`
   // ci-dessus ne le sont pas (`status`, `geo_xxx`, `hierarchy_xxx`…) — d'où le préfixage ici.
   const goToLevers = (params: Record<string, string>) => {
+    if (!leversOpenable) return;
     const globalParams: Record<string, string> = {};
     Object.entries(activeFilters).forEach(([key, value]) => {
       if (value.length > 0)
@@ -670,11 +658,16 @@ export function DashboardPagePerformance() {
     router.push(`/levers${qs ? `?${qs}` : ""}`);
   };
   /** Drill-down générique depuis un graphique du builder (Marimekko/ventilations/P&L) : navigue
-   * filtré si la dimension cliquée a un équivalent dans la barre de filtres globale, sinon
-   * navigue sans filtre additionnel plutôt que d'échouer silencieusement. */
+   * filtré si la dimension cliquée a un équivalent RÉEL dans la barre de filtres de /levers (qui
+   * dépend des arborescences configurées, voir lib/leversDrilldown.ts), sinon navigue sans filtre
+   * additionnel plutôt que de poser un paramètre ignoré à l'arrivée. */
   const goToDimensionValue = (dimensionKey: string, value: string) => {
-    const param = FILTER_PARAM_BY_DIMENSION[dimensionKey];
-    goToLevers(param ? { [param]: value } : {});
+    goToLevers(
+      leversDrilldownParams(dimensionKey, value, {
+        financial: hierarchyLevels.length > 0,
+        geographic: geographyHierarchyLevels.length > 0,
+      })
+    );
   };
   const goToStage = (status: LeverStatus) => goToLevers({ f_status: lifecycle.label(status) });
   const goToAlert = (alert: (typeof data.alerts)[number]) => {
@@ -1993,7 +1986,7 @@ export function DashboardPagePerformance() {
               ? Math.round((summary.plannedInitial / summary.reforecastTarget) * 100)
               : undefined
           }
-          onClick={() => goToLevers({})}
+          onClick={leversOpenable ? () => goToLevers({}) : undefined}
         />
         {/* 2. CAPEX & coûts one-off — engagé vs réactualisé + % (même convention que la carte 1 :
             le % d'avancement se lit TOUJOURS contre le réactualisé, jamais contre le plan initial —
@@ -2014,7 +2007,7 @@ export function DashboardPagePerformance() {
               ? Math.round((summary.plannedCosts / summary.reforecastCosts) * 100)
               : undefined
           }
-          onClick={() => router.push("/finance")}
+          onClick={canOpen("/finance") ? () => router.push("/finance") : undefined}
         />
         {/* 3. Leviers réalisés — barre delivered/total + % */}
         <KPICard
@@ -2026,7 +2019,11 @@ export function DashboardPagePerformance() {
           barPct={
             summary.leverCount > 0 ? Math.round((summary.delivered / summary.leverCount) * 100) : 0
           }
-          onClick={() => goToLevers({ f_status: lifecycle.label("delivered") })}
+          onClick={
+            leversOpenable
+              ? () => goToLevers({ f_status: lifecycle.label("delivered") })
+              : undefined
+          }
         />
         {/* 4. Leviers à risque — décision PO audit fix #2 : risque Critique ou Élevé
             (`AT_RISK_LEVELS`, seuils de l'entreprise) via `leverHealthCounts().atRisk`, MÊME chiffre
@@ -2050,10 +2047,15 @@ export function DashboardPagePerformance() {
               { pct: (healthCounts.atRisk / total) * 100, className: "bg-rag-red" },
             ];
           })()}
-          onClick={() =>
-            goToLevers({
-              f_risk: serializeFilterValues(AT_RISK_LEVELS.map((lvl) => riskLevelLabel(t, lvl))),
-            })
+          onClick={
+            leversOpenable
+              ? () =>
+                  goToLevers({
+                    f_risk: serializeFilterValues(
+                      AT_RISK_LEVELS.map((lvl) => riskLevelLabel(t, lvl))
+                    ),
+                  })
+              : undefined
           }
         />
         {/* 5. ETP impactés — fteImpact comme valeur, suppressions comme barre + %
@@ -2074,7 +2076,7 @@ export function DashboardPagePerformance() {
             "dashboard.kpi.fteImpactedTooltip",
             'Somme des ETP estimés au niveau des leviers (planification), à ne pas confondre avec le suivi RH réel (voir Dashboard RH). "X / Y postes supprimés" ne compte que les départs forcés réalisés/planifiés suivis dans le module RH — un SOUS-ENSEMBLE de cet impact ETP global, pas une décomposition complète.'
           )}
-          onClick={() => router.push("/hr")}
+          onClick={canOpen("/hr") ? () => router.push("/hr") : undefined}
         />
       </div>
 

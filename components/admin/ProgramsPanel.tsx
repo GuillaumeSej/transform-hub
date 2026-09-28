@@ -22,7 +22,6 @@ import {
 } from "@/lib/firestore/admin";
 import { ensureDefaultMaturityStages } from "@/lib/firestore/maturityStageConfigs";
 import { resolveProgramType } from "@/lib/axisLogic";
-import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { MaturityStagesEditor } from "@/components/admin/MaturityStagesEditor";
@@ -151,7 +150,6 @@ export function ProgramsPanel({
 }) {
   const { t } = useTranslation();
   const router = useRouter();
-  const { setActiveProgramId } = useActiveProgram();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [companyUsers, setCompanyUsers] = useState<AuthUser[]>([]);
   // Round 31, point 5 : programme stratégique tout juste créé depuis ce panneau — alimente le
@@ -317,29 +315,25 @@ export function ProgramsPanel({
   };
 
   /**
-   * CTA "Importer le plan stratégique" (round 31, point 5) — au clic sur "Nouveau programme" avec
-   * le type Stratégique, l'admin veut enchaîner directement sur l'écran "Axes stratégiques"
-   * (`StrategicAxesView`, route `/levers` pour un programme stratégique — voir son routeur
-   * `app/(app)/levers/page.tsx`) où vivent déjà "Télécharger le modèle"/"Importer un fichier"
-   * (`StrategicImportButton`). Volontairement PAS une réimplémentation de cet écran ici (risque
-   * disproportionné pour ce lot, voir le plan) : on se contente de sélectionner le programme qu'on
-   * vient de créer comme programme actif (même mécanique que `ProgramSwitcher.select`, seul autre
-   * appelant de `setActiveProgramId`) puis de naviguer vers `/levers`.
-   *
-   * Limite connue, non traitée ici (redesign hors périmètre) : `useActiveProgram` n'attribue un
-   * `activeProgram` qu'à un utilisateur ayant un `companyId` propre (voir son doc-comment,
-   * "un admin global... n'a pas de contexte entreprise cohérent") — un admin GLOBAL (seul profil
-   * habilité à atteindre CE panneau, voir doc-comment de tête de `CompanyDetailClient`) n'a jamais
-   * de `companyId` propre. Ce bouton reste donc surtout utile lorsque cette page est ouverte par
-   * une session qui EST déjà scopée sur l'entreprise du programme créé ; sinon `/levers` retombe
-   * sur la vue Plan Performance historique. Corriger ce cas de fond nécessiterait de faire porter
-   * le scope entreprise par autre chose que la session utilisateur — hors petit lot volontairement
-   * cadré ici.
+   * CTA "Importer le plan stratégique" (round 31, point 5 ; audit fix #3) — enchaîne sur l'écran
+   * d'import Excel du hub entreprise (`StrategicPlanOnboarding`, `/admin/companies/detail?id=…&
+   * onboarding=strategic`), avec `&program=<id>` pour que l'import COMPLÈTE le programme qui vient
+   * d'être créé au lieu d'en créer un second. Auparavant : programme actif + `/levers`, page que le
+   * global admin (seul profil habilité à atteindre ce panneau) ne peut pas ouvrir — la garde de
+   * route le renvoyait sans explication vers son écran d'arrivée.
    */
   const goToStrategicImport = (programId: string) => {
-    setActiveProgramId(programId);
     setJustCreatedStrategicProgram(null);
-    router.push("/levers");
+    router.push(
+      `/admin/companies/detail?id=${encodeURIComponent(companyId)}&onboarding=strategic&program=${encodeURIComponent(programId)}`
+    );
+    window.setTimeout(
+      () =>
+        document
+          .getElementById("company-strategic-onboarding")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      50
+    );
   };
 
   const remove = async (id: string) => {

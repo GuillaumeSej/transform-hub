@@ -8,6 +8,7 @@ import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { useCanOpenRoute } from "@/lib/hooks/useCanOpenRoute";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 
@@ -97,6 +98,7 @@ export function Topbar({
   onMenuClick,
   alerts,
   onAlertClick,
+  alertHref,
   approvalQueue = [],
   realizedApprovalQueue = [],
   deletionQueue = [],
@@ -105,6 +107,10 @@ export function Topbar({
   onMenuClick: () => void;
   alerts: Alert[];
   onAlertClick: (alert: Alert) => void;
+  /** Destination d'une alerte ; `undefined` = alerte affichée NON cliquable (aucune page que
+   *  l'utilisateur peut ouvrir, voir AppShell). Absent = toutes cliquables (comportement
+   *  historique). */
+  alertHref?: (alert: Alert) => string | undefined;
   /** File d'attente de validation en cascade (owner -> sponsor -> cto, voir
    *  lib/hooks/useApprovalQueue.ts) concernant l'utilisateur courant — affichée en section
    *  distincte du dropdown de notifications ci-dessous. Optionnel (défaut vide) pour ne pas
@@ -132,6 +138,11 @@ export function Topbar({
 
   const pathname = usePathname();
   const router = useRouter();
+  // Réalisés / suppressions : la décision se prend sur /validation — si l'utilisateur ne peut pas
+  // l'ouvrir, on l'emmène sur la fiche du levier plutôt que de le voir renvoyé vers « Mon espace ».
+  const canOpen = useCanOpenRoute();
+  const validationOrLever = (leverId: string) =>
+    canOpen("/validation") ? "/validation" : `/levers/detail?id=${leverId}`;
   const { t } = useTranslation();
   const { confirmDiscard } = useUnsavedChanges();
   const { programType } = useActiveProgram();
@@ -218,38 +229,58 @@ export function Topbar({
                     {t("shared.topbar.noNotifications", "Aucune notification à traiter.")}
                   </p>
                 ) : (
-                  alerts.map((alert) => (
-                    <button
-                      key={alert.id}
-                      type="button"
-                      onClick={async () => {
-                        // Bloc de notifications = navigation vers /levers/detail. On protège de
-                        // la même manière que la sidebar : si l'utilisateur a une modif en cours,
-                        // on lui demande avant d'ouvrir le levier.
-                        const proceed = await confirmDiscard();
-                        if (!proceed) return;
-                        setAlertsOpen(false);
-                        onAlertClick(alert);
-                      }}
-                      className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
-                    >
-                      <span className="block text-xs font-semibold text-primary">
-                        {alertTitle(t, alert)}
-                      </span>
-                      <span className="mt-1 block line-clamp-2 text-[11px] text-secondary">
-                        {alertDesc(t, alert)}
-                      </span>
-                      <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
-                        {alert.source === "auto"
-                          ? t("shared.topbar.sourceAuto", "Automatique")
-                          : t("shared.topbar.sourceManual", "Manuelle")}{" "}
-                        {/* Les alertes du Plan Performance portent un id de levier lisible
-                            (`L###`) ; celles du Plan Stratégique référencent des ids générés
-                            (`CH-…`, `IND-…`) et fournissent donc un libellé humain. */}
-                        · {alert.scopeLabel ?? alert.scope}
-                      </span>
-                    </button>
-                  ))
+                  alerts.map((alert) => {
+                    const clickable = !alertHref || !!alertHref(alert);
+                    const body = (
+                      <>
+                        <span className="block text-xs font-semibold text-primary">
+                          {alertTitle(t, alert)}
+                        </span>
+                        <span className="mt-1 block line-clamp-2 text-[11px] text-secondary">
+                          {alertDesc(t, alert)}
+                        </span>
+                        <span className="mt-1.5 block text-[10px] font-semibold uppercase text-tertiary">
+                          {alert.source === "auto"
+                            ? t("shared.topbar.sourceAuto", "Automatique")
+                            : t("shared.topbar.sourceManual", "Manuelle")}{" "}
+                          {/* Les alertes du Plan Performance portent un id de levier lisible
+                              (`L###`) ; celles du Plan Stratégique référencent des ids générés
+                              (`CH-…`, `IND-…`) et fournissent donc un libellé humain. */}
+                          · {alert.scopeLabel ?? alert.scope}
+                        </span>
+                      </>
+                    );
+                    // Alerte sans page ouvrable pour l'utilisateur : affichée (information) mais
+                    // neutre — pas de clic qui le renverrait sans explication vers « Mon espace ».
+                    if (!clickable) {
+                      return (
+                        <div
+                          key={alert.id}
+                          className="block w-full border-b border-border px-4 py-3 text-left last:border-0"
+                        >
+                          {body}
+                        </div>
+                      );
+                    }
+                    return (
+                      <button
+                        key={alert.id}
+                        type="button"
+                        onClick={async () => {
+                          // Bloc de notifications = navigation vers /levers/detail. On protège de
+                          // la même manière que la sidebar : si l'utilisateur a une modif en cours,
+                          // on lui demande avant d'ouvrir le levier.
+                          const proceed = await confirmDiscard();
+                          if (!proceed) return;
+                          setAlertsOpen(false);
+                          onAlertClick(alert);
+                        }}
+                        className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
+                      >
+                        {body}
+                      </button>
+                    );
+                  })
                 )}
                 {/* Section distincte "Validations en attente" — leviers dont la demande de
                     validation (sponsor OU cto) attend l'utilisateur courant, voir
@@ -270,7 +301,7 @@ export function Topbar({
                           const proceed = await confirmDiscard();
                           if (!proceed) return;
                           setAlertsOpen(false);
-                          router.push("/validation");
+                          router.push(validationOrLever(lever.id));
                         }}
                         className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
                       >
@@ -303,7 +334,7 @@ export function Topbar({
                           const proceed = await confirmDiscard();
                           if (!proceed) return;
                           setAlertsOpen(false);
-                          router.push("/validation");
+                          router.push(validationOrLever(lever.id));
                         }}
                         className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
                       >

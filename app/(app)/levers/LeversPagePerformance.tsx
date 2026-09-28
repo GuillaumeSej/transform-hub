@@ -511,12 +511,22 @@ export function LeversPagePerformance() {
   // remplace une implémentation ad hoc qui avait un bug (le premier clic sur un bouton de filtre
   // ne produisait aucun effet visible, voir le commentaire du hook pour le détail).
   const { activeFilters, setFilters } = useMultiFilterBarState(filterDefs);
-  const { expanded: filterBarExpanded, toggle: toggleFilterBar } = useFilterBarExpanded(
-    "betrack_leversFilterBar_expanded"
-  );
-  const activeFilterCount = Object.entries(activeFilters).filter(
-    ([k, v]) => v.length > 0 && !(view === "table" && k === "f_status")
-  ).length;
+  const {
+    expanded: filterBarExpanded,
+    toggle: toggleFilterBar,
+    expand: expandFilterBar,
+  } = useFilterBarExpanded("betrack_leversFilterBar_expanded");
+  // Compteur = TOUS les filtres actifs, `f_status` compris même en vue Table (où il n'a pas de
+  // menu dans la barre mais s'affiche en pastille retirable) : un filtre reçu du dashboard ne doit
+  // jamais filtrer la liste sans être compté (audit fix #3).
+  const activeFilterCount = Object.values(activeFilters).filter((v) => v.length > 0).length;
+  // Arrivée avec des filtres dans l'URL (drill-down du dashboard, lien partagé) : panneau déplié
+  // pour que ces filtres (et la pastille Maturité) soient visibles d'emblée — sans persister la
+  // préférence repliée/dépliée de l'utilisateur. Ne se redéclenche qu'au passage 0 → ≥1 filtre.
+  const hasActiveFilters = activeFilterCount > 0;
+  useEffect(() => {
+    if (hasActiveFilters) expandFilterBar();
+  }, [hasActiveFilters, expandFilterBar]);
 
   // Vue Table : pas de filtre Maturité dans la barre (le filtre reste actif s'il vient de l'URL,
   // ex. lien du dashboard, et s'affiche en pastille retirable sous la barre).

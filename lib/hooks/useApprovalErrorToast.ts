@@ -4,11 +4,14 @@ import { useCallback } from "react";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { approvalErrorToast } from "@/lib/strategicApprovalUi";
+import { isTechnicalSaveError, saveErrorToast } from "@/lib/saveErrors";
 
 /**
  * Toast d'erreur d'un flux de validation stratégique (`lib/strategicApprovalFlows.ts`) :
  * `ApprovalRetryError` → « Données en cours de chargement, réessayez » ; refus / porte absente /
- * autre → message de l'erreur. Renvoie la nature de l'erreur (voir `approvalErrorKind`).
+ * autre → message de l'erreur. Une erreur TECHNIQUE d'écriture (Firebase : droits refusés, perte
+ * de connexion, autre code SDK) est traduite en message français clair (voir lib/saveErrors.ts)
+ * au lieu du message brut anglais du SDK. Renvoie la nature de l'erreur (voir `approvalErrorKind`).
  */
 export function useApprovalErrorToast() {
   const { t } = useTranslation();
@@ -24,8 +27,14 @@ export function useApprovalErrorToast() {
         ),
         fallback: t("strategicFiche.error.generic", "L'action n'a pas pu être effectuée."),
       });
-      if (toast.kind === "other")
+      if (toast.kind === "other") {
         console.error("[betrack] échec d'une action stratégique :", error);
+        if (isTechnicalSaveError(error)) {
+          const save = saveErrorToast(error, t);
+          showToast(save.title, save.message, "error");
+          return toast.kind;
+        }
+      }
       showToast(toast.title, toast.message, "error");
       return toast.kind;
     },

@@ -103,13 +103,19 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
       );
       return;
     }
-    data.updateLever(lever.id, { impacts: next });
-    showToast(
-      decision === "approved"
-        ? t("validation.realized.approved", "Réalisé validé")
-        : t("validation.realized.rejected", "Réalisé rejeté"),
-      lever.name,
-      "success"
+    const leverName = lever.name;
+    // Succès annoncé seulement une fois l'écriture confirmée (échec : rollback + toast d'erreur
+    // déjà affichés par useBeTrackData).
+    data.whenSaved(data.updateLever(lever.id, { impacts: next })).then(
+      () =>
+        showToast(
+          decision === "approved"
+            ? t("validation.realized.approved", "Réalisé validé")
+            : t("validation.realized.rejected", "Réalisé rejeté"),
+          leverName,
+          "success"
+        ),
+      () => {}
     );
   };
 
@@ -329,15 +335,20 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
                             e.stopPropagation();
                             try {
                               const updated = data.approveLeverGate(lever.id);
-                              showToast(
-                                updated.approval
-                                  ? t(
-                                      "levers.approval.stepApproved",
-                                      "Étape validée — transmise à l'étape suivante"
-                                    )
-                                  : t("leverDetail.approval.approved", "Demande approuvée"),
-                                lever.name,
-                                "success"
+                              const leverName = lever.name;
+                              data.whenSaved(updated).then(
+                                () =>
+                                  showToast(
+                                    updated.approval
+                                      ? t(
+                                          "levers.approval.stepApproved",
+                                          "Étape validée — transmise à l'étape suivante"
+                                        )
+                                      : t("leverDetail.approval.approved", "Demande approuvée"),
+                                    leverName,
+                                    "success"
+                                  ),
+                                () => {}
                               );
                             } catch (err) {
                               showToast(
@@ -356,11 +367,18 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
                           onClick={(e) => {
                             e.stopPropagation();
                             try {
-                              data.rejectLeverApproval(lever.id);
-                              showToast(
-                                t("leverDetail.approval.rejected", "Demande de validation rejetée"),
-                                lever.name,
-                                "success"
+                              const leverName = lever.name;
+                              data.whenSaved(data.rejectLeverApproval(lever.id)).then(
+                                () =>
+                                  showToast(
+                                    t(
+                                      "leverDetail.approval.rejected",
+                                      "Demande de validation rejetée"
+                                    ),
+                                    leverName,
+                                    "success"
+                                  ),
+                                () => {}
                               );
                             } catch (err) {
                               showToast(

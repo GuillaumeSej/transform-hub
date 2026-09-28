@@ -153,6 +153,9 @@ export default function CompanyDetailClient() {
   // — propose en tête de page de démarrer son plan stratégique (import Excel en option primaire,
   // saisie manuelle en secondaire), voir `StrategicPlanOnboarding`.
   const showStrategicOnboarding = searchParams.get("onboarding") === "strategic";
+  // `&program=<id>` : programme stratégique DÉJÀ créé à compléter par l'import (CTA « Importer le
+  // plan stratégique » de ProgramsPanel) — voir la prop `program` de StrategicPlanOnboarding.
+  const onboardingProgramId = searchParams.get("program");
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -184,6 +187,9 @@ export default function CompanyDetailClient() {
   // Abonnements scopés sur l'entreprise, réservés au global admin (seul profil admis ici).
   const [companyUsers, setCompanyUsers] = useState<AuthUser[]>([]);
   const [companyPrograms, setCompanyPrograms] = useState<Program[]>([]);
+  const onboardingProgram = onboardingProgramId
+    ? companyPrograms.find((p) => p.id === onboardingProgramId)
+    : undefined;
   const [companyAxes, setCompanyAxes] = useState<StrategicAxis[]>([]);
   const [companyChantiers, setCompanyChantiers] = useState<Chantier[]>([]);
   const [companyLevers, setCompanyLevers] = useState<Lever[]>([]);
@@ -426,7 +432,11 @@ export default function CompanyDetailClient() {
       {showStrategicOnboarding && company && (
         <div id="company-strategic-onboarding" className="scroll-mt-4">
           <StrategicPlanOnboarding
+            // Remonté quand le programme ciblé est résolu (chargement asynchrone) : ses paramètres
+            // initialisent l'état du formulaire et son id est réutilisé à l'import.
+            key={onboardingProgram?.id ?? "new"}
             companyId={company.id}
+            program={onboardingProgram}
             onManual={() =>
               router.replace(
                 `/admin/companies/detail?id=${encodeURIComponent(company.id)}&tab=projects`

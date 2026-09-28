@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { Card, CardBody } from "@/components/shared/Card";
 import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
@@ -17,6 +19,8 @@ import {
   type StrategicApprovalKind,
 } from "@/lib/strategicApprovals";
 import { intlTag } from "@/lib/format";
+import { canOpenRoute } from "@/lib/routeAccess";
+import { approvalTargetHref } from "@/lib/strategicLinks";
 import {
   chainStepsView,
   KIND_FALLBACK,
@@ -106,6 +110,24 @@ export function StrategicApprovalsPanel({
         : s === "rejected"
           ? t("validation.sa.status.rejected", "Refusée")
           : t("validation.sa.status.pending", "En attente");
+
+  /** Audit fix #3 : lien vers l'objet visé (axe, chantier, projet, indicateur) — seulement s'il
+   *  existe dans le programme (`approvalTargetHref`) ET que l'utilisateur peut ouvrir la page
+   *  (`canOpenRoute`, même règle que la garde d'AppShell ; ce panneau n'est rendu qu'en mode
+   *  stratégique). `user` absent = pas de garde connue, on laisse AppShell trancher. */
+  const targetLink = (a: StrategicApproval) => {
+    const href = approvalTargetHref(a, data);
+    if (!href) return null;
+    if (user !== undefined && !canOpenRoute(user, href, "strategic")) return null;
+    return (
+      <Link
+        href={href}
+        className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-bp-coral hover:underline"
+      >
+        {t("strategicLinks.openTarget", "Ouvrir")} <ArrowUpRight size={12} aria-hidden />
+      </Link>
+    );
+  };
 
   const list = useMemo(() => {
     const base = tab === "todo" ? api.pending : tab === "mine" ? api.mine : api.history;
@@ -223,6 +245,7 @@ export function StrategicApprovalsPanel({
                         {kindLabel(a.kind)}
                       </div>
                       <div className="text-sm font-semibold text-primary">{d.subject}</div>
+                      {targetLink(a)}
                     </div>
                     <span
                       className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${

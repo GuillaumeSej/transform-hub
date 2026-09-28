@@ -55,17 +55,24 @@ export function SuccessKpiList({
   const [draftTarget, setDraftTarget] = useState("");
   const byId = new Map(indicators.map((i) => [i.id, i]));
 
-  const kpiLink = (indicator: Indicator) => (
-    <button
-      type="button"
-      onClick={() => onOpenIndicator?.(indicator.id)}
-      className="text-left text-[12.5px] font-medium text-bp-coral hover:underline"
-    >
-      {t("strategicChantierDetail.indicatorLink.label", "KPI n°{n} · {name}")
-        .replace("{n}", String(indicatorNumbers?.get(indicator.id) ?? "?"))
-        .replace("{name}", indicator.name)}
-    </button>
-  );
+  const kpiLink = (indicator: Indicator) => {
+    const label = t("strategicChantierDetail.indicatorLink.label", "KPI n°{n} · {name}")
+      .replace("{n}", String(indicatorNumbers?.get(indicator.id) ?? "?"))
+      .replace("{name}", indicator.name);
+    // Sans `onOpenIndicator` (ex. profil sans accès à /kpi) : texte simple, pas de faux lien.
+    if (!onOpenIndicator) {
+      return <span className="text-left text-[12.5px] font-medium text-primary">{label}</span>;
+    }
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenIndicator(indicator.id)}
+        className="text-left text-[12.5px] font-medium text-bp-coral hover:underline"
+      >
+        {label}
+      </button>
+    );
+  };
 
   const reading = (indicator: Indicator, target?: number) => {
     const r = readKpi(indicator, measurements, target);

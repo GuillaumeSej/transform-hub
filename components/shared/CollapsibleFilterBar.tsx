@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Filter } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
@@ -44,7 +44,12 @@ export function useFilterBarExpanded(storageKey?: string) {
     });
   };
 
-  return { expanded, toggle };
+  /** Déplie le panneau SANS persister la préférence — ex. arrivée sur la page avec des filtres
+   *  déjà posés dans l'URL (drill-down du dashboard) : ils doivent être visibles d'emblée, sans
+   *  pour autant changer l'état replié choisi par l'utilisateur pour ses visites suivantes. */
+  const expand = useCallback(() => setExpanded(true), []);
+
+  return { expanded, toggle, expand };
 }
 
 /** Bouton "Filtres" (+ badge du nombre de filtres actifs) — ne rend QUE le bouton, à placer dans

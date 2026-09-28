@@ -6,6 +6,7 @@ import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useToast } from "@/lib/hooks/useToast";
+import { isSaveErrorReported, isTechnicalSaveError, saveErrorToast } from "@/lib/saveErrors";
 import { formatDateFr } from "@/lib/format";
 import {
   canApproveLeverDeletion,
@@ -22,6 +23,8 @@ type DeletionActions = {
   requestLeverDeletion: (id: string, reason?: string, users?: LeverDirectoryUser[]) => Lever;
   approveLeverDeletion: (id: string, users?: LeverDirectoryUser[]) => Promise<Lever>;
   cancelLeverDeletion: (id: string, users?: LeverDirectoryUser[]) => Lever;
+  /** Promesse d'enregistrement d'une mutation optimiste (voir `useBeTrackData().whenSaved`). */
+  whenSaved?: (value: unknown) => Promise<void>;
 };
 
 /** L'utilisateur a-t-il quoi que ce soit à faire côté suppression sur ce levier (demander,
@@ -96,10 +99,19 @@ export function LeverDeletionDialog({
   const run = async (fn: () => unknown | Promise<unknown>, title: string) => {
     setBusy(true);
     try {
-      await fn();
+      const value = await fn();
+      // Succès annoncé seulement une fois l'écriture optimiste confirmée.
+      await data.whenSaved?.(value);
       showToast(title, lever.name, "success");
       onOpenChange(false);
     } catch (err) {
+      // Échec d'écriture déjà signalé (rollback + toast) par useBeTrackData.
+      if (isSaveErrorReported(err)) return;
+      if (isTechnicalSaveError(err)) {
+        const toast = saveErrorToast(err, t);
+        showToast(toast.title, toast.message, "error");
+        return;
+      }
       showToast(
         t("leverDeletion.error", "Action impossible"),
         err instanceof Error ? err.message : String(err),

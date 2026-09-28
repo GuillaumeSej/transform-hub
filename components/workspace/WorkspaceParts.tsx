@@ -183,16 +183,26 @@ export function RowChevron() {
 }
 
 /** Ligne cliquable pleine largeur (navigation vers `href` via le callback) : curseur main, fond
- *  et filet coral au survol, chevron à droite. */
+ *  et filet coral au survol, chevron à droite. Sans `onClick` (aucune page ouvrable pour l'objet,
+ *  voir `WorkspaceItem.href`) : même mise en page, ni curseur main, ni survol, ni chevron. */
 export function RowButton({
   onClick,
   children,
   className,
 }: {
-  onClick: () => void;
+  onClick?: () => void;
   children: ReactNode;
   className?: string;
 }) {
+  if (!onClick) {
+    return (
+      <div
+        className={cn("flex w-full items-center gap-3 px-4 py-3 text-left sm:px-[18px]", className)}
+      >
+        {children}
+      </div>
+    );
+  }
   return (
     <button
       type="button"

@@ -32,6 +32,8 @@ import { formatDateFr } from "@/lib/format";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useRole } from "@/lib/hooks/useRole";
+import { useBackOrFallback } from "@/lib/hooks/useBackOrFallback";
+import { useCanOpenRoute, useLandingRoute } from "@/lib/hooks/useCanOpenRoute";
 import { useToast } from "@/lib/hooks/useToast";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
@@ -101,6 +103,11 @@ export function LeverDetailClientPerformance() {
     return unsub;
   }, [user?.companyId]);
   const router = useRouter();
+  // « Retour » : historique interne si la fiche a été ouverte depuis l'app ; sinon (lien direct,
+  // nouvel onglet) bibliothèque de leviers, ou page d'arrivée si l'utilisateur ne peut l'ouvrir.
+  const canOpenPage = useCanOpenRoute();
+  const landingRoute = useLandingRoute();
+  const goBack = useBackOrFallback(canOpenPage("/levers") ? "/levers" : landingRoute);
   const searchParams = useSearchParams();
   const id = searchParams.get("id") ?? "";
   const { showToast } = useToast();
@@ -207,7 +214,7 @@ export function LeverDetailClientPerformance() {
     return (
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
         {t("leverDetail.notFound", "Levier introuvable.")}{" "}
-        <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
+        <button onClick={goBack} className="font-medium text-bp-coral hover:underline">
           {t("leverDetail.backToPipeline", "Retour aux leviers par étape")}
         </button>
       </div>
@@ -240,7 +247,7 @@ export function LeverDetailClientPerformance() {
                 "leverDetail.outOfPerimeter",
                 "Accès restreint — ce levier n'est pas dans votre périmètre : vous n'en êtes ni le responsable de levier ni le responsable de chantier."
               )}{" "}
-        <button onClick={() => router.back()} className="font-medium text-bp-coral hover:underline">
+        <button onClick={goBack} className="font-medium text-bp-coral hover:underline">
           {t("leverDetail.backToPipeline", "Retour aux leviers par étape")}
         </button>
       </div>
@@ -285,12 +292,19 @@ export function LeverDetailClientPerformance() {
   function runApproveGate() {
     try {
       const updated = data.approveLeverGate(lever!.id);
-      showToast(
-        updated.approval
-          ? t("levers.approval.stepApproved", "Étape validée — transmise à l'étape suivante")
-          : t("leverDetail.approval.approved", "Demande approuvée"),
-        lever!.name,
-        "success"
+      const leverName = lever!.name;
+      // Succès annoncé seulement une fois l'écriture confirmée (échec : rollback + toast d'erreur
+      // déjà affichés par useBeTrackData).
+      data.whenSaved(updated).then(
+        () =>
+          showToast(
+            updated.approval
+              ? t("levers.approval.stepApproved", "Étape validée — transmise à l'étape suivante")
+              : t("leverDetail.approval.approved", "Demande approuvée"),
+            leverName,
+            "success"
+          ),
+        () => {}
       );
     } catch (err) {
       showToast(
@@ -361,7 +375,7 @@ export function LeverDetailClientPerformance() {
   return (
     <div className="animate-fade-up">
       <button
-        onClick={() => router.back()}
+        onClick={goBack}
         className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-secondary hover:text-primary hover:underline"
       >
         <ArrowLeft size={13} /> {t("leverDetail.back", "Retour")}
@@ -445,11 +459,16 @@ export function LeverDetailClientPerformance() {
                   <button
                     onClick={() => {
                       if (isBlocked || isCurrent || readOnly) return;
-                      data.updateLever(lever.id, { status: s });
-                      showToast(
-                        t("leverDetail.statusUpdated", "Niveau mis à jour"),
-                        `${lever.name} : ${lifecycle.shortLabel(s)}`,
-                        "success"
+                      const saved = data.updateLever(lever.id, { status: s });
+                      const detail = `${lever.name} : ${lifecycle.shortLabel(s)}`;
+                      data.whenSaved(saved).then(
+                        () =>
+                          showToast(
+                            t("leverDetail.statusUpdated", "Niveau mis à jour"),
+                            detail,
+                            "success"
+                          ),
+                        () => {}
                       );
                     }}
                     disabled={isBlocked || readOnly}
@@ -527,13 +546,18 @@ export function LeverDetailClientPerformance() {
                   onClick={() => {
                     try {
                       const updated = data.requestLeverApproval(lever.id, companyUsers);
-                      showToast(
-                        // CTO : sommet de la hiérarchie, la porte est franchie directement.
-                        updated.approval
-                          ? t("leverDetail.approval.requested", "Demande de validation envoyée")
-                          : t("leverDetail.approval.approved", "Demande approuvée"),
-                        lever.name,
-                        "success"
+                      const leverName = lever.name;
+                      data.whenSaved(updated).then(
+                        () =>
+                          showToast(
+                            // CTO : sommet de la hiérarchie, la porte est franchie directement.
+                            updated.approval
+                              ? t("leverDetail.approval.requested", "Demande de validation envoyée")
+                              : t("leverDetail.approval.approved", "Demande approuvée"),
+                            leverName,
+                            "success"
+                          ),
+                        () => {}
                       );
                     } catch (err) {
                       showToast(
@@ -577,11 +601,15 @@ export function LeverDetailClientPerformance() {
                       size="sm"
                       onClick={() => {
                         try {
-                          data.rejectLeverApproval(lever.id);
-                          showToast(
-                            t("levers.approval.withdrawn", "Demande retirée"),
-                            lever.name,
-                            "success"
+                          const leverName = lever.name;
+                          data.whenSaved(data.rejectLeverApproval(lever.id)).then(
+                            () =>
+                              showToast(
+                                t("levers.approval.withdrawn", "Demande retirée"),
+                                leverName,
+                                "success"
+                              ),
+                            () => {}
                           );
                         } catch (err) {
                           showToast(
@@ -624,11 +652,15 @@ export function LeverDetailClientPerformance() {
                     size="sm"
                     onClick={() => {
                       try {
-                        data.rejectLeverApproval(lever.id);
-                        showToast(
-                          t("leverDetail.approval.rejected", "Demande de validation rejetée"),
-                          lever.name,
-                          "success"
+                        const leverName = lever.name;
+                        data.whenSaved(data.rejectLeverApproval(lever.id)).then(
+                          () =>
+                            showToast(
+                              t("leverDetail.approval.rejected", "Demande de validation rejetée"),
+                              leverName,
+                              "success"
+                            ),
+                          () => {}
                         );
                       } catch (err) {
                         showToast(
@@ -679,9 +711,13 @@ export function LeverDetailClientPerformance() {
           onCancel={() => setEditOpen(false)}
           onSubmit={(values: LeverFormValues) => {
             const oldEnd = lever.end;
-            data.updateLever(lever.id, values);
+            const leverName = lever.name;
+            const saved = data.updateLever(lever.id, values);
             setEditOpen(false);
-            showToast(t("leverForm.updated", "Levier mis à jour"), lever.name, "success");
+            data.whenSaved(saved).then(
+              () => showToast(t("leverForm.updated", "Levier mis à jour"), leverName, "success"),
+              () => {}
+            );
             if (values.end > oldEnd) checkCascade(lever.id, oldEnd, values.end);
           }}
         />
@@ -711,25 +747,31 @@ export function LeverDetailClientPerformance() {
             onDelete={
               actionModal.action
                 ? () => {
-                    data.deleteAction(actionScope, actionModal.action!.id);
+                    const saved = data.deleteAction(actionScope, actionModal.action!.id);
                     setActionModal(null);
-                    showToast(t("leverDetail.actionDeleted", "Action supprimée"), "", "success");
+                    saved.then(
+                      () =>
+                        showToast(
+                          t("leverDetail.actionDeleted", "Action supprimée"),
+                          "",
+                          "success"
+                        ),
+                      () => {}
+                    );
                   }
                 : undefined
             }
             onSubmit={(values: ActionFormValues) => {
-              if (actionModal.action) {
-                data.updateAction(actionScope, actionModal.action.id, values);
-              } else {
-                data.createAction(actionScope, values);
-              }
+              const saved = actionModal.action
+                ? data.updateAction(actionScope, actionModal.action.id, values)
+                : data.createAction(actionScope, values);
+              const successTitle = actionModal.action
+                ? t("leverDetail.actionUpdated", "Action mise à jour")
+                : t("leverDetail.actionCreated", "Action créée");
               setActionModal(null);
-              showToast(
-                actionModal.action
-                  ? t("leverDetail.actionUpdated", "Action mise à jour")
-                  : t("leverDetail.actionCreated", "Action créée"),
-                values.name,
-                "success"
+              data.whenSaved(saved).then(
+                () => showToast(successTitle, values.name, "success"),
+                () => {}
               );
 
               // Une action qui dépasse la date de fin du levier étend cette dernière et déclenche
@@ -810,14 +852,17 @@ export function LeverDetailClientPerformance() {
                     (s) => cascadeProposal!.checked[s.id]
                   );
                   if (selected.length > 0) {
-                    data.applyCascadeShift(selected);
-                    showToast(
-                      t("leverDetail.shiftApplied", "Décalage appliqué"),
-                      t("leverDetail.itemsRescheduled", "{n} élément(s) redaté(s)").replace(
-                        "{n}",
-                        String(selected.length)
-                      ),
-                      "success"
+                    data.applyCascadeShift(selected).then(
+                      () =>
+                        showToast(
+                          t("leverDetail.shiftApplied", "Décalage appliqué"),
+                          t("leverDetail.itemsRescheduled", "{n} élément(s) redaté(s)").replace(
+                            "{n}",
+                            String(selected.length)
+                          ),
+                          "success"
+                        ),
+                      () => {}
                     );
                   }
                   setCascadeProposal(null);

@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { canOpenRoute } from "@/lib/routeAccess";
+import { axisDetailHref } from "@/lib/strategicLinks";
 import { useProgramChangeReset } from "@/lib/hooks/useProgramChangeReset";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -347,8 +349,17 @@ const MAX_CARD_INDICATOR_CHIPS = 5;
 
 export function StrategicDashboardView() {
   const { user } = useRole();
-  const { activeProgram, activeProgramId, programs, loading: programsLoading } = useActiveProgram();
+  const {
+    activeProgram,
+    activeProgramId,
+    programs,
+    programType,
+    loading: programsLoading,
+  } = useActiveProgram();
   const { t, locale } = useTranslation();
+  /** Audit fix #3 : un profil sans accès à `/kpi` (ex. RH) ne doit pas se voir proposer un clic
+   *  qui le renverrait vers « Mon espace » sans explication. */
+  const canOpenKpi = canOpenRoute(user, "/kpi", programsLoading ? undefined : programType);
   const router = useRouter();
   const searchParams = useSearchParams();
   const strategic = useStrategicData(user?.companyId ?? null, activeProgramId, user);
@@ -373,7 +384,7 @@ export function StrategicDashboardView() {
    *  ni `BusinessKpiCards` lui-même, ni aucun autre écran. */
   const isAxisSponsor = strategic.strategicRole === "axis_sponsor";
   const isIndicatorPillClickable = (indicator: Pick<Indicator, "chantierId">) =>
-    !(isAxisSponsor && indicator.chantierId);
+    canOpenKpi && !(isAxisSponsor && indicator.chantierId);
 
   /** Panneau chantier INLINE (round 10, point 1 — remplace l'ancienne vraie navigation vers
    *  `/levers?chantier=…`, qui faisait quitter le dashboard) : même mécanisme que
@@ -1243,7 +1254,8 @@ export function StrategicDashboardView() {
               items={axes.map((axis) => ({
                 key: axis.id,
                 label: axis.name,
-                onClick: () => router.push("/levers"),
+                // Audit fix #3 : ouvre la fiche de CET axe, pas la liste générique `/levers`.
+                onClick: () => router.push(axisDetailHref(axis.id)),
               }))}
             />
             <ChipPopover
@@ -1322,7 +1334,7 @@ export function StrategicDashboardView() {
                       </span>
                     </span>
                   ),
-                  onClick: () => router.push("/levers"),
+                  onClick: () => router.push(axisDetailHref(axis.id)),
                 }))}
               />
             </BudgetChipTooltip>
@@ -1519,9 +1531,13 @@ export function StrategicDashboardView() {
           {dependencyAlerts.length === 0
             ? emptyLine(t("strategicDashboard.noDependencyAlerts"))
             : dependencyAlerts.map((alert) => (
-                <div
+                // Audit fix #3 : ligne cliquable vers le chantier BLOQUÉ (`sourceId` = le chantier
+                // qui porte la dépendance), même panneau inline que les autres lignes d'alerte.
+                <button
                   key={`${alert.sourceId}-${alert.targetId}-${alert.type}`}
-                  className="border-b border-border py-2.5 last:border-0 first:pt-0"
+                  type="button"
+                  onClick={() => openChantierPanel(alert.sourceId)}
+                  className="block w-full border-b border-border py-2.5 text-left transition last:border-0 first:pt-0 hover:bg-neutral-50"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <DependencyTypeBadge type={alert.type} />
@@ -1530,7 +1546,7 @@ export function StrategicDashboardView() {
                     </span>
                   </div>
                   <p className="mt-1 text-[12px] leading-snug text-secondary">{alert.message}</p>
-                </div>
+                </button>
               ))}
 
           {/* Sous-section 2 (round 9, point 1) : prérequis non satisfaits (`programBlockedActions`,

@@ -3737,6 +3737,21 @@ const fr: Record<string, string> = {
   "strategicFiche.error.generic": "L'action n'a pas pu être effectuée.",
   "strategicFiche.staffing.pendingCreation": "Ajout en attente de validation",
   "strategicFiche.staffing.chooseProjet": "Choisir un projet",
+  // ─── Liens profonds stratégiques (audit fix #3) ───────────────────────────
+  "strategicLinks.effectifsSubtitle":
+    "ETP mobilisés sur les chantiers du programme, par équipe. Dans « Mobilisé vs disponible », cliquez une équipe pour filtrer sur elle, puis ouvrez la liste de ses employés disponibles.",
+  "strategicLinks.kpiIndicatorNotFound": "Indicateur introuvable dans la vue actuelle",
+  "strategicLinks.openTarget": "Ouvrir",
+  "strategicLinks.leverOtherProgram":
+    "Levier d'un Plan Performance non accessible depuis le programme actif",
+  "saveError.title": "Échec de l'enregistrement",
+  "saveError.permission": "Vous n'avez pas le droit d'effectuer cette modification",
+  "saveError.network": "Connexion perdue, modification non enregistrée",
+  "saveError.generic": "La modification n'a pas pu être enregistrée. Réessayez.",
+  "notFound.title": "Page introuvable",
+  "notFound.message":
+    "La page demandée n'existe pas ou a été déplacée. Vérifiez l'adresse ou revenez à l'accueil.",
+  "notFound.home": "Retour à l'accueil",
 };
 
 export default fr;

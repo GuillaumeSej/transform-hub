@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Plus, TriangleAlert, Users } from "lucide-react";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useRole } from "@/lib/hooks/useRole";
+import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { leverLinkMode } from "@/lib/strategicLinks";
 import { useToast } from "@/lib/hooks/useToast";
 import { isReadOnlyUser } from "@/lib/roleProfiles";
 import * as hr from "@/lib/hrEngine";
@@ -218,6 +220,12 @@ export default function BaseEtpPage() {
     [t]
   );
   const { user } = useRole();
+  const {
+    programType: activeProgramType,
+    authorizedPrograms,
+    setActiveProgramId,
+    loading: programsLoading,
+  } = useActiveProgram();
   const [programs, setPrograms] = useState<Program[]>([]);
   useEffect(() => {
     if (!user?.companyId) {
@@ -1018,20 +1026,42 @@ export default function BaseEtpPage() {
     {
       key: "leverCode",
       label: t("etp.linkedLever", "Levier lié"),
-      render: (r) =>
-        r.leverId ? (
+      render: (r) => {
+        if (!r.leverId) return "—";
+        const leverId = r.leverId;
+        // Audit fix #3 : un levier appartient à un Plan Performance — depuis un programme
+        // stratégique, activer d'abord son programme, sinon texte simple (jamais « Axe introuvable »).
+        const link = leverLinkMode({
+          leverProgramId: data.levers.find((l) => l.id === leverId)?.programId,
+          activeProgramType: programsLoading ? undefined : activeProgramType,
+          selectableProgramIds: authorizedPrograms.map((p) => p.id),
+        });
+        if (link.mode === "text") {
+          return (
+            <span
+              className="font-mono text-[11px] text-secondary"
+              title={t(
+                "strategicLinks.leverOtherProgram",
+                "Levier d'un Plan Performance non accessible depuis le programme actif"
+              )}
+            >
+              {r.leverCode}
+            </span>
+          );
+        }
+        return (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              router.push(`/levers/detail?id=${r.leverId}`);
+              if (link.mode === "switch") setActiveProgramId(link.programId);
+              router.push(`/levers/detail?id=${encodeURIComponent(leverId)}`);
             }}
             className="font-mono text-[11px] text-bp-coral hover:underline"
           >
             {r.leverCode}
           </button>
-        ) : (
-          "—"
-        ),
+        );
+      },
     },
     {
       key: "alertKind",

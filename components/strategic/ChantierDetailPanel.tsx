@@ -122,6 +122,7 @@ import { addDays, parseISO, todayISO } from "@/lib/dateUtils";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { canOpenRoute } from "@/lib/routeAccess";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
@@ -1570,8 +1571,16 @@ export function ChantierDetailPanel({
   onClose: () => void;
 }) {
   const { user } = useRole();
-  const { activeProgram, activeProgramId } = useActiveProgram();
+  const {
+    activeProgram,
+    activeProgramId,
+    programType,
+    loading: programsLoading,
+  } = useActiveProgram();
   const readOnly = isReadOnlyUser(user, activeProgramId, "strategic");
+  /** Audit fix #3 : pas de lien vers `/kpi` pour un profil qui ne peut pas l'ouvrir (ex. RH) —
+   *  le KPI reste affiché, en texte simple. */
+  const canOpenKpi = canOpenRoute(user, "/kpi", programsLoading ? undefined : programType);
   const { t, locale } = useTranslation();
   const { tooltip: deliverableTooltip, stateLabel: deliverableStateLabel } =
     useDeliverableStateText();
@@ -3135,7 +3144,9 @@ export function ChantierDetailPanel({
               measurements={data.measurements}
               indicatorNumbers={indicatorNumbers}
               linkedKpis={linkedKpis}
-              onOpenIndicator={(id) => navigateAway(`/kpi?indicator=${id}`)}
+              onOpenIndicator={
+                canOpenKpi ? (id) => navigateAway(`/kpi?indicator=${id}`) : undefined
+              }
               readOnly={!cRights.canEdit || chantierFieldPending("successKpis")}
             />
           </CardBody>
@@ -3975,19 +3986,30 @@ export function ChantierDetailPanel({
                               <div className="mt-1">
                                 {linkedIndicator ? (
                                   <>
-                                    <button
-                                      onClick={() =>
-                                        navigateAway(`/kpi?indicator=${action.indicatorId}`)
-                                      }
-                                      className="text-[13px] font-medium text-bp-coral hover:underline"
-                                    >
-                                      {t(
-                                        "strategicChantierDetail.indicatorLink.label",
-                                        "KPI n°{n} · {name}"
-                                      )
-                                        .replace("{n}", String(linkedIndicatorNumber ?? "?"))
-                                        .replace("{name}", linkedIndicator.name)}
-                                    </button>
+                                    {canOpenKpi ? (
+                                      <button
+                                        onClick={() =>
+                                          navigateAway(`/kpi?indicator=${action.indicatorId}`)
+                                        }
+                                        className="text-[13px] font-medium text-bp-coral hover:underline"
+                                      >
+                                        {t(
+                                          "strategicChantierDetail.indicatorLink.label",
+                                          "KPI n°{n} · {name}"
+                                        )
+                                          .replace("{n}", String(linkedIndicatorNumber ?? "?"))
+                                          .replace("{name}", linkedIndicator.name)}
+                                      </button>
+                                    ) : (
+                                      <span className="text-[13px] font-medium text-primary">
+                                        {t(
+                                          "strategicChantierDetail.indicatorLink.label",
+                                          "KPI n°{n} · {name}"
+                                        )
+                                          .replace("{n}", String(linkedIndicatorNumber ?? "?"))
+                                          .replace("{name}", linkedIndicator.name)}
+                                      </span>
+                                    )}
                                     {linkedIndicatorReading?.current !== undefined &&
                                       linkedIndicatorReading?.target !== undefined && (
                                         <div className="mt-1 text-[11.5px] text-secondary">

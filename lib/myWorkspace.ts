@@ -79,6 +79,7 @@ import {
 } from "@/lib/roleProfiles";
 import { getConsolidatedPerformancePrograms } from "@/lib/consolidatedProgramAccess";
 import { STATUS_LEVEL } from "@/lib/status-config";
+import { canOpenRoute } from "@/lib/routeAccess";
 import { daysBetween } from "@/lib/dateUtils";
 import { fillTemplate } from "@/lib/importIssue";
 import {
@@ -152,8 +153,11 @@ export type MyWorkspaceInput = {
 const SEVERITY_RANK: Record<WorkspaceSeverity, number> = { critical: 0, warning: 1, info: 2 };
 const HEALTH_RANK: Record<WorkspaceHealth, number> = { red: 0, amber: 1, green: 2, neutral: 3 };
 
-/** Élément interne : l'élément du contrat + sa clé d'objet pour le dédoublonnage. */
-type Candidate = WorkspaceItem & { dedupeKey: string };
+/** Élément interne : l'élément du contrat + sa clé d'objet pour le dédoublonnage + la page de
+ *  DÉTAIL de l'objet (`fallbackHref`), suivie à la place de `href` quand l'utilisateur ne peut pas
+ *  ouvrir `href` (ex. `/validation` pour un profil `lever`, `/kpi` sans ce menu) — voir
+ *  `reachableHref`. */
+type Candidate = WorkspaceItem & { dedupeKey: string; fallbackHref?: string };
 
 function isoDay(value: string | undefined): string | undefined {
   return value && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : undefined;
@@ -217,10 +221,27 @@ function dedupe(items: Candidate[]): Candidate[] {
   return Array.from(best.values());
 }
 
-function strip(item: Candidate): WorkspaceItem {
-  const { dedupeKey: _key, ...rest } = item;
-  void _key;
-  return rest;
+/** Lien réellement ouvrable (audit fix #3) : `href` si l'utilisateur peut ouvrir la page (même
+ *  règle que la garde d'AppShell, `canOpenRoute`, avec le type de plan de l'élément), sinon la
+ *  page de détail de l'objet, sinon AUCUN lien (ligne non cliquable) — jamais un lien qui renverrait
+ *  silencieusement vers « Mon espace ». */
+export function reachableHref(
+  user: AuthUser,
+  plan: WorkspaceItem["plan"],
+  href: string | undefined,
+  fallbackHref?: string
+): string | undefined {
+  if (href && canOpenRoute(user, href, plan)) return href;
+  if (fallbackHref && canOpenRoute(user, fallbackHref, plan)) return fallbackHref;
+  return undefined;
+}
+
+function strip(user: AuthUser) {
+  return (item: Candidate): WorkspaceItem => {
+    const { dedupeKey: _key, fallbackHref, ...rest } = item;
+    void _key;
+    return { ...rest, href: reachableHref(user, item.plan, item.href, fallbackHref) };
+  };
 }
 
 function sortTodo(a: WorkspaceItem, b: WorkspaceItem): number {
@@ -377,6 +398,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
         context: leverContext(lever),
         waitingDays,
         href: VALIDATION_HREF,
+        fallbackHref: leverHref(lever.id),
         programId: lever.programId,
         dedupeKey: `lever:${lever.id}:approval`,
       };
@@ -433,6 +455,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
         context: leverContext(lever),
         waitingDays,
         href: VALIDATION_HREF,
+        fallbackHref: leverHref(lever.id),
         programId: lever.programId,
         dedupeKey: `impact:${key}:realized`,
       };
@@ -470,6 +493,9 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
     if (pilotView) targeted = targeted.slice(0, opts.pilotTopAlerts);
     for (const alert of targeted) {
       const lever = leverById.get(alert.scope);
+      // Alerte sans levier (scope chantier `WS-…`) : bibliothèque filtrée sur ce chantier plutôt
+      // que `/workstreams`, que la plupart des profils ne peuvent pas ouvrir.
+      const alertWs = lever ? undefined : wsById.get(alert.scope);
       todo.push({
         id: `leverAlert:${alert.id}`,
         source: "leverAlert",
@@ -477,7 +503,11 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
         severity: alertSeverity(alert) ?? "warning",
         title: alertTitle(t, alert),
         context: lever ? leverContext(lever) : (alert.scopeLabel ?? alert.scope),
-        href: lever ? leverHref(lever.id) : "/workstreams",
+        href: lever
+          ? leverHref(lever.id)
+          : alertWs
+            ? `/levers?f_ws=${encodeURIComponent(alertWs.name)}`
+            : "/levers",
         programId: lever?.programId,
         dedupeKey: `lever:${alert.scope}:alert`,
       });
@@ -516,6 +546,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
           dueDate: m.status !== "Réalisé" ? m.plannedDate : undefined,
           daysLate: late > 0 ? late : undefined,
           href: etpMovementDeepLink([m.id]),
+          fallbackHref: leverHref(m.leverId),
           programId: m.programId ?? leverById.get(m.leverId)?.programId,
           dedupeKey: `movement:${m.id}`,
         });
@@ -535,6 +566,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
           context: m.label,
           dueDate: m.plannedDate,
           href: etpMovementDeepLink([m.id]),
+          fallbackHref: leverHref(m.leverId),
           programId: m.programId ?? leverById.get(m.leverId)?.programId,
           dedupeKey: `movement:${m.id}`,
         });
@@ -551,6 +583,26 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
     const actionById = new Map(chantierActions.map((a) => [a.id, a]));
     const approvals = (strategic.approvals ?? []).filter((a) => a.status === "pending");
     const approvalData = { ...strategic, programId, users: input.users ?? [] };
+    const indicatorById = new Map(indicators.map((i) => [i.id, i]));
+    /** Page de détail de la cible d'une demande (repli quand `/validation` n'est pas ouvrable). */
+    const approvalTargetHref = (a: StrategicApproval): string | undefined => {
+      switch (a.targetType) {
+        case "axe":
+          return leverHref(a.targetId);
+        case "chantier":
+          return chantierHref(a.targetId);
+        case "projet": {
+          const target = actionById.get(a.targetId);
+          return target ? projetHref(target.chantierId, target.id) : undefined;
+        }
+        case "indicateur": {
+          const indicator = indicatorById.get(a.targetId);
+          return indicator ? leverHref(indicator.axisId) : undefined;
+        }
+        default:
+          return undefined;
+      }
+    };
 
     const projetContext = (action: ChantierAction) => {
       const chantier = chantierById.get(action.chantierId);
@@ -616,6 +668,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
         context: action ? projetContext(action) : (a.targetName ?? a.targetId),
         waitingDays,
         href: VALIDATION_HREF,
+        fallbackHref: approvalTargetHref(a),
         programId: a.programId,
         dedupeKey: a.kind === "milestone" ? `projet:${a.targetId}:milestone` : `strategic:${a.id}`,
       };
@@ -699,6 +752,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
         title: tf("me.item.measurementMissing", "Saisir la mesure {period}", { period }),
         context: indicator.name,
         href: `/kpi?indicator=${encodeURIComponent(indicator.id)}`,
+        fallbackHref: indicator.axisId ? leverHref(indicator.axisId) : undefined,
         programId: indicator.programId,
         dedupeKey: `indicator:${indicator.id}:measure`,
       });
@@ -712,12 +766,13 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
   const blockedFinal = pilotView ? dedupe(blocked).filter((i) => !todoKeys.has(i.dedupeKey)) : [];
 
   return {
-    todo: todoFinal.map(strip).sort(sortTodo),
-    upcoming: upcomingFinal.map(strip).sort(sortUpcoming),
-    blocked: blockedFinal.map(strip).sort(sortBlocked),
-    perimeter: pilotView
+    todo: todoFinal.map(strip(user)).sort(sortTodo),
+    upcoming: upcomingFinal.map(strip(user)).sort(sortUpcoming),
+    blocked: blockedFinal.map(strip(user)).sort(sortBlocked),
+    perimeter: (pilotView
       ? buildPilotPerimeter(user, programs, pilotProgramIds, perf, strategic, allAlerts, t)
-      : buildPerimeter(user, perf, strategic, allAlerts, today, t),
+      : buildPerimeter(user, perf, strategic, allAlerts, today, t)
+    ).map((entry) => ({ ...entry, href: reachableHref(user, entry.plan, entry.href) })),
     pilotView,
   };
 }

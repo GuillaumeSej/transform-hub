@@ -3642,6 +3642,21 @@ const es: Record<string, string> = {
   "strategicFiche.error.generic": "No se pudo realizar la acción.",
   "strategicFiche.staffing.pendingCreation": "Alta pendiente de validación",
   "strategicFiche.staffing.chooseProjet": "Elegir un proyecto",
+  // ─── Liens profonds stratégiques (audit fix #3) ───────────────────────────
+  "strategicLinks.effectifsSubtitle":
+    "ETC asignados a los frentes del programa, por equipo. En «Movilizado vs disponible», haga clic en un equipo para filtrar por él y luego abra la lista de sus empleados disponibles.",
+  "strategicLinks.kpiIndicatorNotFound": "Indicador no encontrado en la vista actual",
+  "strategicLinks.openTarget": "Abrir",
+  "strategicLinks.leverOtherProgram":
+    "Palanca de un Plan de Rendimiento, no accesible desde el programa activo",
+  "saveError.title": "Error al guardar",
+  "saveError.permission": "No tiene permiso para realizar esta modificación",
+  "saveError.network": "Conexión perdida, modificación no guardada",
+  "saveError.generic": "No se pudo guardar la modificación. Inténtelo de nuevo.",
+  "notFound.title": "Página no encontrada",
+  "notFound.message":
+    "La página solicitada no existe o se ha movido. Compruebe la dirección o vuelva al inicio.",
+  "notFound.home": "Volver al inicio",
 };
 
 export default es;

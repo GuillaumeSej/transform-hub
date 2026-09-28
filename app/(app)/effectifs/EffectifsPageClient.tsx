@@ -16,6 +16,7 @@ import { StaffingRateSection } from "@/components/strategic/StaffingRateSection"
 import { EMPTY_BUDGET, rollupBudgets } from "@/lib/budgetRollup";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
+import { canOpenRoute } from "@/lib/routeAccess";
 import { useProgramChangeReset } from "@/lib/hooks/useProgramChangeReset";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useRole } from "@/lib/hooks/useRole";
@@ -366,12 +367,15 @@ export function EffectifsPageClient() {
         {activeProgram && <span className="text-sm text-text-secondary">{activeProgram.name}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href="/hr/etp"
-          className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1.5 text-[12px] font-semibold text-primary transition hover:border-black"
-        >
-          {t("effectifs.viewBaseEtp")} <ArrowUpRight size={13} />
-        </Link>
+        {/* Audit fix #3 : lien masqué pour un profil qui ne peut pas ouvrir la base ETP. */}
+        {canOpenRoute(user, "/hr/etp", programLoading ? undefined : programType) && (
+          <Link
+            href="/hr/etp"
+            className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1.5 text-[12px] font-semibold text-primary transition hover:border-black"
+          >
+            {t("effectifs.viewBaseEtp")} <ArrowUpRight size={13} />
+          </Link>
+        )}
         {/* Import Excel en lot : pilote du plan / admin uniquement (application directe) — masqué
             pour tous les autres, comex/RH compris (décision PO : staffing = pilotage). */}
         {activeProgram && programType === "strategic" && isPilotOrAdmin(user, activeProgramId) && (
@@ -621,7 +625,12 @@ export function EffectifsPageClient() {
     return (
       <div className="space-y-6">
         {header}
-        <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
+        <p className="max-w-3xl text-sm text-text-secondary">
+          {t(
+            "strategicLinks.effectifsSubtitle",
+            "ETP mobilisés sur les chantiers du programme, par équipe. Dans « Mobilisé vs disponible », cliquez une équipe pour filtrer sur elle, puis ouvrez la liste de ses employés disponibles."
+          )}
+        </p>
         {moneyBudgetSection}
         {needVsAvailableSection}
         <Card>
@@ -637,7 +646,12 @@ export function EffectifsPageClient() {
   return (
     <div className="space-y-6">
       {header}
-      <p className="max-w-3xl text-sm text-text-secondary">{t("effectifs.subtitle")}</p>
+      <p className="max-w-3xl text-sm text-text-secondary">
+        {t(
+          "strategicLinks.effectifsSubtitle",
+          "ETP mobilisés sur les chantiers du programme, par équipe. Dans « Mobilisé vs disponible », cliquez une équipe pour filtrer sur elle, puis ouvrez la liste de ses employés disponibles."
+        )}
+      </p>
       {moneyBudgetSection}
       {needVsAvailableSection}
 

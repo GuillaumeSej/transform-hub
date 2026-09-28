@@ -47,6 +47,7 @@ import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
+import { planIndicatorDeepLink } from "@/lib/strategicLinks";
 import { PendingKpiValues } from "@/components/strategic/PendingKpiValues";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import { PendingApprovalBadge } from "@/components/strategic/PendingApprovalBadge";
@@ -943,6 +944,7 @@ export function KpiPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: roleLoading } = useRole();
+  const { showToast } = useToast();
   const {
     activeProgram,
     activeProgramId,
@@ -1295,21 +1297,69 @@ export function KpiPageClient() {
     !dataLoading &&
     !!activeProgram &&
     programType === "strategic";
-  useEffect(() => {
-    if (!targetIndicatorId || !pageReady) return;
-    const el = document.getElementById(`indicator-${targetIndicatorId}`);
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    setHighlightedIndicatorId(targetIndicatorId);
-    const timeout = setTimeout(() => setHighlightedIndicatorId(null), 2500);
-    return () => clearTimeout(timeout);
-  }, [targetIndicatorId, pageReady]);
 
   // Vue Cartes (défaut, comportement historique) vs Tableau (nouvelle vue plate, sans graphique,
   // groupée par axe — voir `KpiTableView`) : les deux vues lisent EXACTEMENT le même périmètre déjà
   // filtré (`grouped`/`orphans`/`measurements`), aucune donnée séparée n'est chargée pour la vue
   // Tableau.
   const [kpiView, setKpiView] = useState<"cards" | "table">("cards");
+
+  // Audit fix #3 : la carte visée peut être MASQUÉE (filtre axe/chantier/responsable/statut, ou vue
+  // Tableau active) — on lève d'abord ce qui bloque (`planIndicatorDeepLink`), puis on défile au
+  // rendu suivant ; hors périmètre chargé → toast plutôt qu'un lien silencieusement sans effet.
+  // `handledIndicatorRef` : le lien n'est traité qu'UNE fois par cible — un filtre posé ensuite par
+  // l'utilisateur (paramètre `indicator` toujours dans l'URL) ne doit pas être effacé à nouveau.
+  const handledIndicatorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!targetIndicatorId || !pageReady) return;
+    if (handledIndicatorRef.current === targetIndicatorId) return;
+    const plan = planIndicatorDeepLink({
+      targetId: targetIndicatorId,
+      scopeIds: indicators.map((i) => i.id),
+      filteredIds: filteredIndicators.map((i) => i.id),
+      view: kpiView,
+    });
+    if (plan.kind === "notFound") {
+      handledIndicatorRef.current = targetIndicatorId;
+      showToast(
+        t("strategicLinks.kpiIndicatorNotFound", "Indicateur introuvable dans la vue actuelle"),
+        "",
+        "error"
+      );
+      return;
+    }
+    if (plan.kind === "reveal") {
+      if (plan.switchToCards) setKpiView("cards");
+      if (plan.clearFilters) {
+        const params = new URLSearchParams(searchParams.toString());
+        for (const key of ["axis", "chantier", "owner", "status"]) params.delete(key);
+        router.replace(`/kpi?${params.toString()}`, { scroll: false });
+      }
+      return; // l'effet se rejoue une fois la carte rendue
+    }
+    const el = document.getElementById(`indicator-${targetIndicatorId}`);
+    if (!el) return;
+    handledIndicatorRef.current = targetIndicatorId;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedIndicatorId(targetIndicatorId);
+  }, [
+    targetIndicatorId,
+    pageReady,
+    indicators,
+    filteredIndicators,
+    kpiView,
+    searchParams,
+    router,
+    showToast,
+    t,
+  ]);
+  // Surlignage borné dans le temps, indépendant des re-rendus de l'effet ci-dessus (une mise à jour
+  // live des données ne doit pas annuler son extinction).
+  useEffect(() => {
+    if (!highlightedIndicatorId) return;
+    const timeout = setTimeout(() => setHighlightedIndicatorId(null), 2500);
+    return () => clearTimeout(timeout);
+  }, [highlightedIndicatorId]);
   // Année de la vue Tableau (sélecteur partagé `YearSegmentedControl`) : « Actuel »/« Cible » y
   // sont lus sur la dernière mesure DE L'ANNÉE choisie. Défaut = historique complet, soit la
   // dernière mesure connue (comportement historique de la vue).
