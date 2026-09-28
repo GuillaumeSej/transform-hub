@@ -12,6 +12,8 @@ import { STATUS_ORDER } from "@/lib/status-config";
 import { isActiveMovement } from "@/lib/workforceLogic";
 import { loadedAnnualSalary } from "@/lib/hrFinancials";
 import { planMovementFte, targetMovementFteImpact } from "@/lib/hrProgramSummary";
+import { formatNumber } from "@/lib/format";
+import type { Locale } from "@/lib/i18n/locales";
 
 /**
  * Moteur de calcul pur du module RH — agrégations de la base ETP et des mouvements pour le
@@ -84,7 +86,7 @@ export function fteEffect(m: WorkforceMovement): number {
   }
 }
 
-export function currentFTE(wf: Workforce): number {
+export function currentFTE(wf: Pick<Workforce, "totalFTE" | "movements">): number {
   return (
     wf.totalFTE +
     wf.movements
@@ -108,6 +110,118 @@ export function targetFTE(wf: Pick<Workforce, "totalFTE" | "movements">): number
   const baseline = Number.isFinite(wf.totalFTE) ? wf.totalFTE : 0;
   const impact = wf.movements.reduce((s, m) => s + targetMovementFteImpact(m), 0);
   return Math.round((baseline + impact) * 10) / 10;
+}
+
+// ---------- Effectifs : définitions uniques (audit effectifs #2) ----------
+//
+// Règle PO : l'effectif se lit TOUJOURS en ETP ; un nombre de personnes n'est qu'un complément,
+// explicitement libellé « personnes ». Trois concepts, un helper chacun, partagés par la Base ETP,
+// le Dashboard RH et (pour le disponible par équipe) la page Budget & effectifs :
+//  - `headcountAtStart` : effectif au démarrage du programme = baseline `Workforce.totalFTE`
+//    (somme des `Employee.fte` de la base importée, ou baseline explicite) ; personnes = fiches de
+//    la base ETP (la base n'est PAS modifiée par les mouvements : c'est la photo de départ).
+//  - `currentHeadcount` : effectif actuel = baseline + mouvements RÉALISÉS (non abandonnés), même
+//    calcul que `currentFTE` ; personnes = fiches − sorties réalisées + recrutements réalisés.
+//  - cible : `targetFTE` (ci-dessus).
+
+/** Effectif exprimé en ETP, avec le nombre de personnes en complément (`null` = non calculable,
+ *  ex. pas de base ETP détaillée ou périmètre non scopable sur les fiches employé). */
+export type HeadcountFigure = { fte: number; persons: number | null };
+
+function isExitType(m: WorkforceMovement): boolean {
+  return m.type === "Attrition" || m.type === "Départ forcé";
+}
+
+function isRealizedActive(m: WorkforceMovement): boolean {
+  return isActiveMovement(m) && m.status === "Réalisé";
+}
+
+/** Matricules des salariés dont une sortie (attrition / départ forcé) est RÉALISÉE. */
+export function realizedExitEmployeeIds(movements: WorkforceMovement[]): Set<string> {
+  const ids = new Set<string>();
+  for (const m of movements) if (m.empId && isExitType(m) && isRealizedActive(m)) ids.add(m.empId);
+  return ids;
+}
+
+/** Effectif au démarrage du programme (voir en-tête de section). */
+export function headcountAtStart(wf: Pick<Workforce, "totalFTE" | "employees">): HeadcountFigure {
+  const fte = Number.isFinite(wf.totalFTE) ? wf.totalFTE : 0;
+  const count = wf.employees?.length ?? 0;
+  return { fte: round1(fte), persons: count > 0 ? count : null };
+}
+
+/** Effectif actuel (voir en-tête de section). Personnes : chaque sortie réalisée retire une
+ *  personne (dédoublonnée par matricule quand elle est liée à une fiche), chaque recrutement
+ *  réalisé en ajoute une ; les transferts internes sont neutres. */
+export function currentHeadcount(
+  wf: Pick<Workforce, "totalFTE" | "employees" | "movements">
+): HeadcountFigure {
+  const start = headcountAtStart(wf);
+  const fte = round1(currentFTE(wf));
+  if (start.persons === null) return { fte, persons: null };
+  const exitedIds = realizedExitEmployeeIds(wf.movements);
+  let exits = exitedIds.size;
+  let hires = 0;
+  for (const m of wf.movements) {
+    if (!isRealizedActive(m)) continue;
+    if (m.type === "Recrutement") hires += 1;
+    else if (isExitType(m) && !m.empId) exits += 1;
+  }
+  return { fte, persons: Math.max(0, start.persons - exits + hires) };
+}
+
+/** Fiches employé du périmètre d'un filtre département / pays (mêmes règles que
+ *  `scopeWorkforceBaseline`) ; `null` si un filtre workstream est actif (pas de workstream sur
+ *  `Employee` : nombre de personnes non calculable). */
+export function scopeEmployees(
+  employees: Employee[],
+  filters: BaselineScopeFilters
+): Employee[] | null {
+  if (filters.workstream?.length) return null;
+  const dep = filters.department?.length ? new Set(filters.department) : null;
+  const cty = filters.country?.length ? new Set(filters.country) : null;
+  return employees.filter((e) => (!dep || dep.has(e.department)) && (!cty || cty.has(e.country)));
+}
+
+/** Composition des lignes du tableau Base ETP : fiches salariés (dont sorties réalisées) +
+ *  lignes « à recruter » (mouvements de recrutement). */
+export type EtpRowBreakdown = {
+  total: number;
+  employees: number;
+  departed: number;
+  recruitments: number;
+};
+
+export function etpRowBreakdown(
+  rows: { employee: { id: string } | null }[],
+  movements: WorkforceMovement[]
+): EtpRowBreakdown {
+  const exited = realizedExitEmployeeIds(movements);
+  let employees = 0;
+  let departed = 0;
+  for (const r of rows) {
+    if (!r.employee) continue;
+    employees += 1;
+    if (exited.has(r.employee.id)) departed += 1;
+  }
+  return { total: rows.length, employees, departed, recruitments: rows.length - employees };
+}
+
+/** Valeur ETP localisée, arrondie au dixième (fr `99,7`, en `99.7`) — formateur de l'app. */
+export function formatFteValue(value: number, locale?: Locale): string {
+  const v = Number.isFinite(value) ? Math.round(value * 10) / 10 : 0;
+  return formatNumber(v || 0, { maximumFractionDigits: 1 }, locale);
+}
+
+type Translate = (key: string, fallback?: string) => string;
+
+/** Libellé d'effectif : « 109 ETP (113 personnes) », ou « 109 ETP » sans nombre de personnes. */
+export function formatHeadcount(figure: HeadcountFigure, t: Translate, locale?: Locale): string {
+  const fte = formatFteValue(figure.fte, locale);
+  if (figure.persons === null) return t("hr.headcount.fteOnly", "{fte} ETP").replace("{fte}", fte);
+  return t("hr.headcount.fteWithPersons", "{fte} ETP ({persons} personnes)")
+    .replace("{fte}", fte)
+    .replace("{persons}", formatNumber(figure.persons, undefined, locale));
 }
 
 // ---------- Baseline dérivée de la base ETP (B2) ----------

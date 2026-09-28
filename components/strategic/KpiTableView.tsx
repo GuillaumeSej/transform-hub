@@ -6,35 +6,32 @@ import {
   baselineMeasurement,
   computeIndicatorDelta,
   formatIndicatorProgress,
-  indicatorReadingState,
   latestMeasurement,
   latestNumericMeasurement,
-  progressBucket,
+  resolveIndicatorStatus,
   resolveIndicatorTargetForPeriod,
-  type ProgressBucket,
 } from "@/lib/axisLogic";
-import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
+import {
+  IndicatorStatusBadge,
+  type IndicatorDisplayStatus,
+} from "@/components/strategic/IndicatorStatusBadge";
 import { IndicatorMetaLine } from "@/components/strategic/IndicatorMetaLine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Chantier, Indicator, IndicatorMeasurement, StrategicAxis } from "@/types";
 
-/** Couleur d'accent de ligne selon la progression vers la cible (`ProgressBucket`, même 3 seaux
- *  discrets — jamais de dégradé — que `MilestoneChecklistPanel.tsx`, seule source de vérité déjà
- *  établie pour ces 3 couleurs dans le Plan Stratégique) : "dans la cible" (vert, 100%), "sur la
- *  trajectoire" (ambre, progression partielle mais favorable), "à risque" (rouge, aucune
- *  progression ou défavorable). `"empty"` (pas de mesure/cible exploitable) reste neutre — même
- *  garde-fou que `computeIndicatorDelta` : on n'invente jamais un statut sans donnée. */
-const ROW_ACCENT: Record<ProgressBucket, string> = {
-  empty: "border-l-transparent",
-  red: "border-l-rag-red",
-  amber: "border-l-rag-amber",
-  green: "border-l-rag-green",
+/** Couleur d'accent de ligne et de la valeur « Actuel » = le statut AFFICHÉ de l'indicateur
+ *  (`resolveIndicatorStatus`, trois états — audit fix #2). Auparavant dérivée d'un seau de
+ *  progression (`progressBucket`) dont l'ambre se lisait « sur la trajectoire » alors que le badge
+ *  de la même ligne disait « À risque » : une seule définition désormais. `no_data` reste neutre. */
+const ROW_ACCENT: Record<IndicatorDisplayStatus, string> = {
+  no_data: "border-l-transparent",
+  at_risk: "border-l-rag-red",
+  on_track: "border-l-rag-green",
 };
-const VALUE_COLOR: Record<ProgressBucket, string> = {
-  empty: "text-text-primary",
-  red: "text-rag-red",
-  amber: "text-rag-amber",
-  green: "text-rag-green-dark",
+const VALUE_COLOR: Record<IndicatorDisplayStatus, string> = {
+  no_data: "text-text-primary",
+  at_risk: "text-rag-red",
+  on_track: "text-rag-green-dark",
 };
 
 /**
@@ -114,14 +111,10 @@ export function KpiTableView({
       : undefined;
     // Statut lu sur les MÊMES mesures que la valeur affichée (année sélectionnée) — plus de
     // statut global à côté d'une valeur d'une autre année. "Sans donnée" = rien à comparer.
-    const readingState = indicatorReadingState(indicator, measurements);
-    // Accent "dans la cible / sur la trajectoire / à risque" (round "KPI pro") : dérivé de
-    // l'avancement vers la cible du PALIER courant (`progressToStepPct`, contexte du statut),
-    // rebucketé par `progressBucket` — jamais une nouvelle échelle de couleur, voir doc-comment en
-    // tête de fichier. `undefined` (pas d'objectif chiffré ou pas de mesure exploitable) reste
-    // neutre. La colonne "Avancement" affiche, elle, l'avancement vers la cible FINALE.
+    const readingState = resolveIndicatorStatus(indicator, measurements);
+    // Accent de ligne = ce même statut (voir doc-comment en tête de fichier). La colonne
+    // "Avancement" affiche l'avancement vers la cible FINALE.
     const delta = computeIndicatorDelta(indicator, latest, baselineMeasurements ?? measurements);
-    const bucket = progressBucket(delta?.progressToStepPct);
 
     return (
       <tr
@@ -147,7 +140,7 @@ export function KpiTableView({
           onIndicatorClick
             ? "cursor-pointer focus:outline-none focus-visible:bg-bp-coral/[0.06]"
             : ""
-        } ${ROW_ACCENT[bucket]} ${index % 2 === 1 ? "bg-neutral-50/60" : "bg-white"}`}
+        } ${ROW_ACCENT[readingState]} ${index % 2 === 1 ? "bg-neutral-50/60" : "bg-white"}`}
       >
         <td className={td}>
           <div className="flex items-center gap-1.5 font-medium">
@@ -170,7 +163,7 @@ export function KpiTableView({
           <IndicatorMetaLine indicator={indicator} className="mt-1" />
         </td>
         <td className={td}>{baselineText}</td>
-        <td className={`${td} font-semibold ${VALUE_COLOR[bucket]}`}>{current}</td>
+        <td className={`${td} font-semibold ${VALUE_COLOR[readingState]}`}>{current}</td>
         <td className={td}>
           {currentTarget !== undefined ? `${currentTarget}${unitSuffix}` : "—"}
         </td>
@@ -202,14 +195,17 @@ export function KpiTableView({
           )}
         </td>
         <td className={td}>
-          {readingState === "no_data" ? (
-            <span className="text-xs text-tertiary">{labels.noValue}</span>
-          ) : (
-            <IndicatorStatusBadge
-              status={readingState}
-              label={readingState === "on_track" ? labels.onTrack : labels.atRisk}
-            />
-          )}
+          {/* Trois états, même badge que le reste du Plan Stratégique : « Sans donnée » gris. */}
+          <IndicatorStatusBadge
+            status={readingState}
+            label={
+              readingState === "on_track"
+                ? labels.onTrack
+                : readingState === "at_risk"
+                  ? labels.atRisk
+                  : undefined
+            }
+          />
         </td>
       </tr>
     );

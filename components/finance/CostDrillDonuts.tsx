@@ -14,6 +14,7 @@ import {
   isCostEngaged,
   isInvestNature,
   sortedHierarchyLevels,
+  splitByNature,
   type HierarchyCostSlice,
   type WorkstreamCostGroup,
 } from "@/lib/financeCosts";
@@ -157,8 +158,24 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
 
   return (
     <Card>
-      <CardHeader title={t("finance.chart.engagedTitle", "Coûts engagés vs à venir")} />
+      <CardHeader
+        title={t(
+          "finance.chart.engagedTitleOneOff",
+          "Coûts ponctuels (CAPEX + OPEX ponctuel) : engagés vs à venir"
+        )}
+      />
       <CardBody>
+        {/* Périmètre explicite (audit fix #2) : OPEX récurrent EXCLU — même total que le
+            « Réactualisé » du KPI « CAPEX & coûts ponctuels » du dashboard, et même « engagé ». */}
+        <p className="mb-2 text-[11.5px] text-secondary">
+          {t(
+            "finance.chart.engagedScopeNote",
+            "Total {total} (engagé {engaged} · à venir {upcoming}) — OPEX récurrent exclu, même périmètre que le KPI « CAPEX & coûts ponctuels » du dashboard."
+          )
+            .replace("{total}", fmt(split.total))
+            .replace("{engaged}", fmt(split.engaged))
+            .replace("{upcoming}", fmt(split.upcoming))}
+        </p>
         {split.total === 0 ? (
           <EmptyState />
         ) : (
@@ -261,7 +278,25 @@ export function CostByHierarchyChart({
     return groupCostsByWorkstream(leafSlice.rows, data.workstreams);
   }, [leafSlice, data.workstreams]);
 
-  const title = t("finance.chart.hierarchyTitle", "Répartition des coûts par centre de coût / P&L");
+  const title = t(
+    "finance.chart.hierarchyTitleAllCosts",
+    "Coûts totaux yc OPEX récurrent, par compte P&L / centre de coût"
+  );
+
+  // Réconciliation avec le donut « Coûts ponctuels » (audit fix #2) : ce donut-ci compte TOUTES les
+  // natures de coût (CAPEX + OPEX ponctuel + OPEX récurrent) — d'où un total supérieur. Les lignes
+  // sans rattachement à l'arborescence n'apparaissent dans aucune part : leur montant est signalé.
+  const natureTotals = useMemo(() => splitByNature(data), [data]);
+  const allCostsTotal = natureTotals.capex + natureTotals.oneoff + natureTotals.opexRec;
+  const rootTotal = useMemo(() => {
+    const rootKey = levels[0]?.key;
+    if (!rootKey) return 0;
+    return costsByHierarchyNode(data, hierarchyNodes, rootKey, null).reduce(
+      (sum, s) => sum + s.amount,
+      0
+    );
+  }, [data, hierarchyNodes, levels]);
+  const unattached = round2(allCostsTotal - rootTotal);
 
   if (levels.length === 0) {
     return (
@@ -285,6 +320,20 @@ export function CostByHierarchyChart({
     <Card>
       <CardHeader title={title} />
       <CardBody>
+        <p className="mb-2 text-[11.5px] text-secondary">
+          {t(
+            "finance.chart.hierarchyScopeNote",
+            "Total {total} = coûts ponctuels (CAPEX + OPEX ponctuel) {oneOff} + OPEX récurrent {rec}. Chaque coût est affecté au compte P&L de son centre de coût (ligne de coût, sinon levier) : un compte de produits (ex. Revenue) peut donc porter les coûts des leviers qui l'impactent."
+          )
+            .replace("{total}", fmt(round2(allCostsTotal)))
+            .replace("{oneOff}", fmt(round2(natureTotals.capex + natureTotals.oneoff)))
+            .replace("{rec}", fmt(natureTotals.opexRec))}
+          {unattached > 0.005 &&
+            ` ${t(
+              "finance.chart.hierarchyUnattachedNote",
+              "Dont {amount} sans rattachement à l'arborescence (absent du graphique)."
+            ).replace("{amount}", fmt(unattached))}`}
+        </p>
         <FinanceDrillBreadcrumb
           levels={levels.map((l) => l.label)}
           path={path}

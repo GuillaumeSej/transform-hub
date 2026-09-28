@@ -16,6 +16,7 @@ import * as engine from "@/lib/engine";
 import { generateAlerts } from "@/lib/alertEngine";
 import { resolveHierarchyPath } from "@/lib/hierarchyLogic";
 import {
+  filterProgramScopedLevers,
   isLeverOwnedBy,
   isLeverSponsoredBy,
   isLeverVisibleForClearance,
@@ -276,42 +277,22 @@ export function LeversPagePerformance() {
   // appliqué AVANT les filtres de la barre (leurs options ne doivent refléter que les leviers du
   // programme courant), même principe que le dashboard exécutif (programScopedLevers).
   //
-  // IMPORTANT : `programId` est optionnel sur `Lever` (import Excel historique sans colonne
-  // "Programme", création manuelle avant l'existence des programmes...) — un filtre `===` strict
-  // faisait purement et simplement DISPARAÎTRE ces leviers de la page dès qu'un programme était
-  // sélectionné (régression constatée sur des entreprises avec des leviers importés de longue
-  // date). Un lever SANS `programId`, ou dont le `programId` ne correspond à AUCUN programme
-  // Performance actuel de l'entreprise (programme supprimé/recréé depuis), reste donc TOUJOURS
-  // visible, quel que soit le programme sélectionné — seuls les leviers explicitement rattachés à
-  // un AUTRE programme existant sont masqués.
-  const performanceProgramIds = useMemo(
-    () => new Set(performancePrograms.map((p) => p.id)),
-    [performancePrograms]
+  // Règle UNIQUE `filterProgramScopedLevers` (audit fix #2), partagée avec le dashboard, Finance et
+  // Chantiers pour que les comptes de leviers se recoupent : programme sélectionné → ses seuls
+  // leviers ; vue consolidée → programmes consolidés + leviers orphelins (sans `programId`, ou
+  // rattachés à un programme Performance supprimé). Avant, la bibliothèque ajoutait les orphelins
+  // à CHAQUE programme (comptes ≠ dashboard) ; ils restent visibles — et rattachables — en vue
+  // consolidée.
+  const programScopedLevers = useMemo(
+    () =>
+      filterProgramScopedLevers(scopedLevers, {
+        programId: selectedProgramId,
+        isConsolidatedView,
+        consolidatedProgramIds: consolidatedPrograms.map((p) => p.id),
+        performanceProgramIds: performancePrograms.map((p) => p.id),
+      }),
+    [scopedLevers, selectedProgramId, isConsolidatedView, consolidatedPrograms, performancePrograms]
   );
-  // Vue consolidée : combine les leviers de TOUS les programmes du périmètre consolidé de
-  // l'utilisateur (voir getConsolidatedPerformancePrograms), au lieu du seul programme actif —
-  // un levier dont le `programId` ne correspond à AUCUN programme consolidé (ou n'en a pas) est
-  // exclu, contrairement au repli mono-programme ci-dessous (pas de notion de "programme non
-  // scopé" pertinente ici, la vue consolidée EST le scope).
-  const consolidatedProgramIds = useMemo(
-    () => new Set(consolidatedPrograms.map((p) => p.id)),
-    [consolidatedPrograms]
-  );
-  const programScopedLevers = useMemo(() => {
-    if (isConsolidatedView) {
-      return scopedLevers.filter((l) => !!l.programId && consolidatedProgramIds.has(l.programId));
-    }
-    return scopedLevers.filter(
-      (l) =>
-        !l.programId || l.programId === selectedProgramId || !performanceProgramIds.has(l.programId)
-    );
-  }, [
-    scopedLevers,
-    selectedProgramId,
-    performanceProgramIds,
-    isConsolidatedView,
-    consolidatedProgramIds,
-  ]);
 
   // Colonne/filtre "Programme" (Tâche 1, vue consolidée) : résout le nom du programme d'un levier
   // via `programs` (liste complète de l'entreprise, déjà chargée par usePerformanceProgramSelector

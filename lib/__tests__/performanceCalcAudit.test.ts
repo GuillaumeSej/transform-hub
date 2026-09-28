@@ -453,6 +453,29 @@ describe("minor calculation fixes", () => {
       }).map((l) => l.id)
     ).toEqual(["a"]);
   });
+
+  it("filterProgramScopedLevers: orphan levers only in the consolidated view (audit fix #2)", () => {
+    const ls = [
+      lever({ id: "a", programId: "p1" }),
+      lever({ id: "b", programId: "p2" }),
+      lever({ id: "none", programId: undefined }),
+      lever({ id: "gone", programId: "deleted" }),
+    ];
+    const performanceProgramIds = ["p1", "p2"];
+    // Mono-programme : strict, les orphelins ne gonflent aucun programme.
+    expect(
+      filterProgramScopedLevers(ls, { programId: "p1", performanceProgramIds }).map((l) => l.id)
+    ).toEqual(["a"]);
+    // Consolidé : programmes consolidés + orphelins (sans programme / programme supprimé).
+    expect(
+      filterProgramScopedLevers(ls, {
+        programId: null,
+        isConsolidatedView: true,
+        consolidatedProgramIds: ["p1"],
+        performanceProgramIds,
+      }).map((l) => l.id)
+    ).toEqual(["a", "none", "gone"]);
+  });
 });
 
 // ─── M1 : exercice du programme + libellés réels ────────────────────────────────────────────────

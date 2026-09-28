@@ -65,6 +65,7 @@ import { Popover } from "@/components/shared/Popover";
 import { ChantierDetailPanel } from "@/components/strategic/ChantierDetailPanel";
 import { IndicatorReadingBadge } from "@/components/strategic/IndicatorReadingBadge";
 import {
+  INDICATOR_STATUS_LABEL_KEY,
   INDICATOR_STATUS_TONE,
   IndicatorStatusBadge,
   IndicatorStatusLegend,
@@ -834,14 +835,7 @@ export function StrategicDashboardView() {
             </span>
             {/* Légende des statuts (refonte visuelle indicateurs) : le code couleur des puces
                 ci-dessous se lit d'un coup d'œil, sans survol. */}
-            {axisIndicators.length > 0 && (
-              <IndicatorStatusLegend
-                labels={{
-                  on_track: t("indicatorStatus.onTrack"),
-                  at_risk: t("indicatorStatus.atRisk"),
-                }}
-              />
-            )}
+            {axisIndicators.length > 0 && <IndicatorStatusLegend />}
           </div>
           <div className="flex flex-wrap items-stretch gap-1.5">
             {axisIndicators.length === 0 ? (
@@ -851,11 +845,11 @@ export function StrategicDashboardView() {
             ) : (
               <>
                 {shownIndicators.map((indicator) => {
-                  const status = resolveIndicatorStatus(indicator);
+                  // Statut LIVE à trois états (audit fix #2) : sans mesure comparable →
+                  // « Sans donnée » (gris), jamais « Sur la trajectoire ».
+                  const status = resolveIndicatorStatus(indicator, measurements);
                   const atRisk = status === "at_risk";
-                  const statusLabel = t(
-                    atRisk ? "indicatorStatus.atRisk" : "indicatorStatus.onTrack"
-                  );
+                  const statusLabel = t(INDICATOR_STATUS_LABEL_KEY[status]);
                   const clickable = isIndicatorPillClickable(indicator);
                   // Round 30 : `undefined` (mesure ou cible manquante) → pas de ligne de lecture,
                   // `IndicatorReadingBadge` ne s'affiche que quand les deux valeurs sont connues
@@ -885,7 +879,7 @@ export function StrategicDashboardView() {
                         clickable ? "hover:border-neutral-300 hover:shadow-sm" : "cursor-default"
                       }`}
                       style={{
-                        borderLeftColor: INDICATOR_STATUS_TONE[status].hex,
+                        borderLeftColor: INDICATOR_STATUS_TONE[status].color,
                       }}
                     >
                       <span className="flex w-full min-w-0 items-center gap-1.5">

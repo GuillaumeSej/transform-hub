@@ -44,18 +44,26 @@ export function computeLeverHealth(
   return { lever, health, computedRisk, activeAlertCount: activeAlerts.length };
 }
 
-/** Répartition des leviers NON abandonnés par santé (`computeLeverHealth`) — KPI « Leviers à
- *  risque » du dashboard (= watch + critical) et compteurs de la page Chantiers. */
+/** Niveaux de risque qui font d'un levier un « levier à risque » (décision PO, audit fix #2) :
+ *  Critique ou Élevé selon les seuils de l'entreprise (`computeLeverRisk`) — PAS Moyen (« à
+ *  surveiller »). Sert aussi au lien vers la bibliothèque filtrée sur ces niveaux. */
+export const AT_RISK_LEVELS: readonly RiskLevel[] = ["critical", "high"];
+
+/** Répartition des leviers NON abandonnés par santé (`computeLeverHealth`) — SOURCE UNIQUE du
+ *  nombre de « Leviers à risque » : KPI du dashboard, badge du bloc « Alertes & Dépendances » et
+ *  compteurs de la page Chantiers. `atRisk` = leviers de risque Critique/Élevé (`AT_RISK_LEVELS`,
+ *  = bucket `critical`) ; `watch` = risque Moyen, affiché à part, jamais additionné à `atRisk`. */
 export function leverHealthCounts(
   levers: Lever[],
   alerts: Alert[],
   thresholds?: { level: RiskLevel; minAmount: number }[]
-): { onTrack: number; watch: number; critical: number } {
-  const counts = { onTrack: 0, watch: 0, critical: 0 };
+): { onTrack: number; watch: number; critical: number; atRisk: number } {
+  const counts = { onTrack: 0, watch: 0, critical: 0, atRisk: 0 };
   for (const lever of levers) {
     if (lever.status === "cancelled") continue;
-    const { health } = computeLeverHealth(lever, alerts, thresholds);
+    const { health, computedRisk } = computeLeverHealth(lever, alerts, thresholds);
     if (health !== "cancelled") counts[health] += 1;
+    if (AT_RISK_LEVELS.includes(computedRisk)) counts.atRisk += 1;
   }
   return counts;
 }

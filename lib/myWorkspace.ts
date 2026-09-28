@@ -49,11 +49,14 @@ import {
 } from "@/lib/leversLogic";
 import { canDecideImpactRealized, isImpactRealizedPending } from "@/lib/impactStatus";
 import {
+  axisProgressPct,
+  chantierDeclaredProgress,
   chantierHealthState,
   displayMilestoneId,
   isProjetDone,
   isProjetLate,
   milestoneProgressPct,
+  programProgressPct,
   resolveIndicatorOwner,
   resolveProgramType,
   type ChantierHealthState,
@@ -807,9 +810,8 @@ function buildPerimeter(
         label: axis.name,
         role: t("me.role.axisSponsor", "Sponsor d'axe"),
         health: worstHealth(own.map(healthOf)),
-        progressPct: average(
-          chantierActions.filter((a) => own.some((c) => c.id === a.chantierId)).map(progressOf)
-        ),
+        // Même % que la feuille de route / l'accordéon d'axe (`axisProgressPct`), audit fix #2.
+        progressPct: axisProgressPct(axis.id, chantiers, chantierActions, progressOf),
         href: leverHref(axis.id),
         programId: strategic.programId,
       });
@@ -825,9 +827,9 @@ function buildPerimeter(
         label: chantier.name,
         role: t("me.role.pilote", "Sponsor de chantier"),
         health: healthOf(chantier),
-        progressPct: average(
-          chantierActions.filter((a) => a.chantierId === chantier.id).map(progressOf)
-        ),
+        // Même % que la fiche chantier, le Gantt et la feuille de route (moyenne PONDÉRÉE par
+        // `chantierWeightPct`, `chantierDeclaredProgress`), audit fix #2.
+        progressPct: chantierDeclaredProgress(chantier.id, chantierActions, progressOf),
         href: chantierHref(chantier.id),
         programId: chantier.programId ?? strategic.programId,
       });
@@ -890,7 +892,15 @@ function buildPilotPerimeter(
           strategic.projetProgress ?? ((a) => milestoneProgressPct(a));
         const healthOf = strategicHealthLookup(strategic);
         health = worstHealth(strategic.chantiers.map(healthOf));
-        progressPct = average(strategic.chantierActions.map(progressOf));
+        // Le dashboard stratégique n'a pas d'agrégat programme : `programProgressPct` prolonge la
+        // chaîne projet → chantier (pondéré) → axe (moyenne des chantiers) → programme (moyenne
+        // des axes portant au moins un chantier), audit fix #2.
+        progressPct = programProgressPct(
+          strategic.axes,
+          strategic.chantiers,
+          strategic.chantierActions,
+          progressOf
+        );
       }
       const programSponsorLabel = t("me.role.programSponsor", "Commanditaire du programme");
       const programOwnerLabel = t("me.role.programOwner", "Responsable du programme");

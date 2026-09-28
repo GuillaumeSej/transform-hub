@@ -230,7 +230,7 @@ const de: Record<string, string> = {
   "dashboard.kpi.reforecast": "Neuprognose",
   "dashboard.kpi.plan": "Plan",
   "dashboard.kpi.leversAtRiskTooltip":
-    "Hebel mit Risiko (Badge der Bibliothek) Mittel oder höher — dieselben wie „Beobachten“ und „Kritische Warnungen“ in der Gesundheitsmatrix. Das Risiko ergibt sich aus Betrag und Alter der offenen roten/orangen Warnungen (eine gelöste Warnung zählt nicht mehr). Balken: orange = beobachten (Mittel), rot = kritisch (Hoch oder Kritisch).",
+    "Hebel mit Risikostufe Kritisch oder Hoch (Risikoschwellen des Unternehmens, berechnet aus Betrag und Alter der offenen roten/orangen Warnungen — eine gelöste Warnung zählt nicht mehr). Gleiche Zahl wie das Badge „Warnungen & Abhängigkeiten“. Hebel „Beobachten“ (Risiko Mittel) werden separat angezeigt und nicht mitgezählt. Balken: orange = beobachten (Mittel), rot = gefährdet (Hoch oder Kritisch). Klick: Bibliothek nach diesen Stufen gefiltert.",
   "dashboard.kpi.fteImpactedTooltip":
     "Summe der auf Hebelebene geschätzten VZÄ (Planung), nicht zu verwechseln mit der tatsächlichen HR-Verfolgung (siehe HR-Dashboard). „X / Y abgebaute Stellen“ zählt nur die im HR-Modul verfolgten realisierten/geplanten Zwangsaustritte — eine TEILMENGE dieser gesamten VZÄ-Auswirkung, keine vollständige Aufschlüsselung.",
   "dashboard.widgets.portfolioFunnel": "Hebel-Fortschritt",
@@ -734,6 +734,19 @@ const de: Record<string, string> = {
   "hr.targetLower": "Ziel",
   "hr.baselineFteLine": "Ausgangswert {n} VZÄ",
   "hr.landingPrefix": "Zielwert",
+  "hr.headcount.fteOnly": "{fte} VZÄ",
+  "hr.headcount.fteWithPersons": "{fte} VZÄ ({persons} Personen)",
+  "hr.subtitleHeadcount":
+    "Personalbestand bei Programmstart: {from} VZÄ → Ziel: {to} VZÄ · {count} Bewegungen · {realized} umgesetzt",
+  "hr.currentHeadcountLabel": "Aktueller Personalbestand:",
+  "hr.targetHeadcountLabel": "Ziel:",
+  "hr.startHeadcountLine": "Personalbestand bei Programmstart: {n}",
+  "hr.column.startFte": "VZÄ bei Programmstart",
+  "hr.column.currentFte": "Aktuelle VZÄ",
+  "hr.column.targetFte": "Ziel-VZÄ",
+  "hr.column.startFteShort": "Start (VZÄ)",
+  "hr.column.currentFteShort": "Aktuell (VZÄ)",
+  "hr.column.targetFteShort": "Ziel (VZÄ)",
   "hr.kpi.fteImpact": "VZÄ-Auswirkung",
   "hr.kpi.annualSalarySavings": "Jährliche Gehaltseinsparungen",
   "hr.kpi.socialCostsConsumed": "Verbrauchte Sozialkosten",
@@ -844,6 +857,12 @@ const de: Record<string, string> = {
   "etp.newMovement": "Neue Bewegung",
   "etp.kpi.currentHeadcount": "Aktueller Personalbestand",
   "etp.kpi.targetHeadcount": "Ziel-Personalbestand",
+  "etp.headcountSummary":
+    "Aktueller Personalbestand: {current} · Personalbestand bei Programmstart: {start} · {m} Bewegungen erfasst",
+  "etp.kpi.personsSub": "{n} Personen",
+  "etp.kpi.startSub": "Start: {n} VZÄ",
+  "etp.rowBreakdown":
+    "{total} Zeilen: {employees} Mitarbeiterdatensätze (davon {departed} ausgeschieden — Austritt umgesetzt) + {recruitments} zu besetzende Stellen (geplante oder umgesetzte Einstellungen)",
   "etp.kpi.landingPlanSub": "Abweichung zum Ziel: {n} VZÄ",
   "etp.kpi.upcomingMovements": "Anstehende Bewegungen",
   "etp.kpi.toValidateHr": "HR-Validierung ausstehend",
@@ -1323,6 +1342,7 @@ const de: Record<string, string> = {
   "shared.fteWaterfallChart.dataUnavailable":
     "VZÄ-Daten nicht verfügbar — HR-Bewegungstypen prüfen (5-Typen-Gooduelle-Typologie erwartet).",
   "shared.fteWaterfallChart.endOfPeriod": "Periodenende",
+  "shared.fteWaterfallChart.opening": "Periodenbeginn",
   "shared.fteWaterfallChart.clickForDetail": "Klicken für Details je Hebel",
   "shared.fteWaterfallChart.reductionsLabel": "Reduzierungen (Abbau)",
   "chart.noDataToDisplay": "Keine Daten anzuzeigen.",
@@ -1529,6 +1549,7 @@ const de: Record<string, string> = {
   // ─── Strategieplan — Risikostatus eines Indikators ────────────────────────
   "indicatorStatus.onTrack": "Im Plan",
   "indicatorStatus.atRisk": "Gefährdet",
+  "indicatorStatus.noData": "Keine Daten",
 
   // ─── Strategieplan — Reifegrade (nur GENERISCHE Labels) ───────────────────
   // Die eigentlichen Stufenbezeichnungen stammen aus `MaturityStageConfig.label` (vom Admin je
@@ -2293,7 +2314,8 @@ const de: Record<string, string> = {
   "effectifs.viewBaseEtp": "VZÄ-Basis ansehen",
   "effectifs.needVsAvailable.availableDetailTitle": "Verfügbare Mitarbeitende — {team}",
   "effectifs.needVsAvailable.availableDetailEmpty": "Keine Mitarbeitenden in diesem Team.",
-  "effectifs.needVsAvailable.rowsCount": "{n} Mitarbeitende(r)",
+  "effectifs.needVsAvailable.rowsCount": "{n} Person(en) in der FTE-Basis",
+  "effectifs.needVsAvailable.availableTotal": "Aktuell verfügbar: {fte} VZÄ",
   "effectifs.needVsAvailable.columnName": "Name",
   "effectifs.needVsAvailable.columnFunction": "Funktion",
   "effectifs.needVsAvailable.columnTeam": "Team",
@@ -2610,6 +2632,16 @@ const de: Record<string, string> = {
   "finance.chart.netEconomy": "Nettoeinsparung",
   "finance.chart.timelineTitle": "Kostenbindung im Zeitverlauf (Invest)",
   "finance.chart.hierarchyTitle": "Kostenaufteilung nach Kostenstelle / GuV",
+  "finance.chart.engagedTitleOneOff":
+    "Einmalkosten (CAPEX + einmaliger OPEX): gebunden vs. anstehend",
+  "finance.chart.engagedScopeNote":
+    "Gesamt {total} (gebunden {engaged} · anstehend {upcoming}) — wiederkehrender OPEX ausgeschlossen, gleicher Umfang wie die Dashboard-Kennzahl „CAPEX & Einmalkosten“.",
+  "finance.chart.hierarchyTitleAllCosts":
+    "Gesamtkosten inkl. wiederkehrendem OPEX, nach GuV-Konto / Kostenstelle",
+  "finance.chart.hierarchyScopeNote":
+    "Gesamt {total} = Einmalkosten (CAPEX + einmaliger OPEX) {oneOff} + wiederkehrender OPEX {rec}. Jede Kostenposition wird dem GuV-Konto ihrer Kostenstelle zugeordnet (Kostenzeile, sonst Hebel): ein Ertragskonto (z. B. Revenue) kann daher die Kosten der Hebel tragen, die es beeinflussen.",
+  "finance.chart.hierarchyUnattachedNote":
+    "Davon {amount} ohne Zuordnung zur Hierarchie (nicht im Diagramm).",
   "finance.chart.hierarchyNoConfig":
     "Für dieses Unternehmen ist keine Finanzhierarchie konfiguriert.",
   "finance.chart.investVsSavingsTitle": "Investitionskosten vs. Savings",
@@ -2695,6 +2727,13 @@ const de: Record<string, string> = {
   "dashboard.widgets.noDependencyAlerts": "Keine Abhängigkeitskonflikte erkannt",
   "dashboard.tableHeader.capexRealizedPlan": "CAPEX (Ist / Plan)",
   "dashboard.tableHeader.opexOneOffRealizedPlan": "Einmaliger OPEX (Ist / Plan)",
+  "dashboard.kpi.leversAtRiskWatchHint": "mittleres Risiko, nicht gezählt",
+  "dashboard.riskCenter.leversAtRiskBadge": "{n} gefährdete Hebel",
+  "dashboard.riskCenter.openAlertsCount": "{n} offene Warnungen",
+  "dashboard.tableHeader.capexEngagedReforecast": "CAPEX (gebunden / Forecast)",
+  "dashboard.tableHeader.opexOneOffEngagedReforecast": "Einmaliger OPEX (gebunden / Forecast)",
+  "dashboard.workstreamsCancelledHidden":
+    "{n} abgebrochene(r) Hebel ausgeblendet — aus Kennzahlen und Tabelle ausgeschlossen.",
   "pnl.filterRegion": "Region",
   "pnl.filterCountry": "Land",
   "pnl.filterEntity": "Entität",

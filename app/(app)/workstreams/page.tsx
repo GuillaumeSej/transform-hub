@@ -73,14 +73,15 @@ export default function WorkstreamsPage() {
   // Périmètre = MÊME périmètre que le dashboard exécutif (programme sélectionné, `programId`
   // strict, + règle de visibilité des vues agrégées), pour que KPI et totaux se recoupent — puis
   // restreint au périmètre du RÔLE (porteur : ses leviers ; sponsor : ses chantiers), raison d'être
-  // de cette page (`canUserViewLever`). Avant, les leviers sans programme (ou d'un programme
-  // supprimé) y étaient ajoutés, ce qui la faisait diverger du dashboard.
-  const visibleLevers = filterProgramScopedLevers(
+  // de cette page (`canUserViewLever`). Leviers orphelins (sans programme / programme supprimé) :
+  // vue consolidée seule, comme partout (audit fix #2).
+  const scopedLevers = filterProgramScopedLevers(
     filterAggregateVisibleLevers(data.levers, user, company),
     {
       programId: selectedProgramId,
       isConsolidatedView,
       consolidatedProgramIds: consolidatedPrograms.map((p) => p.id),
+      performanceProgramIds: performancePrograms.map((p) => p.id),
     }
   ).filter((lever) =>
     canUserViewLever(
@@ -91,6 +92,10 @@ export default function WorkstreamsPage() {
       company?.confidentialityLevels
     )
   );
+  // Leviers abandonnés : exclus du KPI (`programSummary`) ET de la table (audit fix #2 — la table
+  // les listait alors que le KPI « Leviers » ne les comptait pas) ; leur nombre est rappelé en note.
+  const visibleLevers = scopedLevers.filter((l) => l.status !== "cancelled");
+  const cancelledCount = scopedLevers.length - visibleLevers.length;
   const summary = engine.programSummary({ ...data, levers: visibleLevers });
 
   // Même définition que partout (`engine.realizationPct` : cible ≤ 0 ou réalisé négatif → 0 %).
@@ -103,19 +108,15 @@ export default function WorkstreamsPage() {
   // du dashboard (alertes ouvertes, audit C6).
   const healthCounts = leverHealthCounts(visibleLevers, alerts, company?.riskThresholds);
 
-  const rows: Row[] = visibleLevers.map((l) => {
-    const cancelled = l.status === "cancelled";
-    return {
-      ...l,
-      risk: engine.computeLeverRisk(l.id, alerts, company?.riskThresholds).level,
-      realized: cancelled ? 0 : engine.realizedSavings(l),
-      // Un levier abandonné ne porte plus aucune cible (exclu des totaux, comme les KPI).
-      reforecastNet: cancelled ? 0 : engine.displayedReforecastNet(l).value,
-      progressPct: engine.leverProgressPct(l),
-      wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
-      statusLabel: lifecycle.label(l.status),
-    };
-  });
+  const rows: Row[] = visibleLevers.map((l) => ({
+    ...l,
+    risk: engine.computeLeverRisk(l.id, alerts, company?.riskThresholds).level,
+    realized: engine.realizedSavings(l),
+    reforecastNet: engine.displayedReforecastNet(l).value,
+    progressPct: engine.leverProgressPct(l),
+    wsName: data.workstreams.find((w) => w.id === l.ws)?.name.split(" ")[0] ?? l.ws,
+    statusLabel: lifecycle.label(l.status),
+  }));
 
   const columns: ColumnDef<Row>[] = [
     { key: "code", label: t("levers.column.code", "Code"), width: "90px" },
@@ -244,6 +245,14 @@ export default function WorkstreamsPage() {
         />
       </div>
 
+      {cancelledCount > 0 && (
+        <p className="mb-2 text-[11.5px] text-tertiary">
+          {t(
+            "dashboard.workstreamsCancelledHidden",
+            "{n} levier(s) abandonné(s) masqué(s) — exclus des indicateurs et de la table."
+          ).replace("{n}", String(cancelledCount))}
+        </p>
+      )}
       <Card>
         <CardBody flush>
           <EditableTable

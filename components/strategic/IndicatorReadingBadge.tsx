@@ -1,6 +1,8 @@
 import { ArrowRight } from "lucide-react";
-import type { IndicatorRiskStatus } from "@/types";
-import { INDICATOR_STATUS_TONE } from "@/components/strategic/IndicatorStatusBadge";
+import {
+  INDICATOR_STATUS_TONE,
+  type IndicatorDisplayStatus,
+} from "@/components/strategic/IndicatorStatusBadge";
 
 /**
  * Mini visuel "valeur actuelle → cible" d'un indicateur, affiché à l'intérieur de la puce d'axe de
@@ -17,14 +19,13 @@ import { INDICATOR_STATUS_TONE } from "@/components/strategic/IndicatorStatusBad
  * (`StrategicDashboardView.tsx`) est passé de `rounded-full` à `rounded-lg` : un rectangle à coins
  * adoucis porte mieux ce contenu à deux lignes qu'une pastille.
  *
- * Statut EFFECTIF de l'indicateur (`resolveIndicatorStatus`, surcharge manuelle comprise — même
- * source de vérité que `IndicatorStatusBadge`/`StrategicAxesView.tsx`), EXACTEMENT les mêmes tokens
- * (`bg-rag-green`/`bg-rag-amber`, `text-rag-green-dark`/`text-rag-amber`) qu'ailleurs dans l'appli,
- * jamais une logique de couleur maison.
+ * Statut AFFICHÉ de l'indicateur (`resolveIndicatorStatus(indicator, measurements)`, état live à
+ * trois valeurs — même source de vérité que `IndicatorStatusBadge`), EXACTEMENT les mêmes tokens
+ * (`INDICATOR_STATUS_TONE`) qu'ailleurs dans l'appli, jamais une logique de couleur maison.
  *
  * Composant pur, sans calcul métier : `current`/`target`/`unit` viennent de `readKpi` côté
  * appelant (jamais de valeur fabriquée ici — l'appelant n'affiche ce composant QUE quand `current`
- * ET `target` sont tous deux connus), `status` de `resolveIndicatorStatus(indicator)`.
+ * ET `target` sont tous deux connus), `status` de `resolveIndicatorStatus(indicator, measurements)`.
  */
 export function IndicatorReadingBadge({
   current,
@@ -38,7 +39,7 @@ export function IndicatorReadingBadge({
   current: number;
   target: number;
   unit?: string;
-  status: IndicatorRiskStatus;
+  status: IndicatorDisplayStatus;
   /** Libellés traduits fournis par l'appelant (qui a accès à `useTranslation`) — ce composant ne
    *  décide d'aucun texte par défaut, à l'image de `IndicatorStatusBadge`. */
   currentLabel: string;

@@ -26,6 +26,7 @@ import {
   computeIndicatorStatus,
   formatIndicatorProgress,
   countOnTrackAtRisk,
+  indicatorStatusShares,
   isChantierLate,
   isProjetDone,
   isProjetLate,
@@ -37,6 +38,7 @@ import {
   numberIndicators,
   programBlockedActions,
   programBudgetOverrun,
+  programProgressPct,
   programRoadmap,
   programRoadmapBounds,
   progressBucket,
@@ -201,18 +203,108 @@ describe("computeIndicatorStatus", () => {
   });
 });
 
-describe("resolveIndicatorStatus", () => {
-  it("returns the computed status when no manual override is set", () => {
-    expect(resolveIndicatorStatus(makeIndicator({ status: "at_risk" }))).toBe("at_risk");
+describe("resolveIndicatorStatus (display status = live 3-state reading)", () => {
+  it("shows 'no_data' — never 'on_track' — for an indicator without any measurement, whatever the stored status", () => {
+    expect(resolveIndicatorStatus(makeIndicator({ status: "on_track" }), [])).toBe("no_data");
+    expect(resolveIndicatorStatus(makeIndicator({ status: "at_risk" }), [])).toBe("no_data");
   });
 
-  it("ignores the dead statusOverride field (no UI can set it) — computed status only", () => {
+  it("reads the live measurements, not the stored (possibly stale) status field", () => {
+    const stale = makeIndicator({ status: "on_track" });
+    expect(resolveIndicatorStatus(stale, [makeMeasurement("IND001", "2026-03", 40)])).toBe(
+      "at_risk"
+    );
+    const staleRisk = makeIndicator({ status: "at_risk" });
+    expect(resolveIndicatorStatus(staleRisk, [makeMeasurement("IND001", "2026-03", 95)])).toBe(
+      "on_track"
+    );
+  });
+
+  it("is 'no_data' for a qualitative KPI and for a KPI without target", () => {
     expect(
-      resolveIndicatorStatus(makeIndicator({ status: "on_track", statusOverride: "at_risk" }))
-    ).toBe("on_track");
+      resolveIndicatorStatus(makeIndicator({ kind: "qualitative" }), [
+        makeMeasurement("IND001", "2026-03", 95),
+      ])
+    ).toBe("no_data");
     expect(
-      resolveIndicatorStatus(makeIndicator({ status: "at_risk", statusOverride: "on_track" }))
-    ).toBe("at_risk");
+      resolveIndicatorStatus(makeIndicator({ objectiveValue: undefined }), [
+        makeMeasurement("IND001", "2026-03", 95),
+      ])
+    ).toBe("no_data");
+  });
+
+  it("ignores the dead statusOverride field (no UI can set it)", () => {
+    const indicator = makeIndicator({ status: "at_risk", statusOverride: "on_track" });
+    expect(resolveIndicatorStatus(indicator, [makeMeasurement("IND001", "2026-03", 40)])).toBe(
+      "at_risk"
+    );
+  });
+
+  it("agrees with the stored-field writer computeIndicatorStatus whenever there is data", () => {
+    const indicator = makeIndicator();
+    for (const value of [10, 79, 80, 120]) {
+      const ms = [makeMeasurement("IND001", "2026-03", value)];
+      expect(resolveIndicatorStatus(indicator, ms)).toBe(computeIndicatorStatus(indicator, ms));
+    }
+  });
+});
+
+describe("indicatorStatusShares", () => {
+  it("keeps the 'all tracked indicators' denominator: 4/13 on track = 31 %", () => {
+    const shares = indicatorStatusShares({ onTrack: 4, atRisk: 5, noData: 4 });
+    expect(shares.pctOnTrack).toBe(31);
+  });
+
+  it("rounded legend percentages always sum to exactly 100", () => {
+    for (const counts of [
+      { onTrack: 4, atRisk: 5, noData: 4 },
+      { onTrack: 1, atRisk: 1, noData: 1 },
+      { onTrack: 2, atRisk: 3, noData: 7 },
+      { onTrack: 0, atRisk: 0, noData: 5 },
+      { onTrack: 7, atRisk: 0, noData: 0 },
+    ]) {
+      const s = indicatorStatusShares(counts);
+      expect(s.pctOnTrack + s.pctAtRisk + s.pctNoData).toBe(100);
+    }
+  });
+
+  it("exact bar widths sum to 100 and match each count's share", () => {
+    const s = indicatorStatusShares({ onTrack: 4, atRisk: 5, noData: 4 });
+    expect(s.widthOnTrack + s.widthAtRisk + s.widthNoData).toBeCloseTo(100, 10);
+    expect(s.widthNoData).toBeCloseTo((4 / 13) * 100, 10);
+  });
+
+  it("never gives a rounding point to an empty state", () => {
+    const s = indicatorStatusShares({ onTrack: 1, atRisk: 2, noData: 0 });
+    expect(s.pctNoData).toBe(0);
+    expect(s.pctOnTrack + s.pctAtRisk).toBe(100);
+  });
+
+  it("is all zeros when there is no indicator", () => {
+    expect(indicatorStatusShares({ onTrack: 0, atRisk: 0, noData: 0 })).toEqual({
+      widthOnTrack: 0,
+      widthAtRisk: 0,
+      widthNoData: 0,
+      pctOnTrack: 0,
+      pctAtRisk: 0,
+      pctNoData: 0,
+    });
+  });
+
+  it("chains with countOnTrackAtRisk: the three states partition the tracked indicators", () => {
+    const indicators = [
+      makeIndicator({ id: "IND001" }),
+      makeIndicator({ id: "IND002" }),
+      makeIndicator({ id: "IND003" }),
+    ];
+    const counts = countOnTrackAtRisk(indicators, [
+      makeMeasurement("IND001", "2026-Q1", 90),
+      makeMeasurement("IND002", "2026-Q1", 10),
+    ]);
+    expect(counts.onTrack + counts.atRisk + counts.noData).toBe(counts.total);
+    const s = indicatorStatusShares(counts);
+    // Restes égaux : ordre stable (sur la trajectoire d'abord).
+    expect([s.pctOnTrack, s.pctAtRisk, s.pctNoData]).toEqual([34, 33, 33]);
   });
 });
 
@@ -240,17 +332,17 @@ describe("sumLatestQuantitativeValues", () => {
 });
 
 describe("countOnTrackAtRisk", () => {
-  it("counts on the stored status when no measurements are given (compat)", () => {
+  it("never reads the stored status: unmeasured KPIs are 'no data' whatever their stored status", () => {
     const indicators = [
       makeIndicator({ id: "IND001", status: "on_track" }),
       makeIndicator({ id: "IND002", status: "at_risk" }),
       makeIndicator({ id: "IND003", status: "at_risk", statusOverride: "on_track" }),
     ];
-    expect(countOnTrackAtRisk(indicators)).toEqual({
+    expect(countOnTrackAtRisk(indicators, [])).toEqual({
       total: 3,
-      onTrack: 1,
-      atRisk: 2,
-      noData: 0,
+      onTrack: 0,
+      atRisk: 0,
+      noData: 3,
     });
   });
 
@@ -1101,14 +1193,20 @@ describe("chantierAtRiskIndicators", () => {
       makeIndicator({
         id: "IND001",
         chantierId: "CH1",
-        status: "at_risk",
+        status: "on_track",
         statusOverride: "on_track",
       }),
     ];
-    const result = chantierAtRiskIndicators("CH1", indicators, []);
+    const result = chantierAtRiskIndicators("CH1", indicators, [
+      makeMeasurement("IND001", "2026-03", 40),
+    ]);
     expect(result).toHaveLength(1);
-    // Pas de mesure : le delta reste undefined, mais l'indicateur est bien remonté.
-    expect(result[0].delta).toBeUndefined();
+    expect(result[0].delta?.delta).toBe(-40);
+  });
+
+  it("uses the live status: a stored 'at_risk' with no measurement is 'no data', not at risk", () => {
+    const indicators = [makeIndicator({ id: "IND001", chantierId: "CH1", status: "at_risk" })];
+    expect(chantierAtRiskIndicators("CH1", indicators, [])).toEqual([]);
   });
 });
 
@@ -1122,8 +1220,9 @@ describe("chantierHealthState", () => {
 
   it("is watch when the chantier has an at-risk indicator, even without any dependency alert", () => {
     const chantier = makeChantier("CH1");
-    const indicators = [makeIndicator({ id: "IND001", chantierId: "CH1", status: "at_risk" })];
-    expect(chantierHealthState(chantier, indicators, [], [chantier], [])).toBe("watch");
+    const indicators = [makeIndicator({ id: "IND001", chantierId: "CH1" })];
+    const measurements = [makeMeasurement("IND001", "2026-03", 40)];
+    expect(chantierHealthState(chantier, indicators, measurements, [chantier], [])).toBe("watch");
   });
 
   it("is critical when the chantier is the blocked side (sourceId) of a violated alert", () => {
@@ -1171,8 +1270,11 @@ describe("chantierHealthState", () => {
       makeAction("CH1", "2026-01-01", "2026-03-31"),
       makeAction("CH2", "2026-03-01", "2026-06-30"),
     ];
-    const indicators = [makeIndicator({ id: "IND001", chantierId: "CH2", status: "at_risk" })];
-    expect(chantierHealthState(chantiers[1], indicators, [], chantiers, actions)).toBe("critical");
+    const indicators = [makeIndicator({ id: "IND001", chantierId: "CH2" })];
+    const measurements = [makeMeasurement("IND001", "2026-03", 40)];
+    expect(chantierHealthState(chantiers[1], indicators, measurements, chantiers, actions)).toBe(
+      "critical"
+    );
   });
 });
 
@@ -2544,6 +2646,43 @@ describe("programRoadmapBounds", () => {
       { start: "2027-01-01", end: "2028-06-30" },
     ];
     expect(programRoadmapBounds(rows)).toEqual({ start: "2026-11-01", end: "2028-06-30" });
+  });
+});
+
+describe("programProgressPct", () => {
+  const mk = (id: string, chantierId: string, weight?: number) =>
+    ({ id, chantierId, chantierWeightPct: weight }) as ChantierAction;
+  // Avancement projet injecté (même rôle que `data.projetProgress`).
+  const pctById: Record<string, number> = { p1: 100, p2: 0, p3: 50, p4: 20 };
+  const progressOf = (a: ChantierAction) => pctById[a.id] ?? 0;
+
+  it("is undefined when no axis carries a chantier", () => {
+    expect(programProgressPct([{ id: "A" }], [], [], progressOf)).toBeUndefined();
+  });
+
+  it("averages axisProgressPct over the axes that carry at least one chantier", () => {
+    const axes = [{ id: "A" }, { id: "B" }, { id: "EMPTY" }];
+    const chantiers = [
+      { id: "C1", axisIds: ["A"] },
+      { id: "C2", axisIds: ["B"] },
+    ];
+    // C1 pondéré 80/20 : 100×0.8 + 0×0.2 = 80 ; C2 : moyenne 50/20 = 35.
+    const actions = [mk("p1", "C1", 80), mk("p2", "C1", 20), mk("p3", "C2"), mk("p4", "C2")];
+    const a = axisProgressPct("A", chantiers, actions, progressOf);
+    const b = axisProgressPct("B", chantiers, actions, progressOf);
+    expect(a).toBe(80);
+    expect(b).toBe(35);
+    expect(programProgressPct(axes, chantiers, actions, progressOf)).toBe(Math.round((a + b) / 2));
+  });
+
+  it("uses the WEIGHTED chantier progress (same as chantier panel / Gantt), not a flat projet mean", () => {
+    const chantiers = [{ id: "C1", axisIds: ["A"] }];
+    const actions = [mk("p1", "C1", 80), mk("p2", "C1", 20)];
+    // Moyenne simple des projets = 50 ; pondérée = 80.
+    expect(programProgressPct([{ id: "A" }], chantiers, actions, progressOf)).toBe(
+      chantierDeclaredProgress("C1", actions, progressOf)
+    );
+    expect(programProgressPct([{ id: "A" }], chantiers, actions, progressOf)).toBe(80);
   });
 });
 

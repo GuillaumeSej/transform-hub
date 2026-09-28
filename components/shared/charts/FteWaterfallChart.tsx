@@ -237,7 +237,7 @@ export function FteWaterfallChart({
           stroke="rgba(0,0,0,0.35)"
           strokeWidth={1}
           label={{
-            value: `${t("finance.baseline", "Référence")} ${fmt(baseline)}`,
+            value: `${t("shared.fteWaterfallChart.opening", "Ouverture de la période")} ${fmt(baseline)}`,
             fontSize: 10,
             position: "insideTopLeft",
             fill: "#806659",

@@ -539,6 +539,10 @@ export function workstreamSummary(data: BeTrackData, wsId: string): WorkstreamSu
   // qu'un levier du chantier avait un reforecast différent de sa valeur courante.
   const reforecastTarget = levers.reduce((s, l) => s + displayedReforecastNet(l).value, 0);
   const realized = levers.reduce((s, l) => s + realizedSavings(l), 0);
+  // `capex`/`opex` = valeur COURANTE des champs du levier (ni « Planifié initial » = `lockedPlan`,
+  // ni « Réactualisé » = `displayedReforecastSnapshot`) ; `opex` inclut l'OPEX récurrent. À ne pas
+  // afficher sous un libellé « plan » (audit fix #2 : le tableau des chantiers du dashboard lit le
+  // réactualisé, comme le KPI « CAPEX & coûts ponctuels »).
   const capex = levers.reduce((s, l) => s + l.capex, 0);
   const opex = levers.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
   return {

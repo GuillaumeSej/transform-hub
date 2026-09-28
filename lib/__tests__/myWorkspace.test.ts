@@ -6,6 +6,7 @@ import {
   type MyWorkspaceStrategicInput,
 } from "@/lib/myWorkspace";
 import { EMPTY_WORKSPACE } from "@/lib/myWorkspaceTypes";
+import { axisProgressPct, chantierDeclaredProgress, programProgressPct } from "@/lib/axisLogic";
 import type { StrategicApproval } from "@/lib/strategicApprovals";
 import type {
   Alert,
@@ -548,6 +549,55 @@ describe("buildMyWorkspace — contributeurs projet, pilote stratégique", () =>
     expect(ws.perimeter).toEqual([
       expect.objectContaining({ id: "program:p2", role: "Pilote du plan stratégique" }),
     ]);
+  });
+});
+
+describe("buildMyWorkspace — avancement = même définition que le reste de l'app (audit fix #2)", () => {
+  // Deux chantiers sur AX1 ; CH1 a des poids déclarés 80/20 (pondéré = 80, moyenne simple = 50).
+  const actions = [
+    makeAction("P1", "2027-01-01", { chantierId: "CH1", chantierWeightPct: 80 }),
+    makeAction("P2", "2027-01-01", { chantierId: "CH1", chantierWeightPct: 20 }),
+    makeAction("P3", "2027-01-01", { chantierId: "CH2" }),
+  ];
+  const pct: Record<string, number> = { P1: 100, P2: 0, P3: 30 };
+  const projetProgress = (a: ChantierAction) => pct[a.id] ?? 0;
+  const strategic = makeStrategic({
+    axes: [
+      { id: "AX1", name: "Axe 1", owner: "sofia" },
+      { id: "AX2", name: "Axe vide", owner: "sofia" },
+    ] as unknown as MyWorkspaceStrategicInput["axes"],
+    chantiers: [
+      makeChantier({ id: "CH1", pilote: "sofia" }),
+      makeChantier({ id: "CH2", name: "Chantier 2" }),
+    ],
+    chantierActions: actions,
+    projetProgress,
+  });
+
+  it("chantier and axis rows reuse chantierDeclaredProgress / axisProgressPct with the same progressOf", () => {
+    const sofia = makeUser("sofia", [{ role: "axis_sponsor", programId: "p2" }]);
+    const ws = buildMyWorkspace({ user: sofia, strategic, today: TODAY }, t);
+    const chantierRow = ws.perimeter.find((p) => p.id === "chantier:CH1");
+    const axisRow = ws.perimeter.find((p) => p.id === "axis:AX1");
+    expect(chantierRow?.progressPct).toBe(chantierDeclaredProgress("CH1", actions, projetProgress));
+    expect(chantierRow?.progressPct).toBe(80); // pondéré, pas la moyenne simple (50)
+    expect(axisRow?.progressPct).toBe(
+      axisProgressPct("AX1", strategic.chantiers, actions, projetProgress)
+    );
+    expect(axisRow?.progressPct).toBe(55); // (80 + 30) / 2
+  });
+
+  it("programme row uses programProgressPct (mean of axes carrying a chantier)", () => {
+    const lead = makeUser("lea", [{ role: "strategic_lead", programId: "p2" }]);
+    const ws = buildMyWorkspace(
+      { user: lead, strategic, programs, users: [lead], today: TODAY },
+      t
+    );
+    const row = ws.perimeter.find((p) => p.id === "program:p2");
+    expect(row?.progressPct).toBe(
+      programProgressPct(strategic.axes, strategic.chantiers, actions, projetProgress)
+    );
+    expect(row?.progressPct).toBe(55); // AX2 (sans chantier) n'entre pas dans la moyenne
   });
 });
 

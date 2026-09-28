@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeLeverHealth,
+  AT_RISK_LEVELS,
   leverHealthCounts,
   groupLeversByHealthDimension,
 } from "@/lib/leverHealth";
@@ -138,7 +139,28 @@ describe("leverHealth", () => {
       onTrack: 1,
       watch: 1,
       critical: 1,
+      atRisk: 1,
     });
+  });
+
+  it("« Leviers à risque » = risque Critique ou Élevé only, never Moyen (audit fix #2)", () => {
+    const levers = [lever({ id: "C" }), lever({ id: "H" }), lever({ id: "M" }), lever({ id: "F" })];
+    const thresholds = [
+      { level: "critical" as const, minAmount: 500_000 },
+      { level: "high" as const, minAmount: 100_000 },
+      { level: "medium" as const, minAmount: 10_000 },
+      { level: "low" as const, minAmount: 0 },
+    ];
+    const alerts = [
+      alert({ id: "c", scope: "C", type: "red", impactEur: -600_000 }),
+      alert({ id: "h", scope: "H", type: "red", impactEur: -150_000 }),
+      alert({ id: "m", scope: "M", type: "amber", impactEur: -20_000 }),
+    ];
+    const counts = leverHealthCounts(levers, alerts, thresholds);
+    expect(counts.atRisk).toBe(2);
+    expect(counts.watch).toBe(1);
+    expect(counts.atRisk).toBe(counts.critical);
+    expect(AT_RISK_LEVELS).toEqual(["critical", "high"]);
   });
 
   it("groups by workstream, actual country and function", () => {

@@ -140,15 +140,20 @@ export default function FinancePage() {
   // TOUS les leviers de l'entreprise, tous programmes et niveaux de confidentialité confondus, d'où
   // des totaux ≠ dashboard) : programme actif (ou programmes de la vue consolidée) + règle de
   // visibilité des vues agrégées (`filterAggregateVisibleLevers`).
-  const { activeProgram, isConsolidatedView, consolidatedPrograms } = useActiveProgram();
+  // Leviers orphelins (sans programme / programme supprimé) : vue consolidée seule, règle unique
+  // `filterProgramScopedLevers` (audit fix #2, mêmes comptes que dashboard/Chantiers/bibliothèque).
+  const { programs, activeProgram, isConsolidatedView, consolidatedPrograms } = useActiveProgram();
   const scopedLevers = useMemo(
     () =>
       filterProgramScopedLevers(filterAggregateVisibleLevers(data.levers, user, company), {
         programId: activeProgram?.id,
         isConsolidatedView,
         consolidatedProgramIds: consolidatedPrograms.map((p) => p.id),
+        performanceProgramIds: programs
+          .filter((p) => resolveProgramType(p) === "performance")
+          .map((p) => p.id),
       }),
-    [data.levers, user, company, activeProgram, isConsolidatedView, consolidatedPrograms]
+    [data.levers, user, company, activeProgram, isConsolidatedView, consolidatedPrograms, programs]
   );
 
   // Leviers filtrés par la barre, ABANDONNÉS COMPRIS : le tableau par niveau financier en a besoin

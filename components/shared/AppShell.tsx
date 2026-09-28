@@ -156,9 +156,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       routes[id] = axisId ? `/levers/detail?id=${axisId}` : "/levers";
     }
 
-    // 2. Indicateurs à risque — statut EFFECTIF (surcharge manuelle du responsable comprise).
+    // 2. Indicateurs à risque — statut LIVE (`resolveIndicatorStatus`, trois états, audit fix #2) :
+    //    même verdict que les pastilles du dashboard et de la page KPI ; « Sans donnée » n'alerte pas.
     for (const indicator of strategic.indicators) {
-      if (resolveIndicatorStatus(indicator) !== "at_risk") continue;
+      if (resolveIndicatorStatus(indicator, strategic.measurements) !== "at_risk") continue;
       const id = `strategic-indicator-${indicator.id}`;
       // Dernière mesure NUMÉRIQUE (même ordre période puis `reportedAt` que le statut,
       // `compareMeasurements`) : un commentaire seul saisi après la valeur ne date pas l'alerte.

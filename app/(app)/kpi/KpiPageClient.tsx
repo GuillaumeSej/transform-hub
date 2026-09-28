@@ -17,11 +17,11 @@ import {
 } from "@/components/strategic/IndicatorStatusSummary";
 import {
   computeIndicatorDelta,
-  indicatorReadingState,
   latestMeasurement,
   latestNumericMeasurement,
   numberIndicators,
   resolveIndicatorOwner,
+  resolveIndicatorStatus,
   resolveUserFullName,
   type IndicatorFillContext,
 } from "@/lib/axisLogic";
@@ -68,9 +68,13 @@ import type {
   Indicator,
   IndicatorDirection,
   IndicatorMeasurement,
-  IndicatorRiskStatus,
   StrategicAxis,
 } from "@/types";
+import {
+  INDICATOR_STATUS_DEFAULT_LABEL,
+  INDICATOR_STATUS_LABEL_KEY,
+  type IndicatorDisplayStatus,
+} from "@/components/strategic/IndicatorStatusBadge";
 
 /**
  * Page KPI — surface PRINCIPALE de saisie des indicateurs d'un Plan Stratégique, pas un dashboard
@@ -87,7 +91,8 @@ import type {
  *
  * Statut de risque : jamais recalculé ici. `useStrategicData.addMeasurement` et `updateIndicator`
  * recalculent et persistent `Indicator.status` eux-mêmes (une mesure saisie ou un objectif modifié
- * changent mécaniquement le verdict) — la page se contente d'afficher `resolveIndicatorStatus`.
+ * changent mécaniquement le verdict) — champ conservé pour compat ; la page affiche
+ * `resolveIndicatorStatus(indicator, measurements)`, état LIVE à trois valeurs (audit fix #2).
  *
  * Garde d'accès à la route : assurée en amont par `AppShell` (la nav est filtrée par
  * `programType`, voir `lib/nav-config.ts`) ; la page se contente de dégrader proprement si elle
@@ -1000,8 +1005,13 @@ export function KpiPageClient() {
   // des indicateurs » (légende du bloc héros, compteur à risque d'une ligne « Par axe ») et retiré
   // via sa puce au-dessus de la liste. Valeur unique ; toute autre valeur d'URL est ignorée.
   const statusParam = searchParams.get("status");
-  const selectedStatus: IndicatorRiskStatus | null =
-    statusParam === "on_track" || statusParam === "at_risk" ? statusParam : null;
+  const selectedStatus: IndicatorDisplayStatus | null =
+    statusParam === "on_track" || statusParam === "at_risk" || statusParam === "no_data"
+      ? statusParam
+      : null;
+  const selectedStatusLabel = selectedStatus
+    ? t(INDICATOR_STATUS_LABEL_KEY[selectedStatus], INDICATOR_STATUS_DEFAULT_LABEL[selectedStatus])
+    : "";
 
   /** Plusieurs paramètres en UN seul `router.replace` (même raison que le garde-fou de cohérence
    *  plus bas : deux `setParam` successifs s'écraseraient mutuellement). `null`/[] = retirer. */
@@ -1055,7 +1065,7 @@ export function KpiPageClient() {
   );
 
   const handleOverviewStatusClick = useCallback(
-    (status: IndicatorRiskStatus) => {
+    (status: IndicatorDisplayStatus) => {
       if (selectedStatus === status) {
         setParams({ status: null });
         return;
@@ -1172,9 +1182,9 @@ export function KpiPageClient() {
           )
         )
           return false;
-        // Même lecture que la synthèse : un KPI « sans donnée » n'est ni sur la trajectoire ni à
-        // risque (`indicatorReadingState`).
-        if (selectedStatus && indicatorReadingState(i, measurements) !== selectedStatus)
+        // Même lecture que la synthèse (`resolveIndicatorStatus`, trois états) : le filtre
+        // « Sans donnée » est un état à part entière.
+        if (selectedStatus && resolveIndicatorStatus(i, measurements) !== selectedStatus)
           return false;
         return true;
       }),
@@ -1540,16 +1550,10 @@ export function KpiPageClient() {
               })}
               {selectedStatus && (
                 <FilterChip
-                  label={`${t("kpi.filterChip.status", "Statut")} : ${
-                    selectedStatus === "at_risk"
-                      ? t("kpi.summary.atRisk", "À risque")
-                      : t("kpi.summary.onTrack", "Sur la trajectoire")
-                  }`}
+                  label={`${t("kpi.filterChip.status", "Statut")} : ${selectedStatusLabel}`}
                   removeLabel={t("kpi.filterChip.remove", "Retirer le filtre {label}").replace(
                     "{label}",
-                    selectedStatus === "at_risk"
-                      ? t("kpi.summary.atRisk", "À risque")
-                      : t("kpi.summary.onTrack", "Sur la trajectoire")
+                    selectedStatusLabel
                   )}
                   onRemove={() => setParams({ status: null })}
                 />

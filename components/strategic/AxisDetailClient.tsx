@@ -664,7 +664,8 @@ function AxisIndicatorCard({
   const latest =
     latestNumericMeasurement(indicator.id, measures) ?? latestMeasurement(indicator.id, measures);
   const { year, setYear, options, visible, filtered } = useYearSelection(measures, "all");
-  const status = resolveIndicatorStatus(indicator);
+  // Statut LIVE à trois états (audit fix #2) — « Sans donnée » sans mesure comparable.
+  const status = resolveIndicatorStatus(indicator, measures);
   return (
     <div
       role={clickable ? "button" : undefined}
@@ -695,7 +696,6 @@ function AxisIndicatorCard({
         </div>
         <IndicatorStatusBadge
           status={status}
-          label={t(status === "at_risk" ? "indicatorStatus.atRisk" : "indicatorStatus.onTrack")}
           title={status === "at_risk" ? t("strategicAxes.atRiskTooltip") : undefined}
         />
       </div>

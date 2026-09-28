@@ -791,6 +791,20 @@ export default function HrDashboardPage() {
   const current = hr.currentFTE(scopedWf);
   const target = hr.targetFTE(scopedWf);
   const landing = hr.plannedFTE(scopedWf);
+  // Effectifs libellés (définitions uniques, lib/hrEngine.ts) : ETP + personnes en complément,
+  // les personnes étant comptées sur les fiches employé du MÊME périmètre (null si non scopable).
+  const scopedEmployees = useMemo(
+    () =>
+      hr.scopeEmployees(wf.employees ?? [], {
+        department: activeFilters.department,
+        country: activeFilters.country,
+        workstream: activeFilters.workstream,
+      }) ?? [],
+    [wf.employees, activeFilters]
+  );
+  const headcountWf = { ...scopedWf, employees: scopedEmployees };
+  const startHeadcount = hr.headcountAtStart(headcountWf);
+  const nowHeadcount = hr.currentHeadcount(headcountWf);
   const reductionGoal = baselineFte - target;
   const reductionDone = baselineFte - current;
   const goalPct = reductionGoal > 0 ? Math.round((reductionDone / reductionGoal) * 100) : 100;
@@ -1597,9 +1611,9 @@ export default function HrDashboardPage() {
                           : dimension === "country"
                             ? t("dashboard.country", "Pays")
                             : t("hr.pivot.dim.workstream", "Chantier"),
-                        t("hr.column.baselineFte", "ETP de référence"),
-                        t("hr.current", "Actuel"),
-                        t("hr.target", "Cible"),
+                        t("hr.column.startFte", "ETP au démarrage du programme"),
+                        t("hr.column.currentFte", "ETP actuels"),
+                        t("hr.column.targetFte", "ETP cible"),
                         t("hr.gapVsTarget", "Écart vs cible"),
                         t("hr.progress", "Avancement"),
                       ].map((h) => (
@@ -1622,19 +1636,19 @@ export default function HrDashboardPage() {
                         >
                           <td className="px-3 py-2.5 font-semibold text-primary">{d.label}</td>
                           <td className="px-3 py-2.5 tabular-nums">
-                            {d.baseline.toLocaleString(intlTag())}
+                            {hr.formatFteValue(d.baseline)}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
-                            {d.current.toLocaleString(intlTag())}
+                            {hr.formatFteValue(d.current)}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
-                            {d.target.toLocaleString(intlTag())}
+                            {hr.formatFteValue(d.target)}
                           </td>
                           <td
                             className={`px-3 py-2.5 font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
                           >
                             {d.gapToTarget > 0 ? "+" : ""}
-                            {d.gapToTarget.toLocaleString(intlTag())}
+                            {hr.formatFteValue(d.gapToTarget)}
                           </td>
                           <td className="w-[180px] px-3 py-2.5">
                             {/* Valeur réelle passée telle quelle : la barre se borne à 0-100 %,
@@ -1659,21 +1673,27 @@ export default function HrDashboardPage() {
                           className={`text-[12px] font-semibold tabular-nums ${d.gapToTarget > 0 ? "text-rag-red" : "text-rag-green-dark"}`}
                         >
                           {d.gapToTarget > 0 ? "+" : ""}
-                          {d.gapToTarget.toLocaleString(intlTag())} {t("hr.vsTarget", "vs cible")}
+                          {hr.formatFteValue(d.gapToTarget)} {t("hr.vsTarget", "vs cible")}
                         </span>
                       </div>
                       <dl className="mb-2 grid grid-cols-3 gap-x-3 gap-y-1.5">
                         {[
-                          { label: t("finance.baseline", "Référence"), value: d.baseline },
-                          { label: t("hr.current", "Actuel"), value: d.current },
-                          { label: t("hr.target", "Cible"), value: d.target },
+                          {
+                            label: t("hr.column.startFteShort", "Démarrage (ETP)"),
+                            value: d.baseline,
+                          },
+                          {
+                            label: t("hr.column.currentFteShort", "Actuel (ETP)"),
+                            value: d.current,
+                          },
+                          { label: t("hr.column.targetFteShort", "Cible (ETP)"), value: d.target },
                         ].map((item) => (
                           <div key={item.label}>
                             <dt className="text-[10px] font-bold uppercase tracking-wide text-tertiary">
                               {item.label}
                             </dt>
                             <dd className="text-[12px] tabular-nums text-primary">
-                              {item.value.toLocaleString(intlTag())}
+                              {hr.formatFteValue(item.value)}
                             </dd>
                           </div>
                         ))}
@@ -1924,13 +1944,13 @@ export default function HrDashboardPage() {
           <div className="mt-2.5 text-[13px] text-secondary">
             {(absoluteAvailable
               ? t(
-                  "hr.subtitle",
-                  "Trajectoire effectifs {from} → {to} ETP · {count} mouvements · {realized} réalisés"
+                  "hr.subtitleHeadcount",
+                  "Effectif au démarrage du programme : {from} ETP → cible : {to} ETP · {count} mouvements · {realized} réalisés"
                 )
               : t("hr.subtitleNoBaseline", "{count} mouvements · {realized} réalisés")
             )
-              .replace("{from}", baselineFte.toLocaleString(intlTag()))
-              .replace("{to}", target.toLocaleString(intlTag()))
+              .replace("{from}", hr.formatFteValue(baselineFte))
+              .replace("{to}", hr.formatFteValue(target))
               .replace("{count}", String(filteredMovements.length))
               .replace("{realized}", String(realizedMovements))}
             {hasActiveFilters && (
@@ -2038,13 +2058,15 @@ export default function HrDashboardPage() {
           {absoluteAvailable ? (
             <div className="flex items-center gap-3 text-[12px] tabular-nums text-secondary">
               <span>
-                <strong className="text-primary">{current.toLocaleString(intlTag())}</strong>{" "}
-                {t("hr.etpActuels", "ETP actuels")}
+                {t("hr.currentHeadcountLabel", "Effectif actuel :")}{" "}
+                <strong className="text-primary">{hr.formatHeadcount(nowHeadcount, t)}</strong>
               </span>
               <span className="text-tertiary">→</span>
               <span>
-                {t("hr.targetLower", "cible")}{" "}
-                <strong className="text-primary">{target.toLocaleString(intlTag())}</strong>
+                {t("hr.targetHeadcountLabel", "Cible :")}{" "}
+                <strong className="text-primary">
+                  {hr.formatHeadcount({ fte: target, persons: null }, t)}
+                </strong>
               </span>
               <span className="rounded-sm bg-neutral-100 px-1.5 py-0.5 text-[11px] font-bold text-primary">
                 {goalPct}%
@@ -2066,17 +2088,17 @@ export default function HrDashboardPage() {
         {absoluteAvailable && (
           <div className="mt-1 flex justify-between text-[10px] text-tertiary">
             <span>
-              {t("hr.baselineFteLine", "Référence {n} ETP").replace(
+              {t("hr.startHeadcountLine", "Effectif au démarrage du programme : {n}").replace(
                 "{n}",
-                baselineFte.toLocaleString(intlTag())
+                hr.formatHeadcount(startHeadcount, t)
               )}
             </span>
             <span>
-              {t("hr.landingPrefix", "Atterrissage")} {landing.toLocaleString(intlTag())} (
+              {t("hr.landingPrefix", "Atterrissage")} {hr.formatFteValue(landing)}{" "}
+              {t("etp.column.fte", "ETP")} (
               {/* Arrondi au dixième, sans « -0 » dû aux flottants quand l'atterrissage = la cible. */}
               {Math.round((landing - target) * 10) / 10 > 0 ? "+" : ""}
-              {(Math.round((landing - target) * 10) / 10 || 0).toLocaleString(intlTag())}{" "}
-              {t("hr.vsTarget", "vs cible")})
+              {hr.formatFteValue(landing - target)} {t("hr.vsTarget", "vs cible")})
             </span>
           </div>
         )}

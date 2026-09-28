@@ -296,20 +296,34 @@ export function filterAggregateVisibleLevers<T extends Pick<Lever, "confidential
   return levers.filter((l) => isLeverVisibleForClearance(l.confidentialityLevel, clearance));
 }
 
-/** Leviers du périmètre programme affiché — même règle que le dashboard exécutif : vue consolidée
- *  → leviers de tous les programmes consolidés ; sinon leviers du programme sélectionné
- *  (`programId` strictement égal ; aucun programme sélectionné → aucun levier). */
+/** Leviers du périmètre programme affiché — RÈGLE UNIQUE du Plan Performance (dashboard exécutif,
+ *  Finance, Chantiers ET bibliothèque des leviers, audit fix #2) pour que les comptes de leviers se
+ *  recoupent d'une page à l'autre :
+ *  - programme sélectionné → leviers de CE programme (`programId` strictement égal ; aucun
+ *    programme sélectionné → aucun levier) ;
+ *  - vue consolidée → leviers de tous les programmes consolidés, PLUS les leviers « orphelins »
+ *    (sans `programId`, ou rattachés à un programme Performance qui n'existe plus) quand
+ *    `performanceProgramIds` (tous les programmes Performance de l'entreprise) est fourni.
+ *  Un levier orphelin n'appartient à aucun programme : il n'est donc compté dans AUCUNE vue
+ *  mono-programme (sinon il gonflerait chaque programme et la somme des programmes dépasserait le
+ *  consolidé) et n'apparaît qu'en vue consolidée, où l'on peut le rattacher à un programme. */
 export function filterProgramScopedLevers<T extends Pick<Lever, "programId">>(
   levers: T[],
   scope: {
     programId: string | null | undefined;
     isConsolidatedView?: boolean;
     consolidatedProgramIds?: string[];
+    /** Tous les programmes Performance existants de l'entreprise — active l'inclusion des leviers
+     *  orphelins en vue consolidée. */
+    performanceProgramIds?: string[];
   }
 ): T[] {
   if (scope.isConsolidatedView) {
     const ids = new Set(scope.consolidatedProgramIds ?? []);
-    return levers.filter((l) => !!l.programId && ids.has(l.programId));
+    const known = scope.performanceProgramIds ? new Set(scope.performanceProgramIds) : null;
+    return levers.filter((l) =>
+      l.programId ? ids.has(l.programId) || (!!known && !known.has(l.programId)) : !!known
+    );
   }
   if (!scope.programId) return [];
   return levers.filter((l) => l.programId === scope.programId);

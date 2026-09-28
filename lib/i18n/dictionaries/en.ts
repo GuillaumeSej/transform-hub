@@ -233,7 +233,7 @@ const en: Record<string, string> = {
   "dashboard.kpi.reforecast": "Reforecast",
   "dashboard.kpi.plan": "Plan",
   "dashboard.kpi.leversAtRiskTooltip":
-    'Initiatives whose risk (library badge) is Medium or above — the same as "To watch" and "Critical alerts" in the Initiative health matrix. Risk is computed from the amount and age of open red/amber alerts (a resolved alert no longer counts). Bar: orange = to watch (Medium), red = critical (High or Critical).',
+    'Initiatives whose risk level is Critical or High (company risk thresholds, computed from the amount and age of open red/amber alerts — a resolved alert no longer counts). Same figure as the "Alerts & Dependencies" badge. Initiatives "to watch" (Medium risk) are shown separately and not counted. Bar: orange = to watch (Medium), red = at risk (High or Critical). Click: library filtered on these levels.',
   "dashboard.kpi.fteImpactedTooltip":
     'Sum of the FTEs estimated at initiative level (planning), not to be confused with actual HR tracking (see HR Dashboard). "X / Y positions eliminated" only counts the completed/planned forced departures tracked in the HR module — a SUBSET of this overall FTE impact, not a complete breakdown.',
   "dashboard.widgets.portfolioFunnel": "Initiative Progress",
@@ -732,6 +732,19 @@ const en: Record<string, string> = {
   "hr.targetLower": "target",
   "hr.baselineFteLine": "Baseline {n} FTE",
   "hr.landingPrefix": "Landing",
+  "hr.headcount.fteOnly": "{fte} FTE",
+  "hr.headcount.fteWithPersons": "{fte} FTE ({persons} people)",
+  "hr.subtitleHeadcount":
+    "Headcount at programme start: {from} FTE → target: {to} FTE · {count} movements · {realized} realized",
+  "hr.currentHeadcountLabel": "Current headcount:",
+  "hr.targetHeadcountLabel": "Target:",
+  "hr.startHeadcountLine": "Headcount at programme start: {n}",
+  "hr.column.startFte": "FTE at programme start",
+  "hr.column.currentFte": "Current FTE",
+  "hr.column.targetFte": "Target FTE",
+  "hr.column.startFteShort": "Start (FTE)",
+  "hr.column.currentFteShort": "Current (FTE)",
+  "hr.column.targetFteShort": "Target (FTE)",
   "hr.kpi.fteImpact": "FTE impact",
   "hr.kpi.annualSalarySavings": "Annual salary savings",
   "hr.kpi.socialCostsConsumed": "Social costs consumed",
@@ -842,6 +855,12 @@ const en: Record<string, string> = {
   "etp.newMovement": "New movement",
   "etp.kpi.currentHeadcount": "Current headcount",
   "etp.kpi.targetHeadcount": "Target headcount",
+  "etp.headcountSummary":
+    "Current headcount: {current} · Headcount at programme start: {start} · {m} movements tracked",
+  "etp.kpi.personsSub": "{n} people",
+  "etp.kpi.startSub": "start: {n} FTE",
+  "etp.rowBreakdown":
+    "{total} rows: {employees} employee records (incl. {departed} who have left — departure realized) + {recruitments} positions to recruit (planned or realized hires)",
   "etp.kpi.landingPlanSub": "gap to target: {n} FTE",
   "etp.kpi.upcomingMovements": "Upcoming movements",
   "etp.kpi.toValidateHr": "Pending HR validation",
@@ -1396,6 +1415,7 @@ const en: Record<string, string> = {
   "shared.fteWaterfallChart.dataUnavailable":
     "FTE data unavailable — check HR movement types (5-type Gooduelle typology expected).",
   "shared.fteWaterfallChart.endOfPeriod": "End of period",
+  "shared.fteWaterfallChart.opening": "Period opening",
   "shared.fteWaterfallChart.clickForDetail": "Click for detail by lever",
   "shared.fteWaterfallChart.reductionsLabel": "Reductions (eliminations)",
   "chart.noDataToDisplay": "No data to display.",
@@ -1513,6 +1533,7 @@ const en: Record<string, string> = {
   // ─── Strategic Plan — indicator risk status ───────────────────────────────
   "indicatorStatus.onTrack": "On track",
   "indicatorStatus.atRisk": "At risk",
+  "indicatorStatus.noData": "No data",
 
   // ─── Strategic Plan — maturity stages (GENERIC labels only) ───────────────
   // Actual stage labels come from `MaturityStageConfig.label` (entered by the admin, per
@@ -2255,7 +2276,8 @@ const en: Record<string, string> = {
   "effectifs.viewBaseEtp": "View FTE roster",
   "effectifs.needVsAvailable.availableDetailTitle": "Available employees — {team}",
   "effectifs.needVsAvailable.availableDetailEmpty": "No employees in this team.",
-  "effectifs.needVsAvailable.rowsCount": "{n} employee(s)",
+  "effectifs.needVsAvailable.rowsCount": "{n} person(s) in the FTE roster",
+  "effectifs.needVsAvailable.availableTotal": "Currently available: {fte} FTE",
   "effectifs.needVsAvailable.columnName": "Name",
   "effectifs.needVsAvailable.columnFunction": "Function",
   "effectifs.needVsAvailable.columnTeam": "Team",
@@ -2560,6 +2582,15 @@ const en: Record<string, string> = {
   "finance.chart.netEconomy": "Net saving",
   "finance.chart.timelineTitle": "Cost commitment over time (Invest)",
   "finance.chart.hierarchyTitle": "Cost breakdown by cost center / P&L",
+  "finance.chart.engagedTitleOneOff": "One-off costs (CAPEX + one-off OPEX): committed vs upcoming",
+  "finance.chart.engagedScopeNote":
+    'Total {total} (committed {engaged} · upcoming {upcoming}) — recurring OPEX excluded, same scope as the dashboard "CAPEX & one-off costs" KPI.',
+  "finance.chart.hierarchyTitleAllCosts":
+    "Total costs incl. recurring OPEX, by P&L account / cost center",
+  "finance.chart.hierarchyScopeNote":
+    "Total {total} = one-off costs (CAPEX + one-off OPEX) {oneOff} + recurring OPEX {rec}. Each cost is assigned to the P&L account of its cost center (cost line, otherwise lever): an income account (e.g. Revenue) can therefore carry the costs of the levers that impact it.",
+  "finance.chart.hierarchyUnattachedNote":
+    "Of which {amount} not attached to the hierarchy (not in the chart).",
   "finance.chart.hierarchyNoConfig": "No financial hierarchy is configured for this company.",
   "finance.chart.investVsSavingsTitle": "Investment cost vs Savings",
   "finance.chart.investCost": "Investment cost",
@@ -2666,6 +2697,13 @@ const en: Record<string, string> = {
   "adminHistory.filterEntity": "Entity",
   "dashboard.tableHeader.capexRealizedPlan": "CAPEX (actual / plan)",
   "dashboard.tableHeader.opexOneOffRealizedPlan": "One-off OPEX (actual / plan)",
+  "dashboard.kpi.leversAtRiskWatchHint": "medium risk, not counted",
+  "dashboard.riskCenter.leversAtRiskBadge": "{n} levers at risk",
+  "dashboard.riskCenter.openAlertsCount": "{n} open alerts",
+  "dashboard.tableHeader.capexEngagedReforecast": "CAPEX (committed / reforecast)",
+  "dashboard.tableHeader.opexOneOffEngagedReforecast": "One-off OPEX (committed / reforecast)",
+  "dashboard.workstreamsCancelledHidden":
+    "{n} cancelled lever(s) hidden — excluded from the indicators and the table.",
   "dashboard.filter.owner": "Owner",
   "dashboard.filter.type": "Type",
   "dashboard.pivot.metric.netSavings": "Net savings",

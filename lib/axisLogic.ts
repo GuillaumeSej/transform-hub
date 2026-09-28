@@ -178,6 +178,8 @@ function meetsTarget(value: number, target: number, direction: Indicator["direct
  *   - pas de cible applicable.
  * Un indicateur non renseigné n'est PAS un indicateur en retard. Pour DISTINGUER « rien à
  * comparer » de « dans les clous » (compteurs de tête de page), voir `indicatorReadingState`.
+ * Sert UNIQUEMENT à écrire le champ STOCKÉ `Indicator.status` (compat des documents) — jamais à
+ * l'affichage, qui passe par `resolveIndicatorStatus` (trois états).
  */
 export function computeIndicatorStatus(
   indicator: Pick<Indicator, "id" | "kind" | "objectiveValue" | "direction" | "targetSchedule">,
@@ -267,13 +269,20 @@ export function baselineMeasurement(
   return first;
 }
 
-/** Statut EFFECTIF d'un indicateur = son statut calculé (`Indicator.status`, maintenu par
- *  `computeIndicatorStatus` à chaque saisie). `Indicator.statusOverride` n'est plus lu : aucun
- *  écran ne permet de le poser (champ mort, conservé dans le type pour compat des documents
- *  existants) — le lire aurait figé silencieusement un statut qu'aucun utilisateur ne peut voir ni
- *  corriger. Seul point de vérité pour l'affichage — ne jamais lire `indicator.status` nu. */
-export function resolveIndicatorStatus(indicator: Pick<Indicator, "status">): IndicatorRiskStatus {
-  return indicator.status;
+/** Statut AFFICHÉ d'un indicateur — seul point de vérité pour TOUT affichage (pastilles, cloche,
+ *  tableau/filtres KPI, cartes d'axe, synthèse « Santé des indicateurs ») : délègue à l'état de
+ *  lecture LIVE à trois valeurs (`indicatorReadingState`). Un indicateur sans mesure comparable
+ *  s'affiche donc « Sans donnée » partout, jamais « Sur la trajectoire ».
+ *
+ *  Audit fix #2 : ne lit PLUS le champ stocké `Indicator.status` (binaire, où « rien à comparer »
+ *  valait `on_track`). Ce champ reste écrit tel quel dans les documents (`computeIndicatorStatus`
+ *  à chaque saisie, import Excel) pour compatibilité, mais n'alimente plus aucun écran.
+ *  `Indicator.statusOverride` n'est pas lu non plus (champ mort, aucune UI ne le pose). */
+export function resolveIndicatorStatus(
+  indicator: Pick<Indicator, "id" | "kind" | "objectiveValue" | "direction" | "targetSchedule">,
+  measurements: IndicatorMeasurement[]
+): IndicatorReadingState {
+  return indicatorReadingState(indicator, measurements);
 }
 
 /** Écart signé d'un indicateur par rapport à sa cible, dérivé de sa dernière mesure — pendant
@@ -451,32 +460,87 @@ export function sumLatestQuantitativeValues(
   return sum;
 }
 
-/** Compteur global "X sur la trajectoire · Y à risque · Z sans donnée". Avec `measurements`, un
- *  indicateur qualitatif, jamais mesuré numériquement ou sans cible est compté dans `noData`
- *  (« Sans donnée ») et NON comme « sur la trajectoire » (`indicatorReadingState`) ; sans
- *  `measurements` (compat), `noData` vaut 0 et seul le statut stocké compte. */
+/** Compteur global "X sur la trajectoire · Y à risque · Z sans donnée" (`resolveIndicatorStatus`,
+ *  état LIVE à trois valeurs) : un indicateur qualitatif, jamais mesuré numériquement ou sans
+ *  cible est compté dans `noData` (« Sans donnée ») et NON comme « sur la trajectoire ».
+ *  `onTrack + atRisk + noData === total` toujours. */
 export function countOnTrackAtRisk(
   indicators: Indicator[],
-  measurements?: IndicatorMeasurement[]
-): {
-  total: number;
-  onTrack: number;
-  atRisk: number;
-  noData: number;
-} {
+  measurements: IndicatorMeasurement[]
+): IndicatorStatusCounts {
   let onTrack = 0;
   let atRisk = 0;
   let noData = 0;
   for (const indicator of indicators) {
-    if (measurements) {
-      const state = indicatorReadingState(indicator, measurements);
-      if (state === "at_risk") atRisk += 1;
-      else if (state === "no_data") noData += 1;
-      else onTrack += 1;
-    } else if (resolveIndicatorStatus(indicator) === "at_risk") atRisk += 1;
+    const state = resolveIndicatorStatus(indicator, measurements);
+    if (state === "at_risk") atRisk += 1;
+    else if (state === "no_data") noData += 1;
     else onTrack += 1;
   }
   return { total: indicators.length, onTrack, atRisk, noData };
+}
+
+export type IndicatorStatusCounts = {
+  total: number;
+  onTrack: number;
+  atRisk: number;
+  noData: number;
+};
+
+/** Parts (en %) de chaque état dans une synthèse « Santé des indicateurs ».
+ *  - `width*` : parts EXACTES (flottants) pour la largeur des segments de barre — somme = 100
+ *    (0 partout si `total` vaut 0) ;
+ *  - `pct*` : parts ARRONDIES à l'entier par la méthode du plus fort reste, pour que les trois
+ *    libellés de légende somment EXACTEMENT à 100 (jamais « 31 % + 38 % + 30 % = 99 % »). Le
+ *    chiffre héros « % sur la trajectoire » est `pctOnTrack` — même dénominateur (TOUS les
+ *    indicateurs suivis), même arrondi que la légende.
+ *  Seule définition, partagée par le bandeau du dashboard, la synthèse de la page KPI et la
+ *  ventilation par axe. */
+export type IndicatorStatusShares = {
+  widthOnTrack: number;
+  widthAtRisk: number;
+  widthNoData: number;
+  pctOnTrack: number;
+  pctAtRisk: number;
+  pctNoData: number;
+};
+
+export function indicatorStatusShares(
+  counts: Pick<IndicatorStatusCounts, "onTrack" | "atRisk" | "noData">
+): IndicatorStatusShares {
+  const parts = [counts.onTrack, counts.atRisk, counts.noData];
+  const total = parts.reduce((s, n) => s + n, 0);
+  if (total <= 0) {
+    return {
+      widthOnTrack: 0,
+      widthAtRisk: 0,
+      widthNoData: 0,
+      pctOnTrack: 0,
+      pctAtRisk: 0,
+      pctNoData: 0,
+    };
+  }
+  const exact = parts.map((n) => (n / total) * 100);
+  const floored = exact.map(Math.floor);
+  let remainder = 100 - floored.reduce((s, n) => s + n, 0);
+  // Plus fort reste d'abord ; à reste égal, ordre stable (sur la trajectoire, à risque, sans donnée).
+  const order = exact
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (const { i } of order) {
+    if (remainder <= 0) break;
+    if (parts[i] === 0) continue;
+    floored[i] += 1;
+    remainder -= 1;
+  }
+  return {
+    widthOnTrack: exact[0],
+    widthAtRisk: exact[1],
+    widthNoData: exact[2],
+    pctOnTrack: floored[0],
+    pctAtRisk: floored[1],
+    pctNoData: floored[2],
+  };
 }
 
 /** Rôles qui ne saisissent JAMAIS de valeur de KPI (décision PO) : lecture seule sur le Plan
@@ -795,7 +859,7 @@ export function chantierAtRiskIndicators(
 ): { indicator: Indicator; delta: IndicatorDelta | undefined }[] {
   return indicators
     .filter((indicator) => indicator.chantierId === chantierId)
-    .filter((indicator) => resolveIndicatorStatus(indicator) === "at_risk")
+    .filter((indicator) => resolveIndicatorStatus(indicator, measurements) === "at_risk")
     .map((indicator) => ({
       indicator,
       delta: computeIndicatorDelta(
@@ -1697,6 +1761,28 @@ export function axisProgressPct(
     0
   );
   return Math.round(total / own.length);
+}
+
+/**
+ * Avancement d'un PROGRAMME stratégique — le dashboard stratégique n'affiche aucun agrégat
+ * programme propre, on prolonge donc la même chaîne d'un cran (audit fix #2) : moyenne simple,
+ * arrondie, des `axisProgressPct` (même pondération que l'axe sur ses chantiers : chaque axe pèse
+ * pareil). Seuls les axes portant au moins un chantier comptent — un axe vide n'a rien à faire
+ * avancer et tirerait le programme vers 0. `undefined` si aucun axe n'a de chantier.
+ */
+export function programProgressPct(
+  axes: Pick<StrategicAxis, "id">[],
+  chantiers: Pick<Chantier, "id" | "axisIds">[],
+  actions: ChantierAction[],
+  progressOf?: ProjetProgressLookup
+): number | undefined {
+  const withChantiers = axes.filter((axis) => chantiers.some((c) => c.axisIds.includes(axis.id)));
+  if (withChantiers.length === 0) return undefined;
+  const total = withChantiers.reduce(
+    (sum, axis) => sum + axisProgressPct(axis.id, chantiers, actions, progressOf),
+    0
+  );
+  return Math.round(total / withChantiers.length);
 }
 
 /** Nombre de jalons franchis d'un projet, et total de jalons (E0→E4). */

@@ -10,7 +10,6 @@ import {
   type BudgetDonutSlice,
 } from "@/components/shared/charts/BudgetDonutChart";
 import { Modal } from "@/components/shared/Modal";
-import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
 import { StaffingRateSection } from "@/components/strategic/StaffingRateSection";
@@ -24,7 +23,8 @@ import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { isPilotOrAdmin } from "@/lib/strategicApprovals";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatCompactCurrency, formatPercent } from "@/lib/formatCompactAmount";
-import { formatCurrency, normalizeCurrency } from "@/lib/format";
+import { formatCurrency, formatNumber, normalizeCurrency } from "@/lib/format";
+import { formatFteValue } from "@/lib/hrEngine";
 
 /**
  * Page « Effectifs mobilisés » — lecture transverse du staffing saisi chantier par chantier
@@ -570,12 +570,17 @@ export function EffectifsPageClient() {
           </p>
         ) : (
           <div>
+            {/* Même « disponible » que la heatmap (ETP ACTUEL de l'équipe = fiches + mouvements
+                RH réalisés, comme l'« Effectif actuel » de la Base ETP) ; le nombre de fiches
+                listées n'est qu'un complément, en personnes. */}
             <p className="mb-3 text-[12px] text-tertiary">
-              {t("staffing.total")} :{" "}
-              <strong className="text-primary">
-                {formatFte(availableDetailRows.reduce((sum, e) => sum + (e.fte || 0), 0))}{" "}
-                {t("staffing.fteUnit")}
-              </strong>
+              {t(
+                "effectifs.needVsAvailable.availableTotal",
+                "Disponible actuel : {fte} ETP"
+              ).replace(
+                "{fte}",
+                formatFteValue(availableTeam ? (fteByDept[availableTeam] ?? 0) : 0)
+              )}
               {" · "}
               {t("effectifs.needVsAvailable.rowsCount").replace(
                 "{n}",
@@ -598,7 +603,9 @@ export function EffectifsPageClient() {
                       <td className="px-3 py-2 font-medium">{emp.name}</td>
                       <td className="px-3 py-2 text-tertiary">{emp.func}</td>
                       <td className="px-3 py-2 text-tertiary">{emp.team}</td>
-                      <td className="px-3 py-2 text-right font-semibold">{formatFte(emp.fte)}</td>
+                      <td className="px-3 py-2 text-right font-semibold">
+                        {formatNumber(emp.fte, { maximumFractionDigits: 2 })}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

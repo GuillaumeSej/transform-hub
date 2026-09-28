@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  INDICATOR_DISPLAY_STATUSES,
   INDICATOR_STATUS_TONE,
   IndicatorStatusMark,
+  type IndicatorDisplayStatus,
 } from "@/components/strategic/IndicatorStatusBadge";
 import { PendingKpiValues } from "@/components/strategic/PendingKpiValues";
 import { useMemo, useState } from "react";
@@ -16,12 +18,12 @@ import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import {
   computeIndicatorDelta,
   countOnTrackAtRisk,
-  indicatorReadingState,
+  indicatorStatusShares,
   latestMeasurement,
   latestNumericMeasurement,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
-import type { IndicatorFillContext } from "@/lib/axisLogic";
+import type { IndicatorFillContext, IndicatorStatusShares } from "@/lib/axisLogic";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
 import { IndicatorValueModal } from "@/components/strategic/IndicatorValueModal";
 import { useMeasurementCorrection } from "@/components/strategic/MeasurementCorrection";
@@ -38,16 +40,13 @@ import {
   useYearSelection,
 } from "@/components/strategic/YearSegmentedControl";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import type {
-  AuthUser,
-  Indicator,
-  IndicatorMeasurement,
-  IndicatorRiskStatus,
-  StrategicAxis,
-} from "@/types";
+import type { AuthUser, Indicator, IndicatorMeasurement, StrategicAxis } from "@/types";
 
 /**
- * Compteur d'ensemble « N indicateurs suivis · X sur la trajectoire · Y à risque ». Affiché en tête
+ * Compteur d'ensemble « N indicateurs suivis · X sur la trajectoire · Y à risque · Z sans donnée ».
+ * UNE définition (audit fix #2) : dénominateur = TOUS les indicateurs suivis, statut live à trois
+ * états (`countOnTrackAtRisk`), parts et arrondis par `indicatorStatusShares` — barre à trois
+ * segments sommant à 100 %, légende et chiffre héros cohérents partout. Affiché en tête
  * de la page KPI ET de la fiche d'un axe (le périmètre passé en `indicators` change, pas le
  * composant).
  *
@@ -108,12 +107,12 @@ export function IndicatorStatusSummary({
   interaction?: OverviewInteraction;
 }) {
   const { t } = useTranslation();
-  // Avec les mesures : un KPI qualitatif / jamais mesuré / sans cible est compté « Sans donnée »,
-  // jamais comme « sur la trajectoire » (`indicatorReadingState`).
-  const { total, onTrack, atRisk, noData } = countOnTrackAtRisk(indicators, measurements);
+  // Un KPI qualitatif / jamais mesuré / sans cible est compté « Sans donnée », jamais comme « sur
+  // la trajectoire » (`resolveIndicatorStatus`, état live à trois valeurs).
+  const counts = countOnTrackAtRisk(indicators, measurements);
+  const { total, onTrack, atRisk, noData } = counts;
+  const shares = indicatorStatusShares(counts);
   const cumulative = sumLatestQuantitativeValues(indicators, measurements);
-  const onTrackPct = total > 0 ? (onTrack / total) * 100 : 0;
-  const atRiskPct = total > 0 ? (atRisk / total) * 100 : 0;
 
   const l = {
     tracked: labels?.tracked ?? t("kpi.summary.tracked", "Indicateurs suivis"),
@@ -137,9 +136,8 @@ export function IndicatorStatusSummary({
         // paragraphe sont tous deux du contenu statique) donc le bloc entier peut être un seul
         // lien sans conflit d'accessibilité.
         // Round 10, point 1 : le donut circulaire cède la place à un grand chiffre + une barre
-        // horizontale à deux segments (`bg-rag-green`/`bg-rag-red`, même convention que
-        // `components/shared/ProgressBar.tsx`) — plus lisible et plus dans la charte
-        // monochrome + rouge qu'un anneau.
+        // horizontale segmentée — audit fix #2 : TROIS segments (sur la trajectoire / à risque /
+        // sans donnée) qui somment à 100 %, même rendu que la synthèse de la page KPI.
         <Link
           href="/kpi"
           className="mb-3 flex cursor-pointer flex-col gap-3 rounded-lg border border-border bg-neutral-50 p-5 transition hover:border-bp-coral hover:shadow-md"
@@ -147,7 +145,7 @@ export function IndicatorStatusSummary({
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <span className="text-[42px] font-bold leading-none tracking-tight text-primary">
-                {Math.round(onTrackPct)}%
+                {shares.pctOnTrack}%
               </span>
               <div className="mt-1.5 text-[11px] font-bold uppercase tracking-wide text-secondary">
                 {l.onTrack} · {onTrack}/{total}
@@ -159,24 +157,13 @@ export function IndicatorStatusSummary({
               {l.tracked.toLowerCase()}
             </p>
           </div>
-          <div
-            className="flex h-3 w-full overflow-hidden rounded-full bg-neutral-100"
-            role="img"
-            aria-label={`${l.onTrack} ${Math.round(onTrackPct)}% · ${l.atRisk} ${Math.round(atRiskPct)}%`}
-          >
-            {onTrackPct > 0 && (
-              <div
-                className={`h-full ${INDICATOR_STATUS_TONE.on_track.bar}`}
-                style={{ width: `${onTrackPct}%` }}
-              />
-            )}
-            {atRiskPct > 0 && (
-              <div
-                className={`h-full ${INDICATOR_STATUS_TONE.at_risk.bar}`}
-                style={{ width: `${atRiskPct}%` }}
-              />
-            )}
-          </div>
+          <StatusSplitBar
+            onTrack={onTrack}
+            atRisk={atRisk}
+            noData={noData}
+            ariaLabel={statusAriaLabel(l, shares)}
+          />
+          <StatusLegendRow labels={l} shares={shares} counts={counts} />
         </Link>
       )}
       {/* Round 8 : en mode `radialHero`, le PO ne veut QUE le bandeau ci-dessus. Hors héros (page
@@ -225,11 +212,11 @@ type OverviewLabels = {
 export type OverviewInteraction = {
   /** Axe actuellement filtré (un seul) — sa ligne est mise en avant, les autres estompées. */
   selectedAxisId: string | null;
-  selectedStatus: IndicatorRiskStatus | null;
+  selectedStatus: IndicatorDisplayStatus | null;
   onAxisClick: (axisId: string) => void;
   /** Clic sur le compteur à risque d'une ligne : axe + statut « à risque ». */
   onAxisAtRiskClick: (axisId: string) => void;
-  onStatusClick: (status: IndicatorRiskStatus) => void;
+  onStatusClick: (status: IndicatorDisplayStatus) => void;
   /** Libellés d'accessibilité — `{name}` / `{status}` sont remplacés à l'affichage. */
   labels: {
     filterAxis: string;
@@ -241,47 +228,94 @@ export type OverviewInteraction = {
 const FOCUS_RING =
   "focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1";
 
-/** Barre segmentée sur la trajectoire / à risque — même rendu que le bandeau héros du dashboard
- *  stratégique (encre + BearingPoint Red, palette partagée `INDICATOR_STATUS_TONE`). */
+/** Libellé d'accessibilité des trois parts (mêmes arrondis que la légende). */
+function statusAriaLabel(
+  l: Pick<OverviewLabels, "onTrack" | "atRisk" | "noData">,
+  shares: IndicatorStatusShares
+): string {
+  return `${l.onTrack} ${shares.pctOnTrack}% · ${l.atRisk} ${shares.pctAtRisk}% · ${l.noData} ${shares.pctNoData}%`;
+}
+
+/** Libellé d'un état dans les légendes de synthèse. */
+function statusLabel(
+  l: Pick<OverviewLabels, "onTrack" | "atRisk" | "noData">,
+  status: IndicatorDisplayStatus
+): string {
+  return status === "on_track" ? l.onTrack : status === "at_risk" ? l.atRisk : l.noData;
+}
+
+function statusShare(shares: IndicatorStatusShares, status: IndicatorDisplayStatus): number {
+  return status === "on_track"
+    ? shares.pctOnTrack
+    : status === "at_risk"
+      ? shares.pctAtRisk
+      : shares.pctNoData;
+}
+
+/** Légende chiffrée statique (bandeau du dashboard) : les trois états, toujours affichés, avec
+ *  leur part arrondie (somme = 100 %) et leur compte. */
+function StatusLegendRow({
+  labels: l,
+  shares,
+  counts,
+}: {
+  labels: Pick<OverviewLabels, "onTrack" | "atRisk" | "noData">;
+  shares: IndicatorStatusShares;
+  counts: { onTrack: number; atRisk: number; noData: number };
+}) {
+  const countOf = (status: IndicatorDisplayStatus) =>
+    status === "on_track" ? counts.onTrack : status === "at_risk" ? counts.atRisk : counts.noData;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-secondary">
+      {INDICATOR_DISPLAY_STATUSES.map((status) => (
+        <span key={status} className="inline-flex items-center gap-1.5">
+          <IndicatorStatusMark status={status} size={8} />
+          <span className="font-semibold text-primary">{statusLabel(l, status)}</span>
+          <span className="tabular-nums">
+            {statusShare(shares, status)}% · {countOf(status)}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Barre segmentée à TROIS états (sur la trajectoire / à risque / sans donnée) — même rendu
+ *  partout (bandeau du dashboard, synthèse KPI, ventilation par axe), palette partagée
+ *  `INDICATOR_STATUS_TONE`. Largeurs exactes (`indicatorStatusShares`), somme = 100 %. */
 function StatusSplitBar({
   onTrack,
   atRisk,
-  total,
+  noData,
   height = "h-3",
   ariaLabel,
-  color,
 }: {
   onTrack: number;
   atRisk: number;
-  total: number;
+  noData: number;
   height?: string;
   ariaLabel: string;
-  /** Couleur d'axe (ventilation par axe) : segment "sur la trajectoire" plein, segment "à risque"
-   *  en teinte claire de la même couleur — le risque reste signalé par le triangle rouge à droite. */
-  color?: string;
 }) {
-  const onTrackPct = total > 0 ? (onTrack / total) * 100 : 0;
-  const atRiskPct = total > 0 ? (atRisk / total) * 100 : 0;
+  const shares = indicatorStatusShares({ onTrack, atRisk, noData });
+  const segments: { status: IndicatorDisplayStatus; width: number }[] = [
+    { status: "on_track", width: shares.widthOnTrack },
+    { status: "at_risk", width: shares.widthAtRisk },
+    { status: "no_data", width: shares.widthNoData },
+  ];
   return (
     <div
       className={`flex w-full gap-[2px] overflow-hidden rounded-full bg-neutral-100 ${height}`}
       role="img"
       aria-label={ariaLabel}
     >
-      {onTrackPct > 0 && (
-        <div
-          className={`h-full ${color ? "" : INDICATOR_STATUS_TONE.on_track.bar}`}
-          style={{ width: `${onTrackPct}%`, ...(color ? { backgroundColor: color } : {}) }}
-        />
-      )}
-      {atRiskPct > 0 && (
-        <div
-          className={`h-full ${color ? "" : INDICATOR_STATUS_TONE.at_risk.bar}`}
-          style={{
-            width: `${atRiskPct}%`,
-            ...(color ? { backgroundColor: color, opacity: 0.28 } : {}),
-          }}
-        />
+      {segments.map((seg) =>
+        seg.width > 0 ? (
+          <div
+            key={seg.status}
+            className={`h-full ${INDICATOR_STATUS_TONE[seg.status].bar}`}
+            style={{ width: `${seg.width}%` }}
+          />
+        ) : null
       )}
     </div>
   );
@@ -291,11 +325,11 @@ function StatusSplitBar({
  * Synthèse des statuts d'indicateur de la page KPI (et de la fiche d'axe) — refonte (retour PO :
  * l'ancienne tuile « Sur la trajectoire 5/13 » faisait daté à côté du tableau de bord
  * stratégique). Même langage visuel que le bandeau héros du dashboard : grand pourcentage, barre
- * segmentée encre / BearingPoint Red, puis deux tuiles de compte (rond plein vs triangle d'alerte,
- * jamais la couleur seule) et, si `axes` est fourni, une ventilation par axe.
+ * segmentée à trois états, légende chiffrée (rond plein / triangle / rond creux, jamais la couleur
+ * seule) et, si `axes` est fourni, une ventilation par axe — même barre à trois segments.
  *
- * Aucun calcul métier propre : comptes issus de `countOnTrackAtRisk` (passés par le parent) et
- * statut par indicateur via `resolveIndicatorStatus` (`lib/axisLogic.ts`).
+ * Aucun calcul métier propre : comptes issus de `countOnTrackAtRisk` (passés par le parent), parts
+ * via `indicatorStatusShares`, par axe via `countOnTrackAtRisk` sur les indicateurs de l'axe.
  */
 function IndicatorStatusOverview({
   indicators,
@@ -319,35 +353,25 @@ function IndicatorStatusOverview({
   labels: OverviewLabels;
   interaction?: OverviewInteraction;
 }) {
-  const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  const shares = indicatorStatusShares({ onTrack, atRisk, noData });
 
   const perAxis = useMemo(() => {
     if (!axes || axes.length === 0) return [];
     return axes
-      .map((axis) => {
-        let axisOnTrack = 0;
-        let axisAtRisk = 0;
-        let axisNoData = 0;
-        for (const indicator of indicators) {
-          if (indicator.axisId !== axis.id) continue;
-          const state = indicatorReadingState(indicator, measurements);
-          if (state === "at_risk") axisAtRisk += 1;
-          else if (state === "no_data") axisNoData += 1;
-          else axisOnTrack += 1;
-        }
-        return {
-          axis,
-          onTrack: axisOnTrack,
-          atRisk: axisAtRisk,
-          total: axisOnTrack + axisAtRisk + axisNoData,
-        };
-      })
+      .map((axis) => ({
+        axis,
+        ...countOnTrackAtRisk(
+          indicators.filter((indicator) => indicator.axisId === axis.id),
+          measurements
+        ),
+      }))
       .filter((row) => row.total > 0);
   }, [axes, indicators, measurements]);
 
-  const tiles: { status: IndicatorRiskStatus; label: string; count: number }[] = [
+  const tiles: { status: IndicatorDisplayStatus; label: string; count: number }[] = [
     { status: "on_track", label: l.onTrack, count: onTrack },
     { status: "at_risk", label: l.atRisk, count: atRisk },
+    { status: "no_data", label: l.noData, count: noData },
   ];
 
   return (
@@ -369,7 +393,7 @@ function IndicatorStatusOverview({
           </div>
           <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
             <span className="text-[44px] font-bold leading-none tracking-tight text-primary tabular-nums">
-              {pct(onTrack)}%
+              {shares.pctOnTrack}%
             </span>
             <span className="pb-1 text-[11px] font-bold uppercase tracking-wide text-secondary">
               {l.onTrack} · {onTrack}/{total}
@@ -379,8 +403,8 @@ function IndicatorStatusOverview({
             <StatusSplitBar
               onTrack={onTrack}
               atRisk={atRisk}
-              total={total}
-              ariaLabel={`${l.onTrack} ${pct(onTrack)}% · ${l.atRisk} ${pct(atRisk)}%`}
+              noData={noData}
+              ariaLabel={statusAriaLabel(l, shares)}
             />
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-secondary">
               {tiles.map((tile) => {
@@ -388,7 +412,9 @@ function IndicatorStatusOverview({
                   <>
                     <IndicatorStatusMark status={tile.status} size={8} />
                     <span className="font-semibold text-primary">{tile.label}</span>
-                    <span className="tabular-nums">{pct(tile.count)}%</span>
+                    <span className="tabular-nums">
+                      {statusShare(shares, tile.status)}% · {tile.count}
+                    </span>
                   </>
                 );
                 if (!interaction) {
@@ -416,13 +442,6 @@ function IndicatorStatusOverview({
                   </button>
                 );
               })}
-              {noData > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-tertiary">
-                  <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-neutral-300" />
-                  <span className="font-semibold">{l.noData}</span>
-                  <span className="tabular-nums">{pct(noData)}%</span>
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -437,7 +456,7 @@ function IndicatorStatusOverview({
             <ul className={`flex flex-col ${interaction ? "gap-1" : "gap-2.5"}`}>
               {perAxis.map((row) => {
                 const axisColor = row.axis.color ?? "var(--bp-warm-taupe)";
-                const rowSummary = `${row.axis.name} — ${l.onTrack} ${row.onTrack}/${row.total} · ${l.atRisk} ${row.atRisk}`;
+                const rowSummary = `${row.axis.name} — ${l.onTrack} ${row.onTrack}/${row.total} · ${l.atRisk} ${row.atRisk} · ${l.noData} ${row.noData}`;
                 const selected = interaction?.selectedAxisId === row.axis.id;
                 const dimmed = !!interaction?.selectedAxisId && !selected;
                 const atRiskFilterActive = selected && interaction?.selectedStatus === "at_risk";
@@ -459,9 +478,8 @@ function IndicatorStatusOverview({
                       <StatusSplitBar
                         onTrack={row.onTrack}
                         atRisk={row.atRisk}
-                        total={row.total}
+                        noData={row.noData}
                         height="h-2"
-                        color={axisColor}
                         ariaLabel={rowSummary}
                       />
                     </span>
@@ -578,7 +596,7 @@ function IndicatorStatusOverview({
  * dashboard stratégique) ; le dupliquer dans chacun d'eux ferait diverger deux rendus censés être
  * identiques.
  *
- * Aucun calcul propre : `latestMeasurement` / `resolveIndicatorStatus` (`lib/axisLogic.ts`).
+ * Aucun calcul propre : `latestMeasurement` / `computeIndicatorDelta` (`lib/axisLogic.ts`).
  */
 export function BusinessKpiCards({
   indicators,

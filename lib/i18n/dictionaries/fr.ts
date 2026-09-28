@@ -261,7 +261,7 @@ const fr: Record<string, string> = {
   "dashboard.kpi.reforecast": "Réactualisé",
   "dashboard.kpi.plan": "Planifié initial",
   "dashboard.kpi.leversAtRiskTooltip":
-    "Leviers dont le risque (badge de la bibliothèque) est Moyen ou plus — les mêmes que « À surveiller » et « Alertes critiques » dans la matrice Santé des initiatives. Le risque se calcule sur le montant et l'ancienneté des alertes rouges/orange ouvertes (une alerte résolue ne compte plus). Barre : orange = à surveiller (Moyen), rouge = critiques (Élevé ou Critique).",
+    "Leviers dont le niveau de risque est Critique ou Élevé (seuils de risque de l'entreprise, calculés sur le montant et l'ancienneté des alertes rouges/orange ouvertes — une alerte résolue ne compte plus). Même chiffre que le badge du bloc « Alertes & Dépendances ». Les leviers « à surveiller » (risque Moyen) sont indiqués à part, sans être comptés. Barre : orange = à surveiller (Moyen), rouge = à risque (Élevé ou Critique). Clic : bibliothèque filtrée sur ces niveaux.",
   "dashboard.kpi.fteImpactedTooltip":
     'Somme des ETP estimés au niveau des leviers (planification), à ne pas confondre avec le suivi RH réel (voir Tableau de bord RH). "X / Y postes supprimés" ne compte que les départs forcés réalisés/planifiés suivis dans le module RH — un SOUS-ENSEMBLE de cet impact ETP global, pas une décomposition complète.',
   "dashboard.widgets.portfolioFunnel": "Avancement des leviers",
@@ -770,6 +770,19 @@ const fr: Record<string, string> = {
   "hr.targetLower": "cible",
   "hr.baselineFteLine": "Référence {n} ETP",
   "hr.landingPrefix": "Atterrissage",
+  "hr.headcount.fteOnly": "{fte} ETP",
+  "hr.headcount.fteWithPersons": "{fte} ETP ({persons} personnes)",
+  "hr.subtitleHeadcount":
+    "Effectif au démarrage du programme : {from} ETP → cible : {to} ETP · {count} mouvements · {realized} réalisés",
+  "hr.currentHeadcountLabel": "Effectif actuel :",
+  "hr.targetHeadcountLabel": "Cible :",
+  "hr.startHeadcountLine": "Effectif au démarrage du programme : {n}",
+  "hr.column.startFte": "ETP au démarrage du programme",
+  "hr.column.currentFte": "ETP actuels",
+  "hr.column.targetFte": "ETP cible",
+  "hr.column.startFteShort": "Démarrage (ETP)",
+  "hr.column.currentFteShort": "Actuel (ETP)",
+  "hr.column.targetFteShort": "Cible (ETP)",
   "hr.kpi.fteImpact": "Impact ETP",
   "hr.kpi.annualSalarySavings": "Économies salariales annuelles",
   "hr.kpi.socialCostsConsumed": "Coûts sociaux consommés",
@@ -881,6 +894,12 @@ const fr: Record<string, string> = {
   "etp.newMovement": "Nouveau mouvement",
   "etp.kpi.currentHeadcount": "Effectif actuel",
   "etp.kpi.targetHeadcount": "Effectif cible",
+  "etp.headcountSummary":
+    "Effectif actuel : {current} · Effectif au démarrage du programme : {start} · {m} mouvements suivis",
+  "etp.kpi.personsSub": "{n} personnes",
+  "etp.kpi.startSub": "démarrage : {n} ETP",
+  "etp.rowBreakdown":
+    "{total} lignes : {employees} fiches salariés de la base (dont {departed} sortis — départ réalisé) + {recruitments} postes à recruter (recrutements prévus ou réalisés)",
   "etp.kpi.landingPlanSub": "écart cible : {n} ETP",
   "etp.kpi.upcomingMovements": "Mouvements à venir",
   "etp.kpi.toValidateHr": "À valider RH",
@@ -1455,6 +1474,7 @@ const fr: Record<string, string> = {
   "shared.fteWaterfallChart.dataUnavailable":
     "Données ETP indisponibles — vérifier les types de mouvements RH (typologie 5-types Gooduelle attendue).",
   "shared.fteWaterfallChart.endOfPeriod": "Fin de période",
+  "shared.fteWaterfallChart.opening": "Ouverture de la période",
   "shared.fteWaterfallChart.clickForDetail": "Cliquer pour le détail par levier",
   "shared.fteWaterfallChart.reductionsLabel": "Réductions (suppressions)",
   "chart.noDataToDisplay": "Aucune donnée à afficher.",
@@ -1573,6 +1593,7 @@ const fr: Record<string, string> = {
   // ─── Plan Stratégique — statut d'un indicateur ────────────────────────────
   "indicatorStatus.onTrack": "Sur la trajectoire",
   "indicatorStatus.atRisk": "À risque",
+  "indicatorStatus.noData": "Sans donnée",
 
   // ─── Plan Stratégique — étapes de maturité (libellés GÉNÉRIQUES) ──────────
   // Les libellés d'étape réels viennent de `MaturityStageConfig.label` (saisis par l'admin, par
@@ -2375,7 +2396,8 @@ const fr: Record<string, string> = {
   // ratio — voir le doc-comment de `needVsAvailableSection`, `EffectifsPageClient.tsx`.
   "effectifs.needVsAvailable.availableDetailTitle": "Employés disponibles — {team}",
   "effectifs.needVsAvailable.availableDetailEmpty": "Aucun employé dans cette équipe.",
-  "effectifs.needVsAvailable.rowsCount": "{n} employé(s)",
+  "effectifs.needVsAvailable.rowsCount": "{n} personne(s) dans la base ETP",
+  "effectifs.needVsAvailable.availableTotal": "Disponible actuel : {fte} ETP",
   "effectifs.needVsAvailable.columnName": "Nom",
   "effectifs.needVsAvailable.columnFunction": "Fonction",
   "effectifs.needVsAvailable.columnTeam": "Équipe",
@@ -2706,6 +2728,16 @@ const fr: Record<string, string> = {
   "finance.chart.netEconomy": "Économie nette",
   "finance.chart.timelineTitle": "Engagement des coûts dans le temps (Invest)",
   "finance.chart.hierarchyTitle": "Répartition des coûts par centre de coût / P&L",
+  "finance.chart.engagedTitleOneOff":
+    "Coûts ponctuels (CAPEX + OPEX ponctuel) : engagés vs à venir",
+  "finance.chart.engagedScopeNote":
+    "Total {total} (engagé {engaged} · à venir {upcoming}) — OPEX récurrent exclu, même périmètre que le KPI « CAPEX & coûts ponctuels » du dashboard.",
+  "finance.chart.hierarchyTitleAllCosts":
+    "Coûts totaux yc OPEX récurrent, par compte P&L / centre de coût",
+  "finance.chart.hierarchyScopeNote":
+    "Total {total} = coûts ponctuels (CAPEX + OPEX ponctuel) {oneOff} + OPEX récurrent {rec}. Chaque coût est affecté au compte P&L de son centre de coût (ligne de coût, sinon levier) : un compte de produits (ex. Revenue) peut donc porter les coûts des leviers qui l'impactent.",
+  "finance.chart.hierarchyUnattachedNote":
+    "Dont {amount} sans rattachement à l'arborescence (absent du graphique).",
   "finance.chart.hierarchyNoConfig":
     "Aucune arborescence financière n'est configurée pour cette entreprise.",
   "finance.chart.investVsSavingsTitle": "Coût d'investissement vs Économies",
@@ -2818,6 +2850,13 @@ const fr: Record<string, string> = {
   "adminHistory.filterEntity": "Entité",
   "dashboard.tableHeader.capexRealizedPlan": "CAPEX (réalisé / plan)",
   "dashboard.tableHeader.opexOneOffRealizedPlan": "OPEX ponctuels (réalisé / plan)",
+  "dashboard.kpi.leversAtRiskWatchHint": "risque moyen, non compté",
+  "dashboard.riskCenter.leversAtRiskBadge": "{n} leviers à risque",
+  "dashboard.riskCenter.openAlertsCount": "{n} alertes ouvertes",
+  "dashboard.tableHeader.capexEngagedReforecast": "CAPEX (engagé / réactualisé)",
+  "dashboard.tableHeader.opexOneOffEngagedReforecast": "OPEX ponctuels (engagé / réactualisé)",
+  "dashboard.workstreamsCancelledHidden":
+    "{n} levier(s) abandonné(s) masqué(s) — exclus des indicateurs et de la table.",
   "dashboard.filter.owner": "Responsable",
   "dashboard.filter.type": "Type",
   "dashboard.pivot.metric.netSavings": "Économies nettes",

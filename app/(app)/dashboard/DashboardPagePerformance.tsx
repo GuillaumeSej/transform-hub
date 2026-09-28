@@ -41,7 +41,7 @@ import {
   pivotByDimensions,
   type PivotRow,
 } from "@/lib/dashboardPivot";
-import { filterAggregateVisibleLevers } from "@/lib/leversLogic";
+import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/leversLogic";
 import { isReadOnlyUser } from "@/lib/roleProfiles";
 import { KPICard } from "@/components/shared/KPICard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -57,6 +57,7 @@ import { dependencyMilestoneLabel } from "@/lib/dependencyLabels";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { paginateDashboardItems } from "@/lib/dashboardPagination";
 import {
+  AT_RISK_LEVELS,
   groupLeversByHealthDimension,
   leverHealthCounts,
   type LeverHealthDimension,
@@ -233,12 +234,19 @@ export function DashboardPagePerformance() {
   // `consolidatedPrograms` accessibles à l'utilisateur (voir `getConsolidatedPerformancePrograms`)
   // — tous leurs leviers combinés alimentent alors les KPI/widgets ci-dessous, qui n'ont pas besoin
   // d'être modifiés individuellement puisqu'ils dérivent tous, en cascade, de ce scope.
+  // Règle PARTAGÉE (`filterProgramScopedLevers`, audit fix #2) avec Finance, Chantiers et la
+  // bibliothèque : leviers orphelins (sans programme / programme supprimé) en vue consolidée seule.
   const programScopedLevers = useMemo(
     () =>
-      isConsolidatedView
-        ? visibleLevers.filter((l) => consolidatedPrograms.some((p) => p.id === l.programId))
-        : visibleLevers.filter((l) => l.programId === selectedProgramId),
-    [visibleLevers, selectedProgramId, isConsolidatedView, consolidatedPrograms]
+      filterProgramScopedLevers(visibleLevers, {
+        programId: selectedProgramId,
+        isConsolidatedView,
+        consolidatedProgramIds: consolidatedPrograms.map((p) => p.id),
+        performanceProgramIds: programs
+          .filter((p) => resolveProgramType(p) === "performance")
+          .map((p) => p.id),
+      }),
+    [visibleLevers, selectedProgramId, isConsolidatedView, consolidatedPrograms, programs]
   );
 
   // Programme actuellement sélectionné (objet complet, avec ses propres fyStart/fyEnd) — à
@@ -1051,15 +1059,13 @@ export function DashboardPagePerformance() {
         // dépendances, AUTO-DEP-*, sont déjà générées par `generateAlerts` et donc déjà comprises
         // dans `filteredAlerts` — ne pas les rajouter une 2e fois via `depAlerts`, sous peine de
         // double comptage). `depAlerts` reste utilisé séparément pour sa propre section ci-dessous.
-        // Badge « N leviers en alerte » : nombre de LEVIERS distincts ayant une alerte de risque
-        // (rouge/orange) dans la liste (audit DASH-08) — pas le nombre d'alertes (plusieurs par
-        // levier, alertes de chantier), ni les alertes vertes/bleues (information) : en vue « À
-        // traiter », même chiffre que le KPI « Leviers à risque ».
-        const totalAtRisk = new Set(
-          filteredAlerts
-            .filter((a) => (a.type === "red" || a.type === "amber") && data.getLeverById(a.scope))
-            .map((a) => a.scope)
-        ).size;
+        // Badge « N leviers à risque » : MÊME chiffre et même helper que le KPI « Leviers à
+        // risque » (`leverHealthCounts().atRisk` = risque Critique/Élevé, audit fix #2) — plus un
+        // décompte parallèle des leviers ayant une alerte rouge/orange. Le panneau Alertes affiche
+        // à part son propre compte, explicitement « alertes ouvertes » (`openAlertCount`).
+        const totalAtRisk = healthCounts.atRisk;
+        const openAlertCount =
+          alertCounts.red + alertCounts.amber + alertCounts.green + alertCounts.blue;
         const criticalCount = alertCounts.red + depAlerts.filter((a) => a.delayDays > 30).length;
         const depSeverity = (days: number) => {
           if (days > 30) return { label: t("dep.blocking"), cls: "bg-rag-red-light text-rag-red" };
@@ -1082,7 +1088,7 @@ export function DashboardPagePerformance() {
                         : "bg-neutral-100 text-secondary"
                   }`}
                 >
-                  {t("risk.summary", `${totalAtRisk} leviers en alerte`).replace(
+                  {t("dashboard.riskCenter.leversAtRiskBadge", "{n} leviers à risque").replace(
                     "{n}",
                     String(totalAtRisk)
                   )}
@@ -1095,6 +1101,13 @@ export function DashboardPagePerformance() {
                 <div className="min-w-0">
                   <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-primary">
                     {t("dashboard.widgets.riskCenter.alertsPanel", "Alertes")}
+                    <span className="ml-1.5 font-semibold normal-case tracking-normal text-tertiary">
+                      ·{" "}
+                      {t("dashboard.riskCenter.openAlertsCount", "{n} alertes ouvertes").replace(
+                        "{n}",
+                        String(openAlertCount)
+                      )}
+                    </span>
                   </div>
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     {!readOnly && (
@@ -1723,10 +1736,13 @@ export function DashboardPagePerformance() {
                           "dashboard.tableHeader.realizedReforecastTarget",
                           "Réalisé / Cible réactualisée"
                         ),
-                        t("dashboard.tableHeader.capexRealizedPlan", "CAPEX (réalisé / plan)"),
                         t(
-                          "dashboard.tableHeader.opexOneOffRealizedPlan",
-                          "OPEX ponctuels (réalisé / plan)"
+                          "dashboard.tableHeader.capexEngagedReforecast",
+                          "CAPEX (engagé / réactualisé)"
+                        ),
+                        t(
+                          "dashboard.tableHeader.opexOneOffEngagedReforecast",
+                          "OPEX ponctuels (engagé / réactualisé)"
                         ),
                       ].map((h) => (
                         <th
@@ -1747,21 +1763,27 @@ export function DashboardPagePerformance() {
                       // entre les deux graphiques : les totaux par workstream ne portaient pas sur
                       // le même périmètre de leviers.
                       const ss = engine.workstreamSummary(filteredData, ws.id);
-                      // `WorkstreamSummary.opex` (lib/engine.ts) agrège opexOneOff + opexRec — on a
-                      // besoin ici du seul OPEX one-off, recalculé sur le même périmètre de leviers
-                      // que `ss` (même logique d'agrégation que le CAPEX déjà affiché).
-                      // `ss.capex`/`opexOneOff` (ci-dessous) sont des montants PLAN/réactualisé
-                      // (valeur courante du champ `Lever.capex`/`opexOneOff`), jamais réalisés — audit
-                      // #7 : l'ancien libellé "CAPEX"/"OPEX one-off" sans qualificatif laissait croire
-                      // à un réalisé, alors que le KPI héros "CAPEX & coûts one-off" au-dessus AFFICHE
-                      // bien un réalisé. On calcule donc ici un "réalisé" (engagé) par workstream
+                      // Colonnes CAPEX / OPEX ponctuels = engagé / réactualisé, les deux termes du KPI
+                      // « CAPEX & coûts ponctuels » (jamais l'OPEX récurrent). On calcule ici l'engagé par workstream
                       // avec la MÊME règle DATÉE que `engine.programSummary.engagedCosts` et le donut
                       // Finance (`engine.leverEngagedInvestCostByNature`, audit M8 — avant : champ
                       // stocké et périmé `lever.progress`).
                       const wsLevers = filteredData.levers.filter(
                         (l) => l.ws === ws.id && l.status !== "cancelled"
                       );
-                      const opexOneOff = wsLevers.reduce((s, l) => s + l.opexOneOff, 0);
+                      // Dénominateur = RÉACTUALISÉ (`displayedReforecastSnapshot`), exactement comme
+                      // le KPI « CAPEX & coûts ponctuels » (`programSummary.reforecastCosts`) : la
+                      // somme des chantiers retombe sur le KPI. « Planifié initial » est réservé au
+                      // plan figé `lockedPlan` (audit fix #2) — avant, la colonne affichait la valeur
+                      // courante du champ `Lever.capex`/`opexOneOff` sous le libellé « plan ».
+                      const reforecastSnaps = wsLevers.map((l) =>
+                        engine.displayedReforecastSnapshot(l)
+                      );
+                      const capexReforecast = reforecastSnaps.reduce((s, r) => s + r.capex, 0);
+                      const opexOneOffReforecast = reforecastSnaps.reduce(
+                        (s, r) => s + r.opexOneOff,
+                        0
+                      );
                       const engagedByLever = wsLevers.map((l) =>
                         engine.leverEngagedInvestCostByNature(l)
                       );
@@ -1797,11 +1819,11 @@ export function DashboardPagePerformance() {
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
                             <strong>{engine.fmtCurr(capexRealized)}</strong> /{" "}
-                            {engine.fmtCurr(ss.capex)}
+                            {engine.fmtCurr(capexReforecast)}
                           </td>
                           <td className="px-3 py-2.5 tabular-nums">
                             <strong>{engine.fmtCurr(opexOneOffRealized)}</strong> /{" "}
-                            {engine.fmtCurr(opexOneOff)}
+                            {engine.fmtCurr(opexOneOffReforecast)}
                           </td>
                         </tr>
                       );
@@ -2006,27 +2028,33 @@ export function DashboardPagePerformance() {
           }
           onClick={() => goToLevers({ f_status: lifecycle.label("delivered") })}
         />
-        {/* 4. Leviers à risque — même source que la matrice « Santé des initiatives » (alertes
-            ouvertes, audit C6) : à surveiller (orange) + critiques (rouge). */}
+        {/* 4. Leviers à risque — décision PO audit fix #2 : risque Critique ou Élevé
+            (`AT_RISK_LEVELS`, seuils de l'entreprise) via `leverHealthCounts().atRisk`, MÊME chiffre
+            que le badge du bloc « Alertes & Dépendances ». Les « à surveiller » (risque Moyen) sont
+            rappelés en sous-titre, jamais additionnés. Clic → bibliothèque filtrée sur ces niveaux. */}
         <KPICard
           label={t("dashboard.kpi.leversAtRisk")}
-          value={String(healthCounts.watch + healthCounts.critical)}
+          value={String(healthCounts.atRisk)}
           icon={TriangleAlert}
           accent="amber"
           infoTooltip={t(
             "dashboard.kpi.leversAtRiskTooltip",
-            "Leviers « À surveiller » ou « Alertes critiques » dans la matrice Santé des initiatives : calculé à partir des alertes ouvertes de chaque levier (une alerte résolue ne compte plus). Barre : orange = à surveiller, rouge = critiques."
+            "Leviers dont le niveau de risque est Critique ou Élevé (seuils de risque de l'entreprise, calculés à partir des alertes ouvertes — une alerte résolue ne compte plus). Les leviers « à surveiller » (risque Moyen) sont indiqués à part. Barre : orange = à surveiller, rouge = à risque."
           )}
-          sub={`${healthCounts.critical} ${t("dashboard.widgets.healthCritical").toLowerCase()} · ${healthCounts.watch} ${t("dashboard.widgets.healthWatch").toLowerCase()}`}
+          sub={`${healthCounts.watch} ${t("dashboard.widgets.healthWatch").toLowerCase()} (${t("dashboard.kpi.leversAtRiskWatchHint", "risque moyen, non compté")})`}
           barSegments={(() => {
             const total = healthCounts.onTrack + healthCounts.watch + healthCounts.critical;
             if (total === 0) return [];
             return [
               { pct: (healthCounts.watch / total) * 100, className: "bg-rag-amber" },
-              { pct: (healthCounts.critical / total) * 100, className: "bg-rag-red" },
+              { pct: (healthCounts.atRisk / total) * 100, className: "bg-rag-red" },
             ];
           })()}
-          onClick={() => goToLevers({})}
+          onClick={() =>
+            goToLevers({
+              f_risk: serializeFilterValues(AT_RISK_LEVELS.map((lvl) => riskLevelLabel(t, lvl))),
+            })
+          }
         />
         {/* 5. ETP impactés — fteImpact comme valeur, suppressions comme barre + %
             Audit #3 : ce chiffre, la barre "postes supprimés" ci-dessous ET le KPI "Impact ETP" du

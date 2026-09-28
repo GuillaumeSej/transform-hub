@@ -45,7 +45,7 @@ import type {
 } from "@/types";
 import { translate, useTranslation } from "@/lib/i18n/useTranslation";
 import { LOCALES } from "@/lib/i18n/locales";
-import { intlTag } from "@/lib/format";
+import { formatNumber, intlTag } from "@/lib/format";
 
 type EtpRow = {
   id: string;
@@ -348,8 +348,10 @@ export default function BaseEtpPage() {
       };
     });
 
+    // Lignes « à recruter » : recrutements non abandonnés (un recrutement abandonné reste visible
+    // dans l'onglet « Suivi des mouvements », mais n'est pas un poste de la base ETP).
     const recruitmentRows: EtpRow[] = wf.movements
-      .filter((m) => m.type === "Recrutement")
+      .filter((m) => m.type === "Recrutement" && isActiveMovement(m))
       .map((m) => {
         const lever = data.levers.find((l) => l.id === m.leverId);
         return {
@@ -688,6 +690,14 @@ export default function BaseEtpPage() {
     Object.keys(etpActiveFilters).length > 0 ||
     Object.keys(movementActiveFilters).length > 0;
 
+  // Effectifs — définitions uniques partagées avec le Dashboard RH (lib/hrEngine.ts) : toujours
+  // en ETP, le nombre de personnes n'étant qu'un complément explicitement libellé.
+  const startHeadcount = hr.headcountAtStart(wf);
+  const nowHeadcount = hr.currentHeadcount(wf);
+  const targetFte = hr.targetFTE(wf);
+  const landingFte = hr.plannedFTE(wf);
+  const rowBreakdown = hr.etpRowBreakdown(filteredEmployees, wf.movements);
+
   const toValidateCount = alerts.filter((a) => a.kind === "toValidate").length;
   // "Mouvements à venir" : ni réalisés, ni abandonnés.
   const plannedCount = wf.movements.filter(
@@ -891,6 +901,7 @@ export default function BaseEtpPage() {
       align: "right",
       editable: true,
       type: "number",
+      render: (r) => formatNumber(r.fte, { maximumFractionDigits: 2 }),
     },
     {
       key: "salary",
@@ -947,6 +958,7 @@ export default function BaseEtpPage() {
       align: "right",
       editable: true,
       type: "number",
+      render: (r) => formatNumber(r.fte, { maximumFractionDigits: 2 }),
     },
     {
       key: "plannedDate",
@@ -1080,10 +1092,11 @@ export default function BaseEtpPage() {
           </h1>
           <div className="mt-2.5 text-[13px] text-secondary">
             {t(
-              "etp.employeesSummary",
-              "{n} employés sur le périmètre transformation · {m} mouvements suivis"
+              "etp.headcountSummary",
+              "Effectif actuel : {current} · Effectif au démarrage du programme : {start} · {m} mouvements suivis"
             )
-              .replace("{n}", String(wf.employees.length))
+              .replace("{current}", hr.formatHeadcount(nowHeadcount, t))
+              .replace("{start}", hr.formatHeadcount(startHeadcount, t))
               .replace("{m}", String(wf.movements.length))}
           </div>
         </div>
@@ -1106,25 +1119,35 @@ export default function BaseEtpPage() {
       <div className="mb-5 grid grid-cols-5 gap-3.5 max-[1100px]:grid-cols-2">
         <KPICard
           label={t("etp.kpi.currentHeadcount", "Effectif actuel")}
-          value={hr.currentFTE(wf).toLocaleString(intlTag())}
+          value={hr.formatHeadcount({ fte: nowHeadcount.fte, persons: null }, t)}
+          sub={
+            nowHeadcount.persons !== null
+              ? t("etp.kpi.personsSub", "{n} personnes").replace(
+                  "{n}",
+                  formatNumber(nowHeadcount.persons)
+                )
+              : undefined
+          }
           icon={Users}
         />
         <KPICard
           label={t("etp.kpi.targetHeadcount", "Effectif cible")}
-          value={hr.targetFTE(wf).toLocaleString(intlTag())}
+          value={hr.formatHeadcount({ fte: targetFte, persons: null }, t)}
+          sub={t("etp.kpi.startSub", "démarrage : {n} ETP").replace(
+            "{n}",
+            hr.formatFteValue(startHeadcount.fte)
+          )}
           icon={Users}
           accent="green"
         />
         <KPICard
           label={t("hr.landingPlan", "Atterrissage plan")}
-          value={hr.plannedFTE(wf).toLocaleString(intlTag())}
+          value={hr.formatHeadcount({ fte: landingFte, persons: null }, t)}
           icon={Users}
           accent="brown"
           sub={t("etp.kpi.landingPlanSub", "écart cible : {n} ETP").replace(
             "{n}",
-            (Math.round((hr.plannedFTE(wf) - hr.targetFTE(wf)) * 10) / 10 || 0).toLocaleString(
-              intlTag()
-            )
+            hr.formatFteValue(landingFte - targetFte)
           )}
         />
         <KPICard
@@ -1175,6 +1198,16 @@ export default function BaseEtpPage() {
               onChange={setEtpFilters}
             />
           </div>
+          <p className="mb-2 text-[12px] text-secondary">
+            {t(
+              "etp.rowBreakdown",
+              "{total} lignes : {employees} fiches salariés de la base (dont {departed} sortis — départ réalisé) + {recruitments} postes à recruter (recrutements prévus ou réalisés)"
+            )
+              .replace("{total}", String(rowBreakdown.total))
+              .replace("{employees}", String(rowBreakdown.employees))
+              .replace("{departed}", String(rowBreakdown.departed))
+              .replace("{recruitments}", String(rowBreakdown.recruitments))}
+          </p>
           <EditableTable
             data={filteredEmployees}
             columns={etpColumns}
