@@ -6,6 +6,10 @@ import {
   type MyWorkspaceStrategicInput,
 } from "@/lib/myWorkspace";
 import { EMPTY_WORKSPACE } from "@/lib/myWorkspaceTypes";
+import { itemsOfCategory } from "@/components/workspace/workspaceView";
+import { generateAlerts } from "@/lib/alertEngine";
+import { targetAlerts } from "@/lib/notifications";
+import { alertPrimaryBreakdown, movementAlerts } from "@/lib/hrEngine";
 import { axisProgressPct, chantierDeclaredProgress, programProgressPct } from "@/lib/axisLogic";
 import type { StrategicApproval } from "@/lib/strategicApprovals";
 import type {
@@ -624,5 +628,92 @@ describe("missingMeasurementPeriod", () => {
     expect(missingMeasurementPeriod({ ...indicator, frequency: "quarterly" }, [], TODAY)).toBe(
       "2026-Q2"
     );
+  });
+});
+
+describe("buildMyWorkspace — audit fix #5 (pertinence des alertes par rôle, retards RH)", () => {
+  // L1 : action en retard → AUTO-DELAY (livraison) ; L2 : reforecast CAPEX > plan → AUTO-COST
+  // (finance). Même responsable, programme p1.
+  const levers = [
+    lateLever({ id: "L1", code: "L1", ownerUsername: "olivia", owner: "olivia Test" }),
+    makeLever({
+      id: "L2",
+      code: "L2",
+      name: "Levier 2",
+      status: "in_progress",
+      ownerUsername: "olivia",
+      owner: "olivia Test",
+      lockedPlan: { grossSavings: 0, netSavings: 0, opexOneOff: 0, opexRec: 0, capex: 1 },
+      reforecast: { grossSavings: 0, netSavings: 0, opexOneOff: 0, opexRec: 0, capex: 2 },
+    }),
+  ];
+  const owner = makeUser("olivia", [{ role: "lever" }]);
+  const finance = makeUser("fanny", [{ role: "finance" }]);
+  const hr = makeUser("helene", [{ role: "hr" }]);
+  const users = [owner, finance, hr];
+  const alertIds = (user: AuthUser, data: BeTrackData) =>
+    buildMyWorkspace({ user, performance: data, users, today: TODAY }, t)
+      .todo.filter((i) => i.source === "leverAlert")
+      .map((i) => i.id)
+      .sort();
+
+  it("RH : aucune alerte levier (dépassement de coûts, retard) — seulement ses mouvements", () => {
+    const data = makeData({ levers });
+    // Le ciblage par périmètre d'accès, lui, les lui adresse (source du bruit constaté).
+    expect(targetAlerts(generateAlerts(data), hr, users, data, []).length).toBeGreaterThan(0);
+    expect(alertIds(hr, data)).toEqual([]);
+  });
+
+  it("finance : seulement les alertes financières ; responsable de levier : toutes", () => {
+    const data = makeData({ levers });
+    expect(alertIds(finance, data)).toEqual(["leverAlert:AUTO-COST-L2"]);
+    expect(alertIds(owner, data)).toEqual(["leverAlert:AUTO-COST-L2", "leverAlert:AUTO-DELAY-L1"]);
+  });
+
+  it("dépassements de coûts (critiques, sans échéance) : « À traiter », pas « En retard »", () => {
+    const data = makeData({ levers });
+    const ws = buildMyWorkspace({ user: finance, performance: data, users, today: TODAY }, t);
+    expect(itemsOfCategory(ws, "overdue")).toEqual([]);
+    expect(itemsOfCategory(ws, "toHandle").map((i) => [i.id, i.severity])).toEqual([
+      ["leverAlert:AUTO-COST-L2", "critical"],
+    ]);
+  });
+
+  it("mouvement désynchronisé du levier ET date dépassée : « En retard », libellé conservé", () => {
+    // L9 se termine le 1er août : un mouvement planifié après est désynchronisé.
+    const lever = makeLever({ id: "L9", code: "L9", status: "in_progress", end: "2026-08-01" });
+    const data = makeData({
+      levers: [lever],
+      workforce: {
+        ...makeData().workforce,
+        movements: [
+          makeMovement("M1", { leverId: "L9", plannedDate: "2026-09-01" }), // désync + passé
+          makeMovement("M2", { leverId: "L9", plannedDate: "2026-12-01" }), // désync, futur
+        ],
+      },
+    });
+    const ws = buildMyWorkspace({ user: hr, performance: data, users, today: TODAY }, t);
+    const m1 = ws.todo.find((i) => i.id === "hrMovement:M1");
+    const m2 = ws.todo.find((i) => i.id === "hrMovement:M2");
+    expect(m1).toMatchObject({
+      title: "Mouvement RH désynchronisé du levier",
+      daysLate: 24,
+      dueDate: "2026-09-01",
+    });
+    expect(m2).toMatchObject({ title: "Mouvement RH désynchronisé du levier" });
+    expect(m2?.daysLate).toBeUndefined();
+    expect(itemsOfCategory(ws, "overdue").map((i) => i.id)).toEqual(["hrMovement:M1"]);
+    expect(itemsOfCategory(ws, "toHandle").map((i) => i.id)).toEqual(["hrMovement:M2"]);
+
+    // Dashboard RH inchangé : M1 porte bien les deux alertes, catégorie principale « désync ».
+    const alerts = movementAlerts(data.workforce, data.levers, TODAY);
+    expect(alerts.filter((a) => a.movement.id === "M1").map((a) => a.kind)).toEqual([
+      "overdue",
+      "leverMismatch",
+    ]);
+    expect(alertPrimaryBreakdown(alerts)).toEqual({
+      total: 2,
+      parts: [{ kind: "leverMismatch", count: 2 }],
+    });
   });
 });

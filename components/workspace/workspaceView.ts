@@ -2,15 +2,11 @@
  * Helpers PURS de présentation du portail « Mon espace » (`/me`) — aucune logique métier ici
  * (l'agrégation vit dans `lib/myWorkspace.ts`) : filtrage par plan, répartition par catégorie
  * (barre 100 % cliquable + filtre de page), compteurs,
- * phrase de synthèse de l'en-tête et regroupement « À venir » par semaine. Testés dans
+ * phrase de synthèse de l'en-tête, regroupement « À faire » par catégorie (les mêmes que la
+ * barre) et regroupement « À venir » par semaine. Testés dans
  * `components/workspace/__tests__/workspaceView.test.ts`.
  */
-import type {
-  MyWorkspace,
-  WorkspaceItem,
-  WorkspacePlan,
-  WorkspaceSeverity,
-} from "@/lib/myWorkspaceTypes";
+import type { MyWorkspace, WorkspaceItem, WorkspacePlan } from "@/lib/myWorkspaceTypes";
 
 export type Translate = (key: string, fallback?: string) => string;
 
@@ -217,16 +213,19 @@ export function greetingName(
   return user?.name?.trim().split(/\s+/)[0] ?? "";
 }
 
-export const SEVERITY_ORDER: WorkspaceSeverity[] = ["critical", "warning", "info"];
+/** Sous-catégories de « À faire », dans l'ordre de la barre de répartition. */
+export const TODO_CATEGORY_ORDER: TodoCategory[] = ["overdue", "toHandle"];
 
-/** Regroupe les éléments « À faire » par gravité, en conservant l'ordre du moteur dans chaque
- *  groupe ; les groupes vides sont omis. */
-export function groupBySeverity(
+/** Regroupe les éléments « À faire » par sous-catégorie de la barre de répartition (« En retard »
+ *  puis « À traiter » — MÊMES catégories, mêmes comptes, même ordre que `workspaceBreakdown`), en
+ *  conservant l'ordre du moteur dans chaque groupe ; les groupes vides sont omis. La gravité reste
+ *  un simple marqueur visuel (icône / couleur) À L'INTÉRIEUR d'une catégorie, jamais un groupe. */
+export function groupTodoByCategory(
   items: WorkspaceItem[]
-): { severity: WorkspaceSeverity; items: WorkspaceItem[] }[] {
-  return SEVERITY_ORDER.map((severity) => ({
-    severity,
-    items: items.filter((i) => i.severity === severity),
+): { category: TodoCategory; items: WorkspaceItem[] }[] {
+  return TODO_CATEGORY_ORDER.map((category) => ({
+    category,
+    items: filterTodoItems(items, category),
   })).filter((g) => g.items.length > 0);
 }
 

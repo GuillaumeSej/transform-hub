@@ -7,8 +7,11 @@
  *  - `resolveApprovalQueue`          → portes de validation de levier (« À faire », `/validation`)
  *  - `resolveRealizedApprovalQueue`  → réalisés à valider (profil finance)
  *  - `bucketApprovals(...).pending`  → demandes de validation stratégiques décidables
- *  - `generateAlerts` + `targetAlerts` → alertes levier ciblées (la cloche), rouges/ambre ouvertes
- *  - `movementAlerts` + `primaryAlertKindByMovement` → mouvements RH en alerte (rôle `hr`)
+ *  - `generateAlerts` + `targetAlerts` + `isAlertRelevantForUser` → alertes levier ciblées ET
+ *    pertinentes pour le rôle (exactement celles de la cloche), rouges/ambre ouvertes
+ *  - `movementAlerts` + `primaryAlertKindByMovement` → mouvements RH en alerte (rôle `hr`) ; un
+ *    mouvement non réalisé dont la date prévue est dépassée porte `daysLate` quelle que soit sa
+ *    catégorie principale (→ « En retard »)
  *  - `ChantierAction.owner/contributors/end` + `isProjetLate`/`isProjetDone` → projets dont
  *    l'utilisateur est responsable ou contributeur
  *  - indicateurs dont l'utilisateur est responsable (`resolveIndicatorOwner`) sans mesure pour la
@@ -39,6 +42,7 @@ import type { StrategicData } from "@/lib/hooks/useStrategicData";
 import { generateAlerts } from "@/lib/alertEngine";
 import { alertTitle } from "@/lib/alertText";
 import { targetAlerts } from "@/lib/notifications";
+import { isAlertRelevantForUser } from "@/lib/alertRelevance";
 import { movementAlerts, primaryAlertKindByMovement, type MovementAlertKind } from "@/lib/hrEngine";
 import { etpMovementDeepLink } from "@/lib/hrMovementLink";
 import {
@@ -486,8 +490,11 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
     const users = input.users ?? [];
     const recipients = users.some((u) => u.username === user.username) ? users : [...users, user];
     const leverById = new Map(perf.levers.map((l) => [l.id, l]));
+    // Pertinence métier par rôle (`isAlertRelevantForUser`, même filtre que la cloche) : un profil
+    // `hr` ne reçoit pas les dépassements de coûts, un profil `finance` seulement les alertes
+    // financières.
     let targeted = targetAlerts(allAlerts, user, recipients, perf, input.companies ?? []).filter(
-      (a) => !a.resolved && alertSeverity(a) !== null
+      (a) => !a.resolved && alertSeverity(a) !== null && isAlertRelevantForUser(a, user)
     );
     // `generateAlerts` trie déjà : non résolues → sévérité → |impact €|.
     if (pilotView) targeted = targeted.slice(0, opts.pilotTopAlerts);
@@ -535,7 +542,12 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
         const alert = alerts.find((a) => a.movement.id === movementId && a.kind === kind);
         if (!alert) continue;
         const m = alert.movement;
-        const late = kind === "overdue" ? Math.max(0, -daysBetween(today, m.plannedDate)) : 0;
+        // Retard = date prévue DÉPASSÉE d'un mouvement non réalisé, QUELLE QUE SOIT la catégorie
+        // principale (audit fix #5) : un mouvement à la fois désynchronisé du levier et en retard
+        // porte les deux alertes (`movementAlerts`) ; sa catégorie principale reste
+        // « désynchronisé » (libellé, répartition du dashboard RH inchangée), mais il est classé
+        // « En retard » dans Mon espace (`daysLate`).
+        const late = m.status !== "Réalisé" ? Math.max(0, -daysBetween(today, m.plannedDate)) : 0;
         todo.push({
           id: `hrMovement:${m.id}`,
           source: "hrMovement",

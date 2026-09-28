@@ -5,16 +5,11 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/shared/Card";
 import { ProgressBar } from "@/components/shared/ProgressBar";
-import type {
-  MyWorkspace,
-  WorkspaceItem,
-  WorkspacePerimeterEntry,
-  WorkspaceSeverity,
-} from "@/lib/myWorkspaceTypes";
+import type { MyWorkspace, WorkspaceItem, WorkspacePerimeterEntry } from "@/lib/myWorkspaceTypes";
 import {
   categoryLabel,
   filterTodoItems,
-  groupBySeverity,
+  groupTodoByCategory,
   groupByWeek,
   isLate,
   parseIsoDay,
@@ -219,12 +214,6 @@ function dueLabel(item: WorkspaceItem, t: Translate): { text: string; late: bool
   return null;
 }
 
-function severityGroupLabel(severity: WorkspaceSeverity, t: Translate): string {
-  if (severity === "critical") return t("me.severity.critical", "Urgent");
-  if (severity === "warning") return t("me.severity.warning", "À traiter");
-  return t("me.severity.info", "À suivre");
-}
-
 /** Props communes aux blocs filtrables : filtre de catégorie actif sur ce bloc (puce + surlignage). */
 type FilterProps = {
   /** Libellé du filtre actif ciblant ce bloc, `null` sinon. */
@@ -257,7 +246,9 @@ export function TodoSection({
   t: Translate;
 } & FilterProps) {
   const visible = filterTodoItems(items, category);
-  const groups = groupBySeverity(visible);
+  // Mêmes catégories / comptes / ordre que la barre de répartition (« En retard », « À traiter ») ;
+  // la gravité n'est qu'un marqueur visuel (icône) dans la ligne.
+  const groups = groupTodoByCategory(visible);
   return (
     <Card className={cn(filter.filterLabel && HIGHLIGHT)}>
       <SectionHeader
@@ -282,10 +273,21 @@ export function TodoSection({
         />
       ) : (
         groups.map((group) => (
-          <div key={group.severity}>
-            <div className="border-b border-border bg-neutral-50 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-tertiary sm:px-[18px]">
-              {severityGroupLabel(group.severity, t)}
-            </div>
+          <div key={group.category}>
+            {category === null && (
+              <div
+                className={cn(
+                  "flex items-center gap-2 border-b border-border bg-neutral-50 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest sm:px-[18px]",
+                  group.category === "overdue" ? "text-rag-red" : "text-tertiary"
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cn("h-2 w-2 shrink-0", CATEGORY_FILL[group.category])}
+                />
+                {categoryLabel(group.category, t)} · {group.items.length}
+              </div>
+            )}
             <ul className="divide-y divide-border">
               {group.items.map((item) => {
                 const due = dueLabel(item, t);

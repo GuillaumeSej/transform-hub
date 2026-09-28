@@ -21,6 +21,7 @@ import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
 import { Toaster } from "@/components/shared/Toaster";
 import { useNotifications } from "@/lib/hooks/useNotifications";
+import { relevantAlertsFor } from "@/lib/alertRelevance";
 import { useSidebarCollapsed } from "@/lib/hooks/useSidebarCollapsed";
 import { useCurrentCompany } from "@/lib/hooks/useCurrentCompany";
 import {
@@ -258,8 +259,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   ]);
 
   // Alertes réellement affichées (cloche du Topbar + badge de nav) : celles du plan actif, jamais
-  // les deux mélangées. Le Plan Performance conserve exactement son comportement historique.
-  const shellAlerts = isStrategic ? strategicNotifications.alerts : notifications.unresolvedAlerts;
+  // les deux mélangées. Plan Performance : alertes ciblées filtrées par pertinence métier du rôle
+  // (`relevantAlertsFor`, ex. pas de dépassement de coûts pour un profil RH) — même filtre que
+  // « Mon espace » (lib/myWorkspace.ts), audit fix #5.
+  const shellAlerts = isStrategic
+    ? strategicNotifications.alerts
+    : relevantAlertsFor(notifications.unresolvedAlerts, user);
 
   // Le drawer mobile ne doit jamais rester ouvert après une navigation (changement de page) — au
   // cas où la fermeture au clic sur un lien de nav (via Sidebar.onNavigate) n'aurait pas suffi

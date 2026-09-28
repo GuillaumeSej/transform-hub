@@ -8,7 +8,7 @@ import {
   filterTodoItems,
   filterWorkspaceByPlan,
   greetingName,
-  groupBySeverity,
+  groupTodoByCategory,
   groupByWeek,
   isOverdue,
   itemsOfCategory,
@@ -120,10 +120,38 @@ describe("plans, counts, grouping", () => {
     expect(workspaceCounts(ws)).toEqual({ todo: 3, late: 1, upcoming: 1, blocked: 1 });
   });
 
-  it("groups by severity keeping engine order", () => {
-    const groups = groupBySeverity(ws.todo);
-    expect(groups.map((g) => g.severity)).toEqual(["critical", "warning"]);
-    expect(groups[0].items.map((i) => i.id)).toEqual(["t1", "t3"]);
+  it("groups todo by the breakdown categories (not by severity), keeping engine order", () => {
+    const groups = groupTodoByCategory(ws.todo);
+    expect(groups.map((g) => g.category)).toEqual(["overdue", "toHandle"]);
+    expect(groups[0].items.map((i) => i.id)).toEqual(["t1"]);
+    // t3 est critique mais sans échéance dépassée → « À traiter », comme dans la barre.
+    expect(groups[1].items.map((i) => i.id)).toEqual(["t2", "t3"]);
+  });
+
+  it("list groups match the breakdown bar exactly (test.finance: 10 critical cost alerts)", () => {
+    const finance: MyWorkspace = {
+      ...EMPTY_WORKSPACE,
+      todo: [
+        ...Array.from({ length: 10 }, (_, i) =>
+          item({ id: `cost${i}`, source: "leverAlert", severity: "critical", plan: "performance" })
+        ),
+        item({ id: "real", source: "realizedApproval", severity: "warning", plan: "performance" }),
+      ],
+    };
+    const groups = groupTodoByCategory(finance.todo);
+    const bar = workspaceBreakdown(finance).parts.filter(
+      (p) => (p.category === "overdue" || p.category === "toHandle") && p.count > 0
+    );
+    expect(groups.map((g) => [g.category, g.items.length])).toEqual(
+      bar.map((p) => [p.category, p.count])
+    );
+    expect(groups).toEqual([{ category: "toHandle", items: finance.todo }]);
+  });
+
+  it("omits empty groups; a filtered list yields a single group", () => {
+    expect(groupTodoByCategory([])).toEqual([]);
+    const late = filterTodoItems(ws.todo, "overdue");
+    expect(groupTodoByCategory(late).map((g) => g.category)).toEqual(["overdue"]);
   });
 
   it("derives the greeting first name", () => {
