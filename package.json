@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:rules": "npx -y firebase-tools@15.31.0 emulators:exec --config firebase.rules-test.json --only firestore --project demo-betrack-rules \"node scripts/test-firestore-rules.js\"",
     "serve:export": "serve out -l 4173",
     "format": "prettier --write .",
     "prepare": "husky",
@@ -36,6 +37,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@playwright/test": "^1.62.0",
     "@types/node": "^20",
     "@types/react": "^18",

@@ -52,3 +52,6 @@ service-account-tmp.json
 /admin-api/dist
 /admin-api/.env
 scripts/output/
+
+# Émulateur Firebase
+firestore-debug.log

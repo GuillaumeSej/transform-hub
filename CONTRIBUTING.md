@@ -50,6 +50,11 @@ Un hook pre-commit (husky + lint-staged) formate et lint automatiquement les fic
 ## Tests
 
 - `npm test` (Vitest) — tests unitaires de `lib/**` et des composants (`**/__tests__`).
+- `npm run test:rules` — tests des règles Firestore (`scripts/test-firestore-rules.js`) sur
+  l'émulateur (port 8181, `firebase.rules-test.json`). **À lancer avant tout déploiement de
+  `firestore.rules`** (`npx firebase-tools deploy --only firestore:rules --project betrack-4a630`),
+  puis ajouter les cas de toute nouvelle règle. Java requis : `brew install openjdk` et
+  `export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"`.
 - **Pas de tests end-to-end pour l'instant.** L'ancienne suite Playwright (`e2e/smoke.spec.ts`,
   `playwright.config.ts`, scripts `test:e2e`) a été supprimée : elle simulait la connexion en
   injectant une session dans localStorage, ce qui ne fonctionne plus avec l'authentification et
