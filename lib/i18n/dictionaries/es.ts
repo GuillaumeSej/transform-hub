@@ -1878,6 +1878,8 @@ const es: Record<string, string> = {
     "Un criterio de éxito = un KPI + el valor objetivo que se persigue.",
   "strategicChantierDetail.successKpis.current": "Actual",
   "strategicChantierDetail.successKpis.target": "Objetivo",
+  "strategicChantierDetail.successKpis.reached": "objetivo alcanzado",
+  "strategicChantierDetail.successKpis.kpiObjective": "objetivo del KPI",
   "strategicChantierDetail.successKpis.noKpi": "Sin KPI",
   "strategicChantierDetail.successKpis.projects": "Elementos",
   "strategicChantierDetail.successKpis.linkedEmpty": "Ningún otro KPI vinculado.",
@@ -2487,7 +2489,7 @@ const es: Record<string, string> = {
   "strategicDashboard.projetBoard.emptyColumn": "—",
   // Ronda 12: media de los `progressPct` declarados de los leviers de la columna (`{pct}`
   // sustituido manualmente, ver `ProjetMilestoneBoard.tsx`).
-  "strategicDashboard.projetBoard.avgProgress": "{pct}% de media",
+  "strategicDashboard.projetBoard.avgProgress": "Checklist del hito: {pct} % de media",
   "strategicDashboard.projetBoard.late": "Retrasado",
   "strategicDashboard.lateLeviersHeading": "Iniciativas retrasadas",
   "strategicDashboard.noLateLeviers": "Ninguna iniciativa retrasada",

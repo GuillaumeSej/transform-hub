@@ -1880,6 +1880,8 @@ const de: Record<string, string> = {
     "Ein Erfolgskriterium = ein KPI + der angestrebte Zielwert.",
   "strategicChantierDetail.successKpis.current": "Aktuell",
   "strategicChantierDetail.successKpis.target": "Ziel",
+  "strategicChantierDetail.successKpis.reached": "Ziel erreicht",
+  "strategicChantierDetail.successKpis.kpiObjective": "KPI-Ziel",
   "strategicChantierDetail.successKpis.noKpi": "Ohne KPI",
   "strategicChantierDetail.successKpis.projects": "Projekte",
   "strategicChantierDetail.successKpis.linkedEmpty": "Keine weiteren KPI mit Projekten verknüpft.",
@@ -2493,7 +2495,7 @@ const de: Record<string, string> = {
   "strategicDashboard.projetBoard.emptyColumn": "—",
   // Runde 12: Durchschnitt der deklarierten `progressPct` der Leviers dieser Spalte (`{pct}` wird
   // manuell ersetzt, siehe `ProjetMilestoneBoard.tsx`).
-  "strategicDashboard.projetBoard.avgProgress": "{pct}% im Durchschnitt",
+  "strategicDashboard.projetBoard.avgProgress": "Meilenstein-Checkliste: {pct} % im Durchschnitt",
   "strategicDashboard.projetBoard.late": "Verzögert",
   "strategicDashboard.lateLeviersHeading": "Verzögerte Projekte",
   "strategicDashboard.noLateLeviers": "Keine verzögerten Projekte",

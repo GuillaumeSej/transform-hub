@@ -288,10 +288,13 @@ export function ProjetMilestoneBoard({
                         aria-hidden
                         className={`inline-block h-2 w-2 shrink-0 rounded-full ${AVG_PROGRESS_DOT_CLASS[progressBucket(avgPct)]}`}
                       />
+                      {/* Remplissage moyen de la checklist du jalon COURANT des projets de la
+                          colonne — pas leur avancement global (audit XM-09 : « J1 · 40 % en
+                          moyenne » au-dessus de projets à 18 %). */}
                       <span>
                         {t(
                           "strategicDashboard.projetBoard.avgProgress",
-                          "{pct}% en moyenne"
+                          "Checklist du jalon : {pct} % en moyenne"
                         ).replace("{pct}", String(avgPct))}
                       </span>
                     </div>

@@ -1855,6 +1855,8 @@ const en: Record<string, string> = {
     "A success criterion = a KPI + the target value the work package aims for.",
   "strategicChantierDetail.successKpis.current": "Current",
   "strategicChantierDetail.successKpis.target": "Target",
+  "strategicChantierDetail.successKpis.reached": "target reached",
+  "strategicChantierDetail.successKpis.kpiObjective": "KPI objective",
   "strategicChantierDetail.successKpis.noKpi": "No KPI",
   "strategicChantierDetail.successKpis.projects": "Projects",
   "strategicChantierDetail.successKpis.linkedEmpty": "No other KPI linked to projects.",
@@ -2446,7 +2448,7 @@ const en: Record<string, string> = {
   "strategicDashboard.projetBoard.emptyColumn": "—",
   // Round 12: average of the declared `progressPct` of the column's leviers (`{pct}` substituted
   // manually, see `ProjetMilestoneBoard.tsx`).
-  "strategicDashboard.projetBoard.avgProgress": "{pct}% average",
+  "strategicDashboard.projetBoard.avgProgress": "Milestone checklist: {pct}% on average",
   "strategicDashboard.projetBoard.late": "Late",
   "strategicDashboard.lateLeviersHeading": "Late projects",
   "strategicDashboard.noLateLeviers": "No late projects",

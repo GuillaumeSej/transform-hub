@@ -75,7 +75,20 @@ export function SuccessKpiList({
       <span className="text-[11.5px] text-secondary">
         {t("strategicChantierDetail.successKpis.current", "Actuel")} : {fmt(r.current)} ·{" "}
         {t("strategicChantierDetail.successKpis.target", "Cible")} : {fmt(r.target)}
-        {r.progressPct !== undefined ? ` · ${r.approximate ? "≈" : ""}${r.progressPct} %` : ""}
+        {/* Au-delà de 100 %, l'avancement (mesuré depuis la valeur initiale) n'apporte rien
+            et déroutait (« 550 % », audit STR-04) : on affiche « cible atteinte ». */}
+        {r.progressPct === undefined
+          ? ""
+          : r.progressPct >= 100
+            ? ` · ${t("strategicChantierDetail.successKpis.reached", "cible atteinte")}`
+            : ` · ${r.approximate ? "≈" : ""}${r.progressPct} %`}
+        {/* Cible du critère ≠ objectif du KPI : on rappelle ce dernier, sans quoi la page KPI
+            (qui mesure vs l'objectif du KPI) semblait contredire la fiche chantier. */}
+        {target !== undefined &&
+        indicator.objectiveValue !== undefined &&
+        target !== indicator.objectiveValue
+          ? ` · ${t("strategicChantierDetail.successKpis.kpiObjective", "objectif du KPI")} : ${fmt(indicator.objectiveValue)}`
+          : ""}
         {" · "}
         {/* Point = statut de CETTE lecture (cible du critère si surchargée), pas le statut
             propre du KPI vs son objectif — sinon point et ligne pouvaient se contredire. */}

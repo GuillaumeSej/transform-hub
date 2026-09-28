@@ -22,7 +22,6 @@ import type {
   Indicator,
   IndicatorMeasurement,
   IndicatorRiskStatus,
-  MaturityStageConfig,
   MilestoneChecklistItem,
   MilestoneCustomAction,
   MilestoneId,
@@ -985,79 +984,6 @@ export function chantierHealthState(
 
 // ─── Avancement d'un chantier ──────────────────────────────────────────────────────────────────
 
-/**
- * Ratio d'avancement (0 → 1) d'une étape de maturité DANS le cycle du programme. Une étape
- * terminale vaut 1 ; les étapes de cycle sont réparties linéairement d'après leur position.
- *
- * Avec le référentiel par défaut (Défini / Validé / Planifié / Réalisé*) on obtient donc
- * 0 / 0,33 / 0,67 / 1 : la première étape du cycle ne vaut jamais rien de commencé, la terminale
- * vaut le plein. Si le programme n'a AUCUNE étape terminale, le dernier maillon du cycle vaut 1
- * (sinon aucun chantier ne pourrait jamais atteindre 100 %).
- *
- * Étape inconnue du référentiel (supprimée depuis son affectation) : 0 — même parti pris
- * défensif que `resolveMaturityStageLabel`, on ne devine pas un avancement.
- */
-export function maturityStageProgressRatio(stageId: string, stages: MaturityStageConfig[]): number {
-  const stage = stages.find((s) => s.id === stageId);
-  if (!stage) return 0;
-  if (stage.isTerminal) return 1;
-  const cycle = stages.filter((s) => !s.isTerminal);
-  const position = cycle.findIndex((s) => s.id === stage.id);
-  if (position < 0) return 0;
-  const hasTerminal = stages.length > cycle.length;
-  const steps = hasTerminal ? cycle.length : Math.max(1, cycle.length - 1);
-  return Math.min(1, position / steps);
-}
-
-export type ChantierProgress = {
-  /** Avancement pondéré, en pourcentage entier (0-100). */
-  pct: number;
-  /** Nombre total d'actions du chantier. */
-  total: number;
-  /** Actions ayant atteint une étape TERMINALE du programme. */
-  done: number;
-};
-
-/**
- * Avancement d'un chantier, dérivé de ses actions — il n'existe aucun champ « % d'avancement »
- * saisi à la main sur `Chantier`, et on n'en introduit pas : la seule donnée fiable est l'étape de
- * maturité de chaque action.
- *
- * Définition retenue, volontairement simple et explicable au comité : moyenne des avancements
- * d'étape des actions (`maturityStageProgressRatio`), PONDÉRÉE PAR LEUR DURÉE. Une action de six
- * mois pèse donc six fois une action d'un mois — sans quoi un chantier constitué d'un long
- * déploiement et de trois jalons courts afficherait un avancement dicté par les jalons.
- *
- * Un chantier sans action retourne 0 % (et `total: 0`, ce qui permet à l'appelant de distinguer
- * « pas commencé » de « rien à mesurer »).
- */
-export function chantierProgress(
-  chantierId: string,
-  actions: ChantierAction[],
-  stages: MaturityStageConfig[]
-): ChantierProgress {
-  const own = actions.filter((a) => a.chantierId === chantierId);
-  if (own.length === 0) return { pct: 0, total: 0, done: 0 };
-
-  let weighted = 0;
-  let totalWeight = 0;
-  let done = 0;
-  for (const action of own) {
-    // Durée en jours, plancher à 1 : une action d'un seul jour (ou aux dates incohérentes) doit
-    // peser quelque chose plutôt que d'être neutralisée.
-    const weight = Math.max(1, daysBetween(action.start, action.end) + 1);
-    weighted += maturityStageProgressRatio(action.status, stages) * weight;
-    totalWeight += weight;
-    if (stages.find((s) => s.id === action.status)?.isTerminal) done += 1;
-  }
-
-  return {
-    pct: Math.round((weighted / totalWeight) * 100),
-    total: own.length,
-    done,
-  };
-}
-
 // ─── Prérequis d'action (go/no-go) ─────────────────────────────────────────────────────────────
 
 /**
@@ -1262,7 +1188,7 @@ export function canPassMilestone(
  * `MilestoneChecklistPanel.tsx`, ni exigés par `canPassMilestone` (rien à cocher = rien à
  * bloquer). Un `itemId` exclu qui ne correspond à AUCUN item du jalon (référentiel modifié depuis,
  * ou faute de frappe côté appelant) est un no-op silencieux, même parti pris défensif que le reste
- * de ce fichier (ex. `maturityStageProgressRatio`) : jamais d'exception pour une donnée orpheline.
+ * de ce fichier : jamais d'exception pour une donnée orpheline.
  */
 export function mergeMilestoneChecklistItems(
   milestoneId: MilestoneId,
@@ -1506,8 +1432,7 @@ export const MILESTONE_WEIGHT_DELTA: Record<MilestoneId, number> = {
 };
 
 /**
- * Avancement en pourcentage (0-100) d'une entité portant un état de jalon E0→E4 — remplace
- * `chantierProgress()` sur les affichages de progression, comme avant round 5.
+ * Avancement en pourcentage (0-100) d'une entité portant un état de jalon E0→E4.
  *
  * Round 19 : poids VARIABLE par jalon (`MILESTONE_WEIGHT_DELTA` ci-dessus), remplaçant l'ancien
  * poids uniforme de 20 par jalon. Calcul :
@@ -1531,8 +1456,8 @@ export const MILESTONE_WEIGHT_DELTA: Record<MilestoneId, number> = {
  * appelant QUI A ce contexte de lui injecter le résultat déjà calculé de
  * `resolveMilestoneAutoFlags(milestones.currentMilestone, ...)` pour une moyenne exacte ; omis, un
  * item auto est traité comme un item manuel non répondu (compte pour `0`) — dégradé mais jamais
- * dans le sens d'une survalorisation. `chantierMilestoneProgressPct` (ci-dessous) n'a lui-même pas
- * accès à la liste des chantiers et appelle donc systématiquement en mode dégradé. Un `progressPct`
+ * dans le sens d'une survalorisation — d'où `projetProgressPct` / `projetProgressResolver`, à
+ * utiliser pour tout affichage. Un `progressPct`
  * manuel déjà déclaré sur un item, même marqué `auto`, prime TOUJOURS sur `autoValues` (cas
  * résiduel seulement : l'UI n'écrit normalement jamais de valeur manuelle sur un item auto).
  *
@@ -1682,63 +1607,19 @@ export function projetAutoFlagsResolver(
 }
 
 /**
- * Avancement AGRÉGÉ d'un chantier en pourcentage (round 7) — moyenne de `milestoneProgressPct`
- * sur les leviers (`ChantierAction`) du chantier, décision actée avec le PO ("agrégation chantier
- * = moyenne des leviers"). Remplace `milestoneProgressPct(chantier)` sur tous les points d'appel
- * historiques : le suivi E0→E4 vit désormais par levier, `Chantier.milestones` est `@deprecated`.
- *
- * Round 18 : le suivi E0→E4 s'applique UNIVERSELLEMENT à tous les leviers d'un chantier, avec ou
- * sans KPI rattaché (l'ancien aiguillage vers un kanban classique pour les leviers sans
- * `indicatorId` a été supprimé). La moyenne porte donc sur TOUS les leviers du chantier
- * (`a.chantierId === chantier.id`) — un levier sans `.milestones` encore renseigné contribue
- * naturellement 0 % / E0 via le repli existant de `milestoneProgressPct`, pas besoin de le filtrer.
- *
- * 0 si le chantier n'a aucun levier du tout — même parti pris que `chantierProgress()`, pas de
- * division par zéro déguisée. Arrondi (`Math.round`) car `milestoneProgressPct` ne retourne que des
- * multiples de 20 mais leur moyenne ne l'est en général pas.
- */
-export function chantierMilestoneProgressPct(
-  chantier: Pick<Chantier, "id">,
-  actions: ChantierAction[],
-  progressOf: ProjetProgressLookup = (a) => milestoneProgressPct(a)
-): number {
-  const own = actions.filter((a) => a.chantierId === chantier.id);
-  if (own.length === 0) return 0;
-  const total = own.reduce((sum, action) => sum + progressOf(action), 0);
-  return Math.round(total / own.length);
-}
-
-/**
- * Avancement AGRÉGÉ d'un chantier, PONDÉRÉ par le poids déclaré de chacun de ses projets
- * (`ChantierAction.chantierWeightPct`, round "projet weighting") — remplace
- * `chantierMilestoneProgressPct` ci-dessus (moyenne SIMPLE, non pondérée) comme figure de
- * progression réellement affichée sur les écrans que ce round modifie (`ChantierDetailPanel.tsx`,
- * `ChantierGantt.tsx`). `chantierMilestoneProgressPct` reste exportée et INCHANGÉE — un point d'appel
- * hors du périmètre de ce round (`ProgramRoadmap.tsx`, qui recalcule sa propre moyenne inline plutôt
- * que d'importer l'une ou l'autre, voir son commentaire) continue de s'appuyer sur elle sans effet
- * de bord.
- *
- * Algorithme IDENTIQUE à `lib/workstreamLogic.ts::workstreamDeclaredProgress` (même mécanique de
- * poids déclaratif, adaptée au domaine chantier/projet plutôt que workstream/levier) :
- *  1. poids déclarés (`chantierWeightPct`) sommés tels quels ;
- *  2. le reste jusqu'à 100 (jamais négatif) est réparti À PARTS ÉGALES entre les projets SANS poids
- *     déclaré — un projet sans `chantierWeightPct` n'est donc jamais compté pour 0, mais reçoit un
- *     poids implicite égal aux autres projets non pondérés ;
- *  3. moyenne pondérée de `milestoneProgressPct(action)` (degré dégradé — pas d'`autoValues`, cette
- *     fonction n'a pas accès à `allChantiers`/`allActions`, même limitation assumée que
- *     `chantierMilestoneProgressPct` ci-dessus, voir son commentaire round 7) par ce poids (déclaré
- *     ou implicite) ;
- *  4. repli en moyenne SIMPLE si le poids total effectif vaut 0 (tous les poids déclarés sont à 0 ET
- *     aucun projet non pondéré pour absorber un reste — cas limite, mais `workstreamDeclaredProgress`
- *     s'en prémunit, cette fonction fait de même pour ne jamais diviser par zéro).
- *
- * Contrairement à `workstreamDeclaredProgress` (qui retourne `null`, et EXCLUT du calcul, un levier
- * sans aucune action déclarée) : `milestoneProgressPct` ne connaît PAS de notion de "projet non
- * déclaré" à exclure — un projet sans `.milestones` renseigné vaut simplement 0 (voir son propre
- * commentaire), jamais `null`. Cette fonction retourne donc toujours un `number` (jamais `null`),
- * TOUS les projets du chantier participent à la moyenne (pondérée ou implicite), aucun n'est exclu —
- * seule la notion de POIDS (pas de progression) peut être "non déclarée" ici. 0 si le chantier n'a
- * aucun projet du tout — même parti pris que `chantierMilestoneProgressPct`.
+ * Avancement d'un chantier — SEULE définition (audit C8 / STR-01) : fiche chantier, Gantt,
+ * arborescence, accordéon, feuille de route du dashboard et % d'axe (`axisProgressPct`) l'appellent
+ * tous. Moyenne des avancements de ses projets PONDÉRÉE par leur poids déclaré
+ * (`ChantierAction.chantierWeightPct`), même mécanique que
+ * `lib/workstreamLogic.ts::workstreamDeclaredProgress` :
+ *  1. poids déclarés sommés tels quels ;
+ *  2. le reste jusqu'à 100 (jamais négatif) réparti À PARTS ÉGALES entre les projets sans poids ;
+ *  3. moyenne pondérée de `progressOf(action)` — passer `projetProgressResolver` (ou
+ *     `data.projetProgress`) pour compter les items automatiques ;
+ *  4. repli en moyenne simple si le poids total effectif vaut 0.
+ * Un projet sans jalon renseigné vaut 0 ; tous les projets participent. 0 si le chantier n'a aucun
+ * projet. Les anciennes définitions concurrentes (moyenne simple `chantierMilestoneProgressPct`,
+ * étapes de maturité pondérées par la durée `chantierProgress`) ont été supprimées.
  */
 export function chantierDeclaredProgress(
   chantierId: string,

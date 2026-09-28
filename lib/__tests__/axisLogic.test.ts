@@ -16,7 +16,6 @@ import {
   chantierDeclaredProgress,
   chantierDependencyAlerts,
   chantierHealthState,
-  chantierMilestoneProgressPct,
   colorForChantier,
   chantierShadeForAxis,
   chantierShadesByAxis,
@@ -1761,88 +1760,6 @@ describe("advanceMilestone", () => {
 });
 
 // ─── Avancement AGRÉGÉ d'un chantier — moyenne des leviers (round 7) ───────────────────────────
-
-describe("chantierMilestoneProgressPct", () => {
-  it("returns 0 when the chantier has no levier", () => {
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), [])).toBe(0);
-  });
-
-  // Round 19 : poids variable par jalon (E0=10, E1=10, E2=15, E3=50, E4=15) — les commentaires
-  // "// N%" ci-dessous ont été recalculés en conséquence (E2 avec E0+E1 passés = 10+10 = 20%, E1
-  // avec E0 passé = 10%).
-  it("averages the progress of the chantier's own KPI-linked leviers, rounding sensibly", () => {
-    const actions: ChantierAction[] = [
-      {
-        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
-        indicatorId: "IND-A1",
-        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 20%
-      },
-      {
-        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
-        indicatorId: "IND-A2",
-        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 10%
-      },
-      {
-        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A3"),
-        indicatorId: "IND-A3",
-        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 10%
-      },
-    ];
-    // (20 + 10 + 10) / 3 = 13.33 → arrondi à 13.
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(13);
-  });
-
-  it("ignores leviers belonging to another chantier", () => {
-    const actions: ChantierAction[] = [
-      {
-        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
-        indicatorId: "IND-A1",
-        milestones: {
-          currentMilestone: "E4",
-          passedMilestones: ["E0", "E1", "E2", "E3", "E4"],
-          checklists: {},
-        }, // 100%
-      },
-      { ...makeAction("CH2", "2026-01-01", "2026-01-31", "A2"), indicatorId: "IND-A2" }, // sans jalons, autre chantier
-    ];
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(100);
-  });
-
-  // Round 18 : le suivi E0→E4 s'applique désormais UNIVERSELLEMENT, avec ou sans KPI rattaché —
-  // l'ancienne exclusion des leviers sans `indicatorId` du dénominateur a été supprimée.
-  it("includes leviers without a KPI link in the average, using their own milestone progress", () => {
-    const actions: ChantierAction[] = [
-      {
-        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
-        indicatorId: "IND-A1",
-        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 20%
-      },
-      {
-        // Sans KPI, mais avec ses propres jalons — compte désormais comme n'importe quel autre
-        // levier, `indicatorId` n'étant plus qu'un lien informatif.
-        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
-        milestones: { currentMilestone: "E1", passedMilestones: ["E0"], checklists: {} }, // 10%
-      },
-    ];
-    // (20 + 10) / 2 = 15.
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(15);
-  });
-
-  it("counts a levier without any milestones data yet as 0% rather than excluding it", () => {
-    const actions: ChantierAction[] = [
-      {
-        ...makeAction("CH1", "2026-01-01", "2026-01-31", "A1"),
-        indicatorId: "IND-A1",
-        milestones: { currentMilestone: "E2", passedMilestones: ["E0", "E1"], checklists: {} }, // 20%
-      },
-      // Sans KPI ni `.milestones` renseigné : encore à E0/0% via le repli de `milestoneProgressPct`,
-      // mais bien compté dans la moyenne (dénominateur = 2, pas 1).
-      makeAction("CH1", "2026-01-01", "2026-01-31", "A2"),
-    ];
-    // (20 + 0) / 2 = 10.
-    expect(chantierMilestoneProgressPct(makeChantier("CH1"), actions)).toBe(10);
-  });
-});
 
 // ─── Avancement PONDÉRÉ d'un chantier — round "projet weighting" ──────────────────────────────
 // Même algorithme que `lib/workstreamLogic.ts::workstreamDeclaredProgress` (voir

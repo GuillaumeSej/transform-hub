@@ -1956,6 +1956,8 @@ const fr: Record<string, string> = {
     "Un critère de succès = un KPI + la valeur cible que le chantier vise.",
   "strategicChantierDetail.successKpis.current": "Actuel",
   "strategicChantierDetail.successKpis.target": "Cible",
+  "strategicChantierDetail.successKpis.reached": "cible atteinte",
+  "strategicChantierDetail.successKpis.kpiObjective": "objectif du KPI",
   "strategicChantierDetail.successKpis.noKpi": "Sans KPI",
   "strategicChantierDetail.successKpis.projects": "Projets",
   "strategicChantierDetail.successKpis.linkedEmpty": "Aucun autre KPI rattaché aux projets.",
@@ -2587,7 +2589,7 @@ const fr: Record<string, string> = {
   "strategicDashboard.projetBoard.emptyColumn": "—",
   // Round 12 : moyenne des `progressPct` déclarés des leviers de la colonne (`{pct}` substitué
   // manuellement, voir `ProjetMilestoneBoard.tsx`).
-  "strategicDashboard.projetBoard.avgProgress": "{pct}% en moyenne",
+  "strategicDashboard.projetBoard.avgProgress": "Checklist du jalon : {pct} % en moyenne",
   // Round 20, point 3 : pastille/bordure "En retard" sur une `ProjetCard` (`isProjetLate`,
   // lib/axisLogic.ts) — distincte de la pastille rouge existante du bucket de progression 0-33%.
   "strategicDashboard.projetBoard.late": "En retard",
