@@ -21,8 +21,10 @@ import {
   indicatorStatusShares,
   latestMeasurement,
   latestNumericMeasurement,
+  resolveUserFullName,
   sumLatestQuantitativeValues,
 } from "@/lib/axisLogic";
+import { roles as roleDefinitions } from "@/lib/nav-config";
 import type { IndicatorFillContext, IndicatorStatusShares } from "@/lib/axisLogic";
 import { IndicatorHistoryTable } from "@/components/strategic/IndicatorHistoryTable";
 import { IndicatorValueModal } from "@/components/strategic/IndicatorValueModal";
@@ -41,6 +43,7 @@ import {
 } from "@/components/strategic/YearSegmentedControl";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { AuthUser, Indicator, IndicatorMeasurement, StrategicAxis } from "@/types";
+import { formatMeasure } from "@/lib/format";
 
 /**
  * Compteur d'ensemble « N indicateurs suivis · X sur la trajectoire · Y à risque · Z sans donnée ».
@@ -609,7 +612,10 @@ export function BusinessKpiCards({
   deleteMeasurement,
   year = "all",
   fillCtx,
+  users,
 }: {
+  /** Annuaire de l'entreprise : responsables de saisie et auteurs affichés par leur NOM. */
+  users?: Pick<AuthUser, "username" | "name">[];
   /** Saisie de valeur (KPI marché, responsabilité CTO) : bouton affiché seulement si `user` ET
    *  `addMeasurement` sont fournis et que `canFillIndicatorValue` l'autorise. */
   user?: AuthUser | null;
@@ -666,6 +672,7 @@ export function BusinessKpiCards({
           deleteMeasurement={deleteMeasurement}
           year={year}
           fillCtx={fillCtx}
+          users={users}
         />
       ))}
     </div>
@@ -698,7 +705,7 @@ function resolveBusinessKpiLabels(
       labels?.empty ??
       t(
         "businessKpis.empty",
-        "Aucun KPI business défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs."
+        "Aucun indicateur clé défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs."
       ),
     noValue: labels?.noValue ?? t("businessKpis.noValue", "Aucune mesure"),
     objective: labels?.objective ?? t("kpi.objectiveValue", "Objectif"),
@@ -729,11 +736,13 @@ function BusinessKpiCard({
   deleteMeasurement,
   year,
   fillCtx,
+  users,
 }: {
   indicator: Indicator;
   measurements: IndicatorMeasurement[];
   labels: Required<BusinessKpiLabels>;
   fillCtx?: IndicatorFillContext;
+  users?: Pick<AuthUser, "username" | "name">[];
   user?: AuthUser | null;
   addMeasurement?: (input: IndicatorValueInput) => Promise<unknown>;
   updateMeasurement?: (id: string, patch: MeasurementEditPatch) => Promise<unknown>;
@@ -742,6 +751,17 @@ function BusinessKpiCard({
 }) {
   const { t } = useTranslation();
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Responsables de saisie affichés par leur NOM (`additionalAuthorizedUserIds`, source de vérité —
+  // même règle que la page KPI) ; repli legacy sur le libellé de rôle (`responsibleRoles`).
+  const namedFillers = Array.from(
+    new Set((indicator.additionalAuthorizedUserIds ?? []).filter(Boolean))
+  ).map((u) => resolveUserFullName(u, users) ?? u);
+  const fillerNames =
+    namedFillers.length > 0
+      ? namedFillers.join(", ")
+      : (indicator.responsibleRoles ?? [])
+          .map((role) => (roleDefinitions[role] ? t(roleDefinitions[role].label) : role))
+          .join(", ");
   const [fillOpen, setFillOpen] = useState(false);
   const canFill = !!user && !!addMeasurement && canFillIndicatorValue(indicator, user, fillCtx);
   // Année de la modale d'historique (sélecteur partagé `YearSegmentedControl`) — initialisée sur
@@ -764,7 +784,7 @@ function BusinessKpiCard({
   const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
   const value =
     latestNumeric?.value !== undefined
-      ? `${latestNumeric.value}${unitSuffix}`
+      ? `${formatMeasure(latestNumeric.value)}${unitSuffix}`
       : (latest?.note ?? l.noValue);
 
   // Écart signé + progression vers la cible (round 4, point 1) : `undefined` (pas d'objectif
@@ -796,7 +816,7 @@ function BusinessKpiCard({
       </div>
       <div className="mt-auto pt-1 text-[11px] text-tertiary">
         {indicator.objectiveValue !== undefined
-          ? `${l.objective} : ${indicator.objectiveValue}${unitSuffix}`
+          ? `${l.objective} : ${formatMeasure(indicator.objectiveValue)}${unitSuffix}`
           : indicator.objective}
         {(latestNumeric ?? latest) ? ` · ${(latestNumeric ?? latest)!.period}` : ""}
       </div>
@@ -831,7 +851,11 @@ function BusinessKpiCard({
       ) : (
         <div className={`${cardClass} flex-1`}>{content}</div>
       )}
-      <p className="text-[10px] text-tertiary">{t("kpi.market.owner", "Saisie : CTO")}</p>
+      {fillerNames && (
+        <p className="text-[10px] text-tertiary">
+          {t("kpi.market.owner", "Saisie : {names}").replace("{names}", fillerNames)}
+        </p>
+      )}
       <PendingKpiValues indicatorId={indicator.id} unit={indicator.unit} compact />
       {fillButton}
       {correction.canCorrect && latest && (
@@ -893,6 +917,7 @@ function BusinessKpiCard({
             measurements={yearMeasurements}
             onEdit={correction.canCorrect ? correction.startEdit : undefined}
             onDelete={correction.canCorrect ? correction.startDelete : undefined}
+            users={users}
           />
         </Modal>
       )}

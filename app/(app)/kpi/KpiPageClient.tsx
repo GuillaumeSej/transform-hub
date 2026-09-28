@@ -76,6 +76,7 @@ import {
   INDICATOR_STATUS_LABEL_KEY,
   type IndicatorDisplayStatus,
 } from "@/components/strategic/IndicatorStatusBadge";
+import { formatMeasure } from "@/lib/format";
 
 /**
  * Page KPI — surface PRINCIPALE de saisie des indicateurs d'un Plan Stratégique, pas un dashboard
@@ -610,12 +611,12 @@ function IndicatorCard({
                   <>
                     <span className="text-sm font-semibold text-text-primary">
                       {latest.value !== undefined
-                        ? `${latest.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
+                        ? formatMeasure(latest.value, indicator.unit)
                         : (latest.note ?? "—")}
                     </span>
                     <span className="font-mono">{latest.period}</span>
                     <span>
-                      {t("kpi.reportedBy")} {latest.reportedBy}
+                      {t("kpi.reportedBy")} {resolveUserFullName(latest.reportedBy, users)}
                     </span>
                     {correction.canCorrect && (
                       <button
@@ -639,6 +640,7 @@ function IndicatorCard({
                 measurements={yearMeasurements}
                 onEdit={correction.canCorrect ? correction.startEdit : undefined}
                 onDelete={correction.canCorrect ? correction.startDelete : undefined}
+                users={users}
               />
               {correction.dialogs}
             </div>
@@ -823,7 +825,7 @@ function IndicatorCard({
                         {indicator.targetSchedule && indicator.targetSchedule.length > 0
                           ? t("kpi.objective.finalTarget")
                           : t("kpi.objectiveValue")}{" "}
-                        : {indicator.objectiveValue}
+                        : {formatMeasure(indicator.objectiveValue)}
                         {indicator.unit ? ` ${indicator.unit}` : ""} ·{" "}
                         {t(`kpi.direction.${indicator.direction ?? "up"}`)}
                       </p>
@@ -840,7 +842,7 @@ function IndicatorCard({
                             .sort((a, b) => comparePeriods(a.period, b.period))
                             .map(
                               (step) =>
-                                `${step.period} → ${step.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
+                                `${step.period} → ${formatMeasure(step.value, indicator.unit)}`
                             )
                             .join(" · ")}
                         </p>
@@ -1530,6 +1532,7 @@ export function KpiPageClient() {
               updateMeasurement={updateMeasurement}
               deleteMeasurement={deleteMeasurement}
               fillCtx={fillCtx}
+              users={companyUsers}
             />
           </CardBody>
         </Card>

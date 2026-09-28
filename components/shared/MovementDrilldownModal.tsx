@@ -10,6 +10,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { movementStatusLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
 import { planMovementFte } from "@/lib/hrProgramSummary";
 import type { WorkforceMovement } from "@/types";
+import { formatDateShort } from "@/lib/format";
 
 /**
  * Modale de drill-down générique pour les graphiques RH agrégés qui n'ont pas de vue de détail
@@ -85,7 +86,7 @@ export function MovementDrilldownModal({
                     {movementTypeLabel(t, m.type)} · {m.label}
                   </span>
                   <span className="text-[11px] text-tertiary">
-                    {m.plannedDate} · {movementStatusLabel(t, m.status)}
+                    {formatDateShort(m.plannedDate)} · {movementStatusLabel(t, m.status)}
                     {m.hrValidated ? " ✓RH" : ""} · {/* Vue plan, comme le bilan net (M10). */}
                     {planMovementFte(m)} {t("etp.column.fte", "ETP")}
                   </span>

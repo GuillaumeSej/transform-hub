@@ -45,6 +45,7 @@ import {
   validateStaffingLine,
 } from "@/lib/staffingLineValidation";
 import type { AuthUser, Chantier, ChantierAction, ChantierStaffing, StrategicAxis } from "@/types";
+import { formatFte as formatFteInAppLocale, formatDateShort } from "@/lib/format";
 
 /**
  * Bloc « ETP mobilisés » d'une fiche chantier : la liste des lignes de staffing du chantier
@@ -90,9 +91,11 @@ import type { AuthUser, Chantier, ChantierAction, ChantierStaffing, StrategicAxi
  *  `StaffingDraftTable.tsx` et testée unitairement. */
 export { parseFte };
 
-/** Formatage court : 1 et non 1.0, 0,5 et non 0.5 (locale d'affichage du navigateur). */
+/** Formatage court : 1 et non 1.0, 0,5 et non 0.5 — langue de l'APPLICATION (et non plus celle
+ *  du navigateur, `lib/format.ts::formatFte`) ; 2 décimales max pour ne pas arrondir une saisie
+ *  fine (0,25 ETP). */
 export function formatFte(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
+  return formatFteInAppLocale(value, { maximumFractionDigits: 2 });
 }
 
 const SELECT_CLASS =
@@ -490,8 +493,12 @@ export function ChantierStaffingEditor({
                       </td>
                     ) : (
                       <>
-                        <td className="px-2.5 py-1.5 text-tertiary">{entry.startDate}</td>
-                        <td className="px-2.5 py-1.5 text-tertiary">{entry.endDate}</td>
+                        <td className="px-2.5 py-1.5 text-tertiary">
+                          {formatDateShort(entry.startDate)}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-tertiary">
+                          {formatDateShort(entry.endDate)}
+                        </td>
                       </>
                     )}
                     <td className="px-2.5 py-1.5 text-right font-semibold">

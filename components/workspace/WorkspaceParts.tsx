@@ -16,7 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/format";
+import { formatDateShort } from "@/lib/format";
 import type {
   WorkspaceHealth,
   WorkspaceItemSource,
@@ -73,7 +73,7 @@ export function PlanBadge({ plan, t }: { plan: WorkspacePlan; t: Translate }) {
     </span>
   ) : (
     <span className="shrink-0 rounded-full bg-info-blue-light px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-info-blue">
-      {t("me.plan.performance", "Transfo")}
+      {t("me.plan.performance", "Performance")}
     </span>
   );
 }
@@ -102,10 +102,11 @@ export function HealthDot({ health, t }: { health: WorkspaceHealth; t: Translate
   );
 }
 
-/** Date courte localisée (« 3 oct. ») d'une échéance ISO `YYYY-MM-DD`. */
+/** Date courte numérique (« 03/10/2026 » en fr) d'une échéance ISO `YYYY-MM-DD` — format date
+ *  unique de l'app (`formatDateShort`). */
 export function shortDate(iso: string | undefined): string {
   const d = parseIsoDay(iso);
-  return d ? formatDate(d, { day: "numeric", month: "short" }) : "";
+  return d ? formatDateShort(d) : "";
 }
 
 /** En-tête de bloc : titre avec filet coral (même style que `CardHeader`) + sous-titre + actions. */

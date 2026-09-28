@@ -1,4 +1,5 @@
 import type { Alert } from "@/types";
+import { formatAmountM } from "@/lib/format";
 
 /** Signature de `t` (useTranslation) — passée en argument pour garder ce module pur (sans hook). */
 type Translate = (key: string, fallback?: string) => string;
@@ -20,14 +21,16 @@ export function alertDesc(t: Translate, alert: Alert): string {
   return fill(t(alert.i18n.descKey, alert.desc), resolveVars(t, alert.i18n));
 }
 
-/** Variables finales : `vars` + chaque variable `nested` traduite puis remplie. */
+/** Variables finales : `vars` + chaque variable `nested` traduite puis remplie + chaque montant
+ *  `amounts` (en M) formaté dans la langue active (`1,2 M €`, `-480 k €`). */
 function resolveVars(
   t: Translate,
   i18n: NonNullable<Alert["i18n"]>
 ): Record<string, string | number> {
-  if (!i18n.nested) return i18n.vars;
+  if (!i18n.nested && !i18n.amounts) return i18n.vars;
   const out: Record<string, string | number> = { ...i18n.vars };
-  for (const [name, n] of Object.entries(i18n.nested))
+  for (const [name, n] of Object.entries(i18n.nested ?? {}))
     out[name] = fill(t(n.key, n.fallback), n.vars);
+  for (const [name, v] of Object.entries(i18n.amounts ?? {})) out[name] = formatAmountM(v);
   return out;
 }

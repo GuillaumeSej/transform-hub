@@ -15,6 +15,7 @@ import {
 } from "@/lib/axisLogic";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { isSingular } from "@/lib/i18n/plural";
 import {
   formatTimelineDay as formatTimelineDayBase,
   timelineColumns,
@@ -87,6 +88,8 @@ export type ProgramRoadmapLabels = {
   today?: string;
   /** Suffixe "N leviers" affiché sous le nom de chaque chantier. */
   leviersSuffix?: string;
+  /** Forme singulière du suffixe (« 1 projet »). */
+  leviersSuffixOne?: string;
   /** Round 20, point 3 : titre/tooltip de l'icône d'alerte discrète d'un levier/chantier en
    *  retard (`isProjetLate`/`isChantierLate`, lib/axisLogic.ts). */
   late?: string;
@@ -96,6 +99,8 @@ export type ProgramRoadmapLabels = {
    *  plusieurs leviers : impossible de distinguer "1 en retard sur 2" de "tout le chantier est en
    *  retard" sans ce comptage explicite. */
   lateCount?: string;
+  /** Forme singulière de `lateCount` (« 1 projet en retard sur … »). */
+  lateCountOne?: string;
   /** Round 28 : préfixe de l'infobulle du badge "jalon courant" posé sur chaque ligne de levier
    *  (ex. "Jalon actuel : J2") — voir `displayMilestoneId`, lib/axisLogic.ts. */
   currentMilestone?: string;
@@ -240,8 +245,11 @@ export function ProgramRoadmap({
     progress: labels?.progress ?? t("strategicAxes.roadmap.progress", "Avancement"),
     today: labels?.today ?? t("strategicAxes.ganttToday", "Aujourd'hui"),
     leviersSuffix: labels?.leviersSuffix ?? t("strategicAxes.roadmap.leviersSuffix", "projets"),
+    leviersSuffixOne:
+      labels?.leviersSuffixOne ?? t("strategicAxes.roadmap.leviersSuffixOne", "projet"),
     late: labels?.late ?? t("strategicAxes.roadmap.late", "En retard"),
     lateCount: labels?.lateCount,
+    lateCountOne: labels?.lateCountOne ?? labels?.lateCount,
     currentMilestone:
       labels?.currentMilestone ?? t("strategicAxes.roadmap.currentMilestone", "Jalon actuel"),
   };
@@ -452,7 +460,10 @@ export function ProgramRoadmap({
                                   className="flex shrink-0 items-center gap-1 rounded-full bg-rag-red-light px-1.5 py-0.5 text-[10px] font-bold text-rag-red"
                                   title={
                                     l.lateCount
-                                      ? l.lateCount
+                                      ? (isSingular(lateLevierCount) && l.lateCountOne
+                                          ? l.lateCountOne
+                                          : l.lateCount
+                                        )
                                           .replace("{n}", String(lateLevierCount))
                                           .replace("{total}", String(totalLevierCount))
                                       : undefined
@@ -468,7 +479,11 @@ export function ProgramRoadmap({
                                 alignée verticalement sur tout le chantier. */}
                             <div className="flex items-center gap-2 pl-[19px]">
                               <span className="min-w-0 flex-1 truncate text-[11px] text-secondary">
-                                {totalLevierCount} {l.leviersSuffix} · {l.progress}
+                                {totalLevierCount}{" "}
+                                {isSingular(totalLevierCount)
+                                  ? l.leviersSuffixOne
+                                  : l.leviersSuffix}{" "}
+                                · {l.progress}
                               </span>
                               <TimelineProgressGauge
                                 pct={chantierProgressPct}

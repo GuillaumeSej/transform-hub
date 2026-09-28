@@ -4,6 +4,8 @@ import { CheckCircle2, Clock } from "lucide-react";
 import { displayMilestoneId, type MilestoneTransitionState } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { AuthUser, MilestoneId } from "@/types";
+import { formatDateShort } from "@/lib/format";
+import type { Locale } from "@/lib/i18n/locales";
 
 /**
  * Pastilles d'état de TRANSITION de jalon d'un projet (round "passage de jalon explicite") — voir
@@ -25,12 +27,8 @@ export function formatPendingMeta(
   state: Extract<MilestoneTransitionState, { status: "pending" }>,
   users?: Pick<AuthUser, "username" | "name">[]
 ): string {
-  let date = state.requestedAt;
-  try {
-    date = new Date(state.requestedAt).toLocaleDateString(locale);
-  } catch {
-    // date ISO brute en repli
-  }
+  // `24/09/2026` dans la langue de l'app (`locale`) ; date invalide ⇒ ISO brute en repli.
+  const date = formatDateShort(state.requestedAt, locale as Locale);
   return t(
     "strategicChantierDetail.milestones.transition.requestedMeta",
     "Demandé par {user} le {date}"

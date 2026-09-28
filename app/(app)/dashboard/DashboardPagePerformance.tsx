@@ -31,6 +31,7 @@ import { useCanOpenRoute } from "@/lib/hooks/useCanOpenRoute";
 import { leversDrilldownParams } from "@/lib/leversDrilldown";
 import { useLifecycleLabels } from "@/lib/hooks/useLifecycleLabels";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { tPlural } from "@/lib/i18n/plural";
 import { subscribeCompanies, subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { resolveProgramType } from "@/lib/axisLogic";
 import type { Company, HierarchyLevelDef, HierarchyNode } from "@/types";
@@ -106,7 +107,7 @@ import {
   type DashboardWidgetInstance,
   type DashboardWidgetType,
 } from "@/lib/dashboardWidgets";
-import { formatMillions } from "@/lib/format";
+import { formatMillions, formatDateShort } from "@/lib/format";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { onActivateKey } from "@/lib/a11y";
 
@@ -1081,9 +1082,12 @@ export function DashboardPagePerformance() {
                         : "bg-neutral-100 text-secondary"
                   }`}
                 >
-                  {t("dashboard.riskCenter.leversAtRiskBadge", "{n} leviers à risque").replace(
-                    "{n}",
-                    String(totalAtRisk)
+                  {tPlural(
+                    t,
+                    "dashboard.riskCenter.leversAtRiskBadge",
+                    totalAtRisk,
+                    "{n} leviers à risque",
+                    "{n} levier à risque"
                   )}
                 </span>
               }
@@ -1096,9 +1100,12 @@ export function DashboardPagePerformance() {
                     {t("dashboard.widgets.riskCenter.alertsPanel", "Alertes")}
                     <span className="ml-1.5 font-semibold normal-case tracking-normal text-tertiary">
                       ·{" "}
-                      {t("dashboard.riskCenter.openAlertsCount", "{n} alertes ouvertes").replace(
-                        "{n}",
-                        String(openAlertCount)
+                      {tPlural(
+                        t,
+                        "dashboard.riskCenter.openAlertsCount",
+                        openAlertCount,
+                        "{n} alertes ouvertes",
+                        "{n} alerte ouverte"
                       )}
                     </span>
                   </div>
@@ -1108,7 +1115,7 @@ export function DashboardPagePerformance() {
                         onClick={() => setManualAlertOpen(true)}
                         className="rounded-sm border border-border px-2 py-0.5 text-[10.5px] font-semibold text-secondary transition hover:border-black hover:text-primary"
                       >
-                        + Alerte manuelle
+                        {t("dashboard.riskCenter.addManualAlert", "+ Alerte manuelle")}
                       </button>
                     )}
                     {(["red", "amber", "green", "blue"] as const).map((type) => {
@@ -1241,9 +1248,12 @@ export function DashboardPagePerformance() {
                   </div>
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <span className="text-[10.5px] font-semibold text-tertiary">
-                      {t("dashboard.dependency.alertCount", "{n} alerte(s)").replace(
-                        "{n}",
-                        String(depAlerts.length)
+                      {tPlural(
+                        t,
+                        "dashboard.dependency.alertCount",
+                        depAlerts.length,
+                        "{n} alertes",
+                        "{n} alerte"
                       )}
                     </span>
                     <select
@@ -1327,7 +1337,7 @@ export function DashboardPagePerformance() {
                                       </div>
                                       <div className="mt-0.5 text-[10px] text-secondary">
                                         {dependencyMilestoneLabel(t, meta.targetMilestone)} :{" "}
-                                        {a.targetDate}
+                                        {formatDateShort(a.targetDate)}
                                       </div>
                                     </div>
                                     <div className="flex items-center justify-center gap-1 text-tertiary sm:flex-col sm:gap-0">
@@ -1346,7 +1356,7 @@ export function DashboardPagePerformance() {
                                       </div>
                                       <div className="mt-0.5 text-[10px] text-secondary">
                                         {dependencyMilestoneLabel(t, meta.sourceMilestone)} :{" "}
-                                        {a.sourceDate}
+                                        {formatDateShort(a.sourceDate)}
                                       </div>
                                     </div>
                                   </div>
@@ -1362,7 +1372,7 @@ export function DashboardPagePerformance() {
                                       </div>
                                       <div className="mt-0.5 text-[10px] text-secondary">
                                         {dependencyMilestoneLabel(t, meta.sourceMilestone)} :{" "}
-                                        {a.sourceDate}
+                                        {formatDateShort(a.sourceDate)}
                                       </div>
                                     </div>
                                     <div className="flex items-center justify-center gap-1.5 py-1 text-[9px] font-semibold text-tertiary">
@@ -1378,7 +1388,7 @@ export function DashboardPagePerformance() {
                                       </div>
                                       <div className="mt-0.5 text-[10px] text-secondary">
                                         {dependencyMilestoneLabel(t, meta.targetMilestone)} :{" "}
-                                        {a.targetDate}
+                                        {formatDateShort(a.targetDate)}
                                       </div>
                                     </div>
                                   </div>
@@ -1723,7 +1733,7 @@ export function DashboardPagePerformance() {
                     <tr>
                       {[
                         t("dashboard.workstream", "Chantier"),
-                        "Sponsor",
+                        t("leverForm.sponsor", "Responsable de chantier"),
                         t("dashboard.tableHeader.leverCount", "Leviers"),
                         t(
                           "dashboard.tableHeader.realizedReforecastTarget",

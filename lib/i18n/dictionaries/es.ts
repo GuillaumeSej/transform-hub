@@ -18,7 +18,7 @@ const es: Record<string, string> = {
   // ─── nav ──────────────────────────────────────────────────────────────────
   "nav.executiveDashboard": "Pilotaje global",
   "nav.leverLibrary": "Biblioteca de Palancas",
-  "nav.leverPipeline": "Palancas por etapa",
+  "nav.leverPipeline": "Palancas por madurez",
   "nav.myLevers": "Mis Palancas",
   "nav.linkedLevers": "Palancas Vinculadas",
   "nav.workstreamDashboard": "Seguimiento de proyectos",
@@ -49,7 +49,7 @@ const es: Record<string, string> = {
   "shared.topbar.realizedPending": "Realizado por validar · {amount}",
   "leverDetail.lateActions": "Acciones con retraso",
   "validation.lever": "Palanca",
-  "validation.gate": "Etapa",
+  "validation.gate": "Madurez",
   "validation.workstream": "Proyecto",
   "validation.requestedBy": "Solicitado por",
   "validation.requestedAt": "Solicitado el",
@@ -245,8 +245,8 @@ const es: Record<string, string> = {
   "dashboard.widgets.viewBridge": "Vista trimestral",
   "dashboard.widgets.dateFrom": "Desde",
   "dashboard.widgets.dateTo": "Hasta",
-  "dashboard.widgets.stageFunnel": "Avance por etapa del ciclo de vida",
-  "dashboard.widgets.stageFunnelFull": "Avance de las palancas por etapa del ciclo de vida",
+  "dashboard.widgets.stageFunnel": "Avance por madurez",
+  "dashboard.widgets.stageFunnelFull": "Avance de las palancas por madurez",
   "dashboard.widgets.alerts": "Alertas y Notificaciones",
   "dashboard.widgets.noAlerts": "Sin alertas pendientes",
   "dashboard.widgets.riskCenter": "Alertas y Dependencias",
@@ -261,7 +261,8 @@ const es: Record<string, string> = {
   "alerts.markAllResolved": "Resolver todas",
   "alerts.auto": "Auto",
   "alerts.page": "Página {current} / {total}",
-  "alerts.count": "{n} alerta(s)",
+  "alerts.count": "{n} alertas",
+  "alerts.countOne": "{n} alerta",
   "alerts.tooltip.red": "Alertas críticas — acción inmediata requerida",
   "alerts.tooltip.amber": "Alertas a vigilar — riesgo identificado",
   "alerts.tooltip.green": "Alertas positivas — avance o resolución",
@@ -302,7 +303,7 @@ const es: Record<string, string> = {
   "dashboard.widgets.sCurve": "Curva S — Plan inicial / Realizado / Reactualizado",
   "dashboard.widgets.bridgeQuarter": "Ahorros por trimestre → objetivo",
   "dashboard.widgets.bridgeMonth": "Ahorros por mes → objetivo",
-  "dashboard.widgets.sankey": "Flujo de palancas por etapa (Sankey)",
+  "dashboard.widgets.sankey": "Flujo de palancas por madurez (Sankey)",
   "dashboard.widgets.marimekko": "Ahorros previstos",
   "dashboard.widgets.workstreamBreakdown": "Realización de ahorros",
   "dashboard.widgets.geoBreakdown": "Ahorros por País / Función",
@@ -349,7 +350,8 @@ const es: Record<string, string> = {
   "dashboard.dependency.rule.sf": "El destino debe comenzar antes de que termine el origen",
   "dashboard.dependency.rule.ss": "Ambos elementos deben comenzar juntos",
   "dashboard.dependency.rule.ff": "Ambos elementos deben terminar juntos",
-  "dashboard.dependency.alertCount": "{n} alerta(s)",
+  "dashboard.dependency.alertCount": "{n} alertas",
+  "dashboard.dependency.alertCountOne": "{n} alerta",
   "dashboard.noProgram":
     "Todavía no se ha creado ningún programa para su empresa. Cree uno en Admin > Empresas > Programas y luego asocie palancas.",
   "dashboard.builderModal.alreadyOnDashboard": "Este gráfico ya está en su panel",
@@ -387,9 +389,10 @@ const es: Record<string, string> = {
   "levers.createLever": "Crear palanca",
   "levers.table": "Tabla",
   "levers.kanban": "Kanban",
+  "levers.gantt": "Gantt",
   "levers.searchPlaceholder": "Buscar (nombre, código, responsable...)",
   "levers.count": "palancas",
-  "levers.realized": "Ahorro realizado (€M)",
+  "levers.realized": "Ahorro realizado",
   "levers.columnName": "Palanca",
   "levers.columnStatus": "Nivel",
   "levers.filter.costCenter": "Centro de coste / Partida de gasto",
@@ -450,16 +453,18 @@ const es: Record<string, string> = {
 
   // ─── leverDetail (página de detalle de palanca) ────────────────────────────
   "leverDetail.tab.plan": "Plan de acción",
+  "leverDetail.tab.overview": "Resumen",
+  "leverDetail.tab.impact": "Impacto",
   "leverDetail.tab.collab": "Colaboración",
   "leverDetail.loading": "Cargando…",
   "leverDetail.notFound": "Palanca no encontrada.",
-  "leverDetail.backToPipeline": "Volver a palancas por etapa",
+  "leverDetail.backToPipeline": "Volver a palancas por madurez",
   "leverDetail.outOfPerimeter":
     "Acceso restringido — esta palanca no está en su perímetro: no es ni su responsable de palanca ni su responsable de frente de trabajo.",
   "leverDetail.restrictedAccess":
     "Acceso restringido — esta palanca está clasificada como «{level}», un nivel de confidencialidad para el que su perfil no está habilitado.",
   "leverDetail.editLever": "Editar palanca",
-  "leverDetail.statusUpdated": "Nivel actualizado",
+  "leverDetail.statusUpdated": "Madurez actualizada",
   "leverDetail.deliveredNeedsAllActions":
     "Pasar a «{stage}» exige que todas las acciones estén hechas (100 %). Mientras tanto, la palanca sigue en «{current}».",
   "shared.kanban.tip.id": "ID de la palanca",
@@ -467,11 +472,11 @@ const es: Record<string, string> = {
   "shared.kanban.tip.progress": "Avance del plan de acción: {pct} %",
   "shared.kanban.tip.owner": "Responsable de la palanca: {name}",
   "leverDetail.autoStageHint":
-    "Esta etapa se alcanza automáticamente cuando el plan de acción está al 100 %",
-  "leverDetail.pastStageHint": "Etapa ya superada — no se puede retroceder",
+    "Este nivel de madurez se alcanza automáticamente cuando el plan de acción está al 100 %",
+  "leverDetail.pastStageHint": "Nivel de madurez ya superado — no se puede retroceder",
   "leverDetail.moveToStage": "Pasar a «{stage}»",
   "leverDetail.approval.stageHint":
-    "Esta etapa requiere una solicitud de validación (responsable → responsable de frente de trabajo o CTO), ver más abajo",
+    "Este cambio de madurez requiere una solicitud de validación (responsable → responsable de frente de trabajo o CTO), ver más abajo",
   "leverDetail.approval.submitHint":
     "Esta palanca está lista para una solicitud de validación (responsable → responsable de frente de trabajo o CTO).",
   "leverDetail.approval.submit": "Enviar para validación",
@@ -491,7 +496,7 @@ const es: Record<string, string> = {
   "levers.approval.submitHint":
     "Esta palanca está lista para una solicitud de validación (doble validación: niveles por encima del solicitante, responsable de frente y luego CTO).",
   "levers.approval.stageHint":
-    "Esta etapa requiere una solicitud de validación (responsable de frente y luego CTO), ver abajo",
+    "Este cambio de madurez requiere una solicitud de validación (responsable de frente y luego CTO), ver abajo",
   "levers.approval.pending": "Solicitud de validación para pasar a «{stage}»",
   "levers.approval.ownRequest": "Su solicitud: no puede validarla usted mismo.",
   "levers.approval.withdraw": "Retirar la solicitud",
@@ -560,7 +565,9 @@ const es: Record<string, string> = {
   "leverDetail.actionPlanDisabled":
     "Módulo no activado — el Plan de acción se ha desactivado para su empresa (configurable en Admin > Empresas).",
   "leverDetail.actionPlanTitle": "Plan de acción — {name}",
-  "leverDetail.actionsCount": "{n} acción(es)",
+  "leverDetail.actionsCount": "{n} acciones",
+  "leverDetail.addAction": "Acción",
+  "leverDetail.actionsCountOne": "{n} acción",
   "leverDetail.todo": "Por hacer",
   "leverDetail.inProgress": "En curso",
   "leverDetail.completed": "Hecho",
@@ -782,7 +789,8 @@ const es: Record<string, string> = {
   "adminProgramsPanel.ambitionPlaceholder": "Ej. Ser líder del mercado antes de 2027",
   "adminProgramsPanel.budgetLabel": "Presupuesto previsional",
   "adminProgramsPanel.budgetPlaceholder": "Ej. 5000000",
-  "adminProgramsPanel.count": "{n} programa(s)",
+  "adminProgramsPanel.count": "{n} programas",
+  "adminProgramsPanel.countOne": "{n} programa",
   "adminProgramsPanel.colProgram": "Programa",
   "adminProgramsPanel.colActions": "Acciones",
   "adminProgramsPanel.empty": "Ningún programa para esta empresa.",
@@ -795,7 +803,7 @@ const es: Record<string, string> = {
   "adminProgramsPanel.strategicImportCtaButton": "Importar el plan estratégico",
   "adminProgramsPanel.typePerformance": "Plan de Rendimiento",
   "adminProgramsPanel.typePerformanceHint":
-    "Palancas financieras, ciclo de vida L1-L5, impactos CAPEX/OPEX.",
+    "Palancas financieras, madurez L1-L5, impactos CAPEX/OPEX.",
   "adminProgramsPanel.typeStrategic": "Plan Estratégico",
   "adminProgramsPanel.typeStrategicHint":
     "Ejes, proyectos e indicadores (3-5-15), etapas de madurez configurables.",
@@ -819,8 +827,8 @@ const es: Record<string, string> = {
 
   // ─── shared (componentes compartidos: Modal, Topbar, Sidebar, ResetDemoButton…) ─
   "shared.resetDemoButton.label": "Restablecer datos de demostración",
-  "shared.topbar.notificationsToProcess": "Notificaciones por tratar · {n}",
-  "shared.topbar.noNotifications": "No hay notificaciones por tratar.",
+  "shared.topbar.notificationsToProcess": "Alertas · {n}",
+  "shared.topbar.noNotifications": "No hay alertas por tratar.",
   "shared.topbar.sourceAuto": "Automática",
   "shared.topbar.sourceManual": "Manual",
 
@@ -886,7 +894,7 @@ const es: Record<string, string> = {
   "adminHistory.action.approvalRequested": "Validación solicitada",
   "adminHistory.action.approvalApproved": "Solicitud aprobada",
   "adminHistory.action.approvalRejected": "Validación rechazada",
-  "adminHistory.title": "Historial de Modificaciones",
+  "adminHistory.title": "Historial",
   "adminHistory.searchPlaceholder": "Buscar...",
   "adminHistory.allActions": "Todas las acciones",
   "adminHistory.allEntities": "Todas las entidades",
@@ -910,7 +918,7 @@ const es: Record<string, string> = {
   // ─── adminLifecycle ─────────────────────────────────────────────────────────
 
   // ─── adminCompanies ─────────────────────────────────────────────────────────
-  "adminCompanies.title": "Gestión de Empresas",
+  "adminCompanies.title": "Empresas",
   "adminCompanies.editTitle": "Editar empresa",
   "adminCompanies.newTitle": "Nueva empresa",
   "adminCompanies.column.id": "ID",
@@ -960,7 +968,7 @@ const es: Record<string, string> = {
   "adminProgramConfig.saveFailedBody": "No se pudo guardar la configuración del programa.",
 
   // ─── adminData ──────────────────────────────────────────────────────────────
-  "adminData.title": "Resumen de Datos",
+  "adminData.title": "Datos",
   "adminData.globalSummary": "Resumen global",
   "adminData.employees": "Empleados",
   "adminData.movements": "Movimientos",
@@ -1091,7 +1099,7 @@ const es: Record<string, string> = {
   // ─── adminUsers (Admin > Usuarios) ─────────────────────────────────────
   "adminUsers.directionLabel": "Dirección / departamento (opcional)",
   "adminUsers.directionUnassigned": "No especificado",
-  "adminUsers.title": "Gestión de usuarios",
+  "adminUsers.title": "Usuarios",
   "adminUsers.editTitle": "Editar usuario",
   "adminUsers.newTitle": "Nuevo usuario",
   "adminUsers.fieldUsername": "Identificador",
@@ -1168,7 +1176,8 @@ const es: Record<string, string> = {
     "Configure primero niveles de confidencialidad en la pestaña Ajustes de esta empresa para activar este control.",
   "adminUsers.filterByCompany": "Filtrar por empresa",
   "adminUsers.allCompanies": "Todas las empresas",
-  "adminUsers.userCount": "{n} usuario(s)",
+  "adminUsers.userCount": "{n} usuarios",
+  "adminUsers.userCountOne": "{n} usuario",
   "adminUsers.colProfiles": "Perfiles",
   "adminUsers.colActions": "Acciones",
   "adminUsers.confirm": "Confirmar",
@@ -1209,6 +1218,7 @@ const es: Record<string, string> = {
   "shared.periodToolbar.customRange": "Rango personalizado",
   "shared.periodToolbar.reset": "Restablecer",
   "shared.exportButton.successBody": "{n} palancas exportadas",
+  "shared.exportButton.exportExcel": "Exportar Excel",
   "shared.filterBar.clearAll": "Borrar todo",
   "shared.multiSelect.selectAll": "Seleccionar todo",
   "shared.multiSelect.clear": "Borrar",
@@ -1278,11 +1288,11 @@ const es: Record<string, string> = {
     'Código "{code}" duplicado en el archivo (ya usado en la fila {row})',
   "shared.leverImport.msg.unknownStatus": 'Estado "{value}" desconocido (esperado: {expected})',
   "shared.leverImport.msg.statusNewLever":
-    "Una palanca nueva solo puede importarse en la etapa «{idea}» (o abandonada): la etapa «{target}» requiere validación. Impórtela en la etapa «{idea}» y solicite la validación desde su ficha.",
+    "Una palanca nueva solo puede importarse con la madurez «{idea}» (o abandonada): la madurez «{target}» requiere validación. Impórtela en «{idea}» y solicite la validación desde su ficha.",
   "shared.leverImport.msg.statusGated":
-    "Cambio de estado «{current}» → «{target}» rechazado: la etapa «{target}» requiere validación (solicitud desde la ficha de la palanca). Vuelva a poner el estado actual en el archivo para importar los demás cambios.",
+    "Cambio de madurez «{current}» → «{target}» rechazado: la madurez «{target}» requiere validación (solicitud desde la ficha de la palanca). Vuelva a poner la madurez actual en el archivo para importar los demás cambios.",
   "shared.leverImport.msg.statusBackward":
-    "Cambio de estado «{current}» → «{target}» rechazado: una importación no puede saltar etapas ni retroceder en el ciclo de vida. Vuelva a poner el estado actual en el archivo para importar los demás cambios.",
+    "Cambio de madurez «{current}» → «{target}» rechazado: una importación no puede saltar niveles de madurez ni retroceder. Vuelva a poner la madurez actual en el archivo para importar los demás cambios.",
   "shared.leverImport.msg.unknownPnl":
     'Cuenta de P&L "{value}" no encontrada (esperado: {expected})',
   "shared.leverImport.msg.requiredDate":
@@ -1528,7 +1538,7 @@ const es: Record<string, string> = {
 
   // ─── adminLifecycleEditor ───────────────────────────────────────────────────
   "adminLifecycleEditor.intro":
-    "Personalice las etapas del ciclo de vida de las palancas para esta empresa. Puede renombrar, reordenar, activar/desactivar las validaciones y ajustar el número de etapas.",
+    "Personalice los niveles de madurez de las palancas para esta empresa. Puede renombrar, reordenar, activar/desactivar las validaciones y ajustar el número de niveles.",
   "adminLifecycleEditor.colOrder": "Orden",
   "adminLifecycleEditor.colKey": "Clave",
   "adminLifecycleEditor.colLabel": "Etiqueta",
@@ -1555,7 +1565,7 @@ const es: Record<string, string> = {
 
   // ─── Plan Estratégico — página Ejes + ficha de detalle de un eje ──────────
   // Cartera
-  "strategicAxes.title": "Ejes estratégicos",
+  "strategicAxes.title": "Hoja de ruta",
   "strategicAxes.count": "ejes",
   "strategicAxes.chantiersCount": "proyectos",
   "strategicAxes.indicatorsCount": "indicadores",
@@ -1593,8 +1603,10 @@ const es: Record<string, string> = {
   "strategicAxes.budgetByChantierModalTitle": "Reparto del presupuesto por obra",
   "strategicAxes.noIndicatorsShort": "Ningún indicador",
   "strategicAxes.unassigned": "Sin asignar",
-  "strategicAxes.tree.chantiersN": "{n} proyecto(s)",
-  "strategicAxes.tree.projetsN": "{n} iniciativa(s)",
+  "strategicAxes.tree.chantiersN": "{n} proyectos",
+  "strategicAxes.tree.chantiersNOne": "{n} proyecto",
+  "strategicAxes.tree.projetsN": "{n} iniciativas",
+  "strategicAxes.tree.projetsNOne": "{n} iniciativa",
   "strategicAxes.tree.milestonesN": "{p}/{t} hitos",
   "strategicAxes.tree.open": "Abrir la ficha",
   "strategicAxes.tree.allChantiersTitle": "Todos los proyectos",
@@ -1624,6 +1636,7 @@ const es: Record<string, string> = {
   "strategicAxes.chantierUnplanned": "Proyectos sin iniciativa planificada",
   "strategicAxes.chantierNoDates": "Aún sin fecha — añada una iniciativa",
   "strategicAxes.actionsSuffix": "iniciativas",
+  "strategicAxes.actionsSuffixOne": "iniciativa",
   // Gantt: escala temporal ajustable, avance, resumen del proyecto
   "strategicAxes.ganttScale": "Escala",
   "strategicAxes.ganttScaleMonth": "Mes",
@@ -1642,8 +1655,10 @@ const es: Record<string, string> = {
   "strategicAxes.roadmap.scaleYear": "Año",
   "strategicAxes.roadmap.progress": "Avance",
   "strategicAxes.roadmap.leviersSuffix": "iniciativas",
+  "strategicAxes.roadmap.leviersSuffixOne": "iniciativa",
   "strategicAxes.roadmap.late": "Retrasado",
-  "strategicAxes.roadmap.lateCount": "{n} iniciativa(s) retrasada(s) de {total}",
+  "strategicAxes.roadmap.lateCount": "{n} iniciativas retrasadas de {total}",
+  "strategicAxes.roadmap.lateCountOne": "{n} iniciativa retrasada de {total}",
   "strategicAxes.roadmap.currentMilestone": "Hito actual",
   "strategicAxes.chantierPeriod": "Periodo",
   "strategicAxes.newChantier": "Nuevo proyecto",
@@ -2044,9 +2059,9 @@ const es: Record<string, string> = {
   "strategicImport.usernameCollision": "identificador «{username}» ya en uso: con sufijo",
 
   // ─── Plan Estratégico — página KPI (registro de medidas, edición de objetivo) ─
-  "kpi.title": "Indicadores (KPI)",
+  "kpi.title": "KPIs",
   "kpi.subtitle":
-    "Registre aquí el valor de sus indicadores para el periodo en curso y ajuste su objetivo sobre la marcha. Solo los roles responsables — y las cuentas autorizadas explícitamente — pueden registrar un indicador dado.",
+    "Registre aquí el valor de sus indicadores para el periodo en curso y ajuste su objetivo sobre la marcha. Solo los responsables de registro designados, los patrocinadores concernidos y el responsable del plan pueden registrar un indicador dado.",
   "kpi.loading": "Cargando los indicadores…",
   "kpi.noProgram": "Ningún programa activo.",
   "kpi.notStrategic":
@@ -2071,9 +2086,9 @@ const es: Record<string, string> = {
   "kpi.filterChip.noMatch": "Ningún indicador coincide con los filtros activos.",
 
   // ─── KPI de negocio (indicadores de nivel eje) — página KPI Y panel estratégico ───
-  "businessKpis.title": "KPI de negocio — Seguimiento del mercado",
+  "businessKpis.title": "Indicadores clave",
   "businessKpis.empty":
-    "Ningún KPI de negocio definido — añada un indicador vinculado directamente a un eje desde la pestaña Admin > Indicadores.",
+    "Ningún indicador clave definido — añada un indicador vinculado directamente a un eje desde la pestaña Admin > Indicadores.",
   "businessKpis.noValue": "Sin medición",
   "kpi.axisUnknown": "Indicadores sin eje asignado",
   "kpi.macroIndicators": "Indicadores del eje",
@@ -2159,7 +2174,7 @@ const es: Record<string, string> = {
   "kpi.table.finalTarget": "Objetivo final",
   "kpi.table.status": "Estado",
   "kpi.fillValue": "Introducir el valor",
-  "kpi.market.owner": "Entrada: CTO",
+  "kpi.market.owner": "Entrada: {names}",
   "kpi.section.kpis": "KPI",
   "kpi.section.openChantier": "Abrir el frente de trabajo",
   "kpi.noteOptional": "Comentario (opcional)",
@@ -2290,7 +2305,7 @@ const es: Record<string, string> = {
     "Atención: estas fechas quedan fuera del periodo del proyecto.",
 
   // ─── Página Personal movilizado (/effectifs, Plan Estratégico) ────────────
-  "effectifs.title": "Personal y presupuesto movilizados",
+  "effectifs.title": "Presupuesto y personal movilizado",
   "effectifs.subtitle":
     "ETC movilizados en los proyectos del programa, por equipo. Haga clic en un equipo para ver su reparto entre los ejes y detectar una posible sobredotación.",
   "effectifs.loading": "Cargando el personal movilizado…",
@@ -2469,7 +2484,7 @@ const es: Record<string, string> = {
   // Los controles del modo edición (Personalizar / Terminar / Añadir widget / Restablecer)
   // reutilizan a propósito las claves genéricas `dashboard.*`: esas etiquetas deben permanecer
   // idénticas en ambos cuadros de mando.
-  "strategicDashboard.title": "Cuadro de mando estratégico",
+  "strategicDashboard.title": "Pilotaje global",
   "strategicDashboard.loading": "Cargando el plan estratégico…",
   "strategicDashboard.noProgram":
     "No hay ningún programa activo. Cree uno en Admin > Empresas > Programas.",
@@ -2517,7 +2532,7 @@ const es: Record<string, string> = {
   "strategicDashboard.removeWidget": "Quitar este widget",
   // Etiquetas del registro de widgets (lib/strategicDashboardWidgets.ts, campo `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicadores · trayectoria",
-  "strategicDashboard.widget.businessKpis": "KPI de negocio — Seguimiento del mercado",
+  "strategicDashboard.widget.businessKpis": "Indicadores clave",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertas",
   // Ronda 8: marcador de una columna de jalón E0-E4 vacía (`ProjetMilestoneBoard.tsx`).
   "strategicDashboard.projetBoard.emptyColumn": "—",
@@ -2535,9 +2550,9 @@ const es: Record<string, string> = {
   "adminPrograms.back": "Todos los programas",
   "adminPrograms.tabMaturity": "Etapas de madurez",
   "adminPrograms.tabIndicators": "Indicadores",
-  "adminPrograms.tabLifecycle": "Ciclo de vida",
+  "adminPrograms.tabLifecycle": "Madurez de las palancas",
   "adminPrograms.badgeStrategic": "Estratégico",
-  "adminPrograms.badgePerformance": "Transformación",
+  "adminPrograms.badgePerformance": "Rendimiento",
   "adminPrograms.noSettings":
     "No hay parámetros de configuración disponibles para este tipo de programa.",
 
@@ -2547,7 +2562,8 @@ const es: Record<string, string> = {
   "adminIndicators.new": "Nuevo indicador",
   "adminIndicators.createTitle": "Nuevo indicador",
   "adminIndicators.editTitle": "Modificar el indicador",
-  "adminIndicators.count": "{n} indicador(es)",
+  "adminIndicators.count": "{n} indicadores",
+  "adminIndicators.countOne": "{n} indicador",
   "adminIndicators.loading": "Cargando…",
   "adminIndicators.empty": "Ningún indicador definido para este programa.",
   "adminIndicators.name": "Nombre del indicador",
@@ -2721,7 +2737,10 @@ const es: Record<string, string> = {
   "dashboard.tableHeader.opexOneOffRealizedPlan": "OPEX puntual (realizado / plan)",
   "dashboard.kpi.leversAtRiskWatchHint": "riesgo medio, no contado",
   "dashboard.riskCenter.leversAtRiskBadge": "{n} palancas en riesgo",
+  "dashboard.riskCenter.leversAtRiskBadgeOne": "{n} palanca en riesgo",
   "dashboard.riskCenter.openAlertsCount": "{n} alertas abiertas",
+  "dashboard.riskCenter.addManualAlert": "+ Alerta manual",
+  "dashboard.riskCenter.openAlertsCountOne": "{n} alerta abierta",
   "dashboard.tableHeader.capexEngagedReforecast": "CAPEX (comprometido / reprevisto)",
   "dashboard.tableHeader.opexOneOffEngagedReforecast": "OPEX puntual (comprometido / reprevisto)",
   "dashboard.workstreamsCancelledHidden":
@@ -2780,7 +2799,7 @@ const es: Record<string, string> = {
   "leverDetail.fte.created": "puestos creados",
   "leverDetail.fte.reduced": "puestos suprimidos/reducidos",
   "leverDetail.fte.positiveWarning": "FTE positivo — por verificar",
-  "workstreams.reforecastTarget": "Objetivo reproyectado €M",
+  "workstreams.reforecastTarget": "Objetivo reproyectado",
   "workstreams.noProgram":
     "Todavía no se ha creado ningún Plan de Rendimiento para su empresa. Cree uno en Admin > Empresas > Programas y asocie después palancas.",
   "workstreams.vsReforecast": "del objetivo reproyectado",
@@ -2816,7 +2835,7 @@ const es: Record<string, string> = {
   "finance.chart.cumulativeCost": "Coste acumulado",
   "finance.chart.opexRecRunRate": "OPEX recurrente iniciado",
   "finance.chart.empty": "Ningún coste introducido en las acciones de las palancas.",
-  "finance.hierarchyTable.title": "Ahorros por nivel financiero (€M)",
+  "finance.hierarchyTable.title": "Ahorros por nivel financiero",
   "finance.hierarchyTable.level": "Nivel",
   "finance.hierarchyTable.export": "Exportar",
   "finance.hierarchyTable.total": "Total",
@@ -2913,7 +2932,7 @@ const es: Record<string, string> = {
   "levers.tree.leverOwnerEmpty": "Responsable de palanca no indicado",
   "levers.column.code": "Código",
   "levers.column.type": "Tipo",
-  "levers.column.reforecastNet": "Ahorros netos reestimados (€M)",
+  "levers.column.reforecastNet": "Ahorros netos reestimados",
   "levers.column.progress": "Avance",
   "levers.column.fteImpact": "ETC afectados",
   "levers.column.opexOneOff": "OPEX puntual",
@@ -3005,7 +3024,7 @@ const es: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "OPEX puntual",
   "leverDetail.trajectory.detailOpexRec": "OPEX recurrente",
   "leverDetail.trajectory.detailEmpty": "Ningún impacto en este periodo.",
-  "leverDetail.oneOff": "Puntual",
+  "leverDetail.oneOff": "OPEX puntual",
   "chart.waterfall.realized": "Realizado",
   "chart.waterfall.remaining": "Pendiente",
   "chart.waterfall.oneOff": "Ganancias puntuales (fuera de los totales)",
@@ -3363,7 +3382,7 @@ const es: Record<string, string> = {
   "me.planFilter": "Plan",
   "me.plan.all": "Todos",
   "me.plan.strategic": "Estratégico",
-  "me.plan.performance": "Transformación",
+  "me.plan.performance": "Rendimiento",
   "me.category.overdue": "Con retraso",
   "me.category.toHandle": "Por tratar",
   "me.category.upcoming": "Próximo",
@@ -3407,7 +3426,7 @@ const es: Record<string, string> = {
   "me.health.red": "En dificultad",
   "me.health.neutral": "Sin evaluar",
   // Mon espace — moteur (lib/myWorkspace.ts) : libellés d'éléments et de rôles.
-  "me.item.leverApproval": "Validar el paso {from} → {to}",
+  "me.item.leverApproval": "Validar el cambio de madurez {from} → {to}",
   "me.item.realizedApproval": "Validar el realizado: {label}",
   "me.item.milestoneApproval": "Validar el paso al hito {to}",
   "me.item.kpiValueApproval": "Validar un valor de indicador",
@@ -3432,11 +3451,11 @@ const es: Record<string, string> = {
   "me.item.hrLeverMismatch": "Movimiento RR. HH. desincronizado de la palanca",
   "me.item.hrPlanned": "Movimiento RR. HH. planificado",
   "me.role.owner": "Responsable",
-  "me.role.sponsor": "Patrocinador",
+  "me.role.sponsor": "Responsable de frente de trabajo",
   "me.role.axisSponsor": "Patrocinador del eje",
   "me.role.pilote": "Patrocinador del frente",
   "me.role.programOwner": "Responsable del programa",
-  "me.role.cto": "CTO",
+  "me.role.cto": "Director de Transformación",
   "me.role.admin": "Administrador",
   "me.role.finance": "Finanzas",
   "me.role.strategicLead": "Responsable del plan estratégico",

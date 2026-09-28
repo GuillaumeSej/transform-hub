@@ -13,6 +13,8 @@ export function formatCompactCurrency(
   maximumFractionDigits = 1
 ): string {
   const tag = INTL_LOCALE[locale] ?? INTL_LOCALE.fr;
+  // Pas de "-0 €" : un montant qui s'arrondit à zéro (|v| < 0,5 sous 1 000) s'affiche "0 €".
+  if (Math.abs(value) < 0.5) value = 0;
   const options: Intl.NumberFormatOptions = {
     notation: "compact",
     // `minimumFractionDigits: 0` explicite : sans lui, l'ICU de Node 20 (CI GitHub) applique le

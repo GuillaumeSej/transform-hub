@@ -12,7 +12,7 @@ import { useCanOpenRoute } from "@/lib/hooks/useCanOpenRoute";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 
-import { getDisplayRoleDefinition } from "@/lib/nav-config";
+import { getDisplayRoleDefinition, leversPageTitleKey } from "@/lib/nav-config";
 import type { RealizedApprovalEntry } from "@/lib/hooks/useApprovalQueue";
 import { Avatar } from "@/components/shared/Avatar";
 import type { Alert, Company, Lever } from "@/types";
@@ -35,6 +35,12 @@ const CRUMBS: Record<string, string> = {
   "/operations": "nav.operationsModule",
   "/validation": "nav.validation",
   "/profile": "profile.title",
+  // Pages d'administration : même libellé que l'item de menu (titre de page aligné, audit fix #4).
+  "/admin/companies": "nav.companies",
+  "/admin/companies/detail": "nav.companies",
+  "/admin/users": "nav.users",
+  "/admin/data": "nav.data",
+  "/admin/history": "nav.history",
 };
 
 /** Fil d'ariane des routes PARTAGÉES entre les deux types de programme : `/levers` sert aussi le
@@ -151,7 +157,12 @@ export function Topbar({
   const label = isLeverDetail
     ? t(isStrategic ? "topbar.axisDetail" : "topbar.leverDetail")
     : t(
-        (isStrategic ? STRATEGIC_CRUMBS[pathname] : undefined) ?? CRUMBS[pathname] ?? "",
+        (isStrategic ? STRATEGIC_CRUMBS[pathname] : undefined) ??
+          // `/levers` (Plan Performance) : même clé que le titre de page et l'item de menu du
+          // profil (ex. « Leviers par maturité » pour un responsable de chantier).
+          (pathname === "/levers" ? leversPageTitleKey(user) : undefined) ??
+          CRUMBS[pathname] ??
+          "",
         "BeTrack"
       );
 
@@ -215,7 +226,7 @@ export function Topbar({
           {alertsOpen && (
             <div className="absolute right-0 top-10 z-30 w-[calc(100vw-1rem)] max-w-[340px] overflow-hidden rounded-lg border border-border bg-white shadow-xl">
               <div className="border-b border-border px-4 py-3 text-xs font-bold text-primary">
-                {t("shared.topbar.notificationsToProcess", "Notifications à traiter · {n}").replace(
+                {t("shared.topbar.notificationsToProcess", "Alertes · {n}").replace(
                   "{n}",
                   String(alertCount)
                 )}
@@ -226,7 +237,7 @@ export function Topbar({
                 realizedApprovalQueue.length === 0 &&
                 deletionQueue.length === 0 ? (
                   <p className="px-4 py-6 text-center text-xs text-tertiary">
-                    {t("shared.topbar.noNotifications", "Aucune notification à traiter.")}
+                    {t("shared.topbar.noNotifications", "Aucune alerte à traiter.")}
                   </p>
                 ) : (
                   alerts.map((alert) => {

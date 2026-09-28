@@ -4,7 +4,9 @@ import { useMemo } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { buildHistoryRows } from "@/lib/kpiHistory";
-import type { Indicator, IndicatorMeasurement } from "@/types";
+import type { AuthUser, Indicator, IndicatorMeasurement } from "@/types";
+import { resolveUserFullName } from "@/lib/axisLogic";
+import { formatMeasure, formatDateTimeShort } from "@/lib/format";
 
 /** Historique chronologique des mesures d'un indicateur (plus récente d'abord) : période, valeur,
  *  écart à la cible, auteur, horodatage et commentaire. Défile horizontalement plutôt que de
@@ -14,6 +16,7 @@ export function IndicatorHistoryTable({
   measurements,
   onEdit,
   onDelete,
+  users,
 }: {
   indicator: Pick<Indicator, "objectiveValue" | "direction" | "unit" | "targetSchedule">;
   measurements: IndicatorMeasurement[];
@@ -22,6 +25,8 @@ export function IndicatorHistoryTable({
    *  `useMeasurementCorrection`). */
   onEdit?: (measurement: IndicatorMeasurement) => void;
   onDelete?: (measurement: IndicatorMeasurement) => void;
+  /** Annuaire de l'entreprise : auteur/correcteur affichés par leur NOM (repli : identifiant). */
+  users?: Pick<AuthUser, "username" | "name">[];
 }) {
   const withActions = !!onEdit || !!onDelete;
   const { t } = useTranslation();
@@ -65,7 +70,7 @@ export function IndicatorHistoryTable({
                 <tr key={m.id}>
                   <td className="whitespace-nowrap px-2 py-1.5 font-mono">{m.period}</td>
                   <td className="whitespace-nowrap px-2 py-1.5 font-semibold text-text-primary">
-                    {m.value !== undefined ? `${m.value}${unit}` : "—"}
+                    {m.value !== undefined ? `${formatMeasure(m.value)}${unit}` : "—"}
                   </td>
                   <td
                     className={`whitespace-nowrap px-2 py-1.5 ${
@@ -76,17 +81,20 @@ export function IndicatorHistoryTable({
                           : "text-[#806659]"
                     }`}
                   >
-                    {gap === undefined ? "—" : `${gap > 0 ? "+" : ""}${gap}${unit}`}
+                    {gap === undefined
+                      ? "—"
+                      : `${gap > 0 && formatMeasure(gap) !== "0" ? "+" : ""}${formatMeasure(gap)}${unit}`}
                   </td>
                   <td className="px-2 py-1.5 text-text-secondary">
-                    {m.reportedBy} {t("kpi.history.entered", "a saisi")}
+                    {resolveUserFullName(m.reportedBy, users)} {t("kpi.history.entered", "a saisi")}
                     <span className="block text-[10px] text-tertiary">
-                      {m.reportedAt ? new Date(m.reportedAt).toLocaleString() : ""}
+                      {formatDateTimeShort(m.reportedAt)}
                     </span>
                     {m.updatedBy && (
                       <span className="block text-[10px] italic text-tertiary">
-                        {t("kpi.history.correctedBy", "corrigé par")} {m.updatedBy}
-                        {m.updatedAt ? ` — ${new Date(m.updatedAt).toLocaleString()}` : ""}
+                        {t("kpi.history.correctedBy", "corrigé par")}{" "}
+                        {resolveUserFullName(m.updatedBy, users)}
+                        {m.updatedAt ? ` — ${formatDateTimeShort(m.updatedAt)}` : ""}
                       </span>
                     )}
                   </td>

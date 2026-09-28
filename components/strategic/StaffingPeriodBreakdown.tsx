@@ -24,6 +24,7 @@ import { hexForDepartment, staffingPeriodBuckets } from "@/lib/axisLogic";
 import { staffingPeriodShares, todayIso } from "@/lib/staffingNeed";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ChantierStaffing, StrategicAxis } from "@/types";
+import { formatDateShort } from "@/lib/format";
 
 type Granularity = "quarterly" | "semiannual" | "annual";
 type ViewMode = "period" | "axis";
@@ -430,7 +431,7 @@ export function StaffingPeriodBreakdown({
         axisNames: axisNamesForChantier(e.chantierId),
         fte,
         periodLabel: e.startDate
-          ? `${e.startDate} → ${e.endDate ?? "…"}`
+          ? `${formatDateShort(e.startDate)} → ${e.endDate ? formatDateShort(e.endDate) : "…"}`
           : t("staffingPeriod.detailModal.undated"),
         lever: e.actionId ? (actionNamesById[e.actionId] ?? "—") : "—",
         note: e.note ?? "—",

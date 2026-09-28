@@ -4,6 +4,7 @@ import type { LeverAction } from "@/types";
 import { Tooltip } from "@/components/shared/Tooltip";
 import { actionProgressPct } from "@/lib/engine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { formatDate } from "@/lib/format";
 
 const STATUS_COLOR: Record<string, string> = {
   done: "bg-rag-green",
@@ -52,7 +53,7 @@ export function ActionGantt({
   const cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
   while (cur <= endDate) {
     const pct = ((cur.getTime() - minTime) / range) * 100;
-    const shortMonth = cur.toLocaleString("default", { month: "short" });
+    const shortMonth = formatDate(cur, { month: "short" });
     monthLabels.push({ label: `${shortMonth}`, pct: Math.max(0, Math.min(100, pct)) });
     cur.setMonth(cur.getMonth() + 1);
   }

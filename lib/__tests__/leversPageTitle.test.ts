@@ -22,7 +22,7 @@ describe("leversPageTitleKey — /levers title = sidebar label of the 'levers' i
     ["cto", "nav.leverLibrary"],
     ["program_sponsor", "nav.leverLibrary"],
     ["lever", "nav.myLevers"],
-    ["sponsor", "nav.leverPipeline"], // QA : nav « Leviers par étape », titre « Mes leviers »
+    ["sponsor", "nav.leverPipeline"], // QA : nav « Leviers par maturité », titre « Mes leviers »
     ["finance", "nav.leverLibrary"],
     ["ops", "nav.linkedLevers"],
   ])("%s → %s", (role, key) => {

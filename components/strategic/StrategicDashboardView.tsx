@@ -995,8 +995,10 @@ export function StrategicDashboardView() {
     progress: t("strategicAxes.roadmap.progress"),
     today: t("strategicAxes.ganttToday"),
     leviersSuffix: t("strategicAxes.roadmap.leviersSuffix"),
+    leviersSuffixOne: t("strategicAxes.roadmap.leviersSuffixOne"),
     late: t("strategicAxes.roadmap.late"),
     lateCount: t("strategicAxes.roadmap.lateCount"),
+    lateCountOne: t("strategicAxes.roadmap.lateCountOne"),
     currentMilestone: t("strategicAxes.roadmap.currentMilestone"),
   };
 
@@ -1173,6 +1175,7 @@ export function StrategicDashboardView() {
                 indicators={indicators}
                 measurements={measurements}
                 labels={businessKpiLabels}
+                users={strategic.users}
                 // Round 6, point 1 : idem `IndicatorStatusSummary` ci-dessus. Le jeu de démo
                 // (`scripts/seed-strategic-demo.js`) compte 5 KPI business (un macro-indicateur par
                 // axe) — `xl:grid-cols-4` remplit une coquille XL sans jamais forcer plus de 4

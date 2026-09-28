@@ -6,6 +6,7 @@ import { executionLabel, movementTypeLabel } from "@/lib/hrMovementLabels";
 import { actualMovementFte, planMovementFte } from "@/lib/hrProgramSummary";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { groupBlockWidth, useAdaptiveGroupColumns } from "@/lib/hooks/useAdaptiveGroupColumns";
+import { formatFte, formatDateShort } from "@/lib/format";
 
 const STYLE: Record<MovementExecutionStatus, string> = {
   realized: "bg-[#421799]",
@@ -108,7 +109,7 @@ export function MovementStatusMatrix({
                           type="button"
                           onClick={() => onMovementClick(movement.id)}
                           className={`flex h-[21px] items-center justify-center rounded-[2px] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-black ${STYLE[execution]}`}
-                          title={`${movement.label} · ${movementTypeLabel(t, movement.type)}\n${executionLabel(t, execution)} · ${execution === "realized" ? actualMovementFte(movement) : planMovementFte(movement)} ${t("etp.column.fte", "ETP")}\n${t("shared.movementStatusMatrix.initiativeLabel", "Initiative")} : ${getInitiativeLabel?.(movement.leverId) ?? movement.leverId}\n${t("etp.filter.hrOwnerMovement", "Responsable RH")} : ${movement.hrOwner}\n${t("etp.column.plannedDate", "Date prévue")} : ${movement.plannedDate}`}
+                          title={`${movement.label} · ${movementTypeLabel(t, movement.type)}\n${executionLabel(t, execution)} · ${formatFte(execution === "realized" ? actualMovementFte(movement) : planMovementFte(movement))} ${t("etp.column.fte", "ETP")}\n${t("shared.movementStatusMatrix.initiativeLabel", "Initiative")} : ${getInitiativeLabel?.(movement.leverId) ?? movement.leverId}\n${t("etp.filter.hrOwnerMovement", "Responsable RH")} : ${movement.hrOwner}\n${t("etp.column.plannedDate", "Date prévue")} : ${formatDateShort(movement.plannedDate)}`}
                           aria-label={`${movement.label} ${executionLabel(t, execution)}`}
                         >
                           <StatusIcon

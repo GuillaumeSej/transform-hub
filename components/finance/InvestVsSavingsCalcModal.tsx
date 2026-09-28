@@ -10,6 +10,7 @@ import { buildInvestVsSavingsCalc } from "@/lib/investVsSavingsCalc";
 import type { FinanceGranularity, InvestVsSavingsPoint } from "@/lib/financeCosts";
 import type { BeTrackData } from "@/types";
 import { onActivateKey } from "@/lib/a11y";
+import { formatPct } from "@/lib/format";
 
 type CalcLine = {
   key: string;
@@ -152,7 +153,7 @@ export function InvestVsSavingsCalcModal({
           value:
             calc.roiPct === null
               ? t("finance.calc.notApplicable", "n/a (aucun investissement)")
-              : `${calc.roiPct.toLocaleString()} %`,
+              : formatPct(calc.roiPct, 1),
           negative: (calc.roiPct ?? 0) < 0,
           formula: t("finance.calc.formula.roi", "ROI = Résultat net ÷ Coût d'investissement"),
         },

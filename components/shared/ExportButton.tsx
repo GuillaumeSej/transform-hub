@@ -116,7 +116,7 @@ export function ExportButton({
 
   return (
     <Button variant="outline" onClick={() => void exportExcel(data)}>
-      <FileSpreadsheet size={13} /> Export Excel
+      <FileSpreadsheet size={13} /> {t("shared.exportButton.exportExcel", "Export Excel")}
     </Button>
   );
 }

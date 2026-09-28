@@ -25,6 +25,7 @@ import {
 import { generateAlerts } from "@/lib/alertEngine";
 import { leverHealthCounts } from "@/lib/leverHealth";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { formatAmountM } from "@/lib/format";
 
 type Row = Lever & {
   realized: number;
@@ -138,15 +139,15 @@ export default function WorkstreamsPage() {
     { key: "sponsor", label: t("leverForm.sponsor", "Responsable de chantier") },
     {
       key: "reforecastNet",
-      label: t("workstreams.reforecastTarget", "Cible réactualisée €M"),
+      label: t("workstreams.reforecastTarget", "Cible réactualisée"),
       align: "right",
-      render: (r) => r.reforecastNet.toFixed(1),
+      render: (r) => formatAmountM(r.reforecastNet),
     },
     {
       key: "realized",
       label: t("levers.realized", "Réalisé"),
       align: "right",
-      render: (r) => r.realized.toFixed(1),
+      render: (r) => formatAmountM(r.realized),
     },
     {
       key: "progressPct",
@@ -160,7 +161,7 @@ export default function WorkstreamsPage() {
     },
     {
       key: "statusLabel",
-      label: t("levers.columnStatus", "Niveau"),
+      label: t("levers.columnMaturity", "Maturité"),
       render: (r) => <StageBadge status={r.status} label={lifecycle.label(r.status)} />,
     },
   ];
@@ -190,7 +191,7 @@ export default function WorkstreamsPage() {
           <p className="mx-auto max-w-md text-sm text-secondary">
             {t(
               "workstreams.noProgram",
-              "Aucun Plan Performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers."
+              "Aucun Plan de performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers."
             )}
           </p>
         </div>

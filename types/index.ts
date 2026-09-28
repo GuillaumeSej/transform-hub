@@ -712,6 +712,9 @@ export type Alert = {
       string,
       { key: string; fallback: string; vars: Record<string, string | number> }
     >;
+    /** Montants (en MILLIONS) formatés À L'AFFICHAGE dans la langue active (`formatAmountM`,
+     *  lib/alertText.ts) — remplacent la variable homonyme de `vars` (repli texte figé). */
+    amounts?: Record<string, number>;
   };
   actorRole: string;
   /** Impact € sur le run-rate (négatif = perte de valeur, positif = gain). */

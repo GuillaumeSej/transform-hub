@@ -33,6 +33,7 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { tPlural } from "@/lib/i18n/plural";
 import { Modal } from "@/components/shared/Modal";
 import { Button } from "@/components/shared/Button";
 import {
@@ -65,7 +66,7 @@ const MISSING_FIELD_KEYS: Record<string, string> = {
 /** Libellés FR des 6 rôles du Plan Performance (round historique) — cet écran d'admin n'est pas
  *  traduit, mêmes libellés littéraux que les rôles du Plan Stratégique ci-dessous. */
 const PERFORMANCE_ROLE_OPTIONS: { value: Role; labelKey: string; label: string }[] = [
-  { value: "cto", labelKey: "roles.cto.short", label: "CTO" },
+  { value: "cto", labelKey: "roles.cto.label", label: "Directeur de la transformation" },
   // Libellé "Responsable de chantier" (renommage du libellé affiché — la clé technique `sponsor` reste
   // inchangée, toujours scopée WORKSTREAM, voir types/index.ts).
   { value: "sponsor", labelKey: "roles.sponsor.label", label: "Responsable de chantier" },
@@ -920,7 +921,7 @@ export function UsersPanel({
         <div className="flex items-center gap-3">
           <Users size={22} className="text-bp-coral" />
           <h1 className="text-xl font-bold text-text-primary">
-            {t("adminUsers.title", "Gestion des Utilisateurs")}
+            {t("adminUsers.title", "Utilisateurs")}
           </h1>
         </div>
         <button
@@ -1200,14 +1201,14 @@ export function UsersPanel({
                       className="w-56 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary outline-none focus:border-bp-coral"
                     >
                       <option value="">{t("adminUsers.chooseRole", "Choisir un rôle")}</option>
-                      <optgroup label={t("adminUsers.groupPerformance", "Plan Performance")}>
+                      <optgroup label={t("adminUsers.groupPerformance", "Plan de performance")}>
                         {PERFORMANCE_ROLE_OPTIONS.map((r) => (
                           <option key={r.value} value={r.value}>
                             {t(r.labelKey, r.label)}
                           </option>
                         ))}
                       </optgroup>
-                      <optgroup label={t("adminUsers.groupStrategic", "Plan Stratégique")}>
+                      <optgroup label={t("adminUsers.groupStrategic", "Plan stratégique")}>
                         {STRATEGIC_ROLE_OPTIONS.map((r) => (
                           <option key={r.value} value={r.value}>
                             {t(r.labelKey, r.label)}
@@ -1461,9 +1462,12 @@ export function UsersPanel({
             options={companies.map((c) => ({ value: c.id, label: c.name }))}
           />
           <span className="text-xs text-text-secondary">
-            {t("adminUsers.userCount", "{n} utilisateur(s)").replace(
-              "{n}",
-              String(users.filter((u) => matchesFilter(u.companyId, companyFilter)).length)
+            {tPlural(
+              t,
+              "adminUsers.userCount",
+              users.filter((u) => matchesFilter(u.companyId, companyFilter)).length,
+              "{n} utilisateurs",
+              "{n} utilisateur"
             )}
           </span>
         </div>

@@ -334,8 +334,8 @@ export function assertValidProfiles(
     throw new Error("Un utilisateur ne peut avoir qu'un seul profil Directeur RH.");
   }
   for (const [trackLabel, isTrackRole, trackType] of [
-    ["Plan Performance", isPerformanceRole, "performance"],
-    ["Plan Stratégique", isStrategicRole, "strategic"],
+    ["Plan de performance", isPerformanceRole, "performance"],
+    ["Plan stratégique", isStrategicRole, "strategic"],
   ] as const) {
     const trackProfiles = profiles.filter((p) => {
       if (!isTrackRole(p.role)) return false;

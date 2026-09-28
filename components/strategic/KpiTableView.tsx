@@ -18,6 +18,7 @@ import {
 import { IndicatorMetaLine } from "@/components/strategic/IndicatorMetaLine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Chantier, Indicator, IndicatorMeasurement, StrategicAxis } from "@/types";
+import { formatMeasure } from "@/lib/format";
 
 /** Couleur d'accent de ligne et de la valeur « Actuel » = le statut AFFICHÉ de l'indicateur
  *  (`resolveIndicatorStatus`, trois états — audit fix #2). Auparavant dérivée d'un seau de
@@ -97,12 +98,13 @@ export function KpiTableView({
     const unitSuffix = indicator.unit ? ` ${indicator.unit}` : "";
     const current =
       latest?.value !== undefined
-        ? `${latest.value}${unitSuffix}`
+        ? `${formatMeasure(latest.value)}${unitSuffix}`
         : (latest?.note ?? labels.noValue);
     // Référence = valeur au début du plan stratégique : la plus ancienne mesure chiffrée de
     // l'historique COMPLET (jamais bornée par le filtre d'année), même formatage que "Actuel".
     const baseline = baselineMeasurement(indicator.id, baselineMeasurements ?? measurements);
-    const baselineText = baseline?.value !== undefined ? `${baseline.value}${unitSuffix}` : "—";
+    const baselineText =
+      baseline?.value !== undefined ? `${formatMeasure(baseline.value)}${unitSuffix}` : "—";
     // Cible APPLICABLE à la période de la dernière mesure — sans mesure, rien à résoudre (pas de
     // repli sur "aujourd'hui" : on ne sait pas quelle période comparer), voir le doc-comment du
     // composant.
@@ -169,7 +171,7 @@ export function KpiTableView({
         </td>
         <td className={td}>
           {indicator.objectiveValue !== undefined
-            ? `${indicator.objectiveValue}${unitSuffix}`
+            ? `${formatMeasure(indicator.objectiveValue)}${unitSuffix}`
             : "—"}
         </td>
         <td className={`${td} tabular-nums`}>

@@ -18,7 +18,7 @@ const de: Record<string, string> = {
   // ─── nav ──────────────────────────────────────────────────────────────────
   "nav.executiveDashboard": "Gesamtsteuerung",
   "nav.leverLibrary": "Hebel-Bibliothek",
-  "nav.leverPipeline": "Hebel nach Stufe",
+  "nav.leverPipeline": "Hebel nach Reife",
   "nav.myLevers": "Meine Hebel",
   "nav.linkedLevers": "Verknüpfte Hebel",
   "nav.workstreamDashboard": "Arbeitspaket-Dashboard",
@@ -49,7 +49,7 @@ const de: Record<string, string> = {
   "shared.topbar.realizedPending": "Zu bestätigen · {amount}",
   "leverDetail.lateActions": "Verspätete Maßnahmen",
   "validation.lever": "Hebel",
-  "validation.gate": "Stufe",
+  "validation.gate": "Reife",
   "validation.workstream": "Arbeitspaket",
   "validation.requestedBy": "Beantragt von",
   "validation.requestedAt": "Beantragt am",
@@ -196,7 +196,7 @@ const de: Record<string, string> = {
   "topbar.leverDetail": "Hebel-Detail",
   // Gleiche Route /levers/detail, Achsen-Steckbrief bei aktivem Strategieprogramm.
   "topbar.axisDetail": "Achsen-Detail",
-  "topbar.alerts": "Benachrichtigungen",
+  "topbar.alerts": "Warnungen",
   "topbar.logout": "Abmelden",
   "topbar.global": "Global",
   "topbar.language": "Sprache",
@@ -244,8 +244,8 @@ const de: Record<string, string> = {
   "dashboard.widgets.viewBridge": "Quartalsansicht",
   "dashboard.widgets.dateFrom": "Von",
   "dashboard.widgets.dateTo": "Bis",
-  "dashboard.widgets.stageFunnel": "Fortschritt nach Lebenszyklusphase",
-  "dashboard.widgets.stageFunnelFull": "Hebel-Fortschritt nach Lebenszyklusphase",
+  "dashboard.widgets.stageFunnel": "Fortschritt nach Reife",
+  "dashboard.widgets.stageFunnelFull": "Hebel-Fortschritt nach Reife",
   "dashboard.widgets.alerts": "Warnungen & Benachrichtigungen",
   "dashboard.widgets.noAlerts": "Keine offenen Benachrichtigungen",
   "dashboard.widgets.riskCenter": "Warnungen & Abhängigkeiten",
@@ -260,7 +260,8 @@ const de: Record<string, string> = {
   "alerts.markAllResolved": "Alle erledigen",
   "alerts.auto": "Auto",
   "alerts.page": "Seite {current} / {total}",
-  "alerts.count": "{n} Benachrichtigung(en)",
+  "alerts.count": "{n} Warnungen",
+  "alerts.countOne": "{n} Warnung",
   "alerts.tooltip.red": "Kritische Warnungen — sofortiges Handeln erforderlich",
   "alerts.tooltip.amber": "Zu beobachten — Risiko identifiziert",
   "alerts.tooltip.green": "Positive Meldungen — Fortschritt oder Lösung",
@@ -301,7 +302,7 @@ const de: Record<string, string> = {
   "dashboard.widgets.sCurve": "S-Kurve — Plan / Realisiert / Neuprognose",
   "dashboard.widgets.bridgeQuarter": "Einsparungen pro Quartal → Ziel",
   "dashboard.widgets.bridgeMonth": "Einsparungen pro Monat → Ziel",
-  "dashboard.widgets.sankey": "Hebel-Fluss nach Phase (Sankey)",
+  "dashboard.widgets.sankey": "Hebel-Fluss nach Reife (Sankey)",
   "dashboard.widgets.marimekko": "Geplante Einsparungen",
   "dashboard.widgets.workstreamBreakdown": "Realisierung der Einsparungen",
   "dashboard.widgets.geoBreakdown": "Einsparungen nach Land / Funktion",
@@ -347,7 +348,8 @@ const de: Record<string, string> = {
   "dashboard.dependency.rule.sf": "Das Ziel muss beginnen, bevor die Quelle endet",
   "dashboard.dependency.rule.ss": "Beide Elemente müssen gleichzeitig beginnen",
   "dashboard.dependency.rule.ff": "Beide Elemente müssen gleichzeitig enden",
-  "dashboard.dependency.alertCount": "{n} Warnung(en)",
+  "dashboard.dependency.alertCount": "{n} Warnungen",
+  "dashboard.dependency.alertCountOne": "{n} Warnung",
   "dashboard.noProgram":
     "Für Ihr Unternehmen wurde noch kein Programm erstellt. Erstellen Sie eines unter Admin > Unternehmen > Programme und verknüpfen Sie anschließend Hebel damit.",
   "dashboard.builderModal.alreadyOnDashboard": "Dieses Diagramm ist bereits auf Ihrem Dashboard",
@@ -386,9 +388,10 @@ const de: Record<string, string> = {
   "levers.createLever": "Hebel erstellen",
   "levers.table": "Tabelle",
   "levers.kanban": "Kanban",
+  "levers.gantt": "Gantt",
   "levers.searchPlaceholder": "Suchen (Name, Code, Verantwortlicher...)",
   "levers.count": "Hebel",
-  "levers.realized": "Realisierte Einsparungen (€M)",
+  "levers.realized": "Realisierte Einsparungen",
   "levers.columnName": "Hebel",
   "levers.columnStatus": "Stufe",
   "levers.filter.costCenter": "Kostenstelle / Ausgabenposten",
@@ -449,16 +452,18 @@ const de: Record<string, string> = {
 
   // ─── leverDetail (Hebel-Detailseite) ────────────────────────────────────────
   "leverDetail.tab.plan": "Aktionsplan",
+  "leverDetail.tab.overview": "Übersicht",
+  "leverDetail.tab.impact": "Wirkung",
   "leverDetail.tab.collab": "Zusammenarbeit",
   "leverDetail.loading": "Wird geladen…",
   "leverDetail.notFound": "Hebel nicht gefunden.",
-  "leverDetail.backToPipeline": "Zurück zur Pipeline",
+  "leverDetail.backToPipeline": "Zurück zu Hebel nach Reife",
   "leverDetail.outOfPerimeter":
     "Eingeschränkter Zugriff — dieser Hebel liegt außerhalb Ihres Bereichs: Sie sind weder Hebel-Verantwortlicher noch Arbeitspaket-Leiter.",
   "leverDetail.restrictedAccess":
     "Zugriff eingeschränkt — dieser Hebel ist als „{level}“ eingestuft, eine Vertraulichkeitsstufe, für die Ihr Profil nicht freigegeben ist.",
   "leverDetail.editLever": "Hebel bearbeiten",
-  "leverDetail.statusUpdated": "Stufe aktualisiert",
+  "leverDetail.statusUpdated": "Reife aktualisiert",
   "leverDetail.deliveredNeedsAllActions":
     "Der Wechsel zu „{stage}“ erfordert, dass alle Maßnahmen erledigt sind (100 %). Bis dahin bleibt der Hebel „{current}“.",
   "shared.kanban.tip.id": "Hebel-ID",
@@ -466,11 +471,11 @@ const de: Record<string, string> = {
   "shared.kanban.tip.progress": "Fortschritt des Maßnahmenplans: {pct} %",
   "shared.kanban.tip.owner": "Hebelverantwortlicher: {name}",
   "leverDetail.autoStageHint":
-    "Diese Stufe wird automatisch erreicht, wenn der Aktionsplan bei 100 % liegt",
-  "leverDetail.pastStageHint": "Stufe bereits erreicht — kein Zurückgehen möglich",
+    "Diese Reifestufe wird automatisch erreicht, wenn der Aktionsplan bei 100 % liegt",
+  "leverDetail.pastStageHint": "Reifestufe bereits erreicht — kein Zurückgehen möglich",
   "leverDetail.moveToStage": "Zu „{stage}“ wechseln",
   "leverDetail.approval.stageHint":
-    "Diese Stufe erfordert einen Freigabeantrag (Verantwortlicher → Arbeitspaket-Leiter oder CTO), siehe unten",
+    "Dieser Reifewechsel erfordert einen Freigabeantrag (Verantwortlicher → Arbeitspaket-Leiter oder CTO), siehe unten",
   "leverDetail.approval.submitHint":
     "Dieser Hebel ist bereit für einen Freigabeantrag (Verantwortlicher → Arbeitspaket-Leiter oder CTO).",
   "leverDetail.approval.submit": "Zur Freigabe einreichen",
@@ -490,7 +495,7 @@ const de: Record<string, string> = {
   "levers.approval.submitHint":
     "Dieser Hebel ist bereit für einen Freigabeantrag (doppelte Freigabe: Ebenen über dem Antragsteller, Workstream-Verantwortlicher dann CTO).",
   "levers.approval.stageHint":
-    "Diese Phase erfordert einen Freigabeantrag (Workstream-Verantwortlicher dann CTO), siehe unten",
+    "Dieser Reifewechsel erfordert einen Freigabeantrag (Arbeitspaket-Leiter, dann CTO), siehe unten",
   "levers.approval.pending": "Freigabeantrag für den Wechsel zu „{stage}“",
   "levers.approval.ownRequest": "Ihr Antrag: Sie können ihn nicht selbst freigeben.",
   "levers.approval.withdraw": "Antrag zurückziehen",
@@ -560,7 +565,9 @@ const de: Record<string, string> = {
   "leverDetail.actionPlanDisabled":
     "Modul nicht aktiviert — der Aktionsplan wurde für Ihr Unternehmen deaktiviert (konfigurierbar unter Admin > Unternehmen).",
   "leverDetail.actionPlanTitle": "Aktionsplan — {name}",
-  "leverDetail.actionsCount": "{n} Maßnahme(n)",
+  "leverDetail.actionsCount": "{n} Maßnahmen",
+  "leverDetail.addAction": "Maßnahme",
+  "leverDetail.actionsCountOne": "{n} Maßnahme",
   "leverDetail.todo": "Zu erledigen",
   "leverDetail.inProgress": "In Bearbeitung",
   "leverDetail.completed": "Erledigt",
@@ -784,7 +791,8 @@ const de: Record<string, string> = {
   "adminProgramsPanel.ambitionPlaceholder": "Z. B. Bis 2027 Marktführer werden",
   "adminProgramsPanel.budgetLabel": "Geplantes Budget",
   "adminProgramsPanel.budgetPlaceholder": "Z. B. 5000000",
-  "adminProgramsPanel.count": "{n} Programm(e)",
+  "adminProgramsPanel.count": "{n} Programme",
+  "adminProgramsPanel.countOne": "{n} Programm",
   "adminProgramsPanel.colProgram": "Programm",
   "adminProgramsPanel.colActions": "Aktionen",
   "adminProgramsPanel.empty": "Kein Programm für dieses Unternehmen.",
@@ -796,8 +804,7 @@ const de: Record<string, string> = {
     "Importieren Sie den vollständigen strategischen Plan (Achsen, Arbeitspakete, Projekte, Indikatoren) aus einer Excel-Datei.",
   "adminProgramsPanel.strategicImportCtaButton": "Strategischen Plan importieren",
   "adminProgramsPanel.typePerformance": "Performance-Plan",
-  "adminProgramsPanel.typePerformanceHint":
-    "Finanzhebel, Lebenszyklus L1-L5, CAPEX/OPEX-Auswirkungen.",
+  "adminProgramsPanel.typePerformanceHint": "Finanzhebel, Reife L1-L5, CAPEX/OPEX-Auswirkungen.",
   "adminProgramsPanel.typeStrategic": "Strategieplan",
   "adminProgramsPanel.typeStrategicHint":
     "Achsen, Arbeitspakete und Indikatoren (3-5-15), konfigurierbare Reifegradstufen.",
@@ -820,8 +827,8 @@ const de: Record<string, string> = {
 
   // ─── shared (gemeinsame Komponenten: Modal, Topbar, Sidebar, ResetDemoButton…) ─
   "shared.resetDemoButton.label": "Demodaten zurücksetzen",
-  "shared.topbar.notificationsToProcess": "Zu bearbeitende Benachrichtigungen · {n}",
-  "shared.topbar.noNotifications": "Keine zu bearbeitenden Benachrichtigungen.",
+  "shared.topbar.notificationsToProcess": "Warnungen · {n}",
+  "shared.topbar.noNotifications": "Keine zu bearbeitenden Warnungen.",
   "shared.topbar.sourceAuto": "Automatisch",
   "shared.topbar.sourceManual": "Manuell",
 
@@ -886,7 +893,7 @@ const de: Record<string, string> = {
   "adminHistory.action.approvalRequested": "Freigabe angefragt",
   "adminHistory.action.approvalApproved": "Antrag freigegeben",
   "adminHistory.action.approvalRejected": "Freigabe abgelehnt",
-  "adminHistory.title": "Änderungsverlauf",
+  "adminHistory.title": "Verlauf",
   "adminHistory.searchPlaceholder": "Suchen...",
   "adminHistory.allActions": "Alle Aktionen",
   "adminHistory.allEntities": "Alle Entitäten",
@@ -910,7 +917,7 @@ const de: Record<string, string> = {
   // ─── adminLifecycle ─────────────────────────────────────────────────────────
 
   // ─── adminCompanies ─────────────────────────────────────────────────────────
-  "adminCompanies.title": "Unternehmensverwaltung",
+  "adminCompanies.title": "Unternehmen",
   "adminCompanies.editTitle": "Unternehmen bearbeiten",
   "adminCompanies.newTitle": "Neues Unternehmen",
   "adminCompanies.column.id": "ID",
@@ -960,7 +967,7 @@ const de: Record<string, string> = {
   "adminProgramConfig.saveFailedBody": "Die Programmkonfiguration konnte nicht gespeichert werden.",
 
   // ─── adminData ──────────────────────────────────────────────────────────────
-  "adminData.title": "Datenübersicht",
+  "adminData.title": "Daten",
   "adminData.globalSummary": "Globale Zusammenfassung",
   "adminData.employees": "Mitarbeitende",
   "adminData.movements": "Bewegungen",
@@ -1091,7 +1098,7 @@ const de: Record<string, string> = {
   // ─── adminUsers (Admin > Benutzer) ─────────────────────────────────────
   "adminUsers.directionLabel": "Direktion / Abteilung (optional)",
   "adminUsers.directionUnassigned": "Nicht angegeben",
-  "adminUsers.title": "Benutzerverwaltung",
+  "adminUsers.title": "Benutzer",
   "adminUsers.editTitle": "Benutzer bearbeiten",
   "adminUsers.newTitle": "Neuer Benutzer",
   "adminUsers.fieldUsername": "Benutzername",
@@ -1171,6 +1178,7 @@ const de: Record<string, string> = {
   "adminUsers.filterByCompany": "Nach Unternehmen filtern",
   "adminUsers.allCompanies": "Alle Unternehmen",
   "adminUsers.userCount": "{n} Benutzer",
+  "adminUsers.userCountOne": "{n} Benutzer",
   "adminUsers.colProfiles": "Profile",
   "adminUsers.colActions": "Aktionen",
   "adminUsers.confirm": "Bestätigen",
@@ -1211,6 +1219,7 @@ const de: Record<string, string> = {
   "shared.periodToolbar.customRange": "Benutzerdefinierter Zeitraum",
   "shared.periodToolbar.reset": "Zurücksetzen",
   "shared.exportButton.successBody": "{n} Hebel exportiert",
+  "shared.exportButton.exportExcel": "Excel-Export",
   "shared.filterBar.clearAll": "Alle löschen",
   "shared.multiSelect.selectAll": "Alle auswählen",
   "shared.multiSelect.clear": "Löschen",
@@ -1279,11 +1288,11 @@ const de: Record<string, string> = {
     "Code „{code}“ ist in der Datei doppelt vorhanden (bereits in Zeile {row} verwendet)",
   "shared.leverImport.msg.unknownStatus": "Unbekannter Status „{value}“ (erwartet: {expected})",
   "shared.leverImport.msg.statusNewLever":
-    "Ein neuer Hebel kann nur in der Phase „{idea}“ (oder aufgegeben) importiert werden: Die Phase „{target}“ erfordert eine Freigabe. Importieren Sie ihn in der Phase „{idea}“ und beantragen Sie die Freigabe auf seiner Detailseite.",
+    "Ein neuer Hebel kann nur mit der Reife „{idea}“ (oder aufgegeben) importiert werden: Die Reife „{target}“ erfordert eine Freigabe. Importieren Sie ihn mit „{idea}“ und beantragen Sie die Freigabe auf seiner Detailseite.",
   "shared.leverImport.msg.statusGated":
-    "Statuswechsel „{current}“ → „{target}“ abgelehnt: Die Phase „{target}“ erfordert eine Freigabe (Antrag auf der Hebel-Detailseite). Setzen Sie den aktuellen Status in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
+    "Reifewechsel „{current}“ → „{target}“ abgelehnt: Die Reife „{target}“ erfordert eine Freigabe (Antrag auf der Hebel-Detailseite). Setzen Sie die aktuelle Reife in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
   "shared.leverImport.msg.statusBackward":
-    "Statuswechsel „{current}“ → „{target}“ abgelehnt: Ein Import kann weder Phasen überspringen noch im Lebenszyklus zurückgehen. Setzen Sie den aktuellen Status in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
+    "Reifewechsel „{current}“ → „{target}“ abgelehnt: Ein Import kann weder Reifestufen überspringen noch zurückgehen. Setzen Sie die aktuelle Reife in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
   "shared.leverImport.msg.unknownPnl": "GuV-Konto „{value}“ nicht gefunden (erwartet: {expected})",
   "shared.leverImport.msg.requiredDate":
     "„{field}“ ist erforderlich und muss ein gültiges Datum sein (TT/MM/JJJJ oder JJJJ-MM-TT)",
@@ -1530,7 +1539,7 @@ const de: Record<string, string> = {
 
   // ─── adminLifecycleEditor ───────────────────────────────────────────────────
   "adminLifecycleEditor.intro":
-    "Passen Sie die Lebenszyklusphasen der Hebel für dieses Unternehmen an. Sie können die Phasen umbenennen, neu anordnen, Validierungen aktivieren/deaktivieren und die Anzahl der Phasen anpassen.",
+    "Passen Sie die Reifestufen der Hebel für dieses Unternehmen an. Sie können die Stufen umbenennen, neu anordnen, Validierungen aktivieren/deaktivieren und die Anzahl der Stufen anpassen.",
   "adminLifecycleEditor.colOrder": "Reihenfolge",
   "adminLifecycleEditor.colKey": "Schlüssel",
   "adminLifecycleEditor.colLabel": "Bezeichnung",
@@ -1558,7 +1567,7 @@ const de: Record<string, string> = {
 
   // ─── Strategieplan — Seite „Strategische Achsen" + Achsen-Detailblatt ──────
   // Portfolio
-  "strategicAxes.title": "Strategische Achsen",
+  "strategicAxes.title": "Roadmap",
   "strategicAxes.count": "Achsen",
   "strategicAxes.chantiersCount": "Arbeitspakete",
   "strategicAxes.indicatorsCount": "Indikatoren",
@@ -1597,8 +1606,10 @@ const de: Record<string, string> = {
   "strategicAxes.budgetByChantierModalTitle": "Budgetverteilung nach Baustelle",
   "strategicAxes.noIndicatorsShort": "Kein Indikator",
   "strategicAxes.unassigned": "Nicht zugewiesen",
-  "strategicAxes.tree.chantiersN": "{n} Arbeitspaket(e)",
-  "strategicAxes.tree.projetsN": "{n} Projekt(e)",
+  "strategicAxes.tree.chantiersN": "{n} Arbeitspakete",
+  "strategicAxes.tree.chantiersNOne": "{n} Arbeitspaket",
+  "strategicAxes.tree.projetsN": "{n} Projekte",
+  "strategicAxes.tree.projetsNOne": "{n} Projekt",
   "strategicAxes.tree.milestonesN": "{p}/{t} Meilensteine",
   "strategicAxes.tree.open": "Details öffnen",
   "strategicAxes.tree.allChantiersTitle": "Alle Arbeitspakete",
@@ -1629,6 +1640,7 @@ const de: Record<string, string> = {
   "strategicAxes.chantierUnplanned": "Arbeitspakete ohne geplantes Projekt",
   "strategicAxes.chantierNoDates": "Noch kein Datum — Projekt hinzufügen",
   "strategicAxes.actionsSuffix": "Projekte",
+  "strategicAxes.actionsSuffixOne": "Projekt",
   // Gantt: einstellbare Zeitskala, Fortschritt, Übersicht des Arbeitspakets
   "strategicAxes.ganttScale": "Skala",
   "strategicAxes.ganttScaleMonth": "Monat",
@@ -1646,8 +1658,10 @@ const de: Record<string, string> = {
   "strategicAxes.roadmap.scaleYear": "Jahr",
   "strategicAxes.roadmap.progress": "Fortschritt",
   "strategicAxes.roadmap.leviersSuffix": "Projekte",
+  "strategicAxes.roadmap.leviersSuffixOne": "Projekt",
   "strategicAxes.roadmap.late": "Verzögert",
-  "strategicAxes.roadmap.lateCount": "{n} von {total} Projekt(e) verzögert",
+  "strategicAxes.roadmap.lateCount": "{n} von {total} Projekten verzögert",
+  "strategicAxes.roadmap.lateCountOne": "{n} von {total} Projekten verzögert",
   "strategicAxes.roadmap.currentMilestone": "Aktueller Meilenstein",
   "strategicAxes.chantierPeriod": "Zeitraum",
   "strategicAxes.newChantier": "Neues Arbeitspaket",
@@ -2051,9 +2065,9 @@ const de: Record<string, string> = {
     "Benutzername „{username}“ bereits vergeben: mit Suffix versehen",
 
   // ─── Strategieplan — KPI-Seite (Messwerterfassung, Zielbearbeitung) ────────
-  "kpi.title": "Indikatoren (KPI)",
+  "kpi.title": "KPIs",
   "kpi.subtitle":
-    "Erfassen Sie hier die Werte Ihrer Indikatoren für die laufende Periode und passen Sie deren Ziel laufend an. Nur die verantwortlichen Rollen — und ausdrücklich berechtigte Konten — dürfen einen Indikator erfassen.",
+    "Erfassen Sie hier die Werte Ihrer Indikatoren für die laufende Periode und passen Sie deren Ziel laufend an. Nur die benannten Erfassungsverantwortlichen, die betroffenen Sponsoren und die Leitung des Plans dürfen einen Indikator erfassen.",
   "kpi.loading": "Indikatoren werden geladen…",
   "kpi.noProgram": "Kein aktives Programm.",
   "kpi.notStrategic":
@@ -2077,9 +2091,9 @@ const de: Record<string, string> = {
   "kpi.filterChip.noMatch": "Kein Indikator entspricht den aktiven Filtern.",
 
   // ─── Business-KPIs (Indikatoren auf Achsenebene) — KPI-Seite UND Strategie-Dashboard ───
-  "businessKpis.title": "Business-KPIs — Marktbeobachtung",
+  "businessKpis.title": "Schlüsselindikatoren",
   "businessKpis.empty":
-    "Kein Business-KPI definiert — fügen Sie im Reiter Admin > Indikatoren einen direkt einer Achse zugeordneten Indikator hinzu.",
+    "Kein Schlüsselindikator definiert — fügen Sie im Reiter Admin > Indikatoren einen direkt einer Achse zugeordneten Indikator hinzu.",
   "businessKpis.noValue": "Keine Messung",
   "kpi.axisUnknown": "Indikatoren ohne Achse",
   "kpi.macroIndicators": "Indikatoren der Achse",
@@ -2165,7 +2179,7 @@ const de: Record<string, string> = {
   "kpi.table.finalTarget": "Endziel",
   "kpi.table.status": "Status",
   "kpi.fillValue": "Wert erfassen",
-  "kpi.market.owner": "Erfassung: CTO",
+  "kpi.market.owner": "Erfassung: {names}",
   "kpi.section.kpis": "KPIs",
   "kpi.section.openChantier": "Arbeitspaket öffnen",
   "kpi.noteOptional": "Kommentar (optional)",
@@ -2295,7 +2309,7 @@ const de: Record<string, string> = {
     "Achtung: Diese Daten liegen außerhalb des Projektzeitraums.",
 
   // ─── Seite Personaleinsatz (/effectifs, Strategieplan) ────────────────────
-  "effectifs.title": "Eingesetztes Personal & Budget",
+  "effectifs.title": "Budget & eingesetztes Personal",
   "effectifs.subtitle":
     "In den Arbeitspaketen des Programms eingesetzte VZÄ nach Team. Klicken Sie auf ein Team, um seine Verteilung über die Achsen zu sehen und mögliche Überbesetzung zu erkennen.",
   "effectifs.loading": "Personaleinsatz wird geladen…",
@@ -2475,7 +2489,7 @@ const de: Record<string, string> = {
   // Die Bedienelemente des Bearbeitungsmodus (Anpassen / Fertig / Widget hinzufügen /
   // Zurücksetzen) nutzen bewusst die generischen `dashboard.*`-Schlüssel: diese Beschriftungen
   // müssen in beiden Dashboards identisch bleiben.
-  "strategicDashboard.title": "Strategie-Dashboard",
+  "strategicDashboard.title": "Gesamtsteuerung",
   "strategicDashboard.loading": "Strategieplan wird geladen…",
   "strategicDashboard.noProgram":
     "Kein aktives Programm. Legen Sie eines unter Admin > Unternehmen > Programme an.",
@@ -2524,7 +2538,7 @@ const de: Record<string, string> = {
   "strategicDashboard.removeWidget": "Dieses Widget entfernen",
   // Beschriftungen aus dem Widget-Register (lib/strategicDashboardWidgets.ts, Feld `label`).
   "strategicDashboard.widget.indicatorStatus": "Indikatoren · im Plan",
-  "strategicDashboard.widget.businessKpis": "Business-KPIs — Marktbeobachtung",
+  "strategicDashboard.widget.businessKpis": "Schlüsselindikatoren",
   "strategicDashboard.widget.chantierDependencyAlerts": "Warnungen",
   // Runde 8: Platzhalter einer leeren E0-E4-Jalonspalte (`ProjetMilestoneBoard.tsx`).
   "strategicDashboard.projetBoard.emptyColumn": "—",
@@ -2543,9 +2557,9 @@ const de: Record<string, string> = {
   "adminPrograms.back": "Alle Programme",
   "adminPrograms.tabMaturity": "Reifegrade",
   "adminPrograms.tabIndicators": "Indikatoren",
-  "adminPrograms.tabLifecycle": "Lebenszyklus",
+  "adminPrograms.tabLifecycle": "Hebel-Reife",
   "adminPrograms.badgeStrategic": "Strategisch",
-  "adminPrograms.badgePerformance": "Transformation",
+  "adminPrograms.badgePerformance": "Performance",
   "adminPrograms.noSettings":
     "Für diesen Programmtyp sind keine Konfigurationseinstellungen verfügbar.",
 
@@ -2555,7 +2569,8 @@ const de: Record<string, string> = {
   "adminIndicators.new": "Neuer Indikator",
   "adminIndicators.createTitle": "Neuer Indikator",
   "adminIndicators.editTitle": "Indikator bearbeiten",
-  "adminIndicators.count": "{n} Indikator(en)",
+  "adminIndicators.count": "{n} Indikatoren",
+  "adminIndicators.countOne": "{n} Indikator",
   "adminIndicators.loading": "Wird geladen…",
   "adminIndicators.empty": "Für dieses Programm ist kein Indikator definiert.",
   "adminIndicators.name": "Name des Indikators",
@@ -2729,7 +2744,10 @@ const de: Record<string, string> = {
   "dashboard.tableHeader.opexOneOffRealizedPlan": "Einmaliger OPEX (Ist / Plan)",
   "dashboard.kpi.leversAtRiskWatchHint": "mittleres Risiko, nicht gezählt",
   "dashboard.riskCenter.leversAtRiskBadge": "{n} gefährdete Hebel",
+  "dashboard.riskCenter.leversAtRiskBadgeOne": "{n} gefährdeter Hebel",
   "dashboard.riskCenter.openAlertsCount": "{n} offene Warnungen",
+  "dashboard.riskCenter.addManualAlert": "+ Manuelle Warnung",
+  "dashboard.riskCenter.openAlertsCountOne": "{n} offene Warnung",
   "dashboard.tableHeader.capexEngagedReforecast": "CAPEX (gebunden / Forecast)",
   "dashboard.tableHeader.opexOneOffEngagedReforecast": "Einmaliger OPEX (gebunden / Forecast)",
   "dashboard.workstreamsCancelledHidden":
@@ -2788,7 +2806,7 @@ const de: Record<string, string> = {
   "leverDetail.fte.created": "geschaffene Stellen",
   "leverDetail.fte.reduced": "abgebaute/reduzierte Stellen",
   "leverDetail.fte.positiveWarning": "Positive VZÄ — prüfen",
-  "workstreams.reforecastTarget": "Neuprognose-Ziel €M",
+  "workstreams.reforecastTarget": "Neuprognose-Ziel",
   "workstreams.noProgram":
     "Für Ihr Unternehmen wurde noch kein Performance-Plan erstellt. Erstellen Sie unter Admin > Unternehmen > Programme einen und ordnen Sie ihm dann Hebel zu.",
   "workstreams.vsReforecast": "des Neuprognose-Ziels",
@@ -2824,7 +2842,7 @@ const de: Record<string, string> = {
   "finance.chart.cumulativeCost": "Kumulierte Kosten",
   "finance.chart.opexRecRunRate": "Laufender wiederkehrender OPEX",
   "finance.chart.empty": "Keine Kosten für Hebelaktionen erfasst.",
-  "finance.hierarchyTable.title": "Einsparungen nach Finanzebene (€M)",
+  "finance.hierarchyTable.title": "Einsparungen nach Finanzebene",
   "finance.hierarchyTable.level": "Ebene",
   "finance.hierarchyTable.export": "Exportieren",
   "finance.hierarchyTable.total": "Gesamt",
@@ -2923,7 +2941,7 @@ const de: Record<string, string> = {
   "levers.tree.leverOwnerEmpty": "Hebel-Verantwortlicher nicht angegeben",
   "levers.column.code": "Code",
   "levers.column.type": "Typ",
-  "levers.column.reforecastNet": "Aktualisierte Nettoeinsparungen (€M)",
+  "levers.column.reforecastNet": "Aktualisierte Nettoeinsparungen",
   "levers.column.progress": "Fortschritt",
   "levers.column.fteImpact": "Betroffene VZÄ",
   "levers.column.opexOneOff": "Einmaliges OPEX",
@@ -3014,7 +3032,7 @@ const de: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "Einmalige OPEX",
   "leverDetail.trajectory.detailOpexRec": "Wiederkehrende OPEX",
   "leverDetail.trajectory.detailEmpty": "Keine Auswirkung in dieser Periode.",
-  "leverDetail.oneOff": "Einmalig",
+  "leverDetail.oneOff": "Einmaliges OPEX",
   "chart.waterfall.realized": "Ist",
   "chart.waterfall.remaining": "Verbleibend",
   "chart.waterfall.oneOff": "Einmalige Gewinne (nicht in den Summen)",
@@ -3376,7 +3394,7 @@ const de: Record<string, string> = {
   "me.planFilter": "Plan",
   "me.plan.all": "Alle",
   "me.plan.strategic": "Strategisch",
-  "me.plan.performance": "Transformation",
+  "me.plan.performance": "Performance",
   "me.category.overdue": "Überfällig",
   "me.category.toHandle": "Zu bearbeiten",
   "me.category.upcoming": "Anstehend",
@@ -3420,7 +3438,7 @@ const de: Record<string, string> = {
   "me.health.red": "Kritisch",
   "me.health.neutral": "Nicht bewertet",
   // Mon espace — moteur (lib/myWorkspace.ts) : libellés d'éléments et de rôles.
-  "me.item.leverApproval": "Übergang {from} → {to} freigeben",
+  "me.item.leverApproval": "Reifewechsel {from} → {to} freigeben",
   "me.item.realizedApproval": "Realisierten Effekt freigeben: {label}",
   "me.item.milestoneApproval": "Übergang zu Meilenstein {to} freigeben",
   "me.item.kpiValueApproval": "Indikatorwert freigeben",
@@ -3445,11 +3463,11 @@ const de: Record<string, string> = {
   "me.item.hrLeverMismatch": "HR-Bewegung nicht mit dem Hebel synchron",
   "me.item.hrPlanned": "Geplante HR-Bewegung",
   "me.role.owner": "Verantwortlich",
-  "me.role.sponsor": "Sponsor",
+  "me.role.sponsor": "Arbeitspaket-Leiter",
   "me.role.axisSponsor": "Achsen-Sponsor",
   "me.role.pilote": "Arbeitspaket-Sponsor",
   "me.role.programOwner": "Programmverantwortlicher",
-  "me.role.cto": "CTO",
+  "me.role.cto": "Leiter der Transformation",
   "me.role.admin": "Administrator",
   "me.role.finance": "Finanzen",
   "me.role.strategicLead": "Leiter des Strategieplans",

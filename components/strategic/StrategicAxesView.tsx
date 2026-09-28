@@ -20,6 +20,7 @@ import {
   AXIS_FALLBACK_COLOR,
   chantierDeclaredProgress,
   chantierShadesByAxis,
+  resolveUserFullName,
 } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { writeStrategicImport } from "@/lib/firestore/strategicImportWrite";
@@ -571,6 +572,7 @@ export function StrategicAxesView() {
               expandAllSignal={expandAllSignal}
               clickableActionIds={data.clickableActionIds}
               progressOf={data.projetProgress}
+              users={data.users}
             />
           </div>
         </div>
@@ -604,7 +606,8 @@ export function StrategicAxesView() {
                   </span>
                   <span className="block truncate text-[10.5px] text-tertiary">
                     {axisNames || "-"} ·{" "}
-                    {c.pilote ?? t("strategicAxes.tree.noOwner", "Aucun responsable")}
+                    {resolveUserFullName(c.pilote, data.users) ??
+                      t("strategicAxes.tree.noOwner", "Aucun responsable")}
                   </span>
                 </span>
                 <span className="w-[120px] shrink-0">

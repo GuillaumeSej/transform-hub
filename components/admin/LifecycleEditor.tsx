@@ -66,7 +66,7 @@ export function LifecycleEditor({
       <p className="max-w-2xl text-sm text-text-secondary">
         {t(
           "adminLifecycleEditor.intro",
-          "Personnalisez les étapes du cycle de vie des leviers pour cette entreprise. Vous pouvez renommer, réordonner, activer/désactiver les validations et ajuster le nombre d'étapes."
+          "Personnalisez les niveaux de maturité des leviers pour cette entreprise. Vous pouvez renommer, réordonner, activer/désactiver les validations et ajuster le nombre de niveaux."
         )}
       </p>
 

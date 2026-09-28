@@ -162,7 +162,7 @@ export default function AdminHistoryPage() {
       <div className="flex items-center gap-3">
         <History size={22} className="text-bp-coral" />
         <h1 className="text-xl font-bold text-text-primary">
-          {t("adminHistory.title", "Historique des Modifications")}
+          {t("adminHistory.title", "Historique")}
         </h1>
       </div>
 

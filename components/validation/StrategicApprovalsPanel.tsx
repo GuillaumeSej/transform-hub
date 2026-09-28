@@ -18,7 +18,7 @@ import {
   type StrategicApprovalData,
   type StrategicApprovalKind,
 } from "@/lib/strategicApprovals";
-import { intlTag } from "@/lib/format";
+import { formatDateTimeShort } from "@/lib/format";
 import { canOpenRoute } from "@/lib/routeAccess";
 import { approvalTargetHref } from "@/lib/strategicLinks";
 import {
@@ -37,17 +37,8 @@ type Tab = "todo" | "mine" | "history";
 
 function formatTimestamp(ts: string | undefined): string {
   if (!ts) return "—";
-  try {
-    return new Date(ts).toLocaleDateString(intlTag(), {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return ts;
-  }
+  // `24/09/2026 09:30` dans la langue de l'app ; horodatage invalide ⇒ texte brut.
+  return formatDateTimeShort(ts);
 }
 
 type Api = {

@@ -43,7 +43,7 @@ const fr: Record<string, string> = {
   // ─── nav ──────────────────────────────────────────────────────────────────
   "nav.executiveDashboard": "Pilotage global",
   "nav.leverLibrary": "Bibliothèque des leviers",
-  "nav.leverPipeline": "Leviers par étape",
+  "nav.leverPipeline": "Leviers par maturité",
   "nav.myLevers": "Mes leviers",
   "nav.linkedLevers": "Leviers liés",
   "nav.workstreamDashboard": "Suivi des chantiers",
@@ -74,7 +74,7 @@ const fr: Record<string, string> = {
   "shared.topbar.realizedPending": "Réalisé à valider · {amount}",
   "leverDetail.lateActions": "Actions en retard",
   "validation.lever": "Levier",
-  "validation.gate": "Étape",
+  "validation.gate": "Maturité",
   "validation.workstream": "Chantier",
   "validation.requestedBy": "Demandé par",
   "validation.requestedAt": "Demandé le",
@@ -275,8 +275,8 @@ const fr: Record<string, string> = {
   "dashboard.widgets.viewBridge": "Vue trimestrielle",
   "dashboard.widgets.dateFrom": "Du",
   "dashboard.widgets.dateTo": "Au",
-  "dashboard.widgets.stageFunnel": "Avancement par étape du cycle de vie",
-  "dashboard.widgets.stageFunnelFull": "Avancement des leviers par étape du cycle de vie",
+  "dashboard.widgets.stageFunnel": "Avancement par maturité",
+  "dashboard.widgets.stageFunnelFull": "Avancement des leviers par maturité",
   "dashboard.widgets.alerts": "Alertes & notifications",
   "dashboard.widgets.noAlerts": "Aucune alerte à traiter",
   "dashboard.widgets.riskCenter": "Alertes & Dépendances",
@@ -291,7 +291,8 @@ const fr: Record<string, string> = {
   "alerts.markAllResolved": "Tout résoudre",
   "alerts.auto": "Auto",
   "alerts.page": "Page {current} / {total}",
-  "alerts.count": "{n} alerte(s)",
+  "alerts.count": "{n} alertes",
+  "alerts.countOne": "{n} alerte",
   "alerts.tooltip.red": "Alertes critiques — action immédiate requise",
   "alerts.tooltip.amber": "Alertes à surveiller — risque identifié",
   "alerts.tooltip.green": "Alertes positives — avancée ou résolution",
@@ -314,7 +315,7 @@ const fr: Record<string, string> = {
   "dashboard.widgets.sCurve": "Courbe en S — Plan initial / Réalisé / Réactualisé",
   "dashboard.widgets.bridgeQuarter": "Économies par trimestre → cible",
   "dashboard.widgets.bridgeMonth": "Économies par mois → cible",
-  "dashboard.widgets.sankey": "Flux des leviers par étape (Sankey)",
+  "dashboard.widgets.sankey": "Flux des leviers par maturité (Sankey)",
   "dashboard.widgets.marimekko": "Économies prévues",
   "dashboard.widgets.workstreamBreakdown": "Réalisation des économies",
   "dashboard.widgets.geoBreakdown": "Économies par Pays / Fonction",
@@ -384,7 +385,8 @@ const fr: Record<string, string> = {
   "dashboard.dependency.rule.sf": "La cible doit démarrer avant la fin de la source",
   "dashboard.dependency.rule.ss": "Les deux éléments doivent démarrer ensemble",
   "dashboard.dependency.rule.ff": "Les deux éléments doivent finir ensemble",
-  "dashboard.dependency.alertCount": "{n} alerte(s)",
+  "dashboard.dependency.alertCount": "{n} alertes",
+  "dashboard.dependency.alertCountOne": "{n} alerte",
   "dashboard.noProgram":
     "Aucun programme n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers.",
   "dashboard.builderModal.alreadyOnDashboard": "Ce graphique est déjà sur votre tableau de bord",
@@ -422,9 +424,10 @@ const fr: Record<string, string> = {
   "levers.createLever": "Créer le levier",
   "levers.table": "Tableau",
   "levers.kanban": "Kanban",
+  "levers.gantt": "Gantt",
   "levers.searchPlaceholder": "Rechercher (nom, code, responsable...)",
   "levers.count": "leviers",
-  "levers.realized": "Économies réalisées (€M)",
+  "levers.realized": "Économies réalisées",
   "levers.columnName": "Levier",
   "levers.columnStatus": "Niveau",
   "levers.filter.costCenter": "Centre de coût / Poste de dépense",
@@ -486,16 +489,18 @@ const fr: Record<string, string> = {
 
   // ─── leverDetail (page détail levier) ──────────────────────────────────────
   "leverDetail.tab.plan": "Plan d'action",
+  "leverDetail.tab.overview": "Vue d'ensemble",
+  "leverDetail.tab.impact": "Impact",
   "leverDetail.tab.collab": "Collaboration",
   "leverDetail.loading": "Chargement…",
   "leverDetail.notFound": "Levier introuvable.",
-  "leverDetail.backToPipeline": "Retour aux leviers par étape",
+  "leverDetail.backToPipeline": "Retour aux leviers par maturité",
   "leverDetail.outOfPerimeter":
     "Accès restreint — ce levier n'est pas dans votre périmètre : vous n'en êtes ni le responsable de levier ni le responsable de chantier.",
   "leverDetail.restrictedAccess":
     "Accès restreint — ce levier est classé « {level} », un niveau de confidentialité auquel votre profil n'est pas habilité.",
   "leverDetail.editLever": "Modifier le levier",
-  "leverDetail.statusUpdated": "Niveau mis à jour",
+  "leverDetail.statusUpdated": "Maturité mise à jour",
   "leverDetail.deliveredNeedsAllActions":
     "Le passage à « {stage} » exige que toutes les actions soient faites (100 %). Tant que ce n'est pas le cas, le levier reste « {current} ».",
   "shared.kanban.tip.id": "ID du levier",
@@ -503,11 +508,11 @@ const fr: Record<string, string> = {
   "shared.kanban.tip.progress": "Avancement du plan d'action : {pct} %",
   "shared.kanban.tip.owner": "Responsable du levier : {name}",
   "leverDetail.autoStageHint":
-    "Cette étape est atteinte automatiquement quand le plan d'action est à 100 %",
-  "leverDetail.pastStageHint": "Étape déjà franchie — impossible de revenir en arrière",
+    "Ce niveau de maturité est atteint automatiquement quand le plan d'action est à 100 %",
+  "leverDetail.pastStageHint": "Niveau de maturité déjà franchi — impossible de revenir en arrière",
   "leverDetail.moveToStage": "Passer en « {stage} »",
   "leverDetail.approval.stageHint":
-    "Cette étape nécessite une demande de validation (porteur → responsable de chantier ou CTO), voir ci-dessous",
+    "Ce changement de maturité nécessite une demande de validation (porteur → responsable de chantier ou CTO), voir ci-dessous",
   "leverDetail.approval.submitHint":
     "Ce levier est prêt pour une demande de validation (porteur → responsable de chantier ou CTO).",
   "leverDetail.approval.submit": "Soumettre pour validation",
@@ -527,7 +532,7 @@ const fr: Record<string, string> = {
   "levers.approval.submitHint":
     "Ce levier est prêt pour une demande de validation (double validation : niveaux au-dessus du demandeur, responsable de chantier puis CTO).",
   "levers.approval.stageHint":
-    "Cette étape nécessite une demande de validation (responsable de chantier puis CTO), voir ci-dessous",
+    "Ce changement de maturité nécessite une demande de validation (responsable de chantier puis CTO), voir ci-dessous",
   "levers.approval.pending": "Demande de validation pour passer en « {stage} »",
   "levers.approval.ownRequest": "Votre demande : vous ne pouvez pas la valider vous-même.",
   "levers.approval.withdraw": "Retirer la demande",
@@ -596,7 +601,9 @@ const fr: Record<string, string> = {
   "leverDetail.actionPlanDisabled":
     "Module non activé — le Plan d'action a été désactivé pour votre entreprise (paramétrable dans Admin > Entreprises).",
   "leverDetail.actionPlanTitle": "Plan d'action — {name}",
-  "leverDetail.actionsCount": "{n} action(s)",
+  "leverDetail.actionsCount": "{n} actions",
+  "leverDetail.addAction": "Action",
+  "leverDetail.actionsCountOne": "{n} action",
   "leverDetail.todo": "À faire",
   "leverDetail.inProgress": "En cours",
   "leverDetail.completed": "Fait",
@@ -628,7 +635,7 @@ const fr: Record<string, string> = {
   // ─── workstreams (Workstream Dashboard) ────────────────────────────────────
   "workstreams.subtitle": "Vue de tous les leviers du programme, tous chantiers confondus.",
   "workstreams.savingsRealizedTarget": "Réalisé / cible réactualisée",
-  "workstreams.reforecastTarget": "Cible réactualisée €M",
+  "workstreams.reforecastTarget": "Cible réactualisée",
   "workstreams.vsReforecast": "de la cible réactualisée",
   "workstreams.searchPlaceholder": "Rechercher (nom, code, responsable...)",
 
@@ -820,7 +827,8 @@ const fr: Record<string, string> = {
   "adminProgramsPanel.ambitionPlaceholder": "Ex. Devenir leader du marché d'ici 2027",
   "adminProgramsPanel.budgetLabel": "Budget prévisionnel",
   "adminProgramsPanel.budgetPlaceholder": "Ex. 5000000",
-  "adminProgramsPanel.count": "{n} programme(s)",
+  "adminProgramsPanel.count": "{n} programmes",
+  "adminProgramsPanel.countOne": "{n} programme",
   "adminProgramsPanel.colProgram": "Programme",
   "adminProgramsPanel.colActions": "Actions",
   "adminProgramsPanel.empty": "Aucun programme pour cette entreprise.",
@@ -831,10 +839,10 @@ const fr: Record<string, string> = {
   "adminProgramsPanel.strategicImportCtaBody":
     "Importez son plan stratégique complet (axes, chantiers, projets, indicateurs) depuis un fichier Excel.",
   "adminProgramsPanel.strategicImportCtaButton": "Importer le plan stratégique",
-  "adminProgramsPanel.typePerformance": "Plan Performance",
+  "adminProgramsPanel.typePerformance": "Plan de performance",
   "adminProgramsPanel.typePerformanceHint":
-    "Leviers financiers, cycle de vie L1-L5, impacts CAPEX/OPEX.",
-  "adminProgramsPanel.typeStrategic": "Plan Stratégique",
+    "Leviers financiers, maturité L1-L5, impacts CAPEX/OPEX.",
+  "adminProgramsPanel.typeStrategic": "Plan stratégique",
   "adminProgramsPanel.typeStrategicHint":
     "Axes, chantiers et indicateurs (3-5-15), étapes de maturité configurables.",
   "adminProgramsPanel.typeLabelPrefix": "Type de programme :",
@@ -857,8 +865,8 @@ const fr: Record<string, string> = {
 
   // ─── shared (composants partagés : Modal, Topbar, Sidebar, ResetDemoButton…) ─
   "shared.resetDemoButton.label": "Réinitialiser les données démo",
-  "shared.topbar.notificationsToProcess": "Notifications à traiter · {n}",
-  "shared.topbar.noNotifications": "Aucune notification à traiter.",
+  "shared.topbar.notificationsToProcess": "Alertes · {n}",
+  "shared.topbar.noNotifications": "Aucune alerte à traiter.",
   "shared.topbar.sourceAuto": "Automatique",
   "shared.topbar.sourceManual": "Manuelle",
 
@@ -923,7 +931,7 @@ const fr: Record<string, string> = {
   "adminHistory.action.approvalRequested": "Validation demandée",
   "adminHistory.action.approvalApproved": "Demande validée",
   "adminHistory.action.approvalRejected": "Validation rejetée",
-  "adminHistory.title": "Historique des Modifications",
+  "adminHistory.title": "Historique",
   "adminHistory.searchPlaceholder": "Rechercher...",
   "adminHistory.allActions": "Toutes les actions",
   "adminHistory.allEntities": "Toutes les entités",
@@ -947,7 +955,7 @@ const fr: Record<string, string> = {
   // ─── adminLifecycle ─────────────────────────────────────────────────────────
 
   // ─── adminCompanies ─────────────────────────────────────────────────────────
-  "adminCompanies.title": "Gestion des Entreprises",
+  "adminCompanies.title": "Entreprises",
   "adminCompanies.editTitle": "Modifier l'entreprise",
   "adminCompanies.newTitle": "Nouvelle entreprise",
   "adminCompanies.column.id": "ID",
@@ -997,7 +1005,7 @@ const fr: Record<string, string> = {
   "adminProgramConfig.saveFailedBody": "La configuration programme n'a pas pu être sauvegardée.",
 
   // ─── adminData ──────────────────────────────────────────────────────────────
-  "adminData.title": "Vue d'ensemble des Données",
+  "adminData.title": "Données",
   "adminData.globalSummary": "Résumé global",
   "adminData.employees": "Employés",
   "adminData.movements": "Mouvements",
@@ -1084,7 +1092,7 @@ const fr: Record<string, string> = {
   "adminCompanyFields.colProfile": "Profil",
   "adminCompanyFields.directionsLabel": "Directions / services",
   "adminCompanyFields.directionsEmpty":
-    "Aucune direction/service configuré pour cette entreprise. Ajoutez-en pour permettre le rattachement des utilisateurs et le filtrage par direction sur le Plan Stratégique.",
+    "Aucune direction/service configuré pour cette entreprise. Ajoutez-en pour permettre le rattachement des utilisateurs et le filtrage par direction sur le Plan stratégique.",
   "adminCompanyFields.newDirectionPlaceholder": "Ex : Direction Industrielle",
   "adminCompanyFields.addDirection": "Ajouter la direction",
 
@@ -1128,7 +1136,7 @@ const fr: Record<string, string> = {
   // ─── adminUsers (Admin > Utilisateurs) ─────────────────────────────────────
   "adminUsers.directionLabel": "Direction / service (optionnel)",
   "adminUsers.directionUnassigned": "Non renseigné",
-  "adminUsers.title": "Gestion des Utilisateurs",
+  "adminUsers.title": "Utilisateurs",
   "adminUsers.editTitle": "Modifier l'utilisateur",
   "adminUsers.newTitle": "Nouvel utilisateur",
   "adminUsers.fieldUsername": "Identifiant",
@@ -1167,8 +1175,8 @@ const fr: Record<string, string> = {
   "adminUsers.noProfiles":
     "Aucun profil métier — utilisateur purement admin, ou compte de type sélecteur (ex. référence pour un champ responsable/commanditaire).",
   "adminUsers.chooseRole": "Choisir un rôle",
-  "adminUsers.groupPerformance": "Plan Performance",
-  "adminUsers.groupStrategic": "Plan Stratégique",
+  "adminUsers.groupPerformance": "Plan de performance",
+  "adminUsers.groupStrategic": "Plan stratégique",
   "adminUsers.groupCrossTrack": "Transverse (Performance + Stratégique)",
   "adminUsers.allPrograms": "Tous les programmes",
   "adminUsers.chooseProgram": "Choisir un programme",
@@ -1205,7 +1213,8 @@ const fr: Record<string, string> = {
     "Configurez d'abord des niveaux de confidentialité dans l'onglet Paramètres de cette entreprise pour activer ce contrôle.",
   "adminUsers.filterByCompany": "Filtrer par entreprise",
   "adminUsers.allCompanies": "Toutes les entreprises",
-  "adminUsers.userCount": "{n} utilisateur(s)",
+  "adminUsers.userCount": "{n} utilisateurs",
+  "adminUsers.userCountOne": "{n} utilisateur",
   "adminUsers.colProfiles": "Profils",
   "adminUsers.colActions": "Actions",
   "adminUsers.confirm": "Confirmer",
@@ -1246,6 +1255,7 @@ const fr: Record<string, string> = {
   "shared.periodToolbar.customRange": "Plage personnalisée",
   "shared.periodToolbar.reset": "Réinitialiser",
   "shared.exportButton.successBody": "{n} leviers exportés",
+  "shared.exportButton.exportExcel": "Export Excel",
   "shared.filterBar.clearAll": "Tout effacer",
   "shared.multiSelect.selectAll": "Tout sélectionner",
   "shared.multiSelect.clear": "Effacer",
@@ -1328,11 +1338,11 @@ const fr: Record<string, string> = {
     'Code "{code}" en doublon dans le fichier (déjà utilisé ligne {row})',
   "shared.leverImport.msg.unknownStatus": 'Statut "{value}" inconnu (attendu : {expected})',
   "shared.leverImport.msg.statusNewLever":
-    "Un nouveau levier ne peut être importé qu'au stade « {idea} » (ou abandonné) : le stade « {target} » nécessite une validation. Importez-le au stade « {idea} », puis demandez la validation depuis sa fiche.",
+    "Un nouveau levier ne peut être importé qu'en maturité « {idea} » (ou abandonné) : la maturité « {target} » nécessite une validation. Importez-le en « {idea} », puis demandez la validation depuis sa fiche.",
   "shared.leverImport.msg.statusGated":
-    "Changement de statut « {current} » → « {target} » refusé : le stade « {target} » nécessite une validation (demande depuis la fiche du levier). Remettez le statut actuel dans le fichier pour importer les autres modifications.",
+    "Changement de maturité « {current} » → « {target} » refusé : la maturité « {target} » nécessite une validation (demande depuis la fiche du levier). Remettez la maturité actuelle dans le fichier pour importer les autres modifications.",
   "shared.leverImport.msg.statusBackward":
-    "Changement de statut « {current} » → « {target} » refusé : un import ne peut ni sauter d'étape ni revenir en arrière dans le cycle de vie. Remettez le statut actuel dans le fichier pour importer les autres modifications.",
+    "Changement de maturité « {current} » → « {target} » refusé : un import ne peut ni sauter un niveau de maturité ni revenir en arrière. Remettez la maturité actuelle dans le fichier pour importer les autres modifications.",
   "shared.leverImport.msg.unknownPnl": 'Compte P&L "{value}" introuvable (attendu : {expected})',
   "shared.leverImport.msg.requiredDate":
     '"{field}" obligatoire et doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)',
@@ -1574,7 +1584,7 @@ const fr: Record<string, string> = {
 
   // ─── adminLifecycleEditor (Admin > Entreprises > Cycle de vie) ─────────────
   "adminLifecycleEditor.intro":
-    "Personnalisez les étapes du cycle de vie des leviers pour cette entreprise. Vous pouvez renommer, réordonner, activer/désactiver les validations et ajuster le nombre d'étapes.",
+    "Personnalisez les niveaux de maturité des leviers pour cette entreprise. Vous pouvez renommer, réordonner, activer/désactiver les validations et ajuster le nombre de niveaux.",
   "adminLifecycleEditor.colOrder": "Ordre",
   "adminLifecycleEditor.colKey": "Clé",
   "adminLifecycleEditor.colLabel": "Libellé",
@@ -1602,7 +1612,7 @@ const fr: Record<string, string> = {
 
   // ─── Plan Stratégique — page Axes + fiche détail d'un axe ─────────────────
   // Portefeuille
-  "strategicAxes.title": "Axes stratégiques",
+  "strategicAxes.title": "Feuille de route",
   "strategicAxes.count": "axes",
   "strategicAxes.chantiersCount": "chantiers",
   "strategicAxes.indicatorsCount": "indicateurs",
@@ -1645,8 +1655,10 @@ const fr: Record<string, string> = {
   // sur la fiche détail d'axe.
   "strategicAxes.noIndicatorsShort": "Aucun indicateur",
   "strategicAxes.unassigned": "Non assigné",
-  "strategicAxes.tree.chantiersN": "{n} chantier(s)",
-  "strategicAxes.tree.projetsN": "{n} projet(s)",
+  "strategicAxes.tree.chantiersN": "{n} chantiers",
+  "strategicAxes.tree.chantiersNOne": "{n} chantier",
+  "strategicAxes.tree.projetsN": "{n} projets",
+  "strategicAxes.tree.projetsNOne": "{n} projet",
   "strategicAxes.tree.milestonesN": "{p}/{t} jalons",
   "strategicAxes.tree.open": "Ouvrir la fiche",
   "strategicAxes.tree.allChantiersTitle": "Tous les chantiers",
@@ -1679,6 +1691,7 @@ const fr: Record<string, string> = {
   "strategicAxes.chantierUnplanned": "Chantiers sans projet planifié",
   "strategicAxes.chantierNoDates": "Pas encore de date — ajoutez un projet",
   "strategicAxes.actionsSuffix": "projets",
+  "strategicAxes.actionsSuffixOne": "projet",
   // Gantt : échelle temporelle réglable, avancement, synthèse de chantier
   "strategicAxes.ganttScale": "Échelle",
   "strategicAxes.ganttScaleMonth": "Mois",
@@ -1697,12 +1710,14 @@ const fr: Record<string, string> = {
   "strategicAxes.roadmap.scaleYear": "Année",
   "strategicAxes.roadmap.progress": "Avancement",
   "strategicAxes.roadmap.leviersSuffix": "projets",
+  "strategicAxes.roadmap.leviersSuffixOne": "projet",
   // Round 20, point 3 : icône d'alerte discrète sur un levier/chantier en retard (`isProjetLate`,
   // lib/axisLogic.ts) — titre/tooltip de l'icône, `ProgramRoadmap.tsx`.
   "strategicAxes.roadmap.late": "En retard",
   // Round 21 (retour PO) : tooltip de la pastille de comptage "N/total en retard" au niveau
   // chantier — remplace l'icône seule, ambiguë sur un chantier à plusieurs leviers.
-  "strategicAxes.roadmap.lateCount": "{n} projet(s) en retard sur {total}",
+  "strategicAxes.roadmap.lateCount": "{n} projets en retard sur {total}",
+  "strategicAxes.roadmap.lateCountOne": "{n} projet en retard sur {total}",
   // Round 28 : préfixe de l'infobulle du badge "jalon courant" (ex. "J2") posé sur chaque ligne de
   // levier de la feuille de route — remplace la fraction "N/5" jugée confuse par le PO.
   "strategicAxes.roadmap.currentMilestone": "Jalon actuel",
@@ -2124,11 +2139,11 @@ const fr: Record<string, string> = {
   // ─── Plan Stratégique — page KPI (saisie de mesures, édition d'objectif) ───
   "kpi.title": "Indicateurs (KPI)",
   "kpi.subtitle":
-    "Renseignez ici la valeur de vos indicateurs pour la période en cours et ajustez leur objectif au fil de l'eau. Seuls les rôles responsables — et les comptes explicitement autorisés — peuvent saisir un indicateur donné.",
+    "Renseignez ici la valeur de vos indicateurs pour la période en cours et ajustez leur objectif au fil de l'eau. Seuls les responsables de saisie désignés, les sponsors concernés et le pilote du plan peuvent saisir un indicateur donné.",
   "kpi.loading": "Chargement des indicateurs…",
   "kpi.noProgram": "Aucun programme actif.",
   "kpi.notStrategic":
-    "La page Indicateurs n'est disponible que pour un programme de type Plan Stratégique.",
+    "La page Indicateurs n'est disponible que pour un programme de type Plan stratégique.",
   "kpi.empty": "Aucun indicateur défini pour ce programme.",
   "kpi.emptyHint":
     "Les indicateurs se définissent depuis l'administration du programme (onglet Indicateurs).",
@@ -2149,9 +2164,9 @@ const fr: Record<string, string> = {
   "kpi.filterChip.noMatch": "Aucun indicateur ne correspond aux filtres actifs.",
 
   // ─── KPI business (indicateurs de niveau axe) — page KPI ET dashboard stratégique ───
-  "businessKpis.title": "KPI métier — Suivi du marché",
+  "businessKpis.title": "Indicateurs clés",
   "businessKpis.empty":
-    "Aucun KPI métier défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs.",
+    "Aucun indicateur clé défini — ajoutez un indicateur rattaché directement à un axe depuis l'onglet Admin > Indicateurs.",
   "businessKpis.noValue": "Aucune mesure",
   "kpi.axisUnknown": "Indicateurs sans axe rattaché",
   "kpi.macroIndicators": "Indicateurs de l'axe",
@@ -2242,7 +2257,7 @@ const fr: Record<string, string> = {
   "kpi.table.finalTarget": "Cible finale",
   "kpi.table.status": "Statut",
   "kpi.fillValue": "Renseigner la valeur",
-  "kpi.market.owner": "Saisie : CTO",
+  "kpi.market.owner": "Saisie : {names}",
   "kpi.section.kpis": "KPI",
   "kpi.section.openChantier": "Ouvrir le chantier",
   "kpi.noteOptional": "Commentaire (optionnel)",
@@ -2375,13 +2390,13 @@ const fr: Record<string, string> = {
   "staffing.validation.outsideProject": "Attention : ces dates sortent de la période du projet.",
 
   // ─── Page Effectifs mobilisés (/effectifs, Plan Stratégique) ──────────────
-  "effectifs.title": "Effectifs & budget mobilisés",
+  "effectifs.title": "Budget & effectifs mobilisés",
   "effectifs.subtitle":
     "ETP mobilisés sur les chantiers du programme, par équipe. Cliquez une équipe pour voir sa répartition entre les axes et repérer un éventuel sur-staffage.",
   "effectifs.loading": "Chargement des effectifs…",
   "effectifs.noProgram": "Aucun programme actif.",
   "effectifs.notStrategic":
-    "La page Effectifs mobilisés n'est disponible que pour un programme de type Plan Stratégique.",
+    "La page Budget & effectifs mobilisés n'est disponible que pour un programme de type Plan stratégique.",
   "effectifs.empty": "Aucun ETP déclaré sur ce programme.",
   "effectifs.emptyHint":
     "Ouvrez un chantier depuis un axe stratégique et ajoutez-y des ETP par équipe.",
@@ -2570,7 +2585,7 @@ const fr: Record<string, string> = {
   // Le chrome du mode édition (Personnaliser / Terminer / Ajouter un widget / Réinitialiser)
   // réutilise les clés `dashboard.*` : elles sont génériques et strictement identiques d'un
   // dashboard à l'autre — les dupliquer ferait diverger deux libellés censés rester les mêmes.
-  "strategicDashboard.title": "Tableau de bord stratégique",
+  "strategicDashboard.title": "Pilotage global",
   "strategicDashboard.loading": "Chargement du plan stratégique…",
   "strategicDashboard.noProgram":
     "Aucun programme n'est actif. Créez-en un dans Admin > Entreprises > Programmes.",
@@ -2617,7 +2632,7 @@ const fr: Record<string, string> = {
   "strategicDashboard.removeWidget": "Retirer ce widget",
   // Libellés du registre de widgets (lib/strategicDashboardWidgets.ts, champ `label`).
   "strategicDashboard.widget.indicatorStatus": "Indicateurs · trajectoire",
-  "strategicDashboard.widget.businessKpis": "KPI métier — Suivi du marché",
+  "strategicDashboard.widget.businessKpis": "Indicateurs clés",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alertes",
   // Round 8 : placeholder d'une colonne de jalon E0-E4 sans levier (`ProjetMilestoneBoard.tsx`).
   "strategicDashboard.projetBoard.emptyColumn": "—",
@@ -2639,9 +2654,9 @@ const fr: Record<string, string> = {
   "adminPrograms.back": "Tous les programmes",
   "adminPrograms.tabMaturity": "Étapes de maturité",
   "adminPrograms.tabIndicators": "Indicateurs",
-  "adminPrograms.tabLifecycle": "Cycle de vie",
+  "adminPrograms.tabLifecycle": "Maturité des leviers",
   "adminPrograms.badgeStrategic": "Stratégique",
-  "adminPrograms.badgePerformance": "Transformation",
+  "adminPrograms.badgePerformance": "Performance",
   "adminPrograms.noSettings":
     "Aucun paramètre de configuration disponible pour ce type de programme.",
 
@@ -2651,7 +2666,8 @@ const fr: Record<string, string> = {
   "adminIndicators.new": "Nouvel indicateur",
   "adminIndicators.createTitle": "Nouvel indicateur",
   "adminIndicators.editTitle": "Modifier l'indicateur",
-  "adminIndicators.count": "{n} indicateur(s)",
+  "adminIndicators.count": "{n} indicateurs",
+  "adminIndicators.countOne": "{n} indicateur",
   "adminIndicators.loading": "Chargement…",
   "adminIndicators.empty": "Aucun indicateur défini pour ce programme.",
   "adminIndicators.name": "Nom de l'indicateur",
@@ -2852,7 +2868,10 @@ const fr: Record<string, string> = {
   "dashboard.tableHeader.opexOneOffRealizedPlan": "OPEX ponctuels (réalisé / plan)",
   "dashboard.kpi.leversAtRiskWatchHint": "risque moyen, non compté",
   "dashboard.riskCenter.leversAtRiskBadge": "{n} leviers à risque",
+  "dashboard.riskCenter.leversAtRiskBadgeOne": "{n} levier à risque",
   "dashboard.riskCenter.openAlertsCount": "{n} alertes ouvertes",
+  "dashboard.riskCenter.addManualAlert": "+ Alerte manuelle",
+  "dashboard.riskCenter.openAlertsCountOne": "{n} alerte ouverte",
   "dashboard.tableHeader.capexEngagedReforecast": "CAPEX (engagé / réactualisé)",
   "dashboard.tableHeader.opexOneOffEngagedReforecast": "OPEX ponctuels (engagé / réactualisé)",
   "dashboard.workstreamsCancelledHidden":
@@ -2902,10 +2921,10 @@ const fr: Record<string, string> = {
   "hr.drillSeeInEtp": "Voir ces {n} mouvements dans la Base ETP",
   "levers.filter.program": "Programme",
   "levers.noProgram":
-    "Aucun Plan Performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers.",
+    "Aucun Plan de performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers.",
   "levers.column.code": "Code",
   "levers.column.type": "Type",
-  "levers.column.reforecastNet": "Économies nettes réactualisées (€M)",
+  "levers.column.reforecastNet": "Économies nettes réactualisées",
   "levers.column.progress": "Avancement",
   "levers.column.fteImpact": "ETP impacté",
   "levers.column.opexOneOff": "OPEX ponctuel",
@@ -2943,7 +2962,7 @@ const fr: Record<string, string> = {
   "leverDetail.fte.reduced": "postes supprimés/réduits",
   "leverDetail.fte.positiveWarning": "ETP positif — à vérifier",
   "workstreams.noProgram":
-    "Aucun Plan Performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers.",
+    "Aucun Plan de performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers.",
   "workstreams.kpi.onTrack": "Dans les temps",
   "workstreams.kpi.atRisk": "À risque",
   "workstreams.kpi.critical": "Critique",
@@ -2976,7 +2995,7 @@ const fr: Record<string, string> = {
   "finance.chart.cumulativeCost": "Coût cumulé",
   "finance.chart.opexRecRunRate": "OPEX récurrent démarré",
   "finance.chart.empty": "Aucun coût saisi sur les actions des leviers.",
-  "finance.hierarchyTable.title": "Économies par niveau financier (€M)",
+  "finance.hierarchyTable.title": "Économies par niveau financier",
   "finance.hierarchyTable.level": "Niveau",
   "finance.hierarchyTable.export": "Exporter",
   "finance.hierarchyTable.total": "Total",
@@ -3144,7 +3163,7 @@ const fr: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "OPEX ponctuel",
   "leverDetail.trajectory.detailOpexRec": "OPEX récurrent",
   "leverDetail.trajectory.detailEmpty": "Aucun impact sur cette période.",
-  "leverDetail.oneOff": "Ponctuel",
+  "leverDetail.oneOff": "OPEX ponctuel",
   "chart.waterfall.realized": "Réalisé",
   "chart.waterfall.remaining": "Reste à faire",
   "chart.waterfall.oneOff": "Gains ponctuels (hors totaux)",
@@ -3455,7 +3474,7 @@ const fr: Record<string, string> = {
   "me.planFilter": "Plan",
   "me.plan.all": "Tous",
   "me.plan.strategic": "Stratégique",
-  "me.plan.performance": "Transfo",
+  "me.plan.performance": "Performance",
   "me.category.overdue": "En retard",
   "me.category.toHandle": "À traiter",
   "me.category.upcoming": "À venir",
@@ -3499,7 +3518,7 @@ const fr: Record<string, string> = {
   "me.health.red": "En difficulté",
   "me.health.neutral": "Non évalué",
   // Mon espace — moteur (lib/myWorkspace.ts) : libellés d'éléments et de rôles.
-  "me.item.leverApproval": "Valider le passage {from} → {to}",
+  "me.item.leverApproval": "Valider le changement de maturité {from} → {to}",
   "me.item.realizedApproval": "Valider le réalisé : {label}",
   "me.item.milestoneApproval": "Valider le passage au jalon {to}",
   "me.item.kpiValueApproval": "Valider une valeur d'indicateur",
@@ -3524,11 +3543,11 @@ const fr: Record<string, string> = {
   "me.item.hrLeverMismatch": "Mouvement RH désynchronisé du levier",
   "me.item.hrPlanned": "Mouvement RH planifié",
   "me.role.owner": "Responsable",
-  "me.role.sponsor": "Sponsor",
+  "me.role.sponsor": "Responsable de chantier",
   "me.role.axisSponsor": "Sponsor d'axe",
   "me.role.pilote": "Sponsor de chantier",
   "me.role.programOwner": "Responsable du programme",
-  "me.role.cto": "CTO",
+  "me.role.cto": "Directeur de la transformation",
   "me.role.admin": "Administrateur",
   "me.role.finance": "Finance",
   "me.role.strategicLead": "Pilote du plan stratégique",
@@ -3743,7 +3762,7 @@ const fr: Record<string, string> = {
   "strategicLinks.kpiIndicatorNotFound": "Indicateur introuvable dans la vue actuelle",
   "strategicLinks.openTarget": "Ouvrir",
   "strategicLinks.leverOtherProgram":
-    "Levier d'un Plan Performance non accessible depuis le programme actif",
+    "Levier d'un Plan de performance non accessible depuis le programme actif",
   "saveError.title": "Échec de l'enregistrement",
   "saveError.permission": "Vous n'avez pas le droit d'effectuer cette modification",
   "saveError.network": "Connexion perdue, modification non enregistrée",

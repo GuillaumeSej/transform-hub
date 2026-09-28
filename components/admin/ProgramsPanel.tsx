@@ -24,6 +24,7 @@ import { ensureDefaultMaturityStages } from "@/lib/firestore/maturityStageConfig
 import { resolveProgramType } from "@/lib/axisLogic";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { tPlural } from "@/lib/i18n/plural";
 import { MaturityStagesEditor } from "@/components/admin/MaturityStagesEditor";
 import { IndicatorsEditor } from "@/components/admin/IndicatorsEditor";
 import { LifecycleEditor } from "@/components/admin/LifecycleEditor";
@@ -43,14 +44,14 @@ const PROGRAM_TYPE_OPTIONS: {
   {
     value: "performance",
     labelKey: "adminProgramsPanel.typePerformance",
-    label: "Plan Performance",
+    label: "Plan de performance",
     hintKey: "adminProgramsPanel.typePerformanceHint",
-    hint: "Leviers financiers, cycle de vie L1-L5, impacts CAPEX/OPEX.",
+    hint: "Leviers financiers, maturité L1-L5, impacts CAPEX/OPEX.",
   },
   {
     value: "strategic",
     labelKey: "adminProgramsPanel.typeStrategic",
-    label: "Plan Stratégique",
+    label: "Plan stratégique",
     hintKey: "adminProgramsPanel.typeStrategicHint",
     hint: "Axes, chantiers et indicateurs (3-5-15), étapes de maturité configurables.",
   },
@@ -91,7 +92,7 @@ const PROGRAM_TABS: {
   {
     id: "lifecycle",
     key: "adminPrograms.tabLifecycle",
-    fallback: "Cycle de vie",
+    fallback: "Maturité des leviers",
     icon: SlidersHorizontal,
     programTypes: ["performance"],
   },
@@ -125,7 +126,7 @@ function ProgramTypeBadge({
     <span
       className={`rounded-full bg-info-blue-light px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-info-blue ${className}`}
     >
-      {t("adminPrograms.badgePerformance", "Transformation")}
+      {t("adminPrograms.badgePerformance", "Performance")}
     </span>
   );
 }
@@ -654,7 +655,7 @@ export function ProgramsPanel({
       )}
 
       <div className="text-xs text-text-secondary">
-        {t("adminProgramsPanel.count", "{n} programme(s)").replace("{n}", String(programs.length))}
+        {tPlural(t, "adminProgramsPanel.count", programs.length, "{n} programmes", "{n} programme")}
       </div>
 
       {/* Desktop/tablette (>= sm). En dessous de sm, remplacé par des cartes empilées

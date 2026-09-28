@@ -21,7 +21,7 @@ const en: Record<string, string> = {
   // ─── nav ──────────────────────────────────────────────────────────────────
   "nav.executiveDashboard": "Global Steering",
   "nav.leverLibrary": "Initiative Library",
-  "nav.leverPipeline": "Initiative Pipeline",
+  "nav.leverPipeline": "Initiatives by maturity",
   "nav.myLevers": "My Initiatives",
   "nav.linkedLevers": "Linked Initiatives",
   "nav.workstreamDashboard": "Work Package Dashboard",
@@ -52,7 +52,7 @@ const en: Record<string, string> = {
   "shared.topbar.realizedPending": "Realized to approve · {amount}",
   "leverDetail.lateActions": "Late actions",
   "validation.lever": "Lever",
-  "validation.gate": "Stage",
+  "validation.gate": "Maturity",
   "validation.workstream": "Work package",
   "validation.requestedBy": "Requested by",
   "validation.requestedAt": "Requested on",
@@ -247,8 +247,8 @@ const en: Record<string, string> = {
   "dashboard.widgets.viewBridge": "Bridge",
   "dashboard.widgets.dateFrom": "From",
   "dashboard.widgets.dateTo": "To",
-  "dashboard.widgets.stageFunnel": "Progress by lifecycle stage",
-  "dashboard.widgets.stageFunnelFull": "Initiative progress by lifecycle stage",
+  "dashboard.widgets.stageFunnel": "Progress by maturity",
+  "dashboard.widgets.stageFunnelFull": "Initiative progress by maturity",
   "dashboard.widgets.alerts": "Alerts & Notifications",
   "dashboard.widgets.noAlerts": "No alerts to process",
   "dashboard.widgets.riskCenter": "Alerts & Dependencies",
@@ -263,7 +263,8 @@ const en: Record<string, string> = {
   "alerts.markAllResolved": "Resolve all",
   "alerts.auto": "Auto",
   "alerts.page": "Page {current} / {total}",
-  "alerts.count": "{n} alert(s)",
+  "alerts.count": "{n} alerts",
+  "alerts.countOne": "{n} alert",
   "alerts.tooltip.red": "Critical alerts — immediate action required",
   "alerts.tooltip.amber": "Alerts to watch — risk identified",
   "alerts.tooltip.green": "Positive alerts — progress or resolution",
@@ -286,7 +287,7 @@ const en: Record<string, string> = {
   "dashboard.widgets.sCurve": "S-Curve — Baseline / Realized / Re-forecast",
   "dashboard.widgets.bridgeQuarter": "Savings by quarter → target",
   "dashboard.widgets.bridgeMonth": "Savings by month → target",
-  "dashboard.widgets.sankey": "Initiative flow by stage (Sankey)",
+  "dashboard.widgets.sankey": "Initiative flow by maturity (Sankey)",
   "dashboard.widgets.marimekko": "Planned savings",
   "dashboard.widgets.workstreamBreakdown": "Savings realization",
   "dashboard.widgets.geoBreakdown": "Savings by Country / Function",
@@ -351,7 +352,8 @@ const en: Record<string, string> = {
   "dashboard.dependency.rule.sf": "The target must start before the source finishes",
   "dashboard.dependency.rule.ss": "Both initiatives must start together",
   "dashboard.dependency.rule.ff": "Both initiatives must finish together",
-  "dashboard.dependency.alertCount": "{n} alert(s)",
+  "dashboard.dependency.alertCount": "{n} alerts",
+  "dashboard.dependency.alertCountOne": "{n} alert",
   "dashboard.noProgram":
     "No program has been created for your company yet. Create one in Admin > Companies > Programs, then attach initiatives to it.",
   "dashboard.builderModal.alreadyOnDashboard": "This chart is already on your dashboard",
@@ -389,9 +391,10 @@ const en: Record<string, string> = {
   "levers.createLever": "Create initiative",
   "levers.table": "Table",
   "levers.kanban": "Kanban",
+  "levers.gantt": "Gantt",
   "levers.searchPlaceholder": "Search (name, code, owner...)",
   "levers.count": "initiatives",
-  "levers.realized": "Savings realized (€M)",
+  "levers.realized": "Savings realized",
   "levers.columnName": "Initiative",
   "levers.columnStatus": "Stage",
   "levers.filter.costCenter": "Cost center / Expense item",
@@ -452,16 +455,18 @@ const en: Record<string, string> = {
 
   // ─── leverDetail (initiative detail page) ──────────────────────────────────
   "leverDetail.tab.plan": "Action plan",
+  "leverDetail.tab.overview": "Overview",
+  "leverDetail.tab.impact": "Impact",
   "leverDetail.tab.collab": "Collaboration",
   "leverDetail.loading": "Loading…",
   "leverDetail.notFound": "Initiative not found.",
-  "leverDetail.backToPipeline": "Back to pipeline",
+  "leverDetail.backToPipeline": "Back to initiatives by maturity",
   "leverDetail.outOfPerimeter":
     "Restricted access — this initiative is outside your scope: you are neither its initiative leader nor its work package leader.",
   "leverDetail.restrictedAccess":
     'Restricted access — this initiative is classified as "{level}", a confidentiality level your profile is not cleared for.',
   "leverDetail.editLever": "Edit initiative",
-  "leverDetail.statusUpdated": "Stage updated",
+  "leverDetail.statusUpdated": "Maturity updated",
   "leverDetail.deliveredNeedsAllActions":
     'Moving to "{stage}" requires all actions to be done (100%). Until then, the lever stays "{current}".',
   "shared.kanban.tip.id": "Lever ID",
@@ -469,11 +474,11 @@ const en: Record<string, string> = {
   "shared.kanban.tip.progress": "Action plan progress: {pct}%",
   "shared.kanban.tip.owner": "Lever owner: {name}",
   "leverDetail.autoStageHint":
-    "This stage is reached automatically when the action plan is at 100%",
-  "leverDetail.pastStageHint": "Stage already reached — cannot move backward",
+    "This maturity level is reached automatically when the action plan is at 100%",
+  "leverDetail.pastStageHint": "Maturity level already reached — cannot move backward",
   "leverDetail.moveToStage": 'Move to "{stage}"',
   "leverDetail.approval.stageHint":
-    "This stage requires an approval request (owner → work package leader or CTO), see below",
+    "This maturity change requires an approval request (owner → work package leader or CTO), see below",
   "leverDetail.approval.submitHint":
     "This lever is ready for an approval request (owner → work package leader or CTO).",
   "leverDetail.approval.submit": "Submit for approval",
@@ -493,7 +498,7 @@ const en: Record<string, string> = {
   "levers.approval.submitHint":
     "This lever is ready for an approval request (double approval: levels above the requester, workstream lead then CTO).",
   "levers.approval.stageHint":
-    "This stage requires an approval request (workstream lead then CTO), see below",
+    "This maturity change requires an approval request (work package leader then CTO), see below",
   "levers.approval.pending": 'Approval request to move to "{stage}"',
   "levers.approval.ownRequest": "Your request: you cannot approve it yourself.",
   "levers.approval.withdraw": "Withdraw request",
@@ -561,7 +566,9 @@ const en: Record<string, string> = {
   "leverDetail.actionPlanDisabled":
     "Module not enabled — the Action plan has been disabled for your company (configurable in Admin > Companies).",
   "leverDetail.actionPlanTitle": "Action plan — {name}",
-  "leverDetail.actionsCount": "{n} action(s)",
+  "leverDetail.actionsCount": "{n} actions",
+  "leverDetail.addAction": "Action",
+  "leverDetail.actionsCountOne": "{n} action",
   "leverDetail.todo": "To do",
   "leverDetail.inProgress": "In progress",
   "leverDetail.completed": "Done",
@@ -593,7 +600,7 @@ const en: Record<string, string> = {
   // ─── workstreams (Workstream Dashboard) ────────────────────────────────────
   "workstreams.subtitle": "View of all program initiatives, across all work packages.",
   "workstreams.savingsRealizedTarget": "Actual / reforecast target",
-  "workstreams.reforecastTarget": "Reforecast target €M",
+  "workstreams.reforecastTarget": "Reforecast target",
   "workstreams.vsReforecast": "of reforecast target",
   "workstreams.searchPlaceholder": "Search (name, code, owner...)",
 
@@ -781,7 +788,8 @@ const en: Record<string, string> = {
   "adminProgramsPanel.ambitionPlaceholder": "E.g. Become the market leader by 2027",
   "adminProgramsPanel.budgetLabel": "Forecasted budget",
   "adminProgramsPanel.budgetPlaceholder": "E.g. 5000000",
-  "adminProgramsPanel.count": "{n} program(s)",
+  "adminProgramsPanel.count": "{n} programs",
+  "adminProgramsPanel.countOne": "{n} program",
   "adminProgramsPanel.colProgram": "Program",
   "adminProgramsPanel.colActions": "Actions",
   "adminProgramsPanel.empty": "No program for this company.",
@@ -794,7 +802,7 @@ const en: Record<string, string> = {
   "adminProgramsPanel.strategicImportCtaButton": "Import the strategic plan",
   "adminProgramsPanel.typePerformance": "Performance Plan",
   "adminProgramsPanel.typePerformanceHint":
-    "Financial initiatives, L1-L5 lifecycle, CAPEX/OPEX impacts.",
+    "Financial initiatives, L1-L5 maturity, CAPEX/OPEX impacts.",
   "adminProgramsPanel.typeStrategic": "Strategic Plan",
   "adminProgramsPanel.typeStrategicHint":
     "Axes, work packages and indicators (3-5-15), configurable maturity stages.",
@@ -818,8 +826,8 @@ const en: Record<string, string> = {
 
   // ─── shared (shared components: Modal, Topbar, Sidebar, ResetDemoButton…) ──
   "shared.resetDemoButton.label": "Reset demo data",
-  "shared.topbar.notificationsToProcess": "Notifications to process · {n}",
-  "shared.topbar.noNotifications": "No notifications to process.",
+  "shared.topbar.notificationsToProcess": "Alerts · {n}",
+  "shared.topbar.noNotifications": "No alerts to process.",
   "shared.topbar.sourceAuto": "Automatic",
   "shared.topbar.sourceManual": "Manual",
 
@@ -884,7 +892,7 @@ const en: Record<string, string> = {
   "adminHistory.action.approvalRequested": "Approval requested",
   "adminHistory.action.approvalApproved": "Request approved",
   "adminHistory.action.approvalRejected": "Approval rejected",
-  "adminHistory.title": "Change History",
+  "adminHistory.title": "History",
   "adminHistory.searchPlaceholder": "Search...",
   "adminHistory.allActions": "All actions",
   "adminHistory.allEntities": "All entities",
@@ -908,7 +916,7 @@ const en: Record<string, string> = {
   // ─── adminLifecycle ─────────────────────────────────────────────────────────
 
   // ─── adminCompanies ─────────────────────────────────────────────────────────
-  "adminCompanies.title": "Company Management",
+  "adminCompanies.title": "Companies",
   "adminCompanies.editTitle": "Edit company",
   "adminCompanies.newTitle": "New company",
   "adminCompanies.column.id": "ID",
@@ -958,7 +966,7 @@ const en: Record<string, string> = {
   "adminProgramConfig.saveFailedBody": "The program configuration could not be saved.",
 
   // ─── adminData ──────────────────────────────────────────────────────────────
-  "adminData.title": "Data Overview",
+  "adminData.title": "Data",
   "adminData.globalSummary": "Global summary",
   "adminData.employees": "Employees",
   "adminData.movements": "Movements",
@@ -1088,7 +1096,7 @@ const en: Record<string, string> = {
   // ─── adminUsers (Admin > Users) ─────────────────────────────────────
   "adminUsers.directionLabel": "Direction / department (optional)",
   "adminUsers.directionUnassigned": "Not set",
-  "adminUsers.title": "User Management",
+  "adminUsers.title": "Users",
   "adminUsers.editTitle": "Edit user",
   "adminUsers.newTitle": "New user",
   "adminUsers.fieldUsername": "Username",
@@ -1164,7 +1172,8 @@ const en: Record<string, string> = {
     "First configure confidentiality levels in this company's Settings tab to enable this control.",
   "adminUsers.filterByCompany": "Filter by company",
   "adminUsers.allCompanies": "All companies",
-  "adminUsers.userCount": "{n} user(s)",
+  "adminUsers.userCount": "{n} users",
+  "adminUsers.userCountOne": "{n} user",
   "adminUsers.colProfiles": "Profiles",
   "adminUsers.colActions": "Actions",
   "adminUsers.confirm": "Confirm",
@@ -1204,6 +1213,7 @@ const en: Record<string, string> = {
   "shared.periodToolbar.customRange": "Custom range",
   "shared.periodToolbar.reset": "Reset",
   "shared.exportButton.successBody": "{n} levers exported",
+  "shared.exportButton.exportExcel": "Excel export",
   "shared.filterBar.clearAll": "Clear all",
   "shared.multiSelect.selectAll": "Select all",
   "shared.multiSelect.clear": "Clear",
@@ -1270,11 +1280,11 @@ const en: Record<string, string> = {
     'Code "{code}" is duplicated in the file (already used on row {row})',
   "shared.leverImport.msg.unknownStatus": 'Unknown status "{value}" (expected: {expected})',
   "shared.leverImport.msg.statusNewLever":
-    "A new initiative can only be imported at the “{idea}” stage (or abandoned): the “{target}” stage requires approval. Import it at the “{idea}” stage, then request approval from its page.",
+    "A new initiative can only be imported at the “{idea}” maturity (or abandoned): the “{target}” maturity requires approval. Import it at “{idea}”, then request approval from its page.",
   "shared.leverImport.msg.statusGated":
-    "Status change “{current}” → “{target}” rejected: the “{target}” stage requires approval (request it from the initiative page). Put the current status back in the file to import the other changes.",
+    "Maturity change “{current}” → “{target}” rejected: the “{target}” maturity requires approval (request it from the initiative page). Put the current maturity back in the file to import the other changes.",
   "shared.leverImport.msg.statusBackward":
-    "Status change “{current}” → “{target}” rejected: an import can neither skip a stage nor go back in the lifecycle. Put the current status back in the file to import the other changes.",
+    "Maturity change “{current}” → “{target}” rejected: an import can neither skip a maturity level nor go backward. Put the current maturity back in the file to import the other changes.",
   "shared.leverImport.msg.unknownPnl": 'P&L account "{value}" not found (expected: {expected})',
   "shared.leverImport.msg.requiredDate":
     '"{field}" is required and must be a valid date (DD/MM/YYYY or YYYY-MM-DD)',
@@ -1515,7 +1525,7 @@ const en: Record<string, string> = {
 
   // ─── adminLifecycleEditor ───────────────────────────────────────────────────
   "adminLifecycleEditor.intro":
-    "Customize the initiative lifecycle stages for this company. You can rename, reorder, enable/disable validations and adjust the number of stages.",
+    "Customize the initiative maturity levels for this company. You can rename, reorder, enable/disable validations and adjust the number of levels.",
   "adminLifecycleEditor.colOrder": "Order",
   "adminLifecycleEditor.colKey": "Key",
   "adminLifecycleEditor.colLabel": "Label",
@@ -1542,7 +1552,7 @@ const en: Record<string, string> = {
 
   // ─── Strategic Plan — Axes page + axis detail sheet ───────────────────────
   // Portfolio
-  "strategicAxes.title": "Strategic axes",
+  "strategicAxes.title": "Roadmap",
   "strategicAxes.count": "axes",
   "strategicAxes.chantiersCount": "work packages",
   "strategicAxes.indicatorsCount": "indicators",
@@ -1580,8 +1590,10 @@ const en: Record<string, string> = {
   "strategicAxes.budgetByChantierModalTitle": "Budget breakdown by work package",
   "strategicAxes.noIndicatorsShort": "No indicator",
   "strategicAxes.unassigned": "Unassigned",
-  "strategicAxes.tree.chantiersN": "{n} work package(s)",
-  "strategicAxes.tree.projetsN": "{n} project(s)",
+  "strategicAxes.tree.chantiersN": "{n} work packages",
+  "strategicAxes.tree.chantiersNOne": "{n} work package",
+  "strategicAxes.tree.projetsN": "{n} projects",
+  "strategicAxes.tree.projetsNOne": "{n} project",
   "strategicAxes.tree.milestonesN": "{p}/{t} milestones",
   "strategicAxes.tree.open": "Open details",
   "strategicAxes.tree.allChantiersTitle": "All work packages",
@@ -1611,6 +1623,7 @@ const en: Record<string, string> = {
   "strategicAxes.chantierUnplanned": "Work packages with no planned project",
   "strategicAxes.chantierNoDates": "No dates yet — add a project",
   "strategicAxes.actionsSuffix": "projects",
+  "strategicAxes.actionsSuffixOne": "project",
   // Gantt: adjustable time scale, progress, workstream summary
   "strategicAxes.ganttScale": "Scale",
   "strategicAxes.ganttScaleMonth": "Month",
@@ -1628,8 +1641,10 @@ const en: Record<string, string> = {
   "strategicAxes.roadmap.scaleYear": "Year",
   "strategicAxes.roadmap.progress": "Progress",
   "strategicAxes.roadmap.leviersSuffix": "projects",
+  "strategicAxes.roadmap.leviersSuffixOne": "project",
   "strategicAxes.roadmap.late": "Late",
-  "strategicAxes.roadmap.lateCount": "{n} project(s) late out of {total}",
+  "strategicAxes.roadmap.lateCount": "{n} projects late out of {total}",
+  "strategicAxes.roadmap.lateCountOne": "{n} project late out of {total}",
   "strategicAxes.roadmap.currentMilestone": "Current milestone",
   "strategicAxes.chantierPeriod": "Period",
   "strategicAxes.newChantier": "New work package",
@@ -2017,9 +2032,9 @@ const en: Record<string, string> = {
   "strategicImport.usernameCollision": "username “{username}” already taken: suffixed",
 
   // ─── Strategic Plan — KPI page (measurement entry, objective editing) ──────
-  "kpi.title": "Indicators (KPI)",
+  "kpi.title": "KPIs",
   "kpi.subtitle":
-    "Report your indicator values for the current period here, and adjust their targets as you go. Only the responsible roles — and explicitly authorised accounts — can report a given indicator.",
+    "Report your indicator values for the current period here, and adjust their targets as you go. Only the designated data-entry owners, the sponsors concerned and the plan lead can report a given indicator.",
   "kpi.loading": "Loading indicators…",
   "kpi.noProgram": "No active program.",
   "kpi.notStrategic": "The Indicators page is only available for a Strategic Plan program.",
@@ -2042,9 +2057,9 @@ const en: Record<string, string> = {
   "kpi.filterChip.noMatch": "No indicator matches the active filters.",
 
   // ─── Business KPIs (axis-level indicators) — KPI page AND strategic dashboard ───
-  "businessKpis.title": "Business KPIs — Market tracking",
+  "businessKpis.title": "Key indicators",
   "businessKpis.empty":
-    "No business KPI defined — add an indicator attached directly to an axis from the Admin > Indicators tab.",
+    "No key indicator defined — add an indicator attached directly to an axis from the Admin > Indicators tab.",
   "businessKpis.noValue": "No measurement",
   "kpi.axisUnknown": "Indicators without an axis",
   "kpi.macroIndicators": "Axis indicators",
@@ -2130,7 +2145,7 @@ const en: Record<string, string> = {
   "kpi.table.finalTarget": "Final target",
   "kpi.table.status": "Status",
   "kpi.fillValue": "Enter value",
-  "kpi.market.owner": "Entry: CTO",
+  "kpi.market.owner": "Entry: {names}",
   "kpi.section.kpis": "KPIs",
   "kpi.section.openChantier": "Open the work package",
   "kpi.noteOptional": "Comment (optional)",
@@ -2259,7 +2274,7 @@ const en: Record<string, string> = {
   "staffing.validation.outsideProject": "Warning: these dates fall outside the project period.",
 
   // ─── Staffing page (/effectifs, Strategic Plan) ───────────────────────────
-  "effectifs.title": "Mobilized staffing & budget",
+  "effectifs.title": "Budget & mobilized staffing",
   "effectifs.subtitle":
     "FTEs assigned to the programme's work packages, by team. Click a team to see how it splits across axes and spot possible over-staffing.",
   "effectifs.loading": "Loading staffing…",
@@ -2429,7 +2444,7 @@ const en: Record<string, string> = {
   // ─── Strategic dashboard ──────────────────────────────────────────────────
   // Edit-mode chrome (Customise / Done / Add widget / Reset) reuses the generic `dashboard.*`
   // keys on purpose: those labels must stay identical across both dashboards.
-  "strategicDashboard.title": "Strategic dashboard",
+  "strategicDashboard.title": "Global Steering",
   "strategicDashboard.loading": "Loading the strategic plan…",
   "strategicDashboard.noProgram":
     "No active program. Create one under Admin > Companies > Programs.",
@@ -2476,7 +2491,7 @@ const en: Record<string, string> = {
   "strategicDashboard.removeWidget": "Remove this widget",
   // Widget registry labels (lib/strategicDashboardWidgets.ts, `label` field).
   "strategicDashboard.widget.indicatorStatus": "Indicators · on track",
-  "strategicDashboard.widget.businessKpis": "Business KPIs — Market tracking",
+  "strategicDashboard.widget.businessKpis": "Key indicators",
   "strategicDashboard.widget.chantierDependencyAlerts": "Alerts",
   // Round 8: placeholder for an empty E0-E4 milestone column (`ProjetMilestoneBoard.tsx`).
   "strategicDashboard.projetBoard.emptyColumn": "—",
@@ -2494,9 +2509,9 @@ const en: Record<string, string> = {
   "adminPrograms.back": "All programs",
   "adminPrograms.tabMaturity": "Maturity stages",
   "adminPrograms.tabIndicators": "Indicators",
-  "adminPrograms.tabLifecycle": "Lifecycle",
+  "adminPrograms.tabLifecycle": "Initiative maturity",
   "adminPrograms.badgeStrategic": "Strategic",
-  "adminPrograms.badgePerformance": "Transformation",
+  "adminPrograms.badgePerformance": "Performance",
   "adminPrograms.noSettings": "No configuration settings available for this program type.",
 
   // ─── Strategic Plan — Admin "Indicators" tab ──────────────────────────────
@@ -2505,7 +2520,8 @@ const en: Record<string, string> = {
   "adminIndicators.new": "New indicator",
   "adminIndicators.createTitle": "New indicator",
   "adminIndicators.editTitle": "Edit indicator",
-  "adminIndicators.count": "{n} indicator(s)",
+  "adminIndicators.count": "{n} indicators",
+  "adminIndicators.countOne": "{n} indicator",
   "adminIndicators.loading": "Loading…",
   "adminIndicators.empty": "No indicator defined for this program.",
   "adminIndicators.name": "Indicator name",
@@ -2699,7 +2715,10 @@ const en: Record<string, string> = {
   "dashboard.tableHeader.opexOneOffRealizedPlan": "One-off OPEX (actual / plan)",
   "dashboard.kpi.leversAtRiskWatchHint": "medium risk, not counted",
   "dashboard.riskCenter.leversAtRiskBadge": "{n} levers at risk",
+  "dashboard.riskCenter.leversAtRiskBadgeOne": "{n} lever at risk",
   "dashboard.riskCenter.openAlertsCount": "{n} open alerts",
+  "dashboard.riskCenter.addManualAlert": "+ Manual alert",
+  "dashboard.riskCenter.openAlertsCountOne": "{n} open alert",
   "dashboard.tableHeader.capexEngagedReforecast": "CAPEX (committed / reforecast)",
   "dashboard.tableHeader.opexOneOffEngagedReforecast": "One-off OPEX (committed / reforecast)",
   "dashboard.workstreamsCancelledHidden":
@@ -2816,7 +2835,7 @@ const en: Record<string, string> = {
   "finance.chart.cumulativeCost": "Cumulative cost",
   "finance.chart.opexRecRunRate": "Recurring OPEX started",
   "finance.chart.empty": "No cost entered on initiative actions.",
-  "finance.hierarchyTable.title": "Savings by finance level (€M)",
+  "finance.hierarchyTable.title": "Savings by finance level",
   "finance.hierarchyTable.level": "Level",
   "finance.hierarchyTable.export": "Export",
   "finance.hierarchyTable.total": "Total",
@@ -2911,7 +2930,7 @@ const en: Record<string, string> = {
   "levers.tree.leverOwnerEmpty": "Initiative leader not set",
   "levers.column.code": "Code",
   "levers.column.type": "Type",
-  "levers.column.reforecastNet": "Net reforecast savings (€M)",
+  "levers.column.reforecastNet": "Net reforecast savings",
   "levers.column.progress": "Progress",
   "levers.column.fteImpact": "FTE impacted",
   "levers.column.opexOneOff": "One-off OPEX",
@@ -3001,7 +3020,7 @@ const en: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "One-off OPEX",
   "leverDetail.trajectory.detailOpexRec": "Recurring OPEX",
   "leverDetail.trajectory.detailEmpty": "No impact in this period.",
-  "leverDetail.oneOff": "One-off",
+  "leverDetail.oneOff": "One-off OPEX",
   "chart.waterfall.realized": "Actual",
   "chart.waterfall.remaining": "Remaining",
   "chart.waterfall.oneOff": "One-off gains (excluded from totals)",
@@ -3298,7 +3317,7 @@ const en: Record<string, string> = {
   "me.planFilter": "Plan",
   "me.plan.all": "All",
   "me.plan.strategic": "Strategic",
-  "me.plan.performance": "Transformation",
+  "me.plan.performance": "Performance",
   "me.category.overdue": "Overdue",
   "me.category.toHandle": "To handle",
   "me.category.upcoming": "Upcoming",
@@ -3342,7 +3361,7 @@ const en: Record<string, string> = {
   "me.health.red": "In trouble",
   "me.health.neutral": "Not assessed",
   // Mon espace — moteur (lib/myWorkspace.ts) : libellés d'éléments et de rôles.
-  "me.item.leverApproval": "Approve the move {from} → {to}",
+  "me.item.leverApproval": "Approve the maturity change {from} → {to}",
   "me.item.realizedApproval": "Approve the realized impact: {label}",
   "me.item.milestoneApproval": "Approve the move to milestone {to}",
   "me.item.kpiValueApproval": "Approve an indicator value",
@@ -3367,11 +3386,11 @@ const en: Record<string, string> = {
   "me.item.hrLeverMismatch": "HR movement out of sync with its lever",
   "me.item.hrPlanned": "Planned HR movement",
   "me.role.owner": "Owner",
-  "me.role.sponsor": "Sponsor",
+  "me.role.sponsor": "Work Package Leader",
   "me.role.axisSponsor": "Axis sponsor",
   "me.role.pilote": "Work package sponsor",
   "me.role.programOwner": "Program owner",
-  "me.role.cto": "CTO",
+  "me.role.cto": "Chief Transformation Officer",
   "me.role.admin": "Administrator",
   "me.role.finance": "Finance",
   "me.role.strategicLead": "Strategic plan lead",

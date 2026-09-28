@@ -66,7 +66,7 @@ export const DEFAULT_RISK_THRESHOLDS_FORM: {
  *  l'ajout de `comex_member` (transverse aux deux pistes, voir types/index.ts) qui en avait de
  *  toute façon besoin. */
 export const OPERATIONAL_ROLES: { value: Role; labelKey: string; label: string }[] = [
-  { value: "cto", labelKey: "roles.cto.short", label: "CTO" },
+  { value: "cto", labelKey: "roles.cto.label", label: "Directeur de la transformation" },
   // Libellé "Responsable de chantier" (renommage du libellé affiché — la clé technique `sponsor` reste
   // inchangée, toujours scopée WORKSTREAM, voir types/index.ts).
   { value: "sponsor", labelKey: "roles.sponsor.label", label: "Responsable de chantier" },
@@ -322,7 +322,7 @@ export function CompanyFieldsEditor({
             <p className="mt-1 rounded-lg border border-border bg-bg-surface p-3 text-xs text-text-secondary">
               {t(
                 "adminCompanyFields.directionsEmpty",
-                "Aucune direction/service configuré pour cette entreprise. Ajoutez-en pour permettre le rattachement des utilisateurs et le filtrage par direction sur le Plan Stratégique."
+                "Aucune direction/service configuré pour cette entreprise. Ajoutez-en pour permettre le rattachement des utilisateurs et le filtrage par direction sur le Plan stratégique."
               )}
             </p>
           )}

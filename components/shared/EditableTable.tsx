@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { onActivateKey } from "@/lib/a11y";
+import { formatNumber } from "@/lib/format";
 
 export type ColumnDef<T> = {
   key: keyof T & string;
@@ -200,7 +201,7 @@ export function EditableTable<T extends { id: string }>({
     : columns.slice(1);
 
   const cellContent = (row: T, c: ColumnDef<T>) =>
-    c.render ? c.render(row) : String(row[c.key] ?? "");
+    c.render ? c.render(row) : displayCellValue(row[c.key]);
 
   return (
     <div className={className}>
@@ -428,7 +429,7 @@ export function EditableTable<T extends { id: string }>({
                       ) : c.render ? (
                         c.render(row)
                       ) : (
-                        String(row[c.key] ?? "")
+                        displayCellValue(row[c.key])
                       )}
                     </td>
                   );
@@ -504,4 +505,12 @@ export function EditableTable<T extends { id: string }>({
       </div>
     </div>
   );
+}
+
+/** Valeur brute d'une cellule sans `render` : un nombre DÉCIMAL est affiché dans la langue de
+ *  l'app (`0,9` et non `0.9`) ; les entiers restent tels quels (années, codes…, pas de `2 026`). */
+function displayCellValue(value: unknown): string {
+  if (typeof value === "number" && !Number.isInteger(value))
+    return formatNumber(value, { maximumFractionDigits: 2 });
+  return String(value ?? "");
 }

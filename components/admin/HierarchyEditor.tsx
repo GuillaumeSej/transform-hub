@@ -52,6 +52,7 @@ import { Button } from "@/components/shared/Button";
 import { useToast } from "@/lib/hooks/useToast";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { formatAmountM } from "@/lib/format";
 
 let nodeSeq = 0;
 const EMPTY_NODE_FORM = {
@@ -968,7 +969,7 @@ export function HierarchyEditor({
                                   )}
                                   className="cursor-pointer decoration-dotted hover:underline"
                                 >
-                                  {n.financial?.baseline ?? 0} €M
+                                  {formatAmountM(n.financial?.baseline ?? 0)}
                                   {n.financial?.computed
                                     ? t("adminHierarchy.computedSuffix", " · Calculée")
                                     : ""}
@@ -1132,7 +1133,7 @@ export function HierarchyEditor({
                                 )}
                                 className="cursor-pointer decoration-dotted hover:underline"
                               >
-                                {n.financial?.baseline ?? 0} €M
+                                {formatAmountM(n.financial?.baseline ?? 0)}
                               </span>
                             )}
                           </div>

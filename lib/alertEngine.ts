@@ -5,6 +5,7 @@ import {
   displayedReforecastNet,
   leverImpactsOf,
 } from "@/lib/engine";
+import { formatAmountM } from "@/lib/format";
 
 /**
  * Générateur d'alertes automatiques — fonction pure qui analyse les données du programme
@@ -24,11 +25,11 @@ function implCosts(s: { capex: number; opexOneOff: number }): number {
   return s.capex + s.opexOneOff;
 }
 
-/** Formatte un montant en €K ou €M lisible. */
+/** Montant en M → texte de repli (`1,2 M €`, `-480 k €`), SANS signe `+` : les gabarits
+ *  portent eux-mêmes le `+`/`−` du delta. L'affichage réel est reformaté dans la langue active via
+ *  `i18n.amounts` (lib/alertText.ts). */
 function fmtImpact(v: number): string {
-  const abs = Math.abs(v);
-  if (abs >= 1) return `${v > 0 ? "+" : ""}€${v.toFixed(1)}M`;
-  return `${v > 0 ? "+" : ""}€${Math.round(v * 1000)}K`;
+  return formatAmountM(v);
 }
 
 /**
@@ -83,6 +84,7 @@ export function generateAlerts(
           total: totalActions,
           impact: fmtImpact(impact),
         },
+        amounts: { impact },
       },
       actorRole: "lever",
       impactEur: Math.round(impact * 1000000),
@@ -141,6 +143,7 @@ export function generateAlerts(
             plan: fmtImpact(planCost),
             delta: fmtImpact(delta),
           },
+          amounts: { reforecast: refCost, plan: planCost, delta },
         },
         actorRole: "finance",
         impactEur: Math.round(-delta * 1000000),
@@ -173,6 +176,7 @@ export function generateAlerts(
             plan: fmtImpact(l.lockedPlan.opexRec),
             delta: fmtImpact(delta),
           },
+          amounts: { reforecast: l.reforecast.opexRec, plan: l.lockedPlan.opexRec, delta },
         },
         actorRole: "finance",
         impactEur: Math.round(-delta * 1000000),
@@ -207,6 +211,7 @@ export function generateAlerts(
             plan: fmtImpact(l.lockedPlan.netSavings),
             delta: fmtImpact(delta),
           },
+          amounts: { reforecast: refoNet, plan: l.lockedPlan.netSavings, delta },
         },
         actorRole: "finance",
         impactEur: Math.round(-delta * 1000000),

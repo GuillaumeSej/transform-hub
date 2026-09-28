@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Lock } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { isSingular } from "@/lib/i18n/plural";
 import { pendingTransitionLabel } from "@/components/strategic/MilestoneTransitionBadge";
 import {
   formatTimelineDay as formatTimelineDayBase,
@@ -27,10 +28,11 @@ import {
   chantierDeclaredProgress,
   chantierShadesForAxis,
   milestoneProgressPct,
+  resolveUserFullName,
   type ChantierDependencyAlert,
   type ProjetProgressLookup,
 } from "@/lib/axisLogic";
-import type { Chantier, ChantierAction, MaturityStageConfig } from "@/types";
+import type { AuthUser, Chantier, ChantierAction, MaturityStageConfig } from "@/types";
 
 /**
  * Gantt simplifié d'un axe stratégique : UN BLOC = UN CHANTIER, borné par la première et la
@@ -72,6 +74,8 @@ export type ChantierGanttLabels = {
   unplannedTitle?: string;
   noDates?: string;
   actionsSuffix?: string;
+  /** Forme singulière du suffixe (« 1 projet »). */
+  actionsSuffixOne?: string;
   /** Bascule d'échelle temporelle. */
   scale?: string;
   scaleMonth?: string;
@@ -131,7 +135,10 @@ export function ChantierGantt({
   alerts,
   labels,
   progressOf = (a) => milestoneProgressPct(a),
+  users,
 }: {
+  /** Annuaire : responsable de projet affiché par son NOM dans l'infobulle (repli : identifiant). */
+  users?: Pick<AuthUser, "username" | "name">[];
   chantiers: Chantier[];
   /** Toutes les actions du programme — filtrées par chantier ici (les bornes d'un chantier ne
    *  sont pas stockées, elles se dérivent de ses actions). */
@@ -173,6 +180,7 @@ export function ChantierGantt({
       labels?.noDates ??
       t("strategicAxes.chantierNoDates", "Pas encore de date — ajoutez un projet"),
     actionsSuffix: labels?.actionsSuffix ?? t("strategicAxes.actionsSuffix", "projets"),
+    actionsSuffixOne: labels?.actionsSuffixOne ?? t("strategicAxes.actionsSuffixOne", "projet"),
     scale: labels?.scale ?? t("strategicAxes.ganttScale", "Échelle"),
     scaleMonth: labels?.scaleMonth ?? t("strategicAxes.ganttScaleMonth", "Mois"),
     scaleQuarter: labels?.scaleQuarter ?? t("strategicAxes.ganttScaleQuarter", "Trimestre"),
@@ -322,7 +330,9 @@ export function ChantierGantt({
                             en fin de colonne) que la feuille de route programme. */}
                         <span className="flex items-center gap-2">
                           <span className="min-w-0 flex-1 truncate text-[11px] text-secondary">
-                            {items.length} {l.actionsSuffix} · {l.progress}
+                            {items.length}{" "}
+                            {isSingular(items.length) ? l.actionsSuffixOne : l.actionsSuffix} ·{" "}
+                            {l.progress}
                           </span>
                           <TimelineProgressGauge
                             pct={progressPct}
@@ -398,7 +408,7 @@ export function ChantierGantt({
                                 ariaLabel={action.name}
                                 tooltipText={`${action.name} · ${formatTimelineDay(action.start)} → ${formatTimelineDay(
                                   action.end
-                                )}${action.owner ? ` · ${action.owner}` : ""}${
+                                )}${action.owner ? ` · ${resolveUserFullName(action.owner, users)}` : ""}${
                                   startInfo.blocked
                                     ? ` · ${l.blockedBy} ${startInfo.reasons.join(", ")}`
                                     : ""

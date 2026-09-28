@@ -16,6 +16,7 @@ import {
 import { sortedHierarchyLevels } from "@/lib/financeCosts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { BeTrackData, HierarchyLevelDef, HierarchyNode } from "@/types";
+import { formatAmountM } from "@/lib/format";
 
 /** `labelKey`/`label` = clé i18n + fallback français, résolus au rendu via `t()`. */
 const COLUMNS: { key: Exclude<FinanceSortKey, "label">; labelKey: string; label: string }[] = [
@@ -31,7 +32,7 @@ const COLUMNS: { key: Exclude<FinanceSortKey, "label">; labelKey: string; label:
  *  lignes affichées sont arrondies par la méthode du plus fort reste (`roundFinanceTree`) pour
  *  sommer EXACTEMENT au total affiché (et les enfants à leur parent) — à l'écran comme à l'export. */
 const r1 = (v: number) => Math.round(v * 10) / 10;
-const fmt = (v: number) => r1(v).toFixed(1);
+const fmt = (v: number) => formatAmountM(r1(v));
 
 /** Tableau Finance (€M) par niveau de la hiérarchie financière (P&L, centre de coût…), avec
  *  totaux, tri par colonne, export Excel et dépliage parent → enfants (niveau suivant). Les
@@ -154,7 +155,7 @@ export function FinanceHierarchyTable({
   return (
     <Card className="mb-0">
       <CardHeader
-        title={t("finance.hierarchyTable.title", "Économies par niveau financier (€M)")}
+        title={t("finance.hierarchyTable.title", "Économies par niveau financier")}
         actions={
           <div className="flex items-center gap-2">
             <select

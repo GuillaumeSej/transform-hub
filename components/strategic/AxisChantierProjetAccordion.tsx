@@ -10,15 +10,17 @@ import {
   chantierShadesForAxis,
   milestoneProgressPct,
   projetMilestoneCounts,
+  resolveUserFullName,
   type ProjetProgressLookup,
 } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { tPlural } from "@/lib/i18n/plural";
 import {
   DeliverableDiamond,
   useDeliverableStateText,
 } from "@/components/strategic/deliverableMarker";
 import { deliverableLateDays, deliverableState, effectiveDueDate } from "@/lib/deliverableState";
-import type { Chantier, ChantierAction, StrategicAxis } from "@/types";
+import type { AuthUser, Chantier, ChantierAction, StrategicAxis } from "@/types";
 
 /**
  * Accordéon Axe → Chantier → Projet (round 24, Phase 4, Partie 3) — nouvel onglet "Vue par axe" de
@@ -160,7 +162,10 @@ export function AxisChantierProjetAccordion({
   expandAllSignal = 0,
   clickableActionIds = "all",
   progressOf = (a) => milestoneProgressPct(a),
+  users,
 }: {
+  /** Annuaire : sponsors/responsables affichés par leur NOM (repli : identifiant brut). */
+  users?: Pick<AuthUser, "username" | "name">[];
   /** Ordre d'apparition = numérotation "Axe {n}" (position 1-based, jamais retriée). */
   axes: StrategicAxis[];
   chantiers: Chantier[];
@@ -246,10 +251,14 @@ export function AxisChantierProjetAccordion({
               name={t("strategicAxes.axisNumberPrefix", "Axe {n} : {name}")
                 .replace("{n}", String(axisIndex + 1))
                 .replace("{name}", axis.name)}
-              owner={axis.owner ?? noOwner}
-              count={fmt("strategicAxes.tree.chantiersN", "{n} chantier(s)", {
-                n: axisChantiers.length,
-              })}
+              owner={resolveUserFullName(axis.owner, users) ?? noOwner}
+              count={tPlural(
+                t,
+                "strategicAxes.tree.chantiersN",
+                axisChantiers.length,
+                "{n} chantiers",
+                "{n} chantier"
+              )}
               pct={axisProgressPct(axis.id, chantiers, chantierActions, progressOf)}
             />
 
@@ -284,10 +293,19 @@ export function AxisChantierProjetAccordion({
                             />
                           }
                           name={chantier.name}
-                          owner={chantier.pilote ?? mostFrequentOwner(projets) ?? noOwner}
-                          count={fmt("strategicAxes.tree.projetsN", "{n} projet(s)", {
-                            n: projets.length,
-                          })}
+                          owner={
+                            resolveUserFullName(
+                              chantier.pilote ?? mostFrequentOwner(projets),
+                              users
+                            ) ?? noOwner
+                          }
+                          count={tPlural(
+                            t,
+                            "strategicAxes.tree.projetsN",
+                            projets.length,
+                            "{n} projets",
+                            "{n} projet"
+                          )}
                           pct={chantierDeclaredProgress(chantier.id, chantierActions, progressOf)}
                         />
 
@@ -318,7 +336,7 @@ export function AxisChantierProjetAccordion({
                                       openLabel={openLabel}
                                       dot={<span className="hidden" />}
                                       name={action.name}
-                                      owner={action.owner ?? noOwner}
+                                      owner={resolveUserFullName(action.owner, users) ?? noOwner}
                                       count={fmt(
                                         "strategicAxes.tree.milestonesN",
                                         "{p}/{t} jalons",

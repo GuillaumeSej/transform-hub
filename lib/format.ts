@@ -63,7 +63,14 @@ export function formatNumber(
 }
 
 function toDate(value: string | number | Date): Date | null {
-  const d = value instanceof Date ? value : new Date(value);
+  // Date seule ISO (`2026-09-24`) : lue en heure LOCALE (et non UTC) pour ne pas afficher la
+  // veille dans un fuseau négatif.
+  const dateOnly = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : value instanceof Date
+      ? value
+      : new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -125,6 +132,8 @@ export function formatCurrency(
   const currency = opts.currency ? normalizeCurrency(opts.currency) : currentCurrency;
   const tag = intlTag(opts.locale ?? currentLocale);
   const maximumFractionDigits = opts.maximumFractionDigits ?? 0;
+  // Pas de "-0 €" : un montant qui s'arrondit à zéro à la précision affichée vaut 0.
+  if (Math.abs(value) < 0.5 * 10 ** -maximumFractionDigits) value = 0;
   try {
     return new Intl.NumberFormat(tag, {
       style: "currency",
@@ -158,4 +167,107 @@ export function formatMillions(
   opts: { currency?: string; locale?: Locale } = {}
 ): string {
   return formatCompactCurrency(valueInMillions * 1_000_000, { ...opts, maximumFractionDigits });
+}
+
+// ---------- Formateurs d'affichage unifiés (audit formats) ----------
+// Règle PO : format de la langue de l'APPLICATION partout à l'écran (jamais celle du navigateur) —
+// `1,8 M €`, `270 k €`, `0,9 ETP`, `24/09/2026`, `24/09/2026 09:30` en fr. Les exports Excel
+// gardent, eux, des nombres bruts (calculables) et n'utilisent pas ces helpers.
+
+type AmountOpts = {
+  /** `true` ⇒ `+` devant un montant strictement positif (`+270 k €`) ; 0 reste `0 €`. */
+  signed?: boolean;
+  /** `false` ⇒ montant complet (`1 800 000 €`) au lieu du compact (`1,8 M €`). */
+  compact?: boolean;
+  currency?: string;
+  locale?: Locale;
+  maximumFractionDigits?: number;
+};
+
+/** Montant en UNITÉS monétaires → `1,8 M €` / `270 k €` (compact par défaut), sans `-0`, signe
+ *  `+` optionnel. */
+export function formatAmount(value: number, opts: AmountOpts = {}): string {
+  const { signed, compact = true, ...rest } = opts;
+  const base = compact ? formatCompactCurrency(value, rest) : formatCurrency(value, rest);
+  // Signe `+` seulement si le montant AFFICHÉ n'est pas nul (pas de `+0 €`).
+  const shownZero = !/[1-9]/.test(base);
+  return signed && value > 0 && !shownZero ? `+${base}` : base;
+}
+
+/** Montant exprimé en MILLIONS (unité des données Plan Performance) → voir `formatAmount`. */
+export function formatAmountM(valueInMillions: number, opts: AmountOpts = {}): string {
+  return formatAmount(valueInMillions * 1_000_000, opts);
+}
+
+/** Nombre décimal à précision FIXE bornée (`1,8` en fr, `1.8` en en) — pour les colonnes de
+ *  tableaux exprimées dans une unité donnée par l'en-tête (ex. `(M €)`). Jamais `-0`. */
+export function formatDecimal(
+  value: number,
+  fractionDigits = 1,
+  locale: Locale = currentLocale
+): string {
+  const v = Math.abs(value) < 0.5 * 10 ** -fractionDigits ? 0 : value;
+  return formatNumber(
+    v,
+    { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits },
+    locale
+  );
+}
+
+/** ETP/FTE : `0,9` (fr) / `0.9` (en), 1 décimale max par défaut ; `unit` (libellé traduit, ex.
+ *  `t("etp.column.fte")`) suffixé s'il est fourni ⇒ `0,9 ETP`. Jamais `-0`. */
+export function formatFte(
+  value: number,
+  opts: { unit?: string; maximumFractionDigits?: number; locale?: Locale } = {}
+): string {
+  const digits = opts.maximumFractionDigits ?? 1;
+  const v = Math.abs(value) < 0.5 * 10 ** -digits ? 0 : value;
+  const n = formatNumber(v, { maximumFractionDigits: digits }, opts.locale ?? currentLocale);
+  return opts.unit ? `${n} ${opts.unit}` : n;
+}
+
+/** Valeur d'indicateur/KPI (unité libre) : `1 234,5` (fr), 2 décimales max, `unit` suffixé avec
+ *  une espace s'il est fourni (`12,5 %`, `3 jours`). Jamais `-0`. */
+export function formatMeasure(
+  value: number,
+  unit?: string,
+  locale: Locale = currentLocale
+): string {
+  const v = Math.abs(value) < 0.005 ? 0 : value;
+  const n = formatNumber(v, { maximumFractionDigits: 2 }, locale);
+  return unit ? `${n} ${unit}` : n;
+}
+
+/** Pourcentage exprimé en POINTS (`12.5` ⇒ `12,5 %` fr / `12.5%` en). */
+export function formatPct(
+  valuePct: number,
+  maximumFractionDigits = 0,
+  locale: Locale = currentLocale
+): string {
+  const digits = maximumFractionDigits;
+  const v = Math.abs(valuePct) < 0.5 * 10 ** -digits ? 0 : valuePct;
+  return formatNumber(v / 100, { style: "percent", maximumFractionDigits: digits }, locale);
+}
+
+/** Date courte numérique dans la langue de l'app : `24/09/2026` (fr) / `09/24/2026` (en).
+ *  Vide ⇒ "" ; invalide ⇒ entrée brute. */
+export function formatDateShort(
+  value: string | number | Date | null | undefined,
+  locale: Locale = currentLocale
+): string {
+  if (value === null || value === undefined || value === "") return "";
+  return formatDate(value, { day: "2-digit", month: "2-digit", year: "numeric" }, locale);
+}
+
+/** Date + heure courtes dans la langue de l'app : `24/09/2026 09:30` (fr). Vide ⇒ "". */
+export function formatDateTimeShort(
+  value: string | number | Date | null | undefined,
+  locale: Locale = currentLocale
+): string {
+  if (value === null || value === undefined || value === "") return "";
+  return formatDate(
+    value,
+    { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" },
+    locale
+  );
 }

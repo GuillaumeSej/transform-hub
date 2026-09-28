@@ -28,9 +28,10 @@ import {
   hasLeverDeletionAccess,
   LeverDeletionDialog,
 } from "@/components/shared/LeverDeletionDialog";
-import { formatDateFr } from "@/lib/format";
+import { formatDateFr, formatDateShort, formatFte } from "@/lib/format";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { tPlural } from "@/lib/i18n/plural";
 import { useRole } from "@/lib/hooks/useRole";
 import { useBackOrFallback } from "@/lib/hooks/useBackOrFallback";
 import { useCanOpenRoute, useLandingRoute } from "@/lib/hooks/useCanOpenRoute";
@@ -69,9 +70,9 @@ const TABS = ["overview", "plan", "impact", "collab"] as const;
 type Tab = (typeof TABS)[number];
 function tabLabels(t: (key: string, fallback?: string) => string): Record<Tab, string> {
   return {
-    overview: "Overview",
+    overview: t("leverDetail.tab.overview", "Vue d'ensemble"),
     plan: t("leverDetail.tab.plan", "Plan d'action"),
-    impact: "Impact",
+    impact: t("leverDetail.tab.impact", "Impact"),
     collab: t("leverDetail.tab.collab", "Collaboration"),
   };
 }
@@ -215,7 +216,7 @@ export function LeverDetailClientPerformance() {
       <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center text-secondary">
         {t("leverDetail.notFound", "Levier introuvable.")}{" "}
         <button onClick={goBack} className="font-medium text-bp-coral hover:underline">
-          {t("leverDetail.backToPipeline", "Retour aux leviers par étape")}
+          {t("leverDetail.backToPipeline", "Retour aux leviers par maturité")}
         </button>
       </div>
     );
@@ -248,7 +249,7 @@ export function LeverDetailClientPerformance() {
                 "Accès restreint — ce levier n'est pas dans votre périmètre : vous n'en êtes ni le responsable de levier ni le responsable de chantier."
               )}{" "}
         <button onClick={goBack} className="font-medium text-bp-coral hover:underline">
-          {t("leverDetail.backToPipeline", "Retour aux leviers par étape")}
+          {t("leverDetail.backToPipeline", "Retour aux leviers par maturité")}
         </button>
       </div>
     );
@@ -464,7 +465,7 @@ export function LeverDetailClientPerformance() {
                       data.whenSaved(saved).then(
                         () =>
                           showToast(
-                            t("leverDetail.statusUpdated", "Niveau mis à jour"),
+                            t("leverDetail.statusUpdated", "Maturité mise à jour"),
                             detail,
                             "success"
                           ),
@@ -476,17 +477,17 @@ export function LeverDetailClientPerformance() {
                       isAuto
                         ? t(
                             "leverDetail.autoStageHint",
-                            "Cette étape est atteinte automatiquement quand le plan d'action est à 100 %"
+                            "Ce niveau de maturité est atteint automatiquement quand le plan d'action est à 100 %"
                           )
                         : isCascadeGated
                           ? t(
                               "levers.approval.stageHint",
-                              "Cette étape nécessite une demande de validation (responsable de chantier puis CTO), voir ci-dessous"
+                              "Ce changement de maturité nécessite une demande de validation (responsable de chantier puis CTO), voir ci-dessous"
                             )
                           : isPast
                             ? t(
                                 "leverDetail.pastStageHint",
-                                "Étape déjà franchie — impossible de revenir en arrière"
+                                "Niveau de maturité déjà franchi — impossible de revenir en arrière"
                               )
                             : t("leverDetail.moveToStage", "Passer en « {stage} »").replace(
                                 "{stage}",
@@ -1184,7 +1185,9 @@ export function LeverDetailClientPerformance() {
                 <span className="text-tertiary">·</span>
                 <span className="text-tertiary">
                   {t("leverDetail.updatedOn", "Mis à jour le")}{" "}
-                  <span className="font-medium text-primary">{lever.lastUpdate}</span>
+                  <span className="font-medium text-primary">
+                    {formatDateFr(lever.lastUpdate) || lever.lastUpdate}
+                  </span>
                 </span>
               </div>
             </Collapsible>
@@ -1216,10 +1219,7 @@ export function LeverDetailClientPerformance() {
                   {leverAlerts.length > 0 && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-rag-red-light px-2 py-0.5 text-[10px] font-bold normal-case text-rag-red">
                       <TriangleAlert size={10} />{" "}
-                      {t("alerts.count", "{n} alerte(s)").replace(
-                        "{n}",
-                        String(leverAlerts.length)
-                      )}
+                      {tPlural(t, "alerts.count", leverAlerts.length, "{n} alertes", "{n} alerte")}
                     </span>
                   )}
                 </span>
@@ -1360,13 +1360,13 @@ export function LeverDetailClientPerformance() {
                     onClick={() => setActionView("kanban")}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${actionView === "kanban" ? "bg-black text-white" : "bg-white text-secondary"}`}
                   >
-                    <LayoutGrid size={13} /> Kanban
+                    <LayoutGrid size={13} /> {t("levers.kanban", "Kanban")}
                   </button>
                   <button
                     onClick={() => setActionView("gantt")}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${actionView === "gantt" ? "bg-black text-white" : "bg-white text-secondary"}`}
                   >
-                    <BarChart3 size={13} /> Gantt
+                    <BarChart3 size={13} /> {t("levers.gantt", "Gantt")}
                   </button>
                 </div>
                 {!readOnly && (
@@ -1375,7 +1375,7 @@ export function LeverDetailClientPerformance() {
                     size="sm"
                     onClick={() => setActionModal({ mode: "create" })}
                   >
-                    <Plus size={12} /> Action
+                    <Plus size={12} /> {t("leverDetail.addAction", "Action")}
                   </Button>
                 )}
               </div>
@@ -1383,9 +1383,12 @@ export function LeverDetailClientPerformance() {
 
             <div className="mb-4 flex flex-wrap items-center gap-4 rounded-md border border-border bg-neutral-50 px-3 py-2 text-xs">
               <span className="font-semibold text-primary">
-                {t("leverDetail.actionsCount", "{n} action(s)").replace(
-                  "{n}",
-                  String(actions.length)
+                {tPlural(
+                  t,
+                  "leverDetail.actionsCount",
+                  actions.length,
+                  "{n} actions",
+                  "{n} action"
                 )}
               </span>
               <span className="text-secondary">
@@ -1497,7 +1500,7 @@ export function LeverDetailClientPerformance() {
               <Stat label={t("leverForm.capex", "CAPEX")}>
                 {engine.fmtCurr(consolidatedKPIs?.capex ?? lever.capex)}
               </Stat>
-              <Stat label={t("leverDetail.oneOff", "Ponctuel")}>
+              <Stat label={t("leverDetail.oneOff", "OPEX ponctuel")}>
                 {engine.fmtCurr(consolidatedKPIs?.opexOneOff ?? lever.opexOneOff)}
               </Stat>
               <Stat label={t("leverDetail.opexRecYear", "OPEX récurrent /an")}>
@@ -1656,7 +1659,7 @@ export function LeverDetailClientPerformance() {
               <div key={i} className="border-b border-border py-2.5 last:border-b-0">
                 <div className="flex items-center justify-between">
                   <strong className="text-xs">{c.user}</strong>
-                  <span className="text-[11px] text-tertiary">{c.ts}</span>
+                  <span className="text-[11px] text-tertiary">{formatDateShort(c.ts)}</span>
                 </div>
                 <div className="mt-1 text-[13px] text-primary">{c.text}</div>
               </div>
@@ -1822,7 +1825,8 @@ function OverviewField({ label, children }: { label: string; children: React.Rea
  *  l'affichage historique de "Impact estimé (ETP)"/"Réalisé à date (ETP)", factorisée ici pour
  *  être réutilisée par le panneau de réconciliation RH (audit issue #6). */
 function fmtSignedFte(value: number): string {
-  return value > 0 ? `+${value}` : `${value}`;
+  const s = formatFte(value);
+  return value > 0 && s !== "0" ? `+${s}` : s;
 }
 
 /** Libellé "postes créés" / "postes supprimés/réduits" accolé à une valeur ETP signée — l'audit a

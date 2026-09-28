@@ -184,9 +184,7 @@ export default function AdminDataPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Database size={22} className="text-bp-coral" />
-        <h1 className="text-xl font-bold text-text-primary">
-          {t("adminData.title", "Vue d'ensemble des Données")}
-        </h1>
+        <h1 className="text-xl font-bold text-text-primary">{t("adminData.title", "Données")}</h1>
       </div>
 
       <div className="rounded-xl border border-border bg-bg-elevated p-5 space-y-4">

@@ -51,6 +51,7 @@ import { matchesLeverSearch } from "@/lib/leverSearch";
 import { leversPageTitleKey } from "@/lib/nav-config";
 import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
 import { leverRiskReasonText, RISK_SORT_RANK, riskLevelLabel } from "@/lib/leverRiskText";
+import { formatAmountM } from "@/lib/format";
 
 type LeverRow = Lever & {
   realized: number;
@@ -659,22 +660,22 @@ export function LeversPagePerformance() {
     // ── Financier ──
     {
       key: "reforecastNet",
-      label: t("levers.column.reforecastNet", "Économies nettes réactualisées (€M)"),
+      label: t("levers.column.reforecastNet", "Économies nettes réactualisées"),
       align: "right",
       type: "number",
       mobile: "secondary",
       width: "110px",
-      render: (r) => r.reforecastNet.toFixed(1),
+      render: (r) => formatAmountM(r.reforecastNet),
     },
     {
       key: "realized",
-      label: t("levers.realized", "Économies réalisées (€M)"),
+      label: t("levers.realized", "Économies réalisées"),
       align: "right",
       // Visible dans la vue carte mobile : avec Net Savings, c'est LA paire que DG/CTO
       // regardent (réalisé vs engagé) — le reste du détail financier reste desktop.
       mobile: "secondary",
       width: "140px",
-      render: (r) => r.realized.toFixed(1),
+      render: (r) => formatAmountM(r.realized),
     },
     {
       key: "progressPct",
@@ -698,7 +699,7 @@ export function LeversPagePerformance() {
       type: "number",
       mobile: "hide",
       width: "90px",
-      render: (r) => r.capex.toFixed(1),
+      render: (r) => formatAmountM(r.capex),
     },
     {
       key: "opexOneOff",
@@ -707,7 +708,7 @@ export function LeversPagePerformance() {
       type: "number",
       mobile: "hide",
       width: "110px",
-      render: (r) => r.opexOneOff.toFixed(1),
+      render: (r) => formatAmountM(r.opexOneOff),
     },
     // ── Statut ──
     {
@@ -832,7 +833,7 @@ export function LeversPagePerformance() {
           <p className="mx-auto max-w-md text-sm text-secondary">
             {t(
               "levers.noProgram",
-              "Aucun Plan Performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers."
+              "Aucun Plan de performance n'a encore été créé pour votre entreprise. Créez-en un dans Admin > Entreprises > Programmes, puis rattachez-y des leviers."
             )}
           </p>
         </div>

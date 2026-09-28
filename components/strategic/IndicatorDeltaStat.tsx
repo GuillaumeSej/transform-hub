@@ -4,6 +4,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatIndicatorProgress, type IndicatorDelta } from "@/lib/axisLogic";
+import { formatMeasure, formatPct } from "@/lib/format";
 
 /**
  * Écart signé d'un indicateur par rapport à sa cible + barre de progression vers cette cible.
@@ -68,11 +69,11 @@ export function IndicatorDeltaStat({
 
   const sign = value > 0 ? "+" : value < 0 ? "−" : "±";
   const absValue = Math.abs(value);
-  const formattedValue = `${sign}${Number.isInteger(absValue) ? absValue : absValue.toFixed(1)}${
+  const formattedValue = `${sign}${formatMeasure(Math.round(absValue * 10) / 10)}${
     unit ? ` ${unit}` : " pts"
   }`;
   const pctSign = deltaPct > 0 ? "+" : deltaPct < 0 ? "−" : "";
-  const formattedPct = `(${pctSign}${Math.abs(deltaPct).toFixed(1)}%)`;
+  const formattedPct = `(${pctSign}${formatPct(Math.abs(deltaPct), 1)})`;
 
   const progressLabel =
     labels?.progress ?? t("kpi.chart.progressToTarget", "Progression vers la cible");
@@ -81,7 +82,7 @@ export function IndicatorDeltaStat({
     ? `${t("kpi.progress.step", "Palier")} ${delta.stepPeriod} : ${formatIndicatorProgress(
         delta.progressToStepPct,
         delta.stepApproximate
-      )} (${t("kpi.progress.targetShort", "cible")} ${delta.stepTarget}${unit ? ` ${unit}` : ""})`
+      )} (${t("kpi.progress.targetShort", "cible")} ${formatMeasure(delta.stepTarget, unit)})`
     : undefined;
 
   return (

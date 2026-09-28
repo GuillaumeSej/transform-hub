@@ -133,7 +133,7 @@ import {
   type HrWidgetType,
 } from "@/lib/hrDashboardWidgets";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { formatMillions, formatNumber, intlTag, formatDateFr } from "@/lib/format";
+import { formatMillions, formatNumber, intlTag, formatDateFr, formatDateShort } from "@/lib/format";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 
 /** Libellé lisible d'une vue construite (builder générique RH) — `label` explicite si fourni,
@@ -2541,7 +2541,7 @@ export default function HrDashboardPage() {
                           {movementTypeLabel(t, m.type)} · {m.label}
                         </span>
                         <span className="text-tertiary">
-                          {m.plannedDate} · {movementStatusLabel(t, m.status)}
+                          {formatDateShort(m.plannedDate)} · {movementStatusLabel(t, m.status)}
                           {m.hrValidated ? t("etp.hrValidatedSuffix", " ✓RH") : ""}
                         </span>
                       </div>

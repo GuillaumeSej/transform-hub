@@ -19,6 +19,7 @@ import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
 import { useToast } from "@/lib/hooks/useToast";
 import { useRegisterUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { tPlural } from "@/lib/i18n/plural";
 import { AxisForm } from "@/components/strategic/AxisForm";
 import { ChantierForm } from "@/components/strategic/ChantierForm";
 import { Modal } from "@/components/shared/Modal";
@@ -799,9 +800,12 @@ export function IndicatorsEditor({
       <div className="text-xs text-text-secondary">
         {loading
           ? t("adminIndicators.loading", "Chargement…")
-          : t("adminIndicators.count", "{n} indicateur(s)").replace(
-              "{n}",
-              String(indicators.length)
+          : tPlural(
+              t,
+              "adminIndicators.count",
+              indicators.length,
+              "{n} indicateurs",
+              "{n} indicateur"
             )}
       </div>
 

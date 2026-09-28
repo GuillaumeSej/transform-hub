@@ -578,7 +578,7 @@ export function resolveLandingRoute(navItems: NavItem[]): string {
 /** Clé i18n du titre de la page `/levers` (Plan Performance) : le libellé de l'item de nav
  *  "levers" que l'utilisateur voit dans la barre latérale (même résolution `resolveUserNav`, donc
  *  même profil gagnant en cas de cumul) — la nav fait foi, le titre ne peut plus diverger
- *  (ex. sponsor : « Leviers par étape » dans la nav, pas « Mes leviers »). Repli : bibliothèque. */
+ *  (ex. sponsor : « Leviers par maturité » dans la nav, pas « Mes leviers »). Repli : bibliothèque. */
 export function leversPageTitleKey(
   user: Pick<AuthUser, "profiles" | "isGlobalAdmin" | "isCompanyAdmin"> | null | undefined
 ): string {

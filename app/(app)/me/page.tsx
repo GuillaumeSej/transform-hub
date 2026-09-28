@@ -135,7 +135,7 @@ export default function MyWorkspacePage() {
             options={[
               { value: "all", label: t("me.plan.all", "Tous") },
               { value: "strategic", label: t("me.plan.strategic", "Stratégique") },
-              { value: "performance", label: t("me.plan.performance", "Transfo") },
+              { value: "performance", label: t("me.plan.performance", "Performance") },
             ]}
           />
         )}

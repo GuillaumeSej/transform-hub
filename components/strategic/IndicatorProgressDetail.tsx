@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatIndicatorProgress, type IndicatorDelta } from "@/lib/axisLogic";
+import { formatMeasure } from "@/lib/format";
 
 /**
  * Détail de l'AVANCEMENT d'un indicateur (règle validée PO, voir `IndicatorDelta` dans
@@ -30,7 +31,7 @@ export function IndicatorProgressDetail({
   if (!delta) return null;
 
   const u = unit ? ` ${unit}` : "";
-  const fmt = (v: number) => `${Number.isInteger(v) ? v : Number(v.toFixed(2))}${u}`;
+  const fmt = (v: number) => `${formatMeasure(v)}${u}`;
   const hasStep = delta.stepPeriod !== undefined;
   const barTone = delta.favorable ? "bg-rag-green" : "bg-rag-amber";
   const trackTone = delta.favorable ? "bg-rag-green-light" : "bg-rag-amber-light";

@@ -11,6 +11,7 @@ import {
 } from "@/lib/strategicApprovals";
 import { displayUserName } from "@/lib/strategicApprovalView";
 import type { AuthUser } from "@/types";
+import { formatMeasure } from "@/lib/format";
 
 /** Valeurs KPI soumises et « en attente de validation » : lignes grisées (non publiées), avec
  *  l'étape courante (« étape 1/2 ») et le(s) approbateur(s) attendu(s). */
@@ -68,9 +69,7 @@ export function PendingKpiValues({
               </span>
             )}
             <span className="font-medium">{p.period}</span>
-            <span>
-              {p.value !== undefined ? `${p.value}${unit ? ` ${unit}` : ""}` : (p.note ?? "—")}
-            </span>
+            <span>{p.value !== undefined ? formatMeasure(p.value, unit) : (p.note ?? "—")}</span>
             <span className="ml-auto text-[10.5px]">
               {label}
               {step ? ` (${step})` : ""}

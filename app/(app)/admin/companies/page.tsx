@@ -130,7 +130,7 @@ export default function AdminCompaniesPage() {
         <div className="flex items-center gap-3">
           <Building2 size={22} className="text-bp-coral" />
           <h1 className="text-xl font-bold text-text-primary">
-            {t("adminCompanies.title", "Gestion des Entreprises")}
+            {t("adminCompanies.title", "Entreprises")}
           </h1>
         </div>
         <button

@@ -28,7 +28,7 @@ import { LeverApprovalSteps } from "@/components/shared/LeverApprovalSteps";
 import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
 import { useCurrentCompany } from "@/lib/hooks/useCurrentCompany";
 import type { AuthUser, Lever } from "@/types";
-import { intlTag } from "@/lib/format";
+import { formatDateTimeShort } from "@/lib/format";
 import { onActivateKey } from "@/lib/a11y";
 import { isAnyAdmin } from "@/lib/roleProfiles";
 import { isPilotProfile } from "@/lib/myWorkspace";
@@ -42,17 +42,8 @@ import {
 } from "@/components/validation/validationTabs";
 
 function formatTimestamp(ts: string): string {
-  try {
-    return new Date(ts).toLocaleDateString(intlTag(), {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return ts;
-  }
+  // `24/09/2026 09:30` dans la langue de l'app ; horodatage invalide ⇒ texte brut.
+  return formatDateTimeShort(ts);
 }
 
 /**
@@ -283,7 +274,7 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
             <thead>
               <tr className="border-b border-border bg-neutral-50 text-[10px] font-semibold uppercase tracking-wide text-tertiary">
                 <th className="px-4 py-2.5">{t("validation.lever", "Levier")}</th>
-                <th className="px-4 py-2.5">{t("validation.gate", "Étape")}</th>
+                <th className="px-4 py-2.5">{t("validation.gate", "Maturité")}</th>
                 <th className="px-4 py-2.5">{t("validation.workstream", "Chantier")}</th>
                 <th className="px-4 py-2.5">{t("validation.requestedBy", "Demandé par")}</th>
                 <th className="px-4 py-2.5">{t("validation.requestedAt", "Demandé le")}</th>

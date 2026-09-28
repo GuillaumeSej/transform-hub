@@ -66,6 +66,7 @@ import {
   YearSegmentedControl,
   useYearSelection,
 } from "@/components/strategic/YearSegmentedControl";
+import { formatMeasure } from "@/lib/format";
 
 /**
  * Fiche d'identité d'un axe stratégique — servie sur la même route que la fiche levier
@@ -487,6 +488,7 @@ export function AxisDetailClient() {
             allActions={data.chantierActions}
             stages={stages}
             progressOf={data.projetProgress}
+            users={data.users}
             axisColor={axis.color}
             alerts={alerts}
             onChantierClick={(c) => openChantier(c.id)}
@@ -496,6 +498,7 @@ export function AxisDetailClient() {
               unplannedTitle: t("strategicAxes.chantierUnplanned"),
               noDates: t("strategicAxes.chantierNoDates"),
               actionsSuffix: t("strategicAxes.actionsSuffix"),
+              actionsSuffixOne: t("strategicAxes.actionsSuffixOne"),
               scale: t("strategicAxes.ganttScale"),
               scaleMonth: t("strategicAxes.ganttScaleMonth"),
               scaleQuarter: t("strategicAxes.ganttScaleQuarter"),
@@ -710,7 +713,7 @@ function AxisIndicatorCard({
         {t("strategicAxes.latestValue")} :{" "}
         <strong className="text-primary">
           {latest?.value !== undefined
-            ? `${latest.value}${indicator.unit ? ` ${indicator.unit}` : ""}`
+            ? formatMeasure(latest.value, indicator.unit)
             : (latest?.note ?? t("strategicAxes.noMeasurement"))}
         </strong>
         {latest && <span className="text-tertiary"> · {latest.period}</span>}

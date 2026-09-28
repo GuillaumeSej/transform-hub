@@ -1042,7 +1042,7 @@ export default function BaseEtpPage() {
               className="font-mono text-[11px] text-secondary"
               title={t(
                 "strategicLinks.leverOtherProgram",
-                "Levier d'un Plan Performance non accessible depuis le programme actif"
+                "Levier d'un Plan de performance non accessible depuis le programme actif"
               )}
             >
               {r.leverCode}

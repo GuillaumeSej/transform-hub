@@ -391,7 +391,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
       const base = {
         source: "leverApproval" as const,
         plan: "performance" as const,
-        title: tf("me.item.leverApproval", "Valider le passage {from} → {to}", {
+        title: tf("me.item.leverApproval", "Valider le changement de maturité {from} → {to}", {
           from: STATUS_LEVEL[lever.status] ?? lever.status,
           to: STATUS_LEVEL[approval.targetStatus] ?? approval.targetStatus,
         }),
@@ -419,7 +419,7 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
             ws?.sponsor ||
             lever.sponsorUsername ||
             lever.sponsor ||
-            t("me.role.sponsor", "Sponsor"),
+            t("me.role.sponsor", "Responsable de chantier"),
         });
       }
     }
@@ -826,7 +826,7 @@ function buildPerimeter(
 ): WorkspacePerimeterEntry[] {
   const out: WorkspacePerimeterEntry[] = [];
   const roleOwner = t("me.role.owner", "Responsable");
-  const roleSponsor = t("me.role.sponsor", "Sponsor");
+  const roleSponsor = t("me.role.sponsor", "Responsable de chantier");
   const roleContributor = t("me.role.contributor", "Contributeur projet");
 
   if (perf) {
@@ -965,7 +965,7 @@ function buildPilotPerimeter(
           : program.owner === user.username
             ? programOwnerLabel
             : hasRole(user, "cto")
-              ? t("me.role.cto", "CTO")
+              ? t("me.role.cto", "Directeur de la transformation")
               : isAnyAdmin(user)
                 ? t("me.role.admin", "Administrateur")
                 : type === "strategic" && hasRole(user, "strategic_lead")
