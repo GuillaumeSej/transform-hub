@@ -2050,8 +2050,10 @@ export default function HrDashboardPage() {
             </span>
             <span>
               {t("hr.landingPrefix", "Atterrissage")} {landing.toLocaleString(intlTag())} (
-              {landing - target > 0 ? "+" : ""}
-              {(landing - target).toLocaleString(intlTag())} {t("hr.vsTarget", "vs cible")})
+              {/* Arrondi au dixième, sans « -0 » dû aux flottants quand l'atterrissage = la cible. */}
+              {Math.round((landing - target) * 10) / 10 > 0 ? "+" : ""}
+              {(Math.round((landing - target) * 10) / 10 || 0).toLocaleString(intlTag())}{" "}
+              {t("hr.vsTarget", "vs cible")})
             </span>
           </div>
         )}

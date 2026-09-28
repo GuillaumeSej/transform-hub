@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { chantierPlannedFte, todayIso } from "@/lib/staffingNeed";
 import { ExternalLink, Pencil, Plus, Save, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/shared/Button";
 import {
@@ -15,7 +16,7 @@ import {
   saveChantierStaffing,
   subscribeChantierStaffing,
 } from "@/lib/firestore/chantierStaffing";
-import { colorForDepartment } from "@/lib/axisLogic";
+import { chantierBounds, colorForDepartment } from "@/lib/axisLogic";
 import { todayISO } from "@/lib/dateUtils";
 import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
@@ -204,7 +205,21 @@ export function ChantierStaffingEditor({
     [all, chantierId, programId, scopedToActionId]
   );
 
-  const totalFte = entries.reduce((sum, e) => sum + (e.fte || 0), 0);
+  // ETP MOYEN sur la durée (chantier : première → dernière action ; projet : ses propres dates)
+  // — même chiffre que la barre « ETP consommés x / y » de la fiche chantier (`chantierPlannedFte`,
+  // audit KPI-06 / STR-12), plus la somme brute de lignes non simultanées.
+  const totalFte = useMemo(() => {
+    const scopedAction = scopedToActionId ? actionById.get(scopedToActionId) : undefined;
+    const bounds = scopedAction
+      ? { start: scopedAction.start, end: scopedAction.end }
+      : chantierBounds(chantierId, chantierActions);
+    return chantierPlannedFte(
+      entries,
+      bounds,
+      new Set(chantierActions.map((a) => a.id)),
+      todayIso(new Date())
+    );
+  }, [entries, scopedToActionId, actionById, chantierId, chantierActions]);
 
   // Colonne "Projet" redondante en mode scopé (toutes les lignes affichées appartiennent déjà au
   // même projet) — et sans intérêt sur un chantier qui n'a aucun levier (`chantierActions` vide).
@@ -395,8 +410,15 @@ export function ChantierStaffingEditor({
           <Users size={13} /> {t("staffing.title")}
         </span>
         <span className="text-[11px] text-tertiary">
-          {t("staffing.total")} : <strong className="text-primary">{formatFte(totalFte)}</strong>{" "}
-          {t("staffing.fteUnit")}
+          <span
+            title={t(
+              "staffing.totalAverageHint",
+              "ETP moyens des lignes datées sur la durée, pondérés par leur recoupement (lignes non datées exclues)."
+            )}
+          >
+            {t("staffing.totalAverage", "ETP moyen sur la durée")} :{" "}
+            <strong className="text-primary">{formatFte(totalFte)}</strong> {t("staffing.fteUnit")}
+          </span>
         </span>
       </div>
 

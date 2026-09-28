@@ -2111,12 +2111,12 @@ describe("staffingPeriodBuckets", () => {
   it("ignores entries without a startDate", () => {
     const entries = [
       makeStaffing({ id: "S1" }), // pas de startDate → ignoré, "non daté"
-      makeStaffing({ id: "S2", startDate: "2026-02-15" }),
+      makeStaffing({ id: "S2", startDate: "2026-01-01", endDate: "2026-03-31" }),
     ];
-    const buckets = staffingPeriodBuckets(entries, "quarterly");
+    const buckets = staffingPeriodBuckets(entries, "quarterly", "2026-02-01");
     expect(buckets).toHaveLength(1);
     expect(buckets[0].period).toBe("2026-Q1");
-    expect(buckets[0].totalFte).toBe(1);
+    expect(buckets[0].totalFte).toBeCloseTo(1);
   });
 
   it("labels periods correctly per granularity (YYYY-Q#, YYYY-S#, YYYY)", () => {
@@ -2126,18 +2126,50 @@ describe("staffingPeriodBuckets", () => {
     expect(staffingPeriodBuckets([entry], "annual")[0].period).toBe("2026");
   });
 
-  it("sums fte per period and per period+function", () => {
+  it("sums AVERAGE fte per period and per period+function (audit KPI-01)", () => {
     const entries = [
-      makeStaffing({ id: "S1", function: "it", fte: 2, startDate: "2026-01-10" }),
-      makeStaffing({ id: "S2", function: "it", fte: 1, startDate: "2026-02-20" }),
-      makeStaffing({ id: "S3", function: "finance", fte: 0.5, startDate: "2026-03-01" }),
+      makeStaffing({
+        id: "S1",
+        function: "it",
+        fte: 2,
+        startDate: "2026-01-01",
+        endDate: "2026-03-31",
+      }),
+      makeStaffing({
+        id: "S2",
+        function: "it",
+        fte: 1,
+        startDate: "2026-01-01",
+        endDate: "2026-03-31",
+      }),
+      makeStaffing({
+        id: "S3",
+        function: "finance",
+        fte: 0.5,
+        startDate: "2026-01-01",
+        endDate: "2026-03-31",
+      }),
     ];
-    const buckets = staffingPeriodBuckets(entries, "quarterly");
+    const buckets = staffingPeriodBuckets(entries, "quarterly", "2026-02-01");
     expect(buckets).toHaveLength(1);
     expect(buckets[0].period).toBe("2026-Q1");
     expect(buckets[0].totalFte).toBeCloseTo(3.5);
     expect(buckets[0].byFunction.it).toBeCloseTo(3);
     expect(buckets[0].byFunction.finance).toBeCloseTo(0.5);
+  });
+
+  it("spreads a line over every period it covers, pro rata (audit KPI-01)", () => {
+    // 3 ETP du 01/07/2026 au 31/12/2026 : 3 ETP moyens sur T3 et sur T4, rien sur T2 ; sur
+    // l'année 2026, 3 × 184 j / 365 j.
+    const entries = [
+      makeStaffing({ id: "S1", fte: 3, startDate: "2026-07-01", endDate: "2026-12-31" }),
+    ];
+    const q = staffingPeriodBuckets(entries, "quarterly", "2026-07-01");
+    expect(q.map((b) => b.period)).toEqual(["2026-Q3", "2026-Q4"]);
+    expect(q[0].totalFte).toBeCloseTo(3);
+    expect(q[1].totalFte).toBeCloseTo(3);
+    const y = staffingPeriodBuckets(entries, "annual", "2026-07-01");
+    expect(y[0].totalFte).toBeCloseTo((3 * 184) / 365);
   });
 
   it("sorts buckets chronologically ascending", () => {
@@ -2657,5 +2689,20 @@ describe("sponsor d'axe", () => {
     );
     expect(scope.mode).toBe("scoped");
     if (scope.mode === "scoped") expect(Array.from(scope.axisIds).sort()).toEqual(["A1", "A2"]);
+  });
+});
+
+describe("chantierPlannedFte — ETP moyens sur la durée du chantier (audit KPI-06 / STR-12)", () => {
+  it("moyenne les lignes non simultanées et exclut non datées et orphelines", async () => {
+    const { chantierPlannedFte } = await import("@/lib/staffingNeed");
+    const entries = [
+      // 2 ETP sur la 1re moitié de 2026, 2 ETP sur la 2de : 2 ETP moyens (pas 4).
+      makeStaffing({ id: "S1", fte: 2, startDate: "2026-01-01", endDate: "2026-07-01" }),
+      makeStaffing({ id: "S2", fte: 2, startDate: "2026-07-02", endDate: "2026-12-31" }),
+      makeStaffing({ id: "S3", fte: 1 }), // non datée
+      makeStaffing({ id: "S4", fte: 5, startDate: "2026-01-01", actionId: "GONE" }), // orpheline
+    ];
+    const bounds = { start: "2026-01-01", end: "2026-12-31" };
+    expect(chantierPlannedFte(entries, bounds, new Set(["A1"]), "2026-06-01")).toBe(2);
   });
 });

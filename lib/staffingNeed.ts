@@ -123,3 +123,75 @@ export function needSeries(
   }
   return out;
 }
+
+/** Part de chaque ligne de staffing DATÉE dans chaque période de la série (ETP MOYENS de la ligne
+ *  sur la période : fte × jours de recoupement / durée de la période — même règle que
+ *  `averageFte`, donc que le « Taux de staffing »). Une ligne de juin 2026 à juin 2027 apparaît
+ *  ainsi sur chaque trimestre qu'elle couvre, au prorata, au lieu d'être comptée entière dans la
+ *  période de son début (audit KPI-01). Même horizon que `needSeries` : de la période de la
+ *  première `startDate` à la dernière date connue (aujourd'hui au minimum) ; une ligne sans
+ *  `endDate` court jusqu'à la fin de cet horizon. Lignes non datées ignorées. */
+export function staffingPeriodShares(
+  entries: ChantierStaffing[],
+  g: NeedGranularity,
+  today: string,
+  maxPeriods = 40
+): { bounds: PeriodBounds; shares: { entry: ChantierStaffing; fte: number }[] }[] {
+  const dated = entries.filter((e) => e.startDate);
+  if (dated.length === 0) return [];
+  let min = dated[0].startDate as string;
+  let max = today;
+  for (const e of dated) {
+    if ((e.startDate as string) < min) min = e.startDate as string;
+    const last = e.endDate ?? e.startDate;
+    if (last && last > max) max = last;
+  }
+  const out: { bounds: PeriodBounds; shares: { entry: ChantierStaffing; fte: number }[] }[] = [];
+  let cursor = periodBoundsForDate(min, g);
+  while (cursor.start <= max && out.length < maxPeriods) {
+    const periodDays = dayNum(cursor.end) - dayNum(cursor.start) + 1;
+    const shares: { entry: ChantierStaffing; fte: number }[] = [];
+    for (const entry of dated) {
+      const days = overlapDays(
+        entry.startDate as string,
+        entry.endDate ?? "9999-12-31",
+        cursor.start,
+        cursor.end
+      );
+      if (days > 0) shares.push({ entry, fte: (entry.fte || 0) * (days / periodDays) });
+    }
+    out.push({ bounds: cursor, shares });
+    cursor = periodBoundsForDate(nextPeriodStart(cursor.end), g);
+  }
+  return out;
+}
+
+/** « ETP planifiés » d'un chantier (barre « ETP consommés x / y » de sa fiche) : ETP MOYENS de ses
+ *  lignes de staffing sur la durée du chantier (`averageFte`, même règle que /effectifs) — plus la
+ *  somme brute de lignes non simultanées (audit KPI-06 / STR-12). Lignes non datées, et lignes
+ *  rattachées à un projet qui n'existe plus (`actionId` inconnu), exclues. Durée du chantier =
+ *  `bounds` (première → dernière action) ; à défaut, étendue des lignes datées (une ligne sans
+ *  fin court jusqu'à `today`). */
+export function chantierPlannedFte(
+  entries: ChantierStaffing[],
+  bounds: { start: string; end: string } | undefined,
+  knownActionIds: Set<string>,
+  today: string
+): number {
+  const valid = entries.filter(
+    (e) => e.startDate && (!e.actionId || knownActionIds.has(e.actionId))
+  );
+  if (valid.length === 0) return 0;
+  let period = bounds;
+  if (!period) {
+    let start = valid[0].startDate as string;
+    let end = valid[0].endDate ?? today;
+    for (const e of valid) {
+      if ((e.startDate as string) < start) start = e.startDate as string;
+      const last = e.endDate ?? today;
+      if (last > end) end = last;
+    }
+    period = { start, end };
+  }
+  return Math.round(averageFte(valid, period) * 10) / 10;
+}

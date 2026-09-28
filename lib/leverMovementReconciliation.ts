@@ -16,6 +16,13 @@ import { isActiveMovement } from "@/lib/workforceLogic";
  */
 const FTE_TOLERANCE = 0.5;
 
+/** Contrôle de couverture (audit HR-07) : les mouvements RH prévus (Σ de tous les mouvements
+ *  actifs) doivent couvrir l'ETP visé du levier. Écart signalé au-delà de 1 ETP ET de 20 % de
+ *  l'ETP visé (décision 2026-09-28) — ou, pour un levier qui ne vise aucun ETP, dès que ses
+ *  mouvements dépassent 1 ETP. */
+const COVERAGE_TOLERANCE_FTE = 1;
+const COVERAGE_TOLERANCE_PCT = 0.2;
+
 export type LeverMovementReconciliation = {
   leverId: string;
   /** Impact ETP visé du levier (signé) — `consolidateLeverFromActions` si le levier est piloté
@@ -33,6 +40,12 @@ export type LeverMovementReconciliation = {
   mismatchedMovements: WorkforceMovement[];
   /** Aucun mouvement RH lié à ce levier — couverture nulle. */
   hasNoMovements: boolean;
+  /** Couverture de l'ETP visé par les mouvements (`allFte / leverFteImpact`, en %) — `null` quand
+   *  le levier ne vise aucun ETP. */
+  coveragePct: number | null;
+  /** Les mouvements prévus ne couvrent pas l'ETP visé (écart > 1 ETP et > 20 %), ou le levier ne
+   *  vise aucun ETP mais porte plus de 1 ETP de mouvements (audit HR-07). */
+  isCoverageGap: boolean;
   /** Le cumul des mouvements RÉALISÉS diverge de plus de `FTE_TOLERANCE` ETP du "Réalisé à date
    *  (ETP)" affiché pour le levier (progression % × impact ETP visé). */
   isRealizedMismatch: boolean;
@@ -72,6 +85,13 @@ export function reconcileLeverMovements(
   const isRealizedMismatch =
     !hasNoMovements && Math.abs(realizedFte - realizedToDateFte) > FTE_TOLERANCE;
 
+  const coverageGap = Math.abs(allFte - leverFteImpact);
+  const isCoverageGap =
+    !hasNoMovements &&
+    coverageGap > COVERAGE_TOLERANCE_FTE &&
+    (leverFteImpact === 0 || coverageGap > Math.abs(leverFteImpact) * COVERAGE_TOLERANCE_PCT);
+  const coveragePct = leverFteImpact !== 0 ? Math.round((allFte / leverFteImpact) * 100) : null;
+
   return {
     leverId: lever.id,
     leverFteImpact,
@@ -80,8 +100,15 @@ export function reconcileLeverMovements(
     allFte,
     mismatchedMovements,
     hasNoMovements,
+    coveragePct,
+    isCoverageGap,
     isRealizedMismatch,
-    hasWarning: hasNoMovements || isRealizedMismatch || mismatchedMovements.length > 0,
+    // Un levier qui ne vise aucun ETP et n'a aucun mouvement est cohérent : pas d'alerte.
+    hasWarning:
+      (hasNoMovements && leverFteImpact !== 0) ||
+      isCoverageGap ||
+      isRealizedMismatch ||
+      mismatchedMovements.length > 0,
   };
 }
 

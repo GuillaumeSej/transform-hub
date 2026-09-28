@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { subscribeEmployees } from "@/lib/firestore/workforce";
+import { subscribeEmployees, subscribeMovements } from "@/lib/firestore/workforce";
+import { currentFteByDepartment } from "@/lib/hrEngine";
 import { fteByDepartment } from "@/lib/workforceLogic";
-import type { Employee } from "@/types";
+import type { Employee, WorkforceMovement } from "@/types";
 
 /**
  * Base ETP ENTREPRISE (`Employee[]`, module Workforce/Plan Performance — `lib/firestore/
@@ -16,8 +17,16 @@ import type { Employee } from "@/types";
  * dérivent tous leur référentiel d'équipes plutôt que de coder une liste en dur (voir le retrait de
  * `StaffingFunction`, `types/index.ts`).
  */
-export function useCompanyDepartments(companyId: string | null | undefined) {
+export function useCompanyDepartments(
+  companyId: string | null | undefined,
+  /** `true` : `fteByDept` = effectif ACTUEL (base + mouvements RH réalisés, comme l'« Effectif
+   *  actuel » de la Base ETP — audit KPI-03). Défaut `false` : base brute des fiches employé (les
+   *  appelants qui n'ont besoin que des noms d'équipes n'ouvrent pas d'abonnement supplémentaire). */
+  options: { withRealizedMovements?: boolean } = {}
+) {
+  const withMovements = options.withRealizedMovements ?? false;
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [movements, setMovements] = useState<WorkforceMovement[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,10 +43,22 @@ export function useCompanyDepartments(companyId: string | null | undefined) {
     return unsub;
   }, [companyId]);
 
-  const fteByDept = useMemo(() => fteByDepartment(employees), [employees]);
+  useEffect(() => {
+    if (!companyId || !withMovements) {
+      setMovements([]);
+      return;
+    }
+    return subscribeMovements(setMovements, companyId);
+  }, [companyId, withMovements]);
+
+  const baseFteByDept = useMemo(() => fteByDepartment(employees), [employees]);
+  const fteByDept = useMemo(
+    () => (withMovements ? currentFteByDepartment(baseFteByDept, movements) : baseFteByDept),
+    [withMovements, baseFteByDept, movements]
+  );
   const departmentNames = useMemo(
-    () => Object.keys(fteByDept).sort((a, b) => a.localeCompare(b)),
-    [fteByDept]
+    () => Object.keys(baseFteByDept).sort((a, b) => a.localeCompare(b)),
+    [baseFteByDept]
   );
 
   return { employees, loading, fteByDept, departmentNames };

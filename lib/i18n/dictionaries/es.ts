@@ -2211,6 +2211,9 @@ const es: Record<string, string> = {
   // ─── Dotación de un proyecto (ETC por gran función) ───────────────────────
   "staffing.title": "ETC movilizados",
   "staffing.total": "Total",
+  "staffing.totalAverage": "ETC medio en el periodo",
+  "staffing.totalAverageHint":
+    "ETC medios de las líneas con fecha en la duración, ponderados por su solapamiento (líneas sin fecha excluidas).",
   "staffing.fteUnit": "ETC",
   "staffing.function": "Equipo",
   "staffing.noDepartments":
@@ -2708,6 +2711,10 @@ const es: Record<string, string> = {
   "leverDetail.hrReconciliation.realizedShort": "Realizados",
   "leverDetail.hrReconciliation.allShort": "En total",
   "leverDetail.hrReconciliation.targetShort": "Objetivo",
+  "leverDetail.hrReconciliation.coverageUntargeted":
+    "La palanca no apunta a ningún ETC pero tiene {all} ETC de movimientos de RR. HH.",
+  "leverDetail.hrReconciliation.coverageGap":
+    "Cobertura parcial: los movimientos de RR. HH. previstos ({all} ETC) cubren el {pct} % de los {target} ETC objetivo.",
   "leverDetail.hrReconciliation.noMovements":
     "Ningún movimiento de RR. HH. asociado a esta palanca — cobertura 0 %.",
   "leverDetail.hrReconciliation.realizedMismatch":

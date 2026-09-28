@@ -1120,7 +1120,9 @@ export default function BaseEtpPage() {
           accent="brown"
           sub={t("etp.kpi.landingPlanSub", "écart cible : {n} ETP").replace(
             "{n}",
-            (hr.plannedFTE(wf) - hr.targetFTE(wf)).toLocaleString(intlTag())
+            (Math.round((hr.plannedFTE(wf) - hr.targetFTE(wf)) * 10) / 10 || 0).toLocaleString(
+              intlTag()
+            )
           )}
         />
         <KPICard

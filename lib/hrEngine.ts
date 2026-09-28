@@ -827,6 +827,26 @@ function dimensionalContributions(
   return [{ key, delta: signedFteForType(movement.type, fte) }];
 }
 
+/** Effectif ACTUEL par département : ETP de la base (fiches employé) + mouvements RÉALISÉS
+ *  (recrutements +, départs −, transferts retirés du département source et ajoutés au département
+ *  cible) — même règle que l'« Effectif actuel » de la Base ETP (`currentFTE`), ventilée par
+ *  département (audit KPI-03 : le disponible de /effectifs ignorait les mouvements réalisés). */
+export function currentFteByDepartment(
+  baseByDept: Record<string, number>,
+  movements: WorkforceMovement[]
+): Record<string, number> {
+  const map: Record<string, number> = { ...baseByDept };
+  for (const movement of movements) {
+    if (!isActiveMovement(movement) || movement.status !== "Réalisé") continue;
+    for (const { key, delta } of dimensionalContributions(movement, "department", "actual")) {
+      if (!key) continue;
+      map[key] = (map[key] ?? 0) + delta;
+    }
+  }
+  for (const key of Object.keys(map)) map[key] = Math.round(map[key] * 100) / 100;
+  return map;
+}
+
 /** Positions ETP par département, pays ou workstream.
  * - Baseline = référence initiale ;
  * - Actuel = baseline + mouvements réalisés ;

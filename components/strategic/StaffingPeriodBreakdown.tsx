@@ -20,7 +20,8 @@ import {
   type PeriodModalRow,
 } from "@/components/strategic/StaffingPeriodModal";
 import { hexToRgb } from "@/components/strategic/TimelineBars";
-import { hexForDepartment, periodLabelForDate, staffingPeriodBuckets } from "@/lib/axisLogic";
+import { hexForDepartment, staffingPeriodBuckets } from "@/lib/axisLogic";
+import { staffingPeriodShares, todayIso } from "@/lib/staffingNeed";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ChantierStaffing, StrategicAxis } from "@/types";
 
@@ -77,24 +78,21 @@ function findAxisColor(axes: StrategicAxis[], axisId: string): string {
 function axisPeriodBuckets(
   entries: ChantierStaffing[],
   granularity: Granularity,
-  axisIdsByChantier: Record<string, string[]>
+  axisIdsByChantier: Record<string, string[]>,
+  today: string
 ): UnifiedBucket[] {
-  const byPeriod = new Map<string, UnifiedBucket>();
-  for (const entry of entries) {
-    if (!entry.startDate) continue;
-    const period = periodLabelForDate(entry.startDate, granularity);
-    let bucket = byPeriod.get(period);
-    if (!bucket) {
-      bucket = { period, totalFte: 0, byGroup: {} };
-      byPeriod.set(period, bucket);
+  // ETP MOYENS par période (prorata de recoupement, `staffingPeriodShares`) — même règle que le
+  // mode "period" et que le « Taux de staffing » (audit KPI-01).
+  return staffingPeriodShares(entries, granularity, today).map(({ bounds, shares }) => {
+    const bucket: UnifiedBucket = { period: bounds.label, totalFte: 0, byGroup: {} };
+    for (const { entry, fte } of shares) {
+      bucket.totalFte += fte;
+      for (const axisId of axisIdsByChantier[entry.chantierId] ?? []) {
+        bucket.byGroup[axisId] = (bucket.byGroup[axisId] ?? 0) + fte;
+      }
     }
-    bucket.totalFte += entry.fte;
-    const axisIds = axisIdsByChantier[entry.chantierId] ?? [];
-    for (const axisId of axisIds) {
-      bucket.byGroup[axisId] = (bucket.byGroup[axisId] ?? 0) + entry.fte;
-    }
-  }
-  return Array.from(byPeriod.values()).sort((a, b) => a.period.localeCompare(b.period));
+    return bucket;
+  });
 }
 
 /**
@@ -231,9 +229,10 @@ export function StaffingPeriodBreakdown({
     totalAvailable > 0 ? Math.round((total / totalAvailable) * 100) : null;
 
   // ── Mode "period" (équipe) — inchangé, `staffingPeriodBuckets` jamais filtré. ────────────────
+  const today = useMemo(() => todayIso(new Date()), []);
   const teamBuckets = useMemo(
-    () => staffingPeriodBuckets(staffing, granularity),
-    [staffing, granularity]
+    () => staffingPeriodBuckets(staffing, granularity, today),
+    [staffing, granularity, today]
   );
   const teamNames = useMemo(() => {
     const names = new Set<string>();
@@ -251,8 +250,8 @@ export function StaffingPeriodBreakdown({
   }, [staffing, selectedFunction, selectedChantierId]);
 
   const axisBuckets = useMemo(
-    () => axisPeriodBuckets(axisFilteredStaffing, granularity, axisIdsByChantier),
-    [axisFilteredStaffing, granularity, axisIdsByChantier]
+    () => axisPeriodBuckets(axisFilteredStaffing, granularity, axisIdsByChantier, today),
+    [axisFilteredStaffing, granularity, axisIdsByChantier, today]
   );
 
   /** Axes présents dans `axisBuckets`, dans l'ordre du programme (`axes`), plus les orphelins (id
@@ -308,30 +307,27 @@ export function StaffingPeriodBreakdown({
   const chantierBreakdownByPeriod = useMemo(() => {
     const map = new Map<string, Map<string, Map<string, number>>>();
     const source = mode === "axis" ? axisFilteredStaffing : staffing;
-    for (const entry of source) {
-      if (!entry.startDate) continue;
-      const period = periodLabelForDate(entry.startDate, granularity);
-      const groupKeys =
-        mode === "axis" ? (axisIdsByChantier[entry.chantierId] ?? []) : [entry.function];
-      let byGroup = map.get(period);
-      if (!byGroup) {
-        byGroup = new Map();
-        map.set(period, byGroup);
-      }
-      for (const groupKey of groupKeys) {
-        let byChantier = byGroup.get(groupKey);
-        if (!byChantier) {
-          byChantier = new Map();
-          byGroup.set(groupKey, byChantier);
+    for (const { bounds, shares } of staffingPeriodShares(source, granularity, today))
+      for (const { entry, fte: shareFte } of shares) {
+        const period = bounds.label;
+        const groupKeys =
+          mode === "axis" ? (axisIdsByChantier[entry.chantierId] ?? []) : [entry.function];
+        let byGroup = map.get(period);
+        if (!byGroup) {
+          byGroup = new Map();
+          map.set(period, byGroup);
         }
-        byChantier.set(
-          entry.chantierId,
-          (byChantier.get(entry.chantierId) ?? 0) + (entry.fte || 0)
-        );
+        for (const groupKey of groupKeys) {
+          let byChantier = byGroup.get(groupKey);
+          if (!byChantier) {
+            byChantier = new Map();
+            byGroup.set(groupKey, byChantier);
+          }
+          byChantier.set(entry.chantierId, (byChantier.get(entry.chantierId) ?? 0) + shareFte);
+        }
       }
-    }
     return map;
-  }, [mode, staffing, axisFilteredStaffing, granularity, axisIdsByChantier]);
+  }, [mode, staffing, axisFilteredStaffing, granularity, axisIdsByChantier, today]);
 
   /** Chantiers de l'équipe sélectionnée (round 21, déplacé ici round 22) — alimente la rangée de
    *  chips "Chantiers :", visible dans les deux modes. Volontairement basée sur `staffing` COMPLET
@@ -420,17 +416,19 @@ export function StaffingPeriodBreakdown({
   const detailRows: PeriodModalRow[] = useMemo(() => {
     if (!detailScope) return [];
     const source = mode === "axis" ? axisFilteredStaffing : staffing;
-    const entries = source.filter(
-      (e) => e.startDate && periodLabelForDate(e.startDate, granularity) === detailScope.period
+    // Lignes qui RECOUPENT la période (pas seulement celles qui y démarrent), avec leurs ETP
+    // moyens sur la période — mêmes chiffres que la barre cliquée (audit KPI-01).
+    const period = staffingPeriodShares(source, granularity, today).find(
+      (p) => p.bounds.label === detailScope.period
     );
-    return entries
-      .map((e) => ({
+    return (period?.shares ?? [])
+      .map(({ entry: e, fte }) => ({
         id: e.id,
         groupKeys: mode === "axis" ? (axisIdsByChantier[e.chantierId] ?? []) : [e.function],
         chantierName: chantierNamesById[e.chantierId] ?? t("effectifs.chantierUnknown"),
         function: e.function,
         axisNames: axisNamesForChantier(e.chantierId),
-        fte: e.fte || 0,
+        fte,
         periodLabel: e.startDate
           ? `${e.startDate} → ${e.endDate ?? "…"}`
           : t("staffingPeriod.detailModal.undated"),
@@ -444,6 +442,7 @@ export function StaffingPeriodBreakdown({
     axisFilteredStaffing,
     staffing,
     granularity,
+    today,
     axisIdsByChantier,
     chantierNamesById,
     actionNamesById,

@@ -1500,13 +1500,31 @@ export function LeverDetailClientPerformance() {
                   <FteDirectionBadge value={movementReconciliation.leverFteImpact} />
                 </span>
               </div>
-              {movementReconciliation.hasNoMovements && (
+              {movementReconciliation.hasNoMovements &&
+                movementReconciliation.leverFteImpact !== 0 && (
+                  <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-rag-red">
+                    <TriangleAlert size={11} className="shrink-0" />{" "}
+                    {t(
+                      "leverDetail.hrReconciliation.noMovements",
+                      "Aucun mouvement RH lié à ce levier — couverture 0 %."
+                    )}
+                  </p>
+                )}
+              {movementReconciliation.isCoverageGap && (
                 <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-rag-red">
                   <TriangleAlert size={11} className="shrink-0" />{" "}
-                  {t(
-                    "leverDetail.hrReconciliation.noMovements",
-                    "Aucun mouvement RH lié à ce levier — couverture 0 %."
-                  )}
+                  {movementReconciliation.coveragePct === null
+                    ? t(
+                        "leverDetail.hrReconciliation.coverageUntargeted",
+                        "Le levier ne vise aucun ETP mais porte {all} ETP de mouvements RH."
+                      ).replace("{all}", fmtSignedFte(movementReconciliation.allFte))
+                    : t(
+                        "leverDetail.hrReconciliation.coverageGap",
+                        "Couverture partielle : les mouvements RH prévus ({all} ETP) couvrent {pct} % des {target} ETP visés."
+                      )
+                        .replace("{all}", fmtSignedFte(movementReconciliation.allFte))
+                        .replace("{pct}", String(movementReconciliation.coveragePct))
+                        .replace("{target}", fmtSignedFte(movementReconciliation.leverFteImpact))}
                 </p>
               )}
               {!movementReconciliation.hasNoMovements &&

@@ -2216,6 +2216,9 @@ const de: Record<string, string> = {
   // ─── Personaleinsatz je Vorhaben (VZÄ nach Fachfunktion) ──────────────────
   "staffing.title": "Eingesetzte VZÄ",
   "staffing.total": "Gesamt",
+  "staffing.totalAverage": "Durchschnittliche FTE über die Laufzeit",
+  "staffing.totalAverageHint":
+    "Durchschnittliche FTE der datierten Zeilen über die Laufzeit, nach Überschneidung gewichtet (undatierte Zeilen ausgeschlossen).",
   "staffing.fteUnit": "VZÄ",
   "staffing.function": "Team",
   "staffing.noDepartments":
@@ -2716,6 +2719,10 @@ const de: Record<string, string> = {
   "leverDetail.hrReconciliation.realizedShort": "Realisiert",
   "leverDetail.hrReconciliation.allShort": "Insgesamt",
   "leverDetail.hrReconciliation.targetShort": "Angestrebt",
+  "leverDetail.hrReconciliation.coverageUntargeted":
+    "Der Hebel zielt auf keine FTE ab, trägt aber {all} FTE an HR-Bewegungen.",
+  "leverDetail.hrReconciliation.coverageGap":
+    "Teilweise Abdeckung: Die geplanten HR-Bewegungen ({all} FTE) decken {pct} % der angestrebten {target} FTE ab.",
   "leverDetail.hrReconciliation.noMovements":
     "Keine HR-Bewegung mit diesem Hebel verknüpft — Abdeckung 0 %.",
   "leverDetail.hrReconciliation.realizedMismatch":

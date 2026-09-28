@@ -2295,6 +2295,9 @@ const fr: Record<string, string> = {
   // transverse (/effectifs). Sans rapport avec `hr.*` (Plan Performance).
   "staffing.title": "ETP mobilisés",
   "staffing.total": "Total",
+  "staffing.totalAverage": "ETP moyen sur la durée",
+  "staffing.totalAverageHint":
+    "ETP moyens des lignes datées sur la durée, pondérés par leur recoupement (lignes non datées exclues).",
   "staffing.fteUnit": "ETP",
   "staffing.function": "Équipe",
   "staffing.noDepartments":
@@ -2871,6 +2874,10 @@ const fr: Record<string, string> = {
   "leverDetail.hrReconciliation.realizedShort": "Réalisés",
   "leverDetail.hrReconciliation.allShort": "Au total",
   "leverDetail.hrReconciliation.targetShort": "Visés",
+  "leverDetail.hrReconciliation.coverageUntargeted":
+    "Le levier ne vise aucun ETP mais porte {all} ETP de mouvements RH.",
+  "leverDetail.hrReconciliation.coverageGap":
+    "Couverture partielle : les mouvements RH prévus ({all} ETP) couvrent {pct} % des {target} ETP visés.",
   "leverDetail.hrReconciliation.noMovements":
     "Aucun mouvement RH lié à ce levier — couverture 0 %.",
   "leverDetail.hrReconciliation.realizedMismatch":

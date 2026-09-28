@@ -134,7 +134,7 @@ export function EffectifsPageClient() {
     employees,
     fteByDept,
     loading: departmentsLoading,
-  } = useCompanyDepartments(user?.companyId ?? null);
+  } = useCompanyDepartments(user?.companyId ?? null, { withRealizedMovements: true });
 
   /** État du drill-down EN PLACE du donut « Budget financier alloué » (round 26 — remplace le
    *  drill-down par MODALE de round 13/25 : le même donut se redessine désormais d'un niveau à

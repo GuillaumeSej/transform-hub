@@ -2184,6 +2184,9 @@ const en: Record<string, string> = {
   // ─── Workstream staffing (FTE per business function) ──────────────────────
   "staffing.title": "FTEs assigned",
   "staffing.total": "Total",
+  "staffing.totalAverage": "Average FTE over the period",
+  "staffing.totalAverageHint":
+    "Average FTE of dated lines over the duration, weighted by overlap (undated lines excluded).",
   "staffing.fteUnit": "FTE",
   "staffing.function": "Team",
   "staffing.noDepartments": "No team in the company's FTE roster — fill it in first (/hr/etp).",
@@ -2711,6 +2714,10 @@ const en: Record<string, string> = {
   "leverDetail.hrReconciliation.realizedShort": "Realized",
   "leverDetail.hrReconciliation.allShort": "Total",
   "leverDetail.hrReconciliation.targetShort": "Targeted",
+  "leverDetail.hrReconciliation.coverageUntargeted":
+    "The initiative targets no FTE but carries {all} FTE of HR movements.",
+  "leverDetail.hrReconciliation.coverageGap":
+    "Partial coverage: planned HR movements ({all} FTE) cover {pct}% of the {target} FTE targeted.",
   "leverDetail.hrReconciliation.noMovements":
     "No HR movement linked to this initiative — 0% coverage.",
   "leverDetail.hrReconciliation.realizedMismatch":

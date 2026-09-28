@@ -3,6 +3,7 @@ import { daysBetween, todayISO } from "@/lib/dateUtils";
 import { effectiveDueDate } from "@/lib/deliverableState";
 import { comparePeriods, periodIsAfter, periodStartsOnOrBefore } from "@/lib/indicatorPeriod";
 import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
+import { staffingPeriodShares, todayIso } from "@/lib/staffingNeed";
 import {
   getStrategicProfiles,
   hasAnyRole,
@@ -2109,37 +2110,26 @@ export function periodLabelForDate(
 }
 
 /**
- * Répartit les entrées de staffing DATÉES (`ChantierStaffing.startDate` défini) en buckets de
- * période calendaire, sommant les ETP par période et par période+fonction (round 7, page
- * Effectifs — vue trimestre/semestre/année). Les entrées sans `startDate` sont volontairement
- * IGNORÉES : un staffing "non daté" reste compté dans les totaux globaux existants
- * (`EffectifsPageClient.tsx`) mais ne peut pas être positionné dans le temps ici.
- *
- * Buckets triés chronologiquement croissant (tri lexicographique du `period`, cohérent avec
- * `sortMeasurementsByPeriod` — les trois formats retenus sont tous lexicographiquement ordonnés).
- *
- * Fonction pure, distincte de `DateRangePicker.summarizeRange` (qui répond à une question
- * différente — la durée d'une plage de dates, pas une répartition par période calendaire).
+ * Répartit les entrées de staffing DATÉES en buckets de période calendaire (page Effectifs — vue
+ * trimestre/semestre/année) : ETP MOYENS par période et par période+équipe, une ligne étant
+ * répartie au prorata de son recoupement avec chaque période (`staffingPeriodShares`, même règle
+ * que le « Taux de staffing » de la même page — audit KPI-01 ; avant, chaque ligne était comptée
+ * entière dans la période de sa `startDate`). Les entrées sans `startDate` sont ignorées.
+ * Buckets chronologiques, série continue (périodes vides comprises) jusqu'à aujourd'hui au moins.
  */
 export function staffingPeriodBuckets(
   entries: ChantierStaffing[],
-  granularity: "quarterly" | "semiannual" | "annual"
+  granularity: "quarterly" | "semiannual" | "annual",
+  today: string = todayIso(new Date())
 ): StaffingPeriodBucket[] {
-  const byPeriod = new Map<string, StaffingPeriodBucket>();
-
-  for (const entry of entries) {
-    if (!entry.startDate) continue;
-    const period = periodLabelForDate(entry.startDate, granularity);
-    let bucket = byPeriod.get(period);
-    if (!bucket) {
-      bucket = { period, totalFte: 0, byFunction: {} };
-      byPeriod.set(period, bucket);
+  return staffingPeriodShares(entries, granularity, today).map(({ bounds, shares }) => {
+    const bucket: StaffingPeriodBucket = { period: bounds.label, totalFte: 0, byFunction: {} };
+    for (const { entry, fte } of shares) {
+      bucket.totalFte += fte;
+      bucket.byFunction[entry.function] = (bucket.byFunction[entry.function] ?? 0) + fte;
     }
-    bucket.totalFte += entry.fte;
-    bucket.byFunction[entry.function] = (bucket.byFunction[entry.function] ?? 0) + entry.fte;
-  }
-
-  return Array.from(byPeriod.values()).sort((a, b) => a.period.localeCompare(b.period));
+    return bucket;
+  });
 }
 
 // ─── Numérotation globale des KPI (round 10) ───────────────────────────────────────────────────

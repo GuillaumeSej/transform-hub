@@ -1,6 +1,7 @@
 "use client";
 
 import { DateInput } from "@/components/shared/DateInput";
+import { chantierPlannedFte, todayIso } from "@/lib/staffingNeed";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -2009,7 +2010,6 @@ export function ChantierDetailPanel({
     () => (chantier ? data.staffing.filter((s) => s.chantierId === chantier.id) : []),
     [data.staffing, chantier]
   );
-  const plannedFteTotal = chantierStaffing.reduce((sum, s) => sum + (s.fte || 0), 0);
 
   // KPI proposables au sélecteur optionnel d'un levier (round 8) — même filtre que `KpiPageClient.tsx`
   // (`grouped` useMemo, `macro`/`byChantier`) : indicateurs macro d'UN DES AXES du chantier (pas de
@@ -2051,6 +2051,19 @@ export function ChantierDetailPanel({
   const bounds = useMemo(
     () => (chantier ? chantierBounds(chantier.id, chantierActions) : undefined),
     [chantier, chantierActions]
+  );
+  // ETP PLANIFIÉS du chantier : ETP MOYENS de ses lignes de staffing sur la durée du chantier
+  // (`chantierPlannedFte`, même règle que /effectifs), lignes non datées ou orphelines exclues —
+  // plus la somme brute de lignes non simultanées (audit KPI-06 / STR-12).
+  const plannedFteTotal = useMemo(
+    () =>
+      chantierPlannedFte(
+        chantierStaffing,
+        bounds,
+        new Set(chantierActions.map((a) => a.id)),
+        todayIso(new Date())
+      ),
+    [chantierStaffing, bounds, chantierActions]
   );
   // Round "projet weighting" : moyenne PONDÉRÉE des projets (`chantierDeclaredProgress`, par
   // `ChantierAction.chantierWeightPct` — voir `ProjetWeightsEditor.tsx` plus bas) — remplace
@@ -2982,7 +2995,7 @@ export function ChantierDetailPanel({
                   />
                 </div>
                 {/* ── ETP consommés du chantier (round <n>) — même pendant pour `Chantier.consumedFte`,
-                comparé aux ETP PLANIFIÉS (`plannedFteTotal`, somme des lignes `ChantierStaffing` du
+                comparé aux ETP PLANIFIÉS (`plannedFteTotal`, ETP moyens des lignes `ChantierStaffing` du
                 chantier — voir son commentaire ci-dessus, pas de champ "ETP cible" déclaratif). */}
                 <div>
                   <label
