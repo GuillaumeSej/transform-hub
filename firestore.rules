@@ -403,24 +403,26 @@ service cloud.firestore {
       allow delete: if canWriteCompanyScoped(resource.data.companyId);
     }
 
-    // ─── leverMeta/{docId} — restructuré : chaque document est maintenant partitionné par
-    // entreprise via son ID, motif `{companyId}__{comments|auditLog|workforceEmployees|
-    // workforceMovements|workforceSummary}` (voir lib/firestore/levers.ts, workforce.ts). Un doc
-    // id qui suit ce motif est isolé comme n'importe quelle collection scopée entreprise
-    // ci-dessus. Les anciens documents NON préfixés (`comments`, `auditLog`, `workforceEmployees`,
-    // `workforceMovements`, `workforceSummary` — pré-migration, mutualisant encore toutes les
-    // entreprises) restent accessibles en lecture/écriture à tout utilisateur authentifié UNIQUEMENT
-    // le temps de la bascule (scripts/migrate-lever-meta-tenant-split.js) : à supprimer une fois la
-    // migration vérifiée et le code applicatif entièrement basculé sur les documents préfixés — ne
-    // JAMAIS élargir cette clause, c'est une dette de migration temporaire, pas un choix durable.
+    // ─── leverMeta/{docId} — chaque document est partitionné par entreprise via son ID, motif
+    // `{companyId}__{comments|auditLog|workforceEmployees|workforceMovements|workforceSummary|
+    // displaySettings}` (voir lib/firestore/levers.ts, workforce.ts, companyDisplaySettings.ts),
+    // isolé comme n'importe quelle collection scopée entreprise ci-dessus. Les anciens documents
+    // NON préfixés (mutualisés entre entreprises, dont les salaires RH) ne sont plus accessibles
+    // depuis l'application (audit DB-11, 2026-09-28) : la migration
+    // (scripts/migrate-lever-meta-tenant-split.js) est faite et le code ne les lit plus.
     match /leverMeta/{docId} {
-      allow read, write: if isSignedIn() && (
-        (docId.matches('.*__.*') && canReadCompanyScoped(docId.split('__')[0]))
-        || (!docId.matches('.*__.*'))
-      );
+      allow read, write: if isSignedIn()
+        && docId.matches('.+__.+')
+        && canReadCompanyScoped(docId.split('__')[0]);
     }
+    // ─── meta/{docId} — seul `meta/program__{companyId}` est utilisé par l'application
+    // (lib/firestore/programConfig.ts ; `program__global` pour un compte sans entreprise, qui ne
+    // passe que pour le super-admin). Tout autre document (marqueurs de schéma legacy) : refusé
+    // (audit DB-11 — la règle précédente ouvrait toute la collection à tout utilisateur connecté).
     match /meta/{docId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn()
+        && docId.matches('program__.+')
+        && canReadCompanyScoped(docId.split('__')[1]);
     }
 
     // ─── companyDirectory/{companyId} — annuaire PUBLIC minimal (id + nom uniquement, jamais de
