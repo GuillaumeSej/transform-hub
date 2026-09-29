@@ -150,30 +150,92 @@ describe("shouldResetProgramScopedState", () => {
 });
 
 describe("programSwitchForLink", () => {
+  const programs = [
+    { id: "pA", type: "performance" as const },
+    { id: "pB", type: "performance" as const },
+    { id: "pS", type: "strategic" as const },
+  ];
   const base = {
     activeProgramId: "pA",
+    activeProgramType: "performance" as const,
     isConsolidatedView: false,
     consolidatedProgramIds: [] as string[],
-    selectableProgramIds: ["pA", "pB", "pS"],
+    selectablePrograms: programs,
   };
   it("rien sans programme cible ou si c'est déjà le programme actif", () => {
     expect(programSwitchForLink({ ...base, targetProgramId: undefined })).toBeNull();
     expect(programSwitchForLink({ ...base, targetProgramId: "pA" })).toBeNull();
+    expect(
+      programSwitchForLink({ ...base, targetProgramId: "pA", targetPlan: "performance" })
+    ).toBeNull();
   });
   it("bascule vers un autre programme sélectionnable (ex. item stratégique depuis un Plan Perf)", () => {
     expect(programSwitchForLink({ ...base, targetProgramId: "pS" })).toBe("pS");
+    expect(programSwitchForLink({ ...base, targetProgramId: "pB" })).toBe("pB");
   });
-  it("ne bascule pas vers un programme non sélectionnable", () => {
+  it("levier (Performance) ouvert depuis un programme STRATÉGIQUE actif : active le programme du levier", () => {
+    // Bug PO : `/levers/detail?id=L005` suivi sans bascule rendait la fiche axe (« Axe introuvable »).
+    const fromStrategic = {
+      ...base,
+      activeProgramId: "pS",
+      activeProgramType: "strategic" as const,
+    };
+    expect(
+      programSwitchForLink({ ...fromStrategic, targetProgramId: "pB", targetPlan: "performance" })
+    ).toBe("pB");
+  });
+  it("programme non sélectionnable ou absent : même plan → rien ; autre plan → 1er programme de ce plan", () => {
     expect(programSwitchForLink({ ...base, targetProgramId: "autre" })).toBeNull();
+    expect(
+      programSwitchForLink({ ...base, targetProgramId: "autre", targetPlan: "performance" })
+    ).toBeNull();
+    const fromStrategic = {
+      ...base,
+      activeProgramId: "pS",
+      activeProgramType: "strategic" as const,
+    };
+    expect(
+      programSwitchForLink({
+        ...fromStrategic,
+        targetProgramId: "autre",
+        targetPlan: "performance",
+      })
+    ).toBe("pA");
+    expect(
+      programSwitchForLink({
+        ...fromStrategic,
+        targetProgramId: undefined,
+        targetPlan: "performance",
+      })
+    ).toBe("pA");
+    expect(
+      programSwitchForLink({ ...base, targetProgramId: undefined, targetPlan: "strategic" })
+    ).toBe("pS");
+    // Aucun programme sélectionnable du plan visé : rien.
+    expect(
+      programSwitchForLink({
+        ...fromStrategic,
+        selectablePrograms: [programs[2]],
+        targetProgramId: undefined,
+        targetPlan: "performance",
+      })
+    ).toBeNull();
   });
-  it("vue consolidée : reste consolidée pour un programme du périmètre, bascule sinon", () => {
+  it("vue consolidée (= Performance) : reste consolidée pour un programme du périmètre, bascule sinon", () => {
     const consolidated = {
       ...base,
       activeProgramId: CONSOLIDATED_PROGRAM_ID,
+      activeProgramType: "performance" as const,
       isConsolidatedView: true,
       consolidatedProgramIds: ["pA", "pB"],
     };
     expect(programSwitchForLink({ ...consolidated, targetProgramId: "pB" })).toBeNull();
+    expect(
+      programSwitchForLink({ ...consolidated, targetProgramId: "pB", targetPlan: "performance" })
+    ).toBeNull();
     expect(programSwitchForLink({ ...consolidated, targetProgramId: "pS" })).toBe("pS");
+    expect(
+      programSwitchForLink({ ...consolidated, targetProgramId: undefined, targetPlan: "strategic" })
+    ).toBe("pS");
   });
 });

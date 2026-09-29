@@ -4,7 +4,12 @@ import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/shared/Card";
-import type { MyWorkspace, WorkspaceItem, WorkspacePerimeterEntry } from "@/lib/myWorkspaceTypes";
+import type {
+  MyWorkspace,
+  WorkspaceItem,
+  WorkspacePerimeterEntry,
+  WorkspacePlan,
+} from "@/lib/myWorkspaceTypes";
 import {
   categoryLabel,
   filterTodoItems,
@@ -36,18 +41,19 @@ import {
 import { CalendarCheck, Compass, Hourglass } from "lucide-react";
 import { formatDate } from "@/lib/format";
 
-/** Suit un lien du portail ; `programId` (programme de l'élément) est activé comme programme actif
- *  global avant la navigation quand il diffère (voir app/(app)/me/page.tsx). */
-type Navigate = (href: string, programId?: string) => void;
+/** Suit un lien du portail ; le programme (`programId`) / plan (`plan`) de l'élément est activé
+ *  comme programme actif global avant la navigation quand il diffère (voir
+ *  `useProgramLinkNavigation`). */
+type Navigate = (href: string, target?: { programId?: string; plan?: WorkspacePlan }) => void;
 
 /** Callback de navigation d'une ligne, ou `undefined` quand l'objet n'a aucune page ouvrable
  *  (`href` absent, voir `reachableHref` dans lib/myWorkspace.ts) — ligne alors non cliquable. */
 function linkTo(
   navigate: Navigate,
-  target: { href?: string; programId?: string }
+  target: { href?: string; programId?: string; plan: WorkspacePlan }
 ): (() => void) | undefined {
-  const { href, programId } = target;
-  return href ? () => navigate(href, programId) : undefined;
+  const { href, programId, plan } = target;
+  return href ? () => navigate(href, { programId, plan }) : undefined;
 }
 
 const fill = (template: string, n: number) => template.replace("{n}", String(n));
@@ -620,7 +626,7 @@ export function PerimeterSection({
           )}
         />
       ) : (
-        <ul className="space-y-2 p-3 sm:p-4">
+        <ul className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
           {entries.map((entry) => (
             <li key={`${entry.kind}:${entry.id}`}>
               <PerimeterTile entry={entry} onClick={linkTo(navigate, entry)} t={t} />
@@ -698,15 +704,15 @@ export function WorkspaceSkeleton({ label }: { label: string }) {
   return (
     <div className="animate-pulse" aria-busy="true" aria-label={label}>
       <div className="mb-5 h-[150px] border border-border bg-white shadow-sm" />
-      <div className="grid gap-x-4 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-span-2">
+      <div className="grid gap-x-4 lg:grid-cols-2">
+        <div className="min-w-0">
           <SkeletonCard rows={5} />
         </div>
         <div className="min-w-0">
           <SkeletonCard rows={3} variant="timeline" />
-          <SkeletonCard rows={2} variant="tiles" />
         </div>
       </div>
+      <SkeletonCard rows={2} variant="tiles" />
     </div>
   );
 }

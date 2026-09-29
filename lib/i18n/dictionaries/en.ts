@@ -65,6 +65,18 @@ const en: Record<string, string> = {
     "Approvals pending for more than 7 days with another decision-maker — follow up on them.",
   "validation.tabs.blockedEmpty": "No approvals waiting on others for more than 7 days.",
   "validation.tabs.loading": "Loading…",
+  "validation.tabs.label": "Approval views",
+  "validation.plan.strategic": "Strategic Plan",
+  "validation.plan.performance": "Performance Plan",
+  "validation.subtitle.strategic":
+    "Approval requests awaiting your decision, tracking of your own requests and decision history.",
+  "validation.subtitle.performance":
+    "Lever, realized-impact and deletion approvals awaiting your decision.",
+  "validation.emptyHint": "Requests awaiting your decision will appear here.",
+  "validation.sa.tabsLabel": "Approval requests",
+  "validation.sa.emptyMineHint": "Your approval requests and their progress will appear here.",
+  "validation.sa.emptyHistoryHint": "Approved and rejected requests are kept here.",
+  "validation.sa.emptyFilteredHint": "No request of this type — widen the filter to “All types”.",
   // Validation stratégique (lib/strategicApprovals.ts)
   "validation.sa.kind.milestone": "Milestone change",
   "validation.sa.kind.kpi_value": "KPI value",
@@ -3311,7 +3323,6 @@ const en: Record<string, string> = {
   "me.summary.upcomingOne": "{n} deadline in the next 4 weeks",
   "me.summary.upcomingMany": "{n} deadlines in the next 4 weeks",
   "me.planFilter": "Plan",
-  "me.plan.all": "All",
   "me.plan.strategic": "Strategic",
   "me.plan.performance": "Performance",
   "me.category.overdue": "Overdue",

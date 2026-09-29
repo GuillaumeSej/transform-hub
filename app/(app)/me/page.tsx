@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
 import { useMyWorkspace } from "@/lib/hooks/useMyWorkspace";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
-import { programSwitchForLink } from "@/lib/activeProgramSelection";
+import { useProgramLinkNavigation } from "@/lib/hooks/useProgramLinkNavigation";
+import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { formatDate } from "@/lib/format";
@@ -15,6 +15,7 @@ import {
   filterWorkspaceByPlan,
   greetingName,
   presentPlans,
+  resolvePlan,
   summarySentence,
   visibleSections,
   workspaceCounts,
@@ -30,8 +31,11 @@ import {
   WorkspaceSkeleton,
 } from "@/components/workspace/WorkspaceSections";
 
-/** Route `/me` — « Mon espace » : portail personnel COMMUN aux deux plans (Stratégique et
- *  Transfo/Performance), V1 en lecture seule et sans messagerie. La page ne fait qu'afficher le
+/** Route `/me` — « Mon espace » : portail personnel des deux plans (Stratégique et
+ *  Transfo/Performance), V1 en lecture seule et sans messagerie. Les deux plans ne sont JAMAIS
+ *  mélangés (décision PO) : un seul plan affiché à la fois — éléments, compteurs, répartition,
+ *  phrase de synthèse et périmètre —, choisi par la bascule Stratégique | Performance quand
+ *  l'utilisateur a des éléments dans les deux (défaut : type du programme actif, voir `resolvePlan`). La page ne fait qu'afficher le
  *  `MyWorkspace` agrégé par `useMyWorkspace()` (contrat : `lib/myWorkspaceTypes.ts`) ; chaque ligne
  *  renvoie vers l'écran existant où l'action se traite (`item.href`).
  *
@@ -41,17 +45,11 @@ import {
  *  page sur le seul bloc correspondant (colonne principale, surligné, puce « Filtre : … ✕ »). */
 export default function MyWorkspacePage() {
   const { t, locale } = useTranslation();
-  const router = useRouter();
   const { user } = useRole();
   const { workspace, loading } = useMyWorkspace();
-  const {
-    activeProgramId,
-    authorizedPrograms,
-    isConsolidatedView,
-    consolidatedPrograms,
-    setActiveProgramId,
-  } = useActiveProgram();
-  const [plan, setPlan] = useState<PlanFilter>("all");
+  const { programType } = useActiveProgram();
+  // Choix explicite de la bascule de plan — `null` = défaut (type du programme actif).
+  const [selectedPlan, setSelectedPlan] = useState<PlanFilter | null>(null);
   // Filtre de catégorie (barre de répartition) : `null` = tous les blocs.
   const [category, setCategory] = useState<WorkspaceCategory | null>(null);
   // Figé au montage : sert au regroupement « À venir » par semaine calendaire.
@@ -63,10 +61,8 @@ export default function MyWorkspacePage() {
 
   const plans = useMemo(() => presentPlans(workspace), [workspace]);
   const showPlanFilter = plans.length > 1;
-  const view = useMemo(
-    () => filterWorkspaceByPlan(workspace, showPlanFilter ? plan : "all"),
-    [workspace, plan, showPlanFilter]
-  );
+  const plan = resolvePlan(plans, programType, selectedPlan);
+  const view = useMemo(() => filterWorkspaceByPlan(workspace, plan), [workspace, plan]);
   const counts = useMemo(() => workspaceCounts(view), [view]);
   const active = effectiveCategory(category, view);
   const sections = visibleSections(active, view);
@@ -74,22 +70,10 @@ export default function MyWorkspacePage() {
   const clearFilter = () => setCategory(null);
 
   // Programme actif UNIQUE (décision PO, audit fix #1) : les éléments du portail peuvent venir
-  // d'un autre programme que celui du Topbar (ex. projets stratégiques listés alors qu'un Plan
-  // Performance est actif — `useMyWorkspace` charge alors le 1er programme stratégique autorisé).
-  // Approche retenue (la plus simple qui reste correcte) : chaque lien porte son `programId`, qu'on
-  // ACTIVE juste avant `router.push` — les deux mises à jour sont regroupées dans le même rendu,
-  // la page cible s'affiche donc directement sur le bon programme (et le bon type de nav).
-  const navigate = (href: string, programId?: string) => {
-    const switchTo = programSwitchForLink({
-      targetProgramId: programId,
-      activeProgramId,
-      isConsolidatedView,
-      consolidatedProgramIds: consolidatedPrograms.map((p) => p.id),
-      selectableProgramIds: authorizedPrograms.map((p) => p.id),
-    });
-    if (switchTo) setActiveProgramId(switchTo);
-    router.push(href);
-  };
+  // d'un autre programme que celui du Topbar. Chaque lien porte son `programId` et son `plan`, que
+  // `useProgramLinkNavigation` ACTIVE juste avant `router.push` — indispensable pour les routes
+  // partagées entre plans (`/levers/detail` = fiche levier OU fiche axe selon le programme actif).
+  const navigate = useProgramLinkNavigation();
 
   // Au changement de filtre : amène le bloc ciblé dans la vue (sans masquer la barre si possible).
   useEffect(() => {
@@ -151,13 +135,15 @@ export default function MyWorkspacePage() {
             </p>
           )}
         </div>
-        {showPlanFilter && !loading && (
+        {showPlanFilter && plan && !loading && (
           <SegmentedControl<PlanFilter>
             label={t("me.planFilter", "Plan")}
             value={plan}
-            onChange={setPlan}
+            onChange={(next) => {
+              setSelectedPlan(next);
+              setCategory(null);
+            }}
             options={[
-              { value: "all", label: t("me.plan.all", "Tous") },
               { value: "strategic", label: t("me.plan.strategic", "Stratégique") },
               { value: "performance", label: t("me.plan.performance", "Performance") },
             ]}
@@ -170,8 +156,11 @@ export default function MyWorkspacePage() {
       ) : (
         <>
           <WorkspaceBreakdown workspace={view} active={active} onSelect={setCategory} t={t} />
-          <div className="grid gap-x-4 lg:grid-cols-3">
-            <div className="min-w-0 lg:col-span-2">
+          {/* Pleine largeur (retour PO) : À faire / Bloqué à gauche et À venir à droite en deux
+              colonnes égales, puis Mon périmètre sur toute la largeur (cartes en grille). Avec un
+              filtre de catégorie, le bloc ciblé prend toute la largeur. */}
+          <div className={cn("grid gap-x-4", active === null && "lg:grid-cols-2")}>
+            <div className="min-w-0">
               {sections.includes("todo") && (
                 <div ref={todoRef} className="scroll-mt-4">
                   <TodoSection
@@ -195,19 +184,16 @@ export default function MyWorkspacePage() {
                   />
                 </div>
               )}
-              {/* Filtré sur « À venir » : le bloc passe dans la colonne principale. */}
               {active === "upcoming" && upcomingBlock}
             </div>
-            <div className="min-w-0">
-              {active === null && upcomingBlock}
-              <PerimeterSection
-                entries={view.perimeter}
-                pilotView={view.pilotView}
-                navigate={navigate}
-                t={t}
-              />
-            </div>
+            {active === null && <div className="min-w-0">{upcomingBlock}</div>}
           </div>
+          <PerimeterSection
+            entries={view.perimeter}
+            pilotView={view.pilotView}
+            navigate={navigate}
+            t={t}
+          />
         </>
       )}
     </div>

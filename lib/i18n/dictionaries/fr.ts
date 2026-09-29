@@ -90,6 +90,19 @@ const fr: Record<string, string> = {
   "validation.tabs.blockedEmpty":
     "Aucune validation en attente chez d'autres depuis plus de 7 jours.",
   "validation.tabs.loading": "Chargement…",
+  "validation.tabs.label": "Vues de validation",
+  "validation.plan.strategic": "Plan Stratégique",
+  "validation.plan.performance": "Plan Performance",
+  "validation.subtitle.strategic":
+    "Demandes de validation qui attendent votre décision, suivi de vos demandes et historique des décisions.",
+  "validation.subtitle.performance":
+    "Validations de leviers, réalisés et suppressions qui attendent votre décision.",
+  "validation.emptyHint": "Les demandes qui attendent votre décision apparaîtront ici.",
+  "validation.sa.tabsLabel": "Demandes de validation",
+  "validation.sa.emptyMineHint": "Vos demandes de validation et leur avancement apparaîtront ici.",
+  "validation.sa.emptyHistoryHint": "Les demandes validées ou refusées sont conservées ici.",
+  "validation.sa.emptyFilteredHint":
+    "Aucune demande de ce type — élargissez le filtre à « Tous les types ».",
   // Validation stratégique (lib/strategicApprovals.ts)
   "validation.sa.kind.milestone": "Passage de jalon",
   "validation.sa.kind.kpi_value": "Valeur KPI",
@@ -3469,7 +3482,6 @@ const fr: Record<string, string> = {
   "me.summary.upcomingOne": "{n} échéance dans les 4 prochaines semaines",
   "me.summary.upcomingMany": "{n} échéances dans les 4 prochaines semaines",
   "me.planFilter": "Plan",
-  "me.plan.all": "Tous",
   "me.plan.strategic": "Stratégique",
   "me.plan.performance": "Performance",
   "me.category.overdue": "En retard",

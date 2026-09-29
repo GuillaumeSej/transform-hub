@@ -6,6 +6,7 @@ import {
   type MyWorkspaceStrategicInput,
 } from "@/lib/myWorkspace";
 import { EMPTY_WORKSPACE } from "@/lib/myWorkspaceTypes";
+import { programSwitchForLink } from "@/lib/activeProgramSelection";
 import { itemsOfCategory } from "@/components/workspace/workspaceView";
 import { generateAlerts } from "@/lib/alertEngine";
 import { targetAlerts } from "@/lib/notifications";
@@ -715,5 +716,57 @@ describe("buildMyWorkspace — audit fix #5 (pertinence des alertes par rôle, r
       total: 2,
       parts: [{ kind: "leverMismatch", count: 2 }],
     });
+  });
+});
+
+describe("buildMyWorkspace — liens d'un profil ayant les DEUX plans (bug PO « axe introuvable »)", () => {
+  const alex = makeUser(
+    "alex",
+    [
+      { role: "lever", programId: "p1" },
+      { role: "chantier_contributor", programId: "p2" },
+    ],
+    { name: "alex Test" }
+  );
+  const data = makeData({
+    levers: [lateLever({ ownerUsername: "alex", owner: "alex Test" })],
+  });
+  const strategic = makeStrategic({
+    chantierActions: [makeAction("A1", "2026-09-10", { owner: "alex" })],
+  });
+  const ws = buildMyWorkspace(
+    { user: alex, performance: data, strategic, programs, users: [alex], today: TODAY },
+    t
+  );
+  const all = [...ws.todo, ...ws.upcoming, ...ws.blocked, ...ws.perimeter];
+
+  it("chaque lien porte son plan ET le programme de son objet", () => {
+    const perf = all.filter((i) => i.plan === "performance");
+    const strat = all.filter((i) => i.plan === "strategic");
+    expect(perf.length).toBeGreaterThan(0);
+    expect(strat.length).toBeGreaterThan(0);
+    for (const entry of perf) expect(entry.programId).toBe("p1");
+    for (const entry of strat) expect(entry.programId).toBe("p2");
+    const leverAlert = ws.todo.find((i) => i.source === "leverAlert");
+    expect(leverAlert).toMatchObject({ href: "/levers/detail?id=L1", programId: "p1" });
+  });
+
+  it("un levier ouvert depuis le programme stratégique actif active son programme Performance", () => {
+    // `/levers/detail` rend la fiche AXE sur un programme stratégique : sans bascule, « Axe introuvable ».
+    const fromStrategic = {
+      activeProgramId: "p2",
+      activeProgramType: "strategic" as const,
+      isConsolidatedView: false,
+      consolidatedProgramIds: [],
+      selectablePrograms: programs,
+    };
+    for (const entry of all) {
+      const switchTo = programSwitchForLink({
+        ...fromStrategic,
+        targetProgramId: entry.programId,
+        targetPlan: entry.plan,
+      });
+      expect(switchTo).toBe(entry.plan === "performance" ? "p1" : null);
+    }
   });
 });

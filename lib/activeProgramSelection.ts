@@ -113,24 +113,41 @@ export function shouldResetProgramScopedState(
 }
 
 /**
- * Programme à activer AVANT de suivre un lien portant un `programId` (portail « Mon espace ») :
- *  - rien si le lien n'a pas de programme, ou s'il vise déjà le programme actif ;
+ * Programme à activer AVANT de suivre un lien portant un `programId` et/ou un type de plan
+ * (portail « Mon espace », cloche du Topbar) :
+ *  - rien si le lien vise déjà le programme actif ;
  *  - rien en vue consolidée si le programme visé en fait partie (le lien reste dans le périmètre
  *    affiché — inutile de faire sortir l'utilisateur de sa vue consolidée) ;
- *  - rien si le programme n'est pas sélectionnable par l'utilisateur (on navigue quand même, la
- *    page cible applique ses propres gardes) ;
- *  - sinon, l'id à passer à `setActiveProgramId`.
+ *  - le programme visé s'il est sélectionnable par l'utilisateur ;
+ *  - sinon (lien sans programme, ou programme non sélectionnable) : si le PLAN visé (`targetPlan`)
+ *    diffère du type du programme actif, le 1er programme sélectionnable de ce plan. Indispensable
+ *    car plusieurs routes sont PARTAGÉES entre les deux plans et routées selon le type du programme
+ *    actif — ex. `/levers/detail?id=L005` rend la fiche AXE sur un programme stratégique
+ *    (« Axe introuvable » pour un id de levier) ;
+ *  - rien sinon (on navigue quand même, la page cible applique ses propres gardes).
+ * La vue consolidée ne regroupe que des programmes Performance : elle compte comme « performance ».
  */
 export function programSwitchForLink(input: {
   targetProgramId: string | null | undefined;
+  /** Plan de l'objet visé (type de programme attendu par la page cible). */
+  targetPlan?: ProgramType;
   activeProgramId: string | null;
+  /** Type du programme actif (`useActiveProgram().programType`). */
+  activeProgramType?: ProgramType;
   isConsolidatedView: boolean;
   consolidatedProgramIds: string[];
-  selectableProgramIds: string[];
+  /** Programmes sélectionnables par l'utilisateur (`useActiveProgram().authorizedPrograms`). */
+  selectablePrograms: Pick<Program, "id" | "type">[];
 }): string | null {
-  const { targetProgramId, activeProgramId, isConsolidatedView } = input;
-  if (!targetProgramId || targetProgramId === activeProgramId) return null;
-  if (isConsolidatedView && input.consolidatedProgramIds.includes(targetProgramId)) return null;
-  if (!input.selectableProgramIds.includes(targetProgramId)) return null;
-  return targetProgramId;
+  const { targetProgramId, targetPlan, activeProgramId, isConsolidatedView } = input;
+  if (targetProgramId) {
+    if (targetProgramId === activeProgramId) return null;
+    if (isConsolidatedView && input.consolidatedProgramIds.includes(targetProgramId)) return null;
+    if (input.selectablePrograms.some((p) => p.id === targetProgramId)) return targetProgramId;
+  }
+  const activeType: ProgramType | undefined = isConsolidatedView
+    ? "performance"
+    : input.activeProgramType;
+  if (!targetPlan || !activeType || targetPlan === activeType) return null;
+  return input.selectablePrograms.find((p) => resolveProgramType(p) === targetPlan)?.id ?? null;
 }

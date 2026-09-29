@@ -8,7 +8,8 @@ import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
-import { useCanOpenRoute } from "@/lib/hooks/useCanOpenRoute";
+import { useProgramLinkNavigation } from "@/lib/hooks/useProgramLinkNavigation";
+import { canOpenRoute } from "@/lib/routeAccess";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import { ProgramSwitcher } from "@/components/shared/ProgramSwitcher";
 
@@ -146,9 +147,18 @@ export function Topbar({
   const router = useRouter();
   // Réalisés / suppressions : la décision se prend sur /validation — si l'utilisateur ne peut pas
   // l'ouvrir, on l'emmène sur la fiche du levier plutôt que de le voir renvoyé vers « Mon espace ».
-  const canOpen = useCanOpenRoute();
+  // Évalué pour le Plan Performance (celui du levier), pas pour le programme actif : ces files
+  // sont affichées quel que soit le programme actif, y compris sur un Plan Stratégique.
   const validationOrLever = (leverId: string) =>
-    canOpen("/validation") ? "/validation" : `/levers/detail?id=${leverId}`;
+    canOpenRoute(user, "/validation", "performance")
+      ? "/validation"
+      : `/levers/detail?id=${leverId}`;
+  // Leviers des files ci-dessous = Plan PERFORMANCE : on active le programme du levier avant de
+  // naviguer. Sans cela, depuis un programme stratégique actif, `/levers/detail?id=L…` rendait la
+  // fiche AXE (« Axe introuvable ») et `/validation` la file stratégique.
+  const navigateTo = useProgramLinkNavigation();
+  const openLever = (lever: Lever, href: string) =>
+    navigateTo(href, { programId: lever.programId, plan: "performance" });
   const { t } = useTranslation();
   const { confirmDiscard } = useUnsavedChanges();
   const { programType } = useActiveProgram();
@@ -312,7 +322,7 @@ export function Topbar({
                           const proceed = await confirmDiscard();
                           if (!proceed) return;
                           setAlertsOpen(false);
-                          router.push(validationOrLever(lever.id));
+                          openLever(lever, validationOrLever(lever.id));
                         }}
                         className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
                       >
@@ -345,7 +355,7 @@ export function Topbar({
                           const proceed = await confirmDiscard();
                           if (!proceed) return;
                           setAlertsOpen(false);
-                          router.push(validationOrLever(lever.id));
+                          openLever(lever, validationOrLever(lever.id));
                         }}
                         className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
                       >
@@ -377,7 +387,7 @@ export function Topbar({
                           const proceed = await confirmDiscard();
                           if (!proceed) return;
                           setAlertsOpen(false);
-                          router.push(`/levers/detail?id=${lever.id}`);
+                          openLever(lever, `/levers/detail?id=${lever.id}`);
                         }}
                         className="block w-full border-b border-border px-4 py-3 text-left transition last:border-0 hover:bg-neutral-50"
                       >

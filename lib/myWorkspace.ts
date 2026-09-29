@@ -791,6 +791,8 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
       title: text.title,
       context: text.desc,
       href: staffingOverrunHref(overrun),
+      // Sur-staffing calculé sur le programme stratégique chargé (voir `useMyWorkspace`).
+      programId: input.strategic?.programId,
       dedupeKey: `staffing:${overrun.team}`,
     });
   }

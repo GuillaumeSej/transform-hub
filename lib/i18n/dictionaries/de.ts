@@ -62,6 +62,19 @@ const de: Record<string, string> = {
     "Freigaben, die seit mehr als 7 Tagen bei einem anderen Entscheider liegen — fassen Sie nach.",
   "validation.tabs.blockedEmpty": "Keine Freigaben, die seit mehr als 7 Tagen bei anderen warten.",
   "validation.tabs.loading": "Wird geladen…",
+  "validation.tabs.label": "Freigabeansichten",
+  "validation.plan.strategic": "Strategischer Plan",
+  "validation.plan.performance": "Performance-Plan",
+  "validation.subtitle.strategic":
+    "Freigabeanträge, die auf Ihre Entscheidung warten, Verfolgung Ihrer Anträge und Entscheidungsverlauf.",
+  "validation.subtitle.performance":
+    "Freigaben von Hebeln, realisierten Effekten und Löschungen, die auf Ihre Entscheidung warten.",
+  "validation.emptyHint": "Anträge, die auf Ihre Entscheidung warten, erscheinen hier.",
+  "validation.sa.tabsLabel": "Freigabeanträge",
+  "validation.sa.emptyMineHint": "Ihre Freigabeanträge und deren Fortschritt erscheinen hier.",
+  "validation.sa.emptyHistoryHint": "Genehmigte und abgelehnte Anträge werden hier aufbewahrt.",
+  "validation.sa.emptyFilteredHint":
+    "Kein Antrag dieses Typs — erweitern Sie den Filter auf „Alle Typen“.",
   // Validation stratégique (lib/strategicApprovals.ts)
   "validation.sa.kind.milestone": "Meilensteinwechsel",
   "validation.sa.kind.kpi_value": "KPI-Wert",
@@ -3389,7 +3402,6 @@ const de: Record<string, string> = {
   "me.summary.upcomingOne": "{n} Frist in den nächsten 4 Wochen",
   "me.summary.upcomingMany": "{n} Fristen in den nächsten 4 Wochen",
   "me.planFilter": "Plan",
-  "me.plan.all": "Alle",
   "me.plan.strategic": "Strategisch",
   "me.plan.performance": "Performance",
   "me.category.overdue": "Überfällig",

@@ -1,6 +1,6 @@
 /**
  * Helpers PURS de présentation du portail « Mon espace » (`/me`) — aucune logique métier ici
- * (l'agrégation vit dans `lib/myWorkspace.ts`) : filtrage par plan, répartition par catégorie
+ * (l'agrégation vit dans `lib/myWorkspace.ts`) : choix et filtrage du plan affiché, répartition par catégorie
  * (barre 100 % cliquable + filtre de page), compteurs,
  * phrase de synthèse de l'en-tête, regroupement « À faire » par catégorie (les mêmes que la
  * barre) et regroupement « À venir » par semaine. Testés dans
@@ -10,10 +10,12 @@ import type { MyWorkspace, WorkspaceItem, WorkspacePlan } from "@/lib/myWorkspac
 
 export type Translate = (key: string, fallback?: string) => string;
 
-export type PlanFilter = "all" | WorkspacePlan;
+/** Plan affiché par le portail : les deux plans ne sont JAMAIS mélangés (décision PO) — un seul
+ *  plan à la fois, choisi par la bascule Stratégique | Performance quand l'utilisateur a les deux. */
+export type PlanFilter = WorkspacePlan;
 
-/** Plans effectivement présents dans le portail (toutes listes confondues) — le filtre par plan
- *  n'est proposé que si les DEUX y figurent. */
+/** Plans effectivement présents dans le portail (toutes listes confondues) — la bascule de plan
+ *  n'est proposée que si les DEUX y figurent. */
 export function presentPlans(workspace: MyWorkspace): WorkspacePlan[] {
   const plans = new Set<WorkspacePlan>();
   for (const list of [workspace.todo, workspace.upcoming, workspace.blocked, workspace.perimeter]) {
@@ -22,9 +24,28 @@ export function presentPlans(workspace: MyWorkspace): WorkspacePlan[] {
   return (["strategic", "performance"] as const).filter((p) => plans.has(p));
 }
 
-/** Applique le filtre par plan à toutes les listes du portail. */
-export function filterWorkspaceByPlan(workspace: MyWorkspace, plan: PlanFilter): MyWorkspace {
-  if (plan === "all") return workspace;
+/** Plan effectivement affiché :
+ *  - le choix explicite de l'utilisateur (`selected`) s'il a des éléments ;
+ *  - sinon le type du programme ACTIF (Topbar) s'il a des éléments ;
+ *  - sinon le (seul) plan qui a des éléments ;
+ *  - `null` si le portail est vide (aucun plan à afficher). */
+export function resolvePlan(
+  plans: WorkspacePlan[],
+  activeProgramType: WorkspacePlan,
+  selected: WorkspacePlan | null = null
+): WorkspacePlan | null {
+  if (selected && plans.includes(selected)) return selected;
+  if (plans.includes(activeProgramType)) return activeProgramType;
+  return plans[0] ?? null;
+}
+
+/** Restreint toutes les listes du portail (À faire, À venir, Bloqué, Périmètre) au plan donné ;
+ *  `null` (portail vide) = inchangé. */
+export function filterWorkspaceByPlan(
+  workspace: MyWorkspace,
+  plan: WorkspacePlan | null
+): MyWorkspace {
+  if (!plan) return workspace;
   return {
     ...workspace,
     todo: workspace.todo.filter((i) => i.plan === plan),

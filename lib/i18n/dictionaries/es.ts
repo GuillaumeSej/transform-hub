@@ -63,6 +63,19 @@ const es: Record<string, string> = {
   "validation.tabs.blockedEmpty":
     "No hay validaciones pendientes de otros desde hace más de 7 días.",
   "validation.tabs.loading": "Cargando…",
+  "validation.tabs.label": "Vistas de validación",
+  "validation.plan.strategic": "Plan Estratégico",
+  "validation.plan.performance": "Plan de Performance",
+  "validation.subtitle.strategic":
+    "Solicitudes de validación pendientes de su decisión, seguimiento de sus solicitudes e historial de decisiones.",
+  "validation.subtitle.performance":
+    "Validaciones de palancas, realizados y eliminaciones pendientes de su decisión.",
+  "validation.emptyHint": "Las solicitudes pendientes de su decisión aparecerán aquí.",
+  "validation.sa.tabsLabel": "Solicitudes de validación",
+  "validation.sa.emptyMineHint": "Sus solicitudes de validación y su avance aparecerán aquí.",
+  "validation.sa.emptyHistoryHint": "Las solicitudes validadas o rechazadas se conservan aquí.",
+  "validation.sa.emptyFilteredHint":
+    "Ninguna solicitud de este tipo: amplíe el filtro a «Todos los tipos».",
   // Validation stratégique (lib/strategicApprovals.ts)
   "validation.sa.kind.milestone": "Cambio de hito",
   "validation.sa.kind.kpi_value": "Valor de KPI",
@@ -3377,7 +3390,6 @@ const es: Record<string, string> = {
   "me.summary.upcomingOne": "{n} vencimiento en las próximas 4 semanas",
   "me.summary.upcomingMany": "{n} vencimientos en las próximas 4 semanas",
   "me.planFilter": "Plan",
-  "me.plan.all": "Todos",
   "me.plan.strategic": "Estratégico",
   "me.plan.performance": "Rendimiento",
   "me.category.overdue": "Con retraso",

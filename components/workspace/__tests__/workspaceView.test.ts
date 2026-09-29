@@ -13,6 +13,7 @@ import {
   isOverdue,
   itemsOfCategory,
   presentPlans,
+  resolvePlan,
   roundedPercents,
   summarySentence,
   visibleSections,
@@ -113,7 +114,44 @@ describe("plans, counts, grouping", () => {
     expect(perf.todo.map((i) => i.id)).toEqual(["t1"]);
     expect(perf.upcoming).toEqual([]);
     expect(perf.blocked.map((i) => i.id)).toEqual(["b1"]);
-    expect(filterWorkspaceByPlan(ws, "all")).toBe(ws);
+    const strat = filterWorkspaceByPlan(ws, "strategic");
+    expect(strat.todo.map((i) => i.id)).toEqual(["t2", "t3"]);
+    expect(strat.upcoming.map((i) => i.id)).toEqual(["u1"]);
+    expect(strat.blocked).toEqual([]);
+    // Portail vide (aucun plan) : inchangé.
+    expect(filterWorkspaceByPlan(EMPTY_WORKSPACE, null)).toBe(EMPTY_WORKSPACE);
+  });
+
+  it("filters the perimeter too, and the counts follow the selected plan only", () => {
+    const withPerimeter: MyWorkspace = {
+      ...ws,
+      perimeter: [
+        { id: "p1", kind: "lever", plan: "performance", label: "L", role: "R", health: "red" },
+        { id: "p2", kind: "axis", plan: "strategic", label: "A", role: "S", health: "amber" },
+      ],
+    };
+    const perf = filterWorkspaceByPlan(withPerimeter, "performance");
+    expect(perf.perimeter.map((p) => p.id)).toEqual(["p1"]);
+    expect(workspaceCounts(perf)).toEqual({ todo: 1, late: 1, upcoming: 0, blocked: 1 });
+    const strat = filterWorkspaceByPlan(withPerimeter, "strategic");
+    expect(strat.perimeter.map((p) => p.id)).toEqual(["p2"]);
+    expect(workspaceCounts(strat)).toEqual({ todo: 2, late: 0, upcoming: 1, blocked: 0 });
+  });
+
+  it("resolves the displayed plan: explicit choice, else active program type, else the plan with items", () => {
+    const both = ["strategic", "performance"] as const;
+    // Défaut = type du programme actif quand il a des éléments.
+    expect(resolvePlan([...both], "performance")).toBe("performance");
+    expect(resolvePlan([...both], "strategic")).toBe("strategic");
+    // Choix explicite de la bascule.
+    expect(resolvePlan([...both], "performance", "strategic")).toBe("strategic");
+    // Programme actif sans élément : le plan qui en a.
+    expect(resolvePlan(["strategic"], "performance")).toBe("strategic");
+    expect(resolvePlan(["performance"], "strategic")).toBe("performance");
+    // Choix devenu vide (données rechargées) : on retombe sur le défaut.
+    expect(resolvePlan(["performance"], "strategic", "strategic")).toBe("performance");
+    // Portail vide.
+    expect(resolvePlan([], "performance")).toBeNull();
   });
 
   it("counts todo / late / upcoming / blocked (late = daysLate > 0 only)", () => {

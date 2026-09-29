@@ -1,8 +1,7 @@
 "use client";
 
-import { Suspense, useState, type ReactNode } from "react";
+import { Suspense, useId, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ShieldCheck } from "lucide-react";
 import { displayMilestoneId } from "@/lib/axisLogic";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -20,7 +19,9 @@ import { useStrategicApprovals } from "@/lib/hooks/useStrategicApprovals";
 import { StrategicApprovalsPanel } from "@/components/validation/StrategicApprovalsPanel";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { STATUS_SHORT_LABEL } from "@/lib/status-config";
-import { Card, CardBody } from "@/components/shared/Card";
+import { Card } from "@/components/shared/Card";
+import { UnderlineTabs, underlineTabId } from "@/components/shared/UnderlineTabs";
+import { EmptyState } from "@/components/workspace/WorkspaceParts";
 import { Button } from "@/components/shared/Button";
 import { StageBadge } from "@/components/shared/StageBadge";
 import { LeverDeletionDialog } from "@/components/shared/LeverDeletionDialog";
@@ -69,11 +70,13 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
   if (queue.length === 0 && realizedQueue.length === 0 && deletionQueue.length === 0) {
     return (
       <Card>
-        <CardBody>
-          <p className="text-sm text-secondary">
-            {t("validation.empty", "Rien à valider pour le moment.")}
-          </p>
-        </CardBody>
+        <EmptyState
+          title={t("validation.empty", "Rien à valider pour le moment.")}
+          hint={t(
+            "validation.emptyHint",
+            "Les demandes qui attendent votre décision apparaîtront ici."
+          )}
+        />
       </Card>
     );
   }
@@ -554,59 +557,51 @@ function PilotValidationTabs({ children }: { children: ReactNode }) {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
+  const panelId = `validation-panel${useId().replace(/:/g, "")}`;
   const blockedLabel = t("validation.tabs.blocked", "En attente chez d'autres");
-  const tabs: { id: ValidationTab; label: string }[] = [
+  const tabs: { id: ValidationTab; label: string; count?: number }[] = [
     { id: "mine", label: t("validation.tabs.mine", "Mes décisions") },
     {
       id: "blocked",
-      label: loading ? blockedLabel : `${blockedLabel} (${workspace.blocked.length})`,
+      label: blockedLabel,
+      count: loading ? undefined : workspace.blocked.length,
     },
   ];
 
   return (
     <div>
-      <div
-        role="tablist"
-        className="mb-4 flex w-fit overflow-hidden rounded-md border border-border"
-      >
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            onClick={() => selectTab(item.id)}
-            className={`px-3 py-1.5 text-xs font-semibold ${
-              tab === item.id ? "bg-black text-white" : "bg-white text-secondary"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <UnderlineTabs<ValidationTab>
+        label={t("validation.tabs.label", "Vues de validation")}
+        items={tabs}
+        value={tab}
+        onChange={selectTab}
+        panelId={panelId}
+      />
 
-      {tab === "mine" ? (
-        children
-      ) : loading ? (
-        <div aria-busy="true" aria-label={t("validation.tabs.loading", "Chargement…")}>
-          <SkeletonCard rows={3} />
-        </div>
-      ) : (
-        <BlockedSection
-          items={workspace.blocked}
-          navigate={(href) => router.push(href)}
-          t={t}
-          title={blockedLabel}
-          subtitle={t(
-            "validation.tabs.blockedSubtitle",
-            "Validations en attente depuis plus de 7 jours chez un autre décideur — relancez-les."
-          )}
-          emptyLabel={t(
-            "validation.tabs.blockedEmpty",
-            "Aucune validation en attente chez d'autres depuis plus de 7 jours."
-          )}
-        />
-      )}
+      <div role="tabpanel" id={panelId} aria-labelledby={underlineTabId(panelId, tab)}>
+        {tab === "mine" ? (
+          children
+        ) : loading ? (
+          <div aria-busy="true" aria-label={t("validation.tabs.loading", "Chargement…")}>
+            <SkeletonCard rows={3} />
+          </div>
+        ) : (
+          <BlockedSection
+            items={workspace.blocked}
+            navigate={(href) => router.push(href)}
+            t={t}
+            title={blockedLabel}
+            subtitle={t(
+              "validation.tabs.blockedSubtitle",
+              "Validations en attente depuis plus de 7 jours chez un autre décideur — relancez-les."
+            )}
+            emptyLabel={t(
+              "validation.tabs.blockedEmpty",
+              "Aucune validation en attente chez d'autres depuis plus de 7 jours."
+            )}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -625,10 +620,33 @@ function ValidationPageContent() {
 
   return (
     <div className="animate-fade-up">
-      <div className="mb-5 flex items-center gap-2">
-        <ShieldCheck size={18} className="text-bp-coral" />
-        <h1 className="text-xl font-bold text-primary">{t("validation.title", "Validation")}</h1>
-      </div>
+      {/* En-tête aligné sur « Mon espace » : sur-titre discret (rubrique · plan actif), titre à
+          filet coral, phrase d'introduction. */}
+      <header className="mb-6">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+          {t("nav.sectionDecision", "Mes actions")}
+          <span aria-hidden className="mx-1.5 text-neutral-300">
+            ·
+          </span>
+          {isStrategic
+            ? t("validation.plan.strategic", "Plan Stratégique")
+            : t("validation.plan.performance", "Plan Performance")}
+        </p>
+        <h1 className="relative mt-1.5 pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
+          {t("validation.title", "Validation")}
+        </h1>
+        <p className="mt-3 text-[13px] leading-relaxed text-secondary">
+          {isStrategic
+            ? t(
+                "validation.subtitle.strategic",
+                "Demandes de validation qui attendent votre décision, suivi de vos demandes et historique des décisions."
+              )
+            : t(
+                "validation.subtitle.performance",
+                "Validations de leviers, réalisés et suppressions qui attendent votre décision."
+              )}
+        </p>
+      </header>
 
       {isPilotProfile(user) ? <PilotValidationTabs>{decisions}</PilotValidationTabs> : decisions}
     </div>
