@@ -2,6 +2,7 @@
   "name": "betrack-admin-api",
   "version": "0.1.0",
   "private": true,
+  "license": "UNLICENSED",
   "description": "Privileged Firebase Auth admin operations for BeTrack (rename/delete user), kept out of the statically-exported Next.js client. Portable Node/Express service — same Docker image runs on Render or Azure.",
   "main": "dist/index.js",
   "scripts": {
