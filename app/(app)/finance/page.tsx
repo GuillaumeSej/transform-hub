@@ -11,6 +11,7 @@ import {
   InvestVsSavingsChart,
 } from "@/components/finance/FinanceCostCharts";
 import { FinanceHierarchyTable } from "@/components/finance/FinanceHierarchyTable";
+import { PeriodBasisNote } from "@/components/finance/PeriodBasisNote";
 import { PnlBarChart } from "@/components/shared/charts/PnlBarChart";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
@@ -478,6 +479,7 @@ export default function FinancePage() {
                   ))}
                 </select>
               )}
+              <PeriodBasisNote subAnnual={engine.isSubAnnualPeriod(pnlPeriodFilter)} />
             </div>
           }
         />

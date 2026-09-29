@@ -473,6 +473,12 @@ const fr: Record<string, string> = {
   "pnl.allEntities": "Toutes entités",
   "pnl.allQuarters": "Tous les Q",
   "pnl.allMonths": "Tous les mois",
+  "pnl.periodBasis.annual": "Base annuelle (effet année pleine)",
+  "pnl.periodBasis.annualHint":
+    "Montants en effet année pleine (run-rate) : un gain récurrent de 1 M€/an compte 1 M€ dans chaque exercice où il est actif, quelle que soit sa date de début dans l'exercice. Les éléments ponctuels comptent en entier dans l'exercice de leur date.",
+  "pnl.periodBasis.period": "Effet sur la période",
+  "pnl.periodBasis.periodHint":
+    "Montants proratisés sur la période : montant annuel × (mois actifs dans la période / 12). Ex. 1 M€/an démarrant le 1er octobre = 0,25 M€ sur oct.–déc., 0,083 M€ sur octobre. Les éléments ponctuels comptent en entier dans la période de leur date.",
   "chart.pnl.plan": "Plan",
   "chart.pnl.realized": "Réalisé",
   "chart.pnl.reforecast": "Réactualisé",

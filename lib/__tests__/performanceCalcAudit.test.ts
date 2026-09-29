@@ -356,10 +356,12 @@ describe("P&L period filter — same spreading rule as the finance table, fiscal
     expect(tableTotal([2025])).toBe(0);
   });
 
-  it("quarters / months: active from the start month onward (run-rate)", () => {
+  it("quarters / months: in-period effect = annual × active months / 12", () => {
     expect(pnlTotal({ year: "2026", quarter: "Q1", month: "Feb" })).toBe(0);
-    expect(pnlTotal({ year: "2026", quarter: "Q1", month: "Mar" })).toBe(1);
-    expect(pnlTotal({ year: "2027", quarter: "Q3" })).toBe(1);
+    expect(pnlTotal({ year: "2026", quarter: "Q1", month: "Mar" })).toBeCloseTo(1 / 12, 4);
+    // Q1 2026 : actif en mars seulement (1 mois sur 3).
+    expect(pnlTotal({ year: "2026", quarter: "Q1" })).toBeCloseTo(1 / 12, 4);
+    expect(pnlTotal({ year: "2027", quarter: "Q3" })).toBe(0.25);
   });
 
   it("fiscal year (April start): « 2025 » = Apr 2025–Mar 2026, fiscal quarters", () => {
@@ -367,7 +369,10 @@ describe("P&L period filter — same spreading rule as the finance table, fiscal
     expect(pnlTotal({ year: "2025", fyStartMonth: 3 })).toBe(1);
     expect(tableTotal([2025], 3)).toBe(1);
     expect(pnlTotal({ year: "2025", quarter: "Q3", fyStartMonth: 3 })).toBe(0); // Oct–Dec 2025
-    expect(pnlTotal({ year: "2025", quarter: "Q4", month: "Mar", fyStartMonth: 3 })).toBe(1);
+    expect(pnlTotal({ year: "2025", quarter: "Q4", month: "Mar", fyStartMonth: 3 })).toBeCloseTo(
+      1 / 12,
+      4
+    );
     expect(pnlTotal({ year: "2025", quarter: "Q4", month: "Feb", fyStartMonth: 3 })).toBe(0);
     // Un mois hors du trimestre choisi : rien.
     expect(pnlTotal({ year: "2025", quarter: "Q1", month: "Mar", fyStartMonth: 3 })).toBe(0);
@@ -385,6 +390,128 @@ describe("P&L period filter — same spreading rule as the finance table, fiscal
         .reduce((s, p) => s + p.reforecast, 0);
     expect(f("2027")).toBe(2);
     expect(f("2028")).toBe(0);
+  });
+});
+
+describe("PO — full-year effect on a fiscal year, in-period effect on a quarter / month", () => {
+  const today = new Date("2026-06-15");
+  // 1 M€/an dès le 1er octobre 2025, exercice avril–mars.
+  const l = lever({
+    pnlMap: "P1",
+    impacts: [imp("g", { amount: 1, gainDate: "2025-10-01", hierarchyLeafId: "A" })],
+  });
+  const pnl = (lv: Lever, f: Omit<engine.PnlPeriodFilter, "fyStartMonth">) =>
+    engine
+      .pnlImpactDetailed(data([lv]), { ...f, fyStartMonth: 3 }, undefined, undefined, today)
+      .reduce((s, p) => s + p.reforecast, 0);
+
+  it("fiscal year → run-rate (1 M€ in each active year)", () => {
+    expect(pnl(l, { year: "2025" })).toBe(1);
+    expect(pnl(l, { year: "2026" })).toBe(1);
+    expect(engine.isSubAnnualPeriod({ year: "2025" })).toBe(false);
+  });
+  it("quarter / month → annual × active months / 12", () => {
+    expect(pnl(l, { year: "2025", quarter: "Q3" })).toBe(0.25); // Oct–Dec
+    expect(pnl(l, { year: "2025", quarter: "Q3", month: "Oct" })).toBeCloseTo(1 / 12, 4);
+    expect(pnl(l, { year: "2025", quarter: "Q2" })).toBe(0); // Jul–Sep : pas encore actif
+    expect(engine.isSubAnnualPeriod({ year: "2025", quarter: "Q3" })).toBe(true);
+  });
+  it("a quarter where the line is active 1 month out of 3 → 1/12", () => {
+    const dec = lever({
+      pnlMap: "P1",
+      impacts: [imp("g", { amount: 1, gainDate: "2025-12-01" })],
+    });
+    expect(pnl(dec, { year: "2025", quarter: "Q3" })).toBeCloseTo(1 / 12, 4);
+    // Fin d'impact : fin février 2026 → T4 (jan–mar) = 2 mois.
+    const ended = lever({
+      pnlMap: "P1",
+      impacts: [imp("g", { amount: 1.2, gainDate: "2025-10-01", endDate: "2026-02-28" })],
+    });
+    expect(pnl(ended, { year: "2025", quarter: "Q4" })).toBeCloseTo(0.2, 9);
+  });
+  it("one-shot items never enter the net P&L, whatever the filter", () => {
+    const oneOff = lever({
+      pnlMap: "P1",
+      impacts: [
+        imp("g", { amount: 1, gainDate: "2025-10-01" }),
+        imp("x", { amount: 5, gainDate: "2025-10-15", gainRecurrence: "oneoff" }),
+        imp("c", { type: "cost", nature: "capex", amount: 3, capexDeploymentDate: "2025-10-01" }),
+      ],
+    });
+    expect(pnl(oneOff, { year: "2025", quarter: "Q3", month: "Oct" })).toBeCloseTo(1 / 12, 4);
+  });
+});
+
+describe("P&L and finance table give identical totals for the same period filter", () => {
+  const today = new Date("2026-06-15");
+  const nodes = [node("A"), node("B")];
+  const levers = [
+    lever({
+      id: "L1",
+      pnlMap: "P1",
+      status: "in_progress",
+      // Plan figé ≠ impacts actuels : l'écart est réparti sur les lignes (`allocateLeverTotal`).
+      lockedPlan: { grossSavings: 3, netSavings: 2.4, opexOneOff: 0, opexRec: 0.6, capex: 0 },
+      impacts: [
+        imp("g", { amount: 2, gainDate: "2025-11-01", hierarchyLeafId: "A", status: "ongoing" }),
+        imp("o", {
+          type: "cost",
+          nature: "opex_rec",
+          amount: 0.6,
+          capexDeploymentDate: "2025-12-01",
+          endDate: "2026-05-31",
+          hierarchyLeafId: "B",
+        }),
+        imp("c", { type: "cost", nature: "capex", amount: 4, capexDeploymentDate: "2025-10-01" }),
+      ],
+    }),
+    // Levier sans ligne nette : bloc unique proratisé sur sa période [début, fin].
+    lever({
+      id: "L2",
+      pnlMap: "P2",
+      hierarchyLeafId: "B",
+      start: "2025-09-01",
+      end: "2026-02-28",
+      netSavings: 1.2,
+      lockedPlan: { grossSavings: 1.2, netSavings: 1.2, opexOneOff: 0, opexRec: 0, capex: 0 },
+    }),
+  ];
+  const d = data(levers);
+  const periods: engine.PnlPeriodFilter[] = [
+    { year: "2025", fyStartMonth: 3 },
+    { year: "2025", quarter: "Q3", fyStartMonth: 3 },
+    { year: "2025", quarter: "Q4", fyStartMonth: 3 },
+    { year: "2025", quarter: "Q4", month: "Jan", fyStartMonth: 3 },
+    { year: "2026", quarter: "Q1", fyStartMonth: 3 },
+  ];
+  it.each(periods)("same planned / reforecast / realized totals for %o", (period) => {
+    const pts = engine.pnlImpactDetailed(d, period, undefined, undefined, today);
+    const rows = engine.financeByHierarchyLevel(d, { hierarchyLevels: levels }, 0, nodes, {
+      period,
+      unrounded: true,
+      today,
+      fyStartMonth: 3,
+    });
+    // Totaux non arrondis (le tableau n'arrondit qu'à l'affichage, `financeTotals` au dixième).
+    const tbl = (k: "planned" | "reforecast" | "realized") => rows.reduce((s, r) => s + r[k], 0);
+    const sum = (k: "plan" | "reforecast" | "realized") => pts.reduce((s, p) => s + p[k], 0);
+    expect(sum("plan")).toBeCloseTo(tbl("planned"), 3);
+    expect(sum("reforecast")).toBeCloseTo(tbl("reforecast"), 3);
+    expect(sum("realized")).toBeCloseTo(tbl("realized"), 3);
+    // Et au dixième (affichage) : mêmes totaux.
+    expect(Math.round(sum("reforecast") * 10) / 10).toBe(financeTotals(rows).reforecast);
+  });
+  it("Q3 (Oct–Dec 2025) values are the in-period effect", () => {
+    const pts = engine.pnlImpactDetailed(
+      d,
+      { year: "2025", quarter: "Q3", fyStartMonth: 3 },
+      undefined,
+      undefined,
+      today
+    );
+    // Gain 2 M€/an × 2 mois − OPEX 0,6 × 1 mois + bloc L2 1,2 × 3 mois, /12.
+    const refo = pts.reduce((s, p) => s + p.reforecast, 0);
+    expect(refo).toBeCloseTo((2 * 2 - 0.6 * 1 + 1.2 * 3) / 12, 3);
   });
 });
 

@@ -436,6 +436,12 @@ const de: Record<string, string> = {
   "pnl.allEntities": "Alle Einheiten",
   "pnl.allQuarters": "Alle Quartale",
   "pnl.allMonths": "Alle Monate",
+  "pnl.periodBasis.annual": "Jahresbasis (Ganzjahreseffekt)",
+  "pnl.periodBasis.annualHint":
+    "Beträge als Ganzjahreseffekt (Run-Rate): ein wiederkehrender Gewinn von 1 Mio. €/Jahr zählt 1 Mio. € in jedem Geschäftsjahr, in dem er aktiv ist, unabhängig vom Startdatum im Jahr. Einmalige Posten zählen vollständig im Geschäftsjahr ihres Datums.",
+  "pnl.periodBasis.period": "Effekt im Zeitraum",
+  "pnl.periodBasis.periodHint":
+    "Anteilige Beträge im Zeitraum: Jahresbetrag × (aktive Monate im Zeitraum / 12). Bsp. 1 Mio. €/Jahr ab 1. Oktober = 0,25 Mio. € für Okt.–Dez., 0,083 Mio. € für Oktober. Einmalige Posten zählen vollständig im Zeitraum ihres Datums.",
   "chart.pnl.plan": "Plan",
   "chart.pnl.realized": "Realisiert",
   "chart.pnl.reforecast": "Neuprognose",

@@ -638,6 +638,33 @@ function monthRangesOverlap(a: [number, number], b: [number, number]): boolean {
   return a[0] <= b[1] && b[0] <= a[1];
 }
 
+/** Filtre de période infra-annuel (trimestre ou mois) ? Décision PO : sur un exercice (ou sans
+ *  filtre) on affiche l'effet ANNÉE PLEINE (run-rate) ; sur un trimestre / un mois, l'effet SUR LA
+ *  PÉRIODE (montant annuel × mois actifs / 12, voir `periodLineShare`). */
+export function isSubAnnualPeriod(filter: PnlPeriodFilter | undefined): boolean {
+  return !!filter && !!(filter.quarter || filter.month);
+}
+
+/** Part (coefficient) du montant ANNUALISÉ d'une ligne retenue dans une période — règle commune du
+ *  P&L (`pnlImpactDetailed`) et du tableau Finance (`financeByHierarchyLevel`) :
+ *  - pas de chevauchement → 0 ;
+ *  - période annuelle (exercice) → 1 (effet année pleine / run-rate) ;
+ *  - période infra-annuelle (trimestre / mois) et ligne RÉCURRENTE → mois actifs dans la période
+ *    / 12 (ex. 1 M€/an dès octobre : T3 oct–déc = 0,25 ; octobre = 1/12) ;
+ *  - ligne PONCTUELLE (CAPEX, OPEX ou gain one-off) → 1 dans la période qui la contient, sans
+ *    prorata. */
+function periodLineShare(
+  range: [number, number] | null,
+  period: [number, number],
+  subAnnual: boolean,
+  recurring: boolean
+): number {
+  if (!range || !monthRangesOverlap(range, period)) return 0;
+  if (!subAnnual || !recurring) return 1;
+  const months = Math.min(range[1], period[1]) - Math.max(range[0], period[0]) + 1;
+  return months / 12;
+}
+
 /** Plage [début, fin] (ordinaux de mois) d'un levier SANS ligne nette : sa période [début, fin]. */
 function leverMonthRange(l: Pick<Lever, "start" | "end">): [number, number] | null {
   const a = monthOrdinalOf(l.start);
@@ -747,6 +774,11 @@ export const UNALLOCATED_ACCOUNT_ID = "__unallocated__";
  *  Le réalisé d'une ligne suit la même plage. Levier sans ligne nette : bloc unique retenu si sa
  *  période [début, fin] chevauche la période filtrée.
  *
+ *  Montant affiché (décision PO, `periodLineShare`) : sur un EXERCICE → effet année pleine
+ *  (run-rate, ci-dessus) ; sur un TRIMESTRE ou un MOIS → effet SUR LA PÉRIODE = montant annuel ×
+ *  (mois actifs dans la période / 12) ; les ponctuels comptent en entier dans la période de leur
+ *  date. Le bloc d'un levier sans ligne nette est proratisé sur sa période [début, fin].
+ *
  *  Comptes P&L : si `hierarchyLevels` contient un niveau `semantic === "pnl"` avec des nœuds
  *  (domaine "financial"), ce sont CES nœuds qui font foi — TOUS apparaissent (même à 0). Rattachement
  *  d'une ligne : 1) `impact.hierarchyLeafId` ; 2) `lever.hierarchyLeafId` ; 3) `impact.pnlMap ||
@@ -777,8 +809,11 @@ export function pnlImpactDetailed(
     return e;
   };
   const periodRange = periodFilter ? pnlPeriodMonthRange(periodFilter) : null;
-  const inPeriod = (range: [number, number] | null) =>
-    !periodFilter || (!!periodRange && !!range && monthRangesOverlap(range, periodRange));
+  const subAnnual = isSubAnnualPeriod(periodFilter);
+  // Coefficient de la ligne dans la période (1 sans filtre / sur un exercice ; prorata des mois
+  // actifs sur un trimestre / un mois — `periodLineShare`).
+  const shareIn = (range: [number, number] | null, recurring: boolean) =>
+    !periodFilter ? 1 : periodRange ? periodLineShare(range, periodRange, subAnnual, recurring) : 0;
 
   const accountOfLeaf = (leafId: string | undefined): string | undefined => {
     if (!useHierarchy || !leafId) return undefined;
@@ -797,11 +832,12 @@ export function pnlImpactDetailed(
       // Levier sans ligne nette détaillée : bloc unique, retenu si sa période [début, fin]
       // chevauche la période filtrée (même règle que `financeByHierarchyLevel`).
       const account = leverAccount ?? (lever.pnlMap || undefined) ?? UNALLOCATED_ACCOUNT_ID;
-      if (!inPeriod(leverMonthRange(lever))) continue;
-      entry(account).plan += plan;
-      entry(account).reforecast += refo;
+      const w = shareIn(leverMonthRange(lever), true);
+      if (w === 0) continue;
+      entry(account).plan += plan * w;
+      entry(account).reforecast += refo * w;
       const real = isCancelled ? 0 : realizedSavings(lever);
-      if (real !== 0) entry(account).realized += real;
+      if (real !== 0) entry(account).realized += real * w;
       continue;
     }
 
@@ -814,14 +850,18 @@ export function pnlImpactDetailed(
         leverAccount ??
         (line.imp.pnlMap || lever.pnlMap || undefined) ??
         UNALLOCATED_ACCOUNT_ID;
-      if (!inPeriod(netLineMonthRange(line, lever))) return;
-      entry(account).plan += planParts[i];
-      entry(account).reforecast += refoParts[i];
-      if (line.realized) entry(account).realized += line.signed;
+      const w = shareIn(netLineMonthRange(line, lever), isRecurringImpact(line.imp));
+      if (w === 0) return;
+      entry(account).plan += planParts[i] * w;
+      entry(account).reforecast += refoParts[i] * w;
+      if (line.realized) entry(account).realized += line.signed * w;
     });
   }
 
-  const r1 = (n: number) => Math.round(n * 10) / 10;
+  // Arrondi au dixième de M€ ; sur un trimestre / un mois (montants proratisés, ex. 1 M€/an × 1/12)
+  // au 1/10 000 de M€ (100 €), sinon un mois à 83 k€ s'afficherait 100 k€.
+  const precision = subAnnual ? 10_000 : 10;
+  const r1 = (n: number) => Math.round(n * precision) / precision;
   return Array.from(map.entries())
     .map(([id, vals]) => ({
       accountId: id,
@@ -2563,6 +2603,11 @@ export function financeYearOptions(
  * `impactYearRange`) ; un levier sans ligne active est exclu. Levier sans ligne nette : bloc unique
  * sur sa feuille, retenu si sa période [début, fin] couvre une des années.
  *
+ * `opts.period` (optionnel, prioritaire sur `opts.years`) : MÊME filtre de période que le P&L
+ * (`PnlPeriodFilter`, exercice / trimestre / mois fiscaux) et MÊME montant (`periodLineShare`) :
+ * effet année pleine sur un exercice, effet sur la période (prorata des mois actifs / 12) sur un
+ * trimestre ou un mois — les totaux égalent ceux de `pnlImpactDetailed` pour le même filtre.
+ *
  * « En retard » : pour un levier en retard (`isLeverLate`), réactualisé − réalisé (≥ 0) des lignes
  * retenues, réparti au prorata de l'écart de chaque ligne.
  *
@@ -2573,12 +2618,28 @@ export function financeByHierarchyLevel(
   company: { hierarchyLevels?: HierarchyLevelDef[] } | null | undefined,
   levelOrder: number,
   nodes: HierarchyNode[],
-  opts: { today?: Date; years?: Set<number>; unrounded?: boolean; fyStartMonth?: number } = {}
+  opts: {
+    today?: Date;
+    years?: Set<number>;
+    period?: PnlPeriodFilter;
+    unrounded?: boolean;
+    fyStartMonth?: number;
+  } = {}
 ): FinanceHierarchyRow[] {
   const today = opts.today ?? new Date();
-  const years = opts.years && opts.years.size > 0 ? opts.years : null;
+  const period = opts.period;
+  const years = !period && opts.years && opts.years.size > 0 ? opts.years : null;
   // Années = EXERCICES FISCAUX du programme (mois de début `fyStartMonth`, défaut janvier).
   const fyStartMonth = opts.fyStartMonth ?? 0;
+  const periodRange = period ? pnlPeriodMonthRange(period) : null;
+  const subAnnual = isSubAnnualPeriod(period);
+  // Coefficient d'une ligne : 1 sans filtre ; exercices cochés → 1 si active sur l'un d'eux
+  // (run-rate) ; période du P&L → `periodLineShare` (prorata sur trimestre / mois).
+  const shareIn = (range: [number, number] | null, recurring: boolean): number => {
+    if (period) return periodRange ? periodLineShare(range, periodRange, subAnnual, recurring) : 0;
+    if (years) return rangeInFiscalYears(range, years, fyStartMonth) ? 1 : 0;
+    return 1;
+  };
   const levels = company?.hierarchyLevels ?? [];
   const financial = nodesForDomain(nodes, "financial");
   const targetKey = levels.find((lv) => lv.order === levelOrder)?.key;
@@ -2611,9 +2672,6 @@ export function financeByHierarchyLevel(
       ? rowFor(node.id, node.code, node.label)
       : rowFor(UNATTRIBUTED_NODE_ID, "", "Non attribué");
   };
-  const leverInYears = (l: Lever) =>
-    !years || rangeInFiscalYears(leverMonthRange(l), years, fyStartMonth);
-
   for (const l of data.levers) {
     // Même définition que `plannedInitialNet` (KPI / cascade du dashboard).
     const locked = displayedLockedPlanNet(l).value;
@@ -2623,26 +2681,29 @@ export function financeByHierarchyLevel(
     const lines = leverNetLines(l, today);
 
     if (lines.length === 0) {
-      if (!leverInYears(l)) continue;
-      const real = isCancelled ? 0 : realizedSavings(l);
+      const w = shareIn(leverMonthRange(l), true);
+      if (w === 0) continue;
+      const real = (isCancelled ? 0 : realizedSavings(l)) * w;
       const row = rowForLeaf(l.hierarchyLeafId);
-      row.planned += locked;
-      row.reforecast += refo;
-      if (isCancelled) row.cancelled += locked;
+      row.planned += locked * w;
+      row.reforecast += refo * w;
+      if (isCancelled) row.cancelled += locked * w;
       row.realized += real;
-      if (late) row.late += Math.max(0, refo - real);
+      if (late) row.late += Math.max(0, refo * w - real);
       continue;
     }
 
     const signed = lines.map((x) => x.signed);
-    const planParts = allocateLeverTotal(locked, signed);
-    const refoParts = isCancelled ? signed.map(() => 0) : allocateLeverTotal(refo, signed);
-    const realParts = lines.map((x) => (x.realized ? x.signed : 0));
-    // Même plage d'activité par ligne que le P&L (`pnlImpactDetailed`, `netLineMonthRange`).
-    const kept = lines.map(
-      (x) => !years || rangeInFiscalYears(netLineMonthRange(x, l), years, fyStartMonth)
-    );
+    // Même plage d'activité par ligne que le P&L (`pnlImpactDetailed`, `netLineMonthRange`) et
+    // même coefficient de période ; les parts ci-dessous sont déjà pondérées.
+    const weights = lines.map((x) => shareIn(netLineMonthRange(x, l), isRecurringImpact(x.imp)));
+    const kept = weights.map((w) => w > 0);
     if (!kept.some(Boolean)) continue;
+    const planParts = allocateLeverTotal(locked, signed).map((v, i) => v * weights[i]);
+    const refoParts = isCancelled
+      ? signed.map(() => 0)
+      : allocateLeverTotal(refo, signed).map((v, i) => v * weights[i]);
+    const realParts = lines.map((x, i) => (x.realized ? x.signed * weights[i] : 0));
 
     // Retard : réactualisé − réalisé des lignes retenues, réparti au prorata de l'écart par ligne.
     let lateParts = lines.map(() => 0);

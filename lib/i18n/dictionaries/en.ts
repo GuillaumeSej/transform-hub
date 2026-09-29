@@ -438,6 +438,12 @@ const en: Record<string, string> = {
   "pnl.allEntities": "All entities",
   "pnl.allQuarters": "All quarters",
   "pnl.allMonths": "All months",
+  "pnl.periodBasis.annual": "Annual basis (full-year effect)",
+  "pnl.periodBasis.annualHint":
+    "Full-year (run-rate) amounts: a recurring gain of €1M/yr counts €1M in each fiscal year where it is active, whatever its start date within the year. One-off items count in full in the fiscal year of their date.",
+  "pnl.periodBasis.period": "In-period effect",
+  "pnl.periodBasis.periodHint":
+    "Amounts prorated over the period: annual amount × (active months in the period / 12). E.g. €1M/yr starting 1 October = €0.25M for Oct–Dec, €0.083M for October. One-off items count in full in the period of their date.",
   "chart.pnl.plan": "Plan",
   "chart.pnl.realized": "Actual",
   "chart.pnl.reforecast": "Reforecast",

@@ -437,6 +437,12 @@ const es: Record<string, string> = {
   "pnl.allEntities": "Todas las entidades",
   "pnl.allQuarters": "Todos los trimestres",
   "pnl.allMonths": "Todos los meses",
+  "pnl.periodBasis.annual": "Base anual (efecto año completo)",
+  "pnl.periodBasis.annualHint":
+    "Importes en efecto año completo (run-rate): una ganancia recurrente de 1 M€/año cuenta 1 M€ en cada ejercicio en que está activa, sea cual sea su fecha de inicio en el ejercicio. Los elementos puntuales cuentan íntegramente en el ejercicio de su fecha.",
+  "pnl.periodBasis.period": "Efecto en el período",
+  "pnl.periodBasis.periodHint":
+    "Importes prorrateados en el período: importe anual × (meses activos en el período / 12). P. ej. 1 M€/año desde el 1 de octubre = 0,25 M€ en oct.–dic., 0,083 M€ en octubre. Los elementos puntuales cuentan íntegramente en el período de su fecha.",
   "chart.pnl.plan": "Plan",
   "chart.pnl.realized": "Realizado",
   "chart.pnl.reforecast": "Reactualizado",

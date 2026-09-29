@@ -1182,8 +1182,20 @@ describe("engine — pnlImpactDetailed from action impacts", () => {
     const feb = pnlImpactDetailed(data, { year: "2026", quarter: "Q1", month: "Feb" });
     expect(feb).toEqual([]);
 
+    // Filtre MOIS : effet sur la période (décision PO) = montant annuel × 1/12 (actif en mars).
     const march = pnlImpactDetailed(data, { year: "2026", quarter: "Q1", month: "Mar" });
     expect(march).toEqual([
+      {
+        accountId: "COGS",
+        accountName: "Cost of Goods Sold",
+        plan: 0.6667,
+        reforecast: 0.6667,
+        realized: 0,
+      },
+    ]);
+    // Filtre EXERCICE : effet année pleine (run-rate).
+    const fy = pnlImpactDetailed(data, { year: "2026" });
+    expect(fy).toEqual([
       { accountId: "COGS", accountName: "Cost of Goods Sold", plan: 8, reforecast: 8, realized: 0 },
     ]);
   });

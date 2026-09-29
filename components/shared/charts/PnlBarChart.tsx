@@ -59,7 +59,8 @@ export function PnlBarChart({
   const chartData = useStableValue(
     data.map((d) => ({
       ...d,
-      remaining: Math.max(0, Math.round((d.plan - d.realized) * 10) / 10),
+      // Précision fine : sur un mois / trimestre les montants sont proratisés (ex. 83 k€).
+      remaining: Math.max(0, Math.round((d.plan - d.realized) * 10_000) / 10_000),
     }))
   );
 

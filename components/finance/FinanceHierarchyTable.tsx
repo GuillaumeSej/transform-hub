@@ -17,6 +17,7 @@ import { sortedHierarchyLevels } from "@/lib/financeCosts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { BeTrackData, HierarchyLevelDef, HierarchyNode } from "@/types";
 import { formatAmountM } from "@/lib/format";
+import { PeriodBasisNote } from "./PeriodBasisNote";
 
 /** `labelKey`/`label` = clé i18n + fallback français, résolus au rendu via `t()`. */
 const COLUMNS: { key: Exclude<FinanceSortKey, "label">; labelKey: string; label: string }[] = [
@@ -256,6 +257,9 @@ export function FinanceHierarchyTable({
                 ))}
               </div>
             </Popover>
+            {/* Filtre en exercices uniquement → toujours l'effet année pleine (même règle que le
+                P&L, `engine.periodLineShare`). */}
+            <PeriodBasisNote subAnnual={false} />
           </div>
         )}
         <div className="overflow-x-auto">
