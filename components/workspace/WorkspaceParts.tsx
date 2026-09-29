@@ -35,6 +35,7 @@ export const SOURCE_ICONS: Record<WorkspaceItemSource, LucideIcon> = {
   hrMovement: Users,
   chantierAction: ListChecks,
   indicatorMeasurement: Gauge,
+  staffingOverrun: Users,
   blockedValidation: Hourglass,
 };
 

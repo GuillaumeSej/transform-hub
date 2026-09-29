@@ -3688,6 +3688,13 @@ const de: Record<string, string> = {
   "notFound.message":
     "Die angeforderte Seite existiert nicht oder wurde verschoben. Prüfen Sie die Adresse oder kehren Sie zur Startseite zurück.",
   "notFound.home": "Zurück zur Startseite",
+  "staffingAlert.etp": "VZÄ",
+  "staffingAlert.title": "Überbesetzung — {team}",
+  "staffingAlert.desc":
+    "{peak} % der Kapazität ({mobilised} eingesetzt / {available} verfügbar) im Zeitraum {period}",
+  "staffingAlert.descNoBase":
+    "{mobilised} eingesetzt, obwohl das Team in der VZÄ-Basis keine Verfügbarkeit hat, im Zeitraum {period}",
+  "staffingAlert.bannerTitle": "Überbesetzte Teams (laufende und kommende Monate)",
 };
 
 export default de;

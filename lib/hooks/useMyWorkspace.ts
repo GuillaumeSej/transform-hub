@@ -8,6 +8,9 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useStrategicApprovals } from "@/lib/hooks/useStrategicApprovals";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
+import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
+import { useStaffingThresholds } from "@/lib/hooks/useStaffingThresholds";
+import { receivesStaffingAlerts, staffingOverruns } from "@/lib/staffingAlerts";
 import { resolveProgramType } from "@/lib/axisLogic";
 import { hrToday } from "@/lib/hrEngine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -145,13 +148,38 @@ export function useMyWorkspace(): { workspace: MyWorkspace; loading: boolean } {
 
   const today = hrToday();
 
+  // Sur-staffing (lib/staffingAlerts.ts) : base ETP chargée UNIQUEMENT pour les destinataires
+  // (pilote du plan, RH du programme, admins) — `companyId` null = aucun abonnement sinon.
+  const staffingRecipient =
+    !!strategicProgramId && receivesStaffingAlerts(user, strategicProgramId);
+  const { fteByDept } = useCompanyDepartments(staffingRecipient ? companyId : null, {
+    withRealizedMovements: true,
+  });
+  const { thresholds: staffingThresholds } = useStaffingThresholds();
+  const overruns = useMemo(
+    () =>
+      staffingRecipient
+        ? staffingOverruns(strategicData.staffing, fteByDept, today, staffingThresholds)
+        : [],
+    [staffingRecipient, strategicData.staffing, fteByDept, today, staffingThresholds]
+  );
+
   const workspace = useMemo(
     () =>
       buildMyWorkspace(
-        { user, performance: performanceData, strategic, programs, users, companies, today },
+        {
+          user,
+          performance: performanceData,
+          strategic,
+          programs,
+          users,
+          companies,
+          today,
+          staffingOverruns: overruns,
+        },
         t
       ),
-    [user, performanceData, strategic, programs, users, companies, today, t]
+    [user, performanceData, strategic, programs, users, companies, today, overruns, t]
   );
 
   const loading =

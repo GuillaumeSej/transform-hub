@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Users, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Users, X } from "lucide-react";
 import {
   Bar as RBar,
   CartesianGrid,
@@ -44,6 +44,7 @@ import {
   type TeamPeriodCell,
 } from "@/lib/staffingRate";
 import { useStaffingThresholds } from "@/lib/hooks/useStaffingThresholds";
+import { staffingOverrunText, staffingOverruns } from "@/lib/staffingAlerts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ChantierStaffing, StrategicAxis } from "@/types";
 
@@ -146,6 +147,12 @@ export function StaffingRateSection({
   const [granularity, setGranularity] = useState<Granularity>("monthly");
   const [selectedAxisIds, setSelectedAxisIds] = useState<string[]>([]);
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
+  // Arrivée depuis une alerte de sur-staffing (`/effectifs?team=…`, lib/staffingAlerts.ts) :
+  // l'équipe est présélectionnée une fois au chargement.
+  useEffect(() => {
+    const team = new URLSearchParams(window.location.search).get("team");
+    if (team) setTeamFilter(team);
+  }, []);
   const [heatmapYear, setHeatmapYear] = useState(currentYear);
   const [detail, setDetail] = useState<DetailState | null>(null);
 
@@ -329,6 +336,12 @@ export function StaffingRateSection({
     ) : null;
 
   const hasData = series.length > 0 || matrix.length > 0;
+  // Sur-staffing du programme entier (toutes équipes, tous axes) sur les mois à venir, avec les
+  // seuils ENREGISTRÉS de l'entreprise (pas l'aperçu en cours d'édition).
+  const overruns = useMemo(
+    () => staffingOverruns(staffing, fteByDept, today, savedThresholds),
+    [staffing, fteByDept, today, savedThresholds]
+  );
 
   return (
     <>
@@ -349,6 +362,35 @@ export function StaffingRateSection({
           }
         />
         <CardBody>
+          {/* Bandeau des équipes sur-staffées (mois en cours et à venir) — même calcul que les
+              alertes de la cloche et de Mon espace ; clic = filtre sur l'équipe. */}
+          {overruns.length > 0 && (
+            <div
+              role="alert"
+              className="mb-3 rounded-md border border-rag-red/40 bg-rag-red-light px-3 py-2"
+            >
+              <div className="mb-1 flex items-center gap-1.5 text-[12px] font-bold text-rag-red">
+                <AlertTriangle size={14} aria-hidden />
+                {t("staffingAlert.bannerTitle", "Équipes sur-staffées (mois en cours et à venir)")}
+              </div>
+              <ul className="space-y-0.5">
+                {overruns.map((o) => {
+                  const text = staffingOverrunText(o, t);
+                  return (
+                    <li key={o.team}>
+                      <button
+                        type="button"
+                        onClick={() => setTeamFilter(o.team)}
+                        className="text-left text-[12px] text-primary hover:underline"
+                      >
+                        <span className="font-semibold">{text.title}</span> · {text.desc}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
           <p className="mb-3 text-[11px] text-tertiary">{t("effectifs.staffingRate.hint")}</p>
 
           {/* Filtres axes (multi) + équipe (unique) — même contrôles que la page KPI. */}

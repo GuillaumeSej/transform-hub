@@ -3605,6 +3605,13 @@ const en: Record<string, string> = {
   "notFound.message":
     "The requested page does not exist or has been moved. Check the address or go back to the home page.",
   "notFound.home": "Back to home",
+  "staffingAlert.etp": "FTE",
+  "staffingAlert.title": "Over-staffing — {team}",
+  "staffingAlert.desc":
+    "{peak} % of capacity ({mobilised} assigned / {available} available) over {period}",
+  "staffingAlert.descNoBase":
+    "{mobilised} assigned while the team has no availability in the FTE base, over {period}",
+  "staffingAlert.bannerTitle": "Over-staffed teams (current and upcoming months)",
 };
 
 export default en;

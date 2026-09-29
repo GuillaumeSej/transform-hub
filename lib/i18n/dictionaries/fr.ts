@@ -3768,6 +3768,13 @@ const fr: Record<string, string> = {
   "notFound.message":
     "La page demandée n'existe pas ou a été déplacée. Vérifiez l'adresse ou revenez à l'accueil.",
   "notFound.home": "Retour à l'accueil",
+  "staffingAlert.etp": "ETP",
+  "staffingAlert.title": "Sur-staffing — {team}",
+  "staffingAlert.desc":
+    "{peak} % de la capacité ({mobilised} mobilisés / {available} disponibles) sur {period}",
+  "staffingAlert.descNoBase":
+    "{mobilised} mobilisés alors que l'équipe n'a aucun disponible dans la base ETP, sur {period}",
+  "staffingAlert.bannerTitle": "Équipes sur-staffées (mois en cours et à venir)",
 };
 
 export default fr;

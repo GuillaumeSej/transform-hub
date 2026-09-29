@@ -84,6 +84,11 @@ import {
 import { getConsolidatedPerformancePrograms } from "@/lib/consolidatedProgramAccess";
 import { STATUS_LEVEL } from "@/lib/status-config";
 import { canOpenRoute } from "@/lib/routeAccess";
+import {
+  staffingOverrunHref,
+  staffingOverrunText,
+  type StaffingOverrun,
+} from "@/lib/staffingAlerts";
 import { daysBetween } from "@/lib/dateUtils";
 import { fillTemplate } from "@/lib/importIssue";
 import {
@@ -150,6 +155,9 @@ export type MyWorkspaceInput = {
   /** Aujourd'hui, ISO `YYYY-MM-DD` (date locale, `hrToday()`). */
   today: string;
   options?: Partial<MyWorkspaceOptions>;
+  /** Équipes sur-staffées du programme stratégique (lib/staffingAlerts.ts), déjà limitées aux
+   *  destinataires (pilote du plan, RH du programme, admins) par l'appelant. */
+  staffingOverruns?: StaffingOverrun[];
 };
 
 // ─── Petits utilitaires ─────────────────────────────────────────────────────────────────────
@@ -769,6 +777,22 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
         dedupeKey: `indicator:${indicator.id}:measure`,
       });
     }
+  }
+
+  // 9. Sur-staffing (équipe > seuil « sur-staffé » sur un mois en cours ou à venir) — mêmes
+  //    calculs que la page Budget & effectifs ; destinataires filtrés par l'appelant.
+  for (const overrun of input.staffingOverruns ?? []) {
+    const text = staffingOverrunText(overrun, t);
+    todo.push({
+      id: `staffingOverrun:${overrun.team}`,
+      source: "staffingOverrun",
+      plan: "strategic",
+      severity: "critical",
+      title: text.title,
+      context: text.desc,
+      href: staffingOverrunHref(overrun),
+      dedupeKey: `staffing:${overrun.team}`,
+    });
   }
 
   // ── Dédoublonnage et tri ─────────────────────────────────────────────────────────────────

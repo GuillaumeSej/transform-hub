@@ -23,6 +23,7 @@ export type WorkspaceItemSource =
   | "hrMovement" // mouvement RH en alerte (profil RH)
   | "chantierAction" // projet / action de chantier dont l'utilisateur est owner
   | "indicatorMeasurement" // mesure d'indicateur à saisir
+  | "staffingOverrun" // équipe sur-staffée (> seuil) sur un mois en cours ou à venir
   | "blockedValidation"; // (vue pilotage CTO) validation en attente chez quelqu'un d'autre
 
 export type WorkspaceItem = {

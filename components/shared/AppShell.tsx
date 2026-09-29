@@ -6,6 +6,14 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { useBeTrackData } from "@/lib/hooks/useStorage";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
+import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
+import { useStaffingThresholds } from "@/lib/hooks/useStaffingThresholds";
+import {
+  receivesStaffingAlerts,
+  staffingOverrunHref,
+  staffingOverrunText,
+  staffingOverruns,
+} from "@/lib/staffingAlerts";
 import { useUnsavedChanges } from "@/lib/hooks/useUnsavedChanges";
 import {
   chantierDependencyAlerts,
@@ -113,6 +121,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     programId: activeProgramId,
     data: strategic,
   });
+
+  // Sur-staffing (lib/staffingAlerts.ts) : base ETP chargée UNIQUEMENT pour les destinataires
+  // (pilote du plan, RH du programme, admins) en mode stratégique — sinon aucun abonnement.
+  const staffingRecipient = isStrategic && receivesStaffingAlerts(user, activeProgramId);
+  const { fteByDept: staffingFteByDept } = useCompanyDepartments(
+    staffingRecipient ? (user?.companyId ?? null) : null,
+    { withRealizedMovements: true }
+  );
+  const { thresholds: staffingThresholds } = useStaffingThresholds();
 
   const strategicNotifications = useMemo(() => {
     const alerts: Alert[] = [];
@@ -239,6 +256,35 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
     }
 
+    // 4. Sur-staffing : équipe au-delà du seuil « sur-staffé » sur un mois en cours ou à venir
+    //    (mêmes calculs que la page Budget & effectifs). Pour le pilote, le RH et les admins.
+    if (staffingRecipient) {
+      for (const overrun of staffingOverruns(
+        strategic.staffing,
+        staffingFteByDept,
+        today,
+        staffingThresholds
+      )) {
+        const id = `strategic-staffing-${activeProgramId ?? ""}-${overrun.team}`;
+        const text = staffingOverrunText(overrun, t);
+        alerts.push({
+          id,
+          type: "red",
+          ts: today,
+          createdAt: today,
+          scope: overrun.team,
+          scopeLabel: overrun.team,
+          title: text.title,
+          desc: text.desc,
+          actorRole: "strategic_lead",
+          resolved: false,
+          source: "auto",
+          companyId,
+        });
+        routes[id] = reachable(staffingOverrunHref(overrun), "/effectifs");
+      }
+    }
+
     for (const alert of strategicApprovals.alerts) {
       alerts.push(alert);
       routes[alert.id] = reachable(APPROVAL_ALERT_ROUTE);
@@ -254,6 +300,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     strategic.indicators,
     strategic.measurements,
     strategic.fullScope,
+    strategic.staffing,
+    staffingRecipient,
+    staffingFteByDept,
+    staffingThresholds,
+    activeProgramId,
     user,
     t,
   ]);

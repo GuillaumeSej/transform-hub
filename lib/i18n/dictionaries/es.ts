@@ -3673,6 +3673,13 @@ const es: Record<string, string> = {
   "notFound.message":
     "La página solicitada no existe o se ha movido. Compruebe la dirección o vuelva al inicio.",
   "notFound.home": "Volver al inicio",
+  "staffingAlert.etp": "ETC",
+  "staffingAlert.title": "Sobreasignación — {team}",
+  "staffingAlert.desc":
+    "{peak} % de la capacidad ({mobilised} asignados / {available} disponibles) en {period}",
+  "staffingAlert.descNoBase":
+    "{mobilised} asignados aunque el equipo no tiene disponibilidad en la base ETC, en {period}",
+  "staffingAlert.bannerTitle": "Equipos sobreasignados (meses en curso y próximos)",
 };
 
 export default es;
