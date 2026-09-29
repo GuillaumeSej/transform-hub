@@ -1222,21 +1222,6 @@ export function StrategicDashboardView() {
           <div className="mt-2 text-[13px] text-secondary">
             {t("dashboard.program")} <strong className="text-primary">{activeProgram.name}</strong>
           </div>
-          {/* Bandeau "ambition" (round 12) — rappel permanent du programme, réglé une fois par un
-              admin (ProgramsPanel.tsx) et affiché à quiconque ouvre ce dashboard. Volontairement
-              DISTINCT des puces de stats juste en dessous (barre bordée pleine largeur plutôt
-              qu'une pastille) pour se lire comme un rappel plutôt qu'une métrique — masqué quand le
-              champ n'est pas encore renseigné (pas de placeholder). */}
-          {activeProgram.ambition && activeProgram.ambition.trim() !== "" && (
-            <div className="mt-3 max-w-2xl rounded-lg border-l-4 border-bp-coral bg-bp-coral/5 px-4 py-2.5">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-bp-coral">
-                {t("strategicDashboard.ambitionLabel")}
-              </div>
-              <div className="mt-0.5 text-[13px] font-medium leading-snug text-primary">
-                {activeProgram.ambition}
-              </div>
-            </div>
-          )}
           {/* Round 28 → retrait (retour PO) : l'ancien encadré "Budget prévisionnel du programme"
               (`BudgetVsActualBar` somme projets / `Program.budget`) n'est plus affiché ici — le
               dépassement est désormais signalé directement sur la puce "Budget alloué" ci-dessous

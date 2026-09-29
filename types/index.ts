@@ -921,20 +921,8 @@ export type Program = {
    *  l'introduction du toggle, alors porté par `Company.actionPlanEnabled`, retiré depuis :
    *  l'activation se décide par programme, pas globalement pour toute l'entreprise). */
   actionPlanEnabled?: boolean;
-  /** Vision/accroche courte du programme (round 12), affichée de façon persistante sur le
-   *  dashboard stratégique (`components/strategic/StrategicDashboardView.tsx`) — texte libre,
-   *  distinct de `name` (l'intitulé) : "ce qu'on cherche à atteindre" plutôt que "comment le
-   *  programme s'appelle". Optionnel, aucune valeur par défaut : un programme sans ambition
-   *  déclarée n'affiche simplement rien à cet endroit.
-   *
-   *  N'a de sens QUE pour un programme "strategic" (retiré du formulaire de création/édition pour
-   *  un programme "performance" dans `components/admin/ProgramsPanel.tsx` — un Plan Performance n'a
-   *  pas d'"ambition" au sens de cette vision 3-5-15). Champ conservé sur `Program` (pas retiré du
-   *  type) car réellement lu par `StrategicDashboardView` : seul son édition côté Performance a été
-   *  retirée. */
-  ambition?: string;
   /** Budget prévisionnel TOTAL du plan (round <n>, demande PO) — n'a de sens QUE pour un programme
-   *  "strategic" (comme `ambition` ci-dessus), retiré du formulaire d'un Plan Performance dans
+   *  "strategic", retiré du formulaire d'un Plan Performance dans
    *  `components/admin/ProgramsPanel.tsx`. Comparé à la somme remontée depuis les projets
    *  (`ChantierAction.budget`, voir `lib/axisLogic.ts::sumProgramProjetBudgets`) : chaque projet
    *  déclare son propre budget, sommé par chantier puis par programme (PAS par axe — un chantier

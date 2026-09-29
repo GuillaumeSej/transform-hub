@@ -132,7 +132,7 @@ export function subscribePrograms(
   );
 }
 
-/** Firestore refuse `undefined` (champs optionnels comme sponsor/owner/ambition) — on les retire
+/** Firestore refuse `undefined` (champs optionnels comme sponsor/owner/budget) — on les retire
  * du payload avant écriture (JSON round-trip : suffisant pour ces objets purs), même pattern que
  * `stripUndefined` dans lib/firestore/workforce.ts. */
 function stripUndefined<T>(value: T): T {

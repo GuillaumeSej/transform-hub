@@ -121,8 +121,6 @@ const program = {
   createdAt: TODAY,
   type: "performance",
   actionPlanEnabled: true,
-  ambition:
-    "Renforcer la compétitivité industrielle et logistique du groupe en Europe et en Afrique.",
 };
 
 // meta/program__{companyId} : config legacy (nom/sponsor/target affichés sur le dashboard exécutif)

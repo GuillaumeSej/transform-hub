@@ -1982,7 +1982,7 @@ export function DashboardPagePerformance() {
             NOTE (feedback pilote Août 2026) : l'ancien bloc `secondary` "Ambition Programme"
             (Program.target top-down) a été retiré — sa cohabitation avec la cible bottom-up
             (summary.target) dans la même carte produisait deux chiffres perçus comme
-            incohérents. L'ambition programme reste consultable dans Admin → Programmes. */}
+            incohérents. L'objectif programme reste consultable dans Admin → Programmes. */}
         <KPICard
           label={t("dashboard.kpi.savingsRealized")}
           value={engine.fmtCurr(summary.realized)}
