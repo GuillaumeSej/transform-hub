@@ -238,14 +238,14 @@ const de: Record<string, string> = {
   "dashboard.kpi.leversDelivered": "Abgeschlossene Hebel",
   "dashboard.kpi.leversAtRisk": "Gefährdete Hebel",
   "dashboard.kpi.implementationCosts": "CAPEX & Einmalkosten",
-  "dashboard.kpi.fteImpacted": "Betroffene VZÄ",
+  "dashboard.kpi.fteImpacted": "Von Hebeln angestrebte VZÄ",
   "dashboard.kpi.target": "Ursprünglicher Plan",
   "dashboard.kpi.reforecast": "Neuprognose",
   "dashboard.kpi.plan": "Plan",
   "dashboard.kpi.leversAtRiskTooltip":
     "Hebel mit Risikostufe Kritisch oder Hoch (Risikoschwellen des Unternehmens, berechnet aus Betrag und Alter der offenen roten/orangen Warnungen — eine gelöste Warnung zählt nicht mehr). Gleiche Zahl wie das Badge „Warnungen & Abhängigkeiten“. Hebel „Beobachten“ (Risiko Mittel) werden separat angezeigt und nicht mitgezählt. Balken: orange = beobachten (Mittel), rot = gefährdet (Hoch oder Kritisch). Klick: Bibliothek nach diesen Stufen gefiltert.",
   "dashboard.kpi.fteImpactedTooltip":
-    "Summe der auf Hebelebene geschätzten VZÄ (Planung), nicht zu verwechseln mit der tatsächlichen HR-Verfolgung (siehe HR-Dashboard). „X / Y abgebaute Stellen“ zählt nur die im HR-Modul verfolgten realisierten/geplanten Zwangsaustritte — eine TEILMENGE dieser gesamten VZÄ-Auswirkung, keine vollständige Aufschlüsselung.",
+    "Auf aktiven Hebeln erklärte VZÄ-Ambition (Planung). „davon X durch HR-Bewegungen abgedeckt“: Anteil dieser Ambition, der bereits über geplante oder realisierte HR-Bewegungen Personen zugeordnet ist (siehe HR-Dashboard, „Abdeckung der angestrebten VZÄ“). Der Balken verfolgt nur realisierte / geplante Zwangsaustritte — eine Teilmenge.",
   "dashboard.widgets.portfolioFunnel": "Hebel-Fortschritt",
   "dashboard.widgets.savingsTrajectory": "Einsparungs-Verlauf",
   "chart.scurve.actual": "Realisiert",
@@ -3727,6 +3727,19 @@ const de: Record<string, string> = {
   "approvalFeedback.decisionRejected": "Anfrage abgelehnt · {kind}",
   "approvalFeedback.decisionDesc": "„{target}“ — Entscheidung von {name}.",
   "approvalFeedback.decisionComment": "Kommentar: {comment}",
+  "dashboard.kpi.fteCoveredByMovements": "davon {n} durch HR-Bewegungen abgedeckt",
+  "hr.fteCoverage.title": "Abdeckung der angestrebten VZÄ (VZÄ)",
+  "hr.fteCoverage.tooltip":
+    "Hebel: auf den Hebeln des Programms erklärte VZÄ-Ambition (gleiche Zahl wie im Gesamt-Dashboard). Bewegungen: personenbezogene HR-Bewegungen, geplant oder realisiert. Noch abzudecken: von den Hebeln angestrebte Reduktionen, die noch keiner Person zugeordnet sind.",
+  "hr.fteCoverage.levers": "Von Hebeln angestrebt",
+  "hr.fteCoverage.movements": "Durch Bewegungen abgedeckt",
+  "hr.fteCoverage.remaining": "Noch abzudecken",
+  "hr.fteCoverage.exceeded": "Abdeckung überschritten um",
+  "hr.fteCoverage.noLeverTarget": "Die Hebel dieses Perimeters streben keine VZÄ an.",
+  "hr.fteCoverage.filtersNotApplied":
+    "Nicht auf Hebel anwendbare Filter (nur Bewegungen): {filters}.",
+  "hr.fteCoverage.periodNotApplied":
+    "Der Zeitraum gilt nur für Bewegungen: Hebel werden über das gesamte Programm gezählt.",
 };
 
 export default de;

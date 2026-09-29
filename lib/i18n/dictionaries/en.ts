@@ -240,14 +240,14 @@ const en: Record<string, string> = {
   "dashboard.kpi.leversDelivered": "Initiatives Delivered",
   "dashboard.kpi.leversAtRisk": "Initiatives At Risk",
   "dashboard.kpi.implementationCosts": "CAPEX & one-off costs",
-  "dashboard.kpi.fteImpacted": "FTEs impacted",
+  "dashboard.kpi.fteImpacted": "FTEs targeted by initiatives",
   "dashboard.kpi.target": "Initial plan",
   "dashboard.kpi.reforecast": "Reforecast",
   "dashboard.kpi.plan": "Plan",
   "dashboard.kpi.leversAtRiskTooltip":
     'Initiatives whose risk level is Critical or High (company risk thresholds, computed from the amount and age of open red/amber alerts — a resolved alert no longer counts). Same figure as the "Alerts & Dependencies" badge. Initiatives "to watch" (Medium risk) are shown separately and not counted. Bar: orange = to watch (Medium), red = at risk (High or Critical). Click: library filtered on these levels.',
   "dashboard.kpi.fteImpactedTooltip":
-    'Sum of the FTEs estimated at initiative level (planning), not to be confused with actual HR tracking (see HR Dashboard). "X / Y positions eliminated" only counts the completed/planned forced departures tracked in the HR module — a SUBSET of this overall FTE impact, not a complete breakdown.',
+    'FTE ambition declared on active initiatives (planning). "of which X covered by HR movements": share of this ambition already assigned to people through planned or completed HR movements (see HR Dashboard, "Coverage of targeted FTEs"). The bar only tracks completed / planned forced departures — a subset.',
   "dashboard.widgets.portfolioFunnel": "Initiative Progress",
   "dashboard.widgets.savingsTrajectory": "Savings Trajectory",
   "chart.scurve.actual": "Actual",
@@ -3641,6 +3641,19 @@ const en: Record<string, string> = {
   "approvalFeedback.decisionRejected": "Request rejected · {kind}",
   "approvalFeedback.decisionDesc": "“{target}” — decided by {name}.",
   "approvalFeedback.decisionComment": "Comment: {comment}",
+  "dashboard.kpi.fteCoveredByMovements": "of which {n} covered by HR movements",
+  "hr.fteCoverage.title": "Coverage of targeted FTEs (FTE)",
+  "hr.fteCoverage.tooltip":
+    "Initiatives: FTE ambition declared on the programme's initiatives (same figure as the Executive dashboard). Movements: person-level HR movements, planned or completed. Remaining to cover: reductions targeted by initiatives that are not yet assigned to a person.",
+  "hr.fteCoverage.levers": "Targeted by initiatives",
+  "hr.fteCoverage.movements": "Covered by movements",
+  "hr.fteCoverage.remaining": "Remaining to cover",
+  "hr.fteCoverage.exceeded": "Coverage exceeded by",
+  "hr.fteCoverage.noLeverTarget": "No FTE is targeted by the initiatives in this scope.",
+  "hr.fteCoverage.filtersNotApplied":
+    "Filters not applicable to initiatives (movements only): {filters}.",
+  "hr.fteCoverage.periodNotApplied":
+    "The period only applies to movements: initiatives are counted over the whole programme.",
 };
 
 export default en;

@@ -32,7 +32,10 @@ import {
 } from "@/lib/hrTimeSeries";
 import { hrProgramSummary, targetFteFromBaseline } from "@/lib/hrProgramSummary";
 import { etpMovementDeepLink, etpMovementFilterLink } from "@/lib/hrMovementLink";
-import { fmtCurr } from "@/lib/engine";
+import { fmtCurr, leverTargetFte } from "@/lib/engine";
+import { fteCoverage } from "@/lib/fteCoverage";
+import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/leversLogic";
+import { FteCoveragePanel } from "@/components/shared/FteCoveragePanel";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { HrKPICard } from "@/components/shared/HrKPICard";
 import { ProgressBar } from "@/components/shared/ProgressBar";
@@ -83,6 +86,7 @@ import type {
   Company,
   HierarchyLevelDef,
   HierarchyNode,
+  Lever,
   MovementStatus,
   Program,
   SocialScheme,
@@ -610,6 +614,113 @@ export default function HrDashboardPage() {
     [filteredMovements, granularity, dateRange, seriesOptions]
   );
   const summary = useMemo(() => hrProgramSummary(filteredMovements), [filteredMovements]);
+
+  // ─── Couverture des ETP visés par les leviers (décision PO) ─────────────────────────────────
+  // « Visés par les leviers » = MÊME calcul que le KPI du dashboard Performance
+  // (`leverTargetFte`, via `programSummary`), sur le MÊME périmètre de leviers (visibilité
+  // d'agrégation + scope programme partagés, voir DashboardPagePerformance) ; « couverts par des
+  // mouvements » = cible de l'Impact ETP ci-dessous. Seuls les filtres ayant un équivalent sur le
+  // levier (chantier, fonction, pays, arborescences) s'appliquent aux leviers — les autres sont
+  // signalés dans une note.
+  const leverFilterGetters = useMemo(() => {
+    const getters: Record<string, (l: Lever) => string[]> = {
+      workstream: (l) => [l.ws, data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws],
+      function: (l) => [l.function || "—"],
+      country: (l) => [l.country],
+    };
+    for (const level of sortedGeographyHierarchyLevels) {
+      getters[`geo_${level.key}`] = (l) => [
+        resolveHierarchyPath(
+          l.geographyLeafId ?? "",
+          geographyNodes,
+          sortedGeographyHierarchyLevels
+        ).find((p) => p.levelKey === level.key)?.label ?? "",
+      ];
+    }
+    for (const level of sortedHierarchyLevels) {
+      getters[`hierarchy_${level.key}`] = (l) => [
+        resolveHierarchyPath(l.hierarchyLeafId ?? "", hierarchyNodes, sortedHierarchyLevels).find(
+          (p) => p.levelKey === level.key
+        )?.label ?? "",
+      ];
+    }
+    return getters;
+  }, [
+    data.workstreams,
+    sortedGeographyHierarchyLevels,
+    geographyNodes,
+    sortedHierarchyLevels,
+    hierarchyNodes,
+  ]);
+  const coverageLevers = useMemo(() => {
+    const programLevers = filterProgramScopedLevers(
+      filterAggregateVisibleLevers(data.levers, user, company),
+      {
+        programId: selectedProgramId,
+        isConsolidatedView,
+        consolidatedProgramIds: consolidatedPrograms.map((p) => p.id),
+        performanceProgramIds: programs
+          .filter((p) => resolveProgramType(p) === "performance")
+          .map((p) => p.id),
+      }
+    );
+    return programLevers.filter((l) =>
+      Object.entries(activeFilters).every(([key, value]) => {
+        if (!value || value.length === 0) return true;
+        const getter = leverFilterGetters[key];
+        return !getter || getter(l).some((v) => matchesFilter(v, value));
+      })
+    );
+  }, [
+    data.levers,
+    user,
+    company,
+    selectedProgramId,
+    isConsolidatedView,
+    consolidatedPrograms,
+    programs,
+    activeFilters,
+    leverFilterGetters,
+  ]);
+  const coverage = useMemo(
+    () => fteCoverage(leverTargetFte(coverageLevers), summary.fte.target),
+    [coverageLevers, summary.fte.target]
+  );
+  const coverageNote = useMemo(() => {
+    const leverOnlyLabels = Object.keys(activeFilters)
+      .filter((key) => (activeFilters[key]?.length ?? 0) > 0 && !leverFilterGetters[key])
+      .map((key) => filterDefs.find((d) => d.key === key)?.label ?? key);
+    const rangeNarrowed =
+      (!!dateFromISO && dateFromISO > movementDateRange.from) ||
+      (!!dateToISO && dateToISO < movementDateRange.to);
+    const parts: string[] = [];
+    if (leverOnlyLabels.length > 0) {
+      parts.push(
+        t(
+          "hr.fteCoverage.filtersNotApplied",
+          "Filtres non applicables aux leviers (mouvements uniquement) : {filters}."
+        ).replace("{filters}", leverOnlyLabels.join(", "))
+      );
+    }
+    if (rangeNarrowed) {
+      parts.push(
+        t(
+          "hr.fteCoverage.periodNotApplied",
+          "La période ne s'applique qu'aux mouvements : les leviers sont comptés sur tout le programme."
+        )
+      );
+    }
+    return parts.length > 0 ? parts.join(" ") : null;
+  }, [
+    activeFilters,
+    leverFilterGetters,
+    filterDefs,
+    dateFromISO,
+    dateToISO,
+    movementDateRange.from,
+    movementDateRange.to,
+    t,
+  ]);
   const movementTableRows = useMemo(
     () => buildMovementTableRows(filteredMovements, data.levers, programs),
     [filteredMovements, data.levers, programs]
@@ -2182,6 +2293,10 @@ export default function HrDashboardPage() {
           accent="brown"
         />
       </div>
+
+      {/* Couverture des ETP visés par les leviers : réconcilie le KPI du dashboard Performance
+          (ETP visés par les leviers) et l'Impact ETP ci-dessus (mouvements RH). */}
+      <FteCoveragePanel className="mb-4" coverage={coverage} note={coverageNote} />
 
       {/* ═══════════════════════════════════════════════════════════════════════════════════════
           ALERTES MOUVEMENTS — sous les KPI, pas au-dessus.

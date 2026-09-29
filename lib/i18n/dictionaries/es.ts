@@ -239,14 +239,14 @@ const es: Record<string, string> = {
   "dashboard.kpi.leversDelivered": "Palancas Realizadas",
   "dashboard.kpi.leversAtRisk": "Palancas en Riesgo",
   "dashboard.kpi.implementationCosts": "CAPEX y costes puntuales",
-  "dashboard.kpi.fteImpacted": "FTE impactados",
+  "dashboard.kpi.fteImpacted": "ETC previstos por las palancas",
   "dashboard.kpi.target": "Plan inicial",
   "dashboard.kpi.reforecast": "Reprevisión",
   "dashboard.kpi.plan": "Plan",
   "dashboard.kpi.leversAtRiskTooltip":
     "Palancas cuyo nivel de riesgo es Crítico o Alto (umbrales de riesgo de la empresa, calculados a partir del importe y la antigüedad de las alertas rojas/naranjas abiertas — una alerta resuelta ya no cuenta). Mismo número que la insignia de «Alertas y dependencias». Las palancas «en vigilancia» (riesgo Medio) se indican aparte, sin contarse. Barra: naranja = vigilancia (Medio), rojo = en riesgo (Alto o Crítico). Clic: biblioteca filtrada por estos niveles.",
   "dashboard.kpi.fteImpactedTooltip":
-    "Suma de los ETC estimados a nivel de palancas (planificación), no confundir con el seguimiento real de RRHH (ver Panel de RRHH). «X / Y puestos suprimidos» solo cuenta las salidas forzadas realizadas/planificadas registradas en el módulo de RRHH: un SUBCONJUNTO de este impacto global en ETC, no un desglose completo.",
+    "Ambición en ETC declarada en las palancas activas (planificación). «de los cuales X cubiertos por movimientos de RRHH»: parte de esta ambición ya asignada a personas mediante movimientos de RRHH planificados o realizados (ver Panel de RRHH, «Cobertura de los ETC previstos»). La barra solo sigue las salidas forzadas realizadas / planificadas: un subconjunto.",
   "dashboard.widgets.portfolioFunnel": "Avance de palancas",
   "dashboard.widgets.savingsTrajectory": "Trayectoria de ahorros",
   "chart.scurve.actual": "Realizado",
@@ -3711,6 +3711,19 @@ const es: Record<string, string> = {
   "approvalFeedback.decisionRejected": "Solicitud rechazada · {kind}",
   "approvalFeedback.decisionDesc": "«{target}» — decisión de {name}.",
   "approvalFeedback.decisionComment": "Comentario: {comment}",
+  "dashboard.kpi.fteCoveredByMovements": "de los cuales {n} cubiertos por movimientos de RRHH",
+  "hr.fteCoverage.title": "Cobertura de los ETC previstos (ETC)",
+  "hr.fteCoverage.tooltip":
+    "Palancas: ambición en ETC declarada en las palancas del programa (mismo dato que el Panel global). Movimientos: movimientos de RRHH nominativos (por persona), planificados o realizados. Pendiente de cubrir: reducciones previstas por las palancas aún no asignadas a una persona.",
+  "hr.fteCoverage.levers": "Previstos por las palancas",
+  "hr.fteCoverage.movements": "Cubiertos por movimientos",
+  "hr.fteCoverage.remaining": "Pendiente de cubrir",
+  "hr.fteCoverage.exceeded": "Cobertura superada en",
+  "hr.fteCoverage.noLeverTarget": "Las palancas de este perímetro no prevén ningún ETC.",
+  "hr.fteCoverage.filtersNotApplied":
+    "Filtros no aplicables a las palancas (solo movimientos): {filters}.",
+  "hr.fteCoverage.periodNotApplied":
+    "El periodo solo se aplica a los movimientos: las palancas se cuentan sobre todo el programa.",
 };
 
 export default es;

@@ -269,14 +269,14 @@ const fr: Record<string, string> = {
   "dashboard.kpi.leversDelivered": "Leviers réalisés",
   "dashboard.kpi.leversAtRisk": "Leviers à risque",
   "dashboard.kpi.implementationCosts": "CAPEX & coûts ponctuels",
-  "dashboard.kpi.fteImpacted": "ETP impactés",
+  "dashboard.kpi.fteImpacted": "ETP visés par les leviers",
   "dashboard.kpi.target": "Planifié initial",
   "dashboard.kpi.reforecast": "Réactualisé",
   "dashboard.kpi.plan": "Planifié initial",
   "dashboard.kpi.leversAtRiskTooltip":
     "Leviers dont le niveau de risque est Critique ou Élevé (seuils de risque de l'entreprise, calculés sur le montant et l'ancienneté des alertes rouges/orange ouvertes — une alerte résolue ne compte plus). Même chiffre que le badge du bloc « Alertes & Dépendances ». Les leviers « à surveiller » (risque Moyen) sont indiqués à part, sans être comptés. Barre : orange = à surveiller (Moyen), rouge = à risque (Élevé ou Critique). Clic : bibliothèque filtrée sur ces niveaux.",
   "dashboard.kpi.fteImpactedTooltip":
-    'Somme des ETP estimés au niveau des leviers (planification), à ne pas confondre avec le suivi RH réel (voir Tableau de bord RH). "X / Y postes supprimés" ne compte que les départs forcés réalisés/planifiés suivis dans le module RH — un SOUS-ENSEMBLE de cet impact ETP global, pas une décomposition complète.',
+    "Ambition ETP déclarée sur les leviers actifs (planification). « dont X couverts par des mouvements RH » : part de cette ambition déjà affectée à des personnes via des mouvements RH planifiés ou réalisés (voir Tableau de bord RH, bloc « Couverture des ETP visés »). La barre ne suit que les départs forcés réalisés / planifiés — un sous-ensemble.",
   "dashboard.widgets.portfolioFunnel": "Avancement des leviers",
   "dashboard.widgets.savingsTrajectory": "Trajectoire des économies",
   "chart.scurve.actual": "Réalisé",
@@ -3807,6 +3807,19 @@ const fr: Record<string, string> = {
   "approvalFeedback.decisionRejected": "Demande refusée · {kind}",
   "approvalFeedback.decisionDesc": "« {target} » — décision de {name}.",
   "approvalFeedback.decisionComment": "Commentaire : {comment}",
+  "dashboard.kpi.fteCoveredByMovements": "dont {n} couverts par des mouvements RH",
+  "hr.fteCoverage.title": "Couverture des ETP visés (ETP)",
+  "hr.fteCoverage.tooltip":
+    "Leviers : ambition ETP déclarée sur les leviers du programme (même chiffre que le Pilotage global). Mouvements : mouvements RH nominatifs (par personne) planifiés ou réalisés. Reste à couvrir : réductions visées par les leviers qui ne sont pas encore affectées à une personne.",
+  "hr.fteCoverage.levers": "Visés par les leviers",
+  "hr.fteCoverage.movements": "Couverts par des mouvements",
+  "hr.fteCoverage.remaining": "Reste à couvrir",
+  "hr.fteCoverage.exceeded": "Couverture dépassée de",
+  "hr.fteCoverage.noLeverTarget": "Aucun ETP n'est visé par les leviers de ce périmètre.",
+  "hr.fteCoverage.filtersNotApplied":
+    "Filtres non applicables aux leviers (mouvements uniquement) : {filters}.",
+  "hr.fteCoverage.periodNotApplied":
+    "La période ne s'applique qu'aux mouvements : les leviers sont comptés sur tout le programme.",
 };
 
 export default fr;

@@ -108,6 +108,8 @@ import {
   type DashboardWidgetType,
 } from "@/lib/dashboardWidgets";
 import { formatMillions, formatDateShort } from "@/lib/format";
+import { formatFteValue } from "@/lib/hrEngine";
+import { hrProgramSummary } from "@/lib/hrProgramSummary";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { onActivateKey } from "@/lib/a11y";
 
@@ -152,7 +154,7 @@ function pivotDimensionLabel(
 export function DashboardPagePerformance() {
   const { user } = useRole();
   const data = useBeTrackData(user?.companyId ?? null, user);
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const router = useRouter();
   // Liens sortants (KPI → /finance, /hr, drill-downs → /levers) : rendus cliquables SEULEMENT si
   // l'utilisateur peut ouvrir la page cible (même règle que la garde d'AppShell) — sinon un
@@ -401,6 +403,16 @@ export function DashboardPagePerformance() {
   }, [visibleData, filteredLevers, effectiveFyStart]);
 
   const summary = engine.programSummary(filteredData);
+  // « dont X couverts par des mouvements RH » (KPI ETP visés par les leviers) : cible ETP des
+  // mouvements RH rattachés aux leviers actifs du périmètre affiché — même agrégat que l'« Impact
+  // ETP » cible du Dashboard RH (`hrProgramSummary`). `null` sans aucun mouvement rattaché.
+  const movementCoveredFte = useMemo(() => {
+    const leverIds = new Set(
+      filteredData.levers.filter((l) => l.status !== "cancelled").map((l) => l.id)
+    );
+    const linked = (filteredData.workforce?.movements ?? []).filter((m) => leverIds.has(m.leverId));
+    return linked.length > 0 ? hrProgramSummary(linked).fte.target : null;
+  }, [filteredData]);
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
 
   const depAlerts = useMemo(() => engine.dependencyAlerts(filteredData), [filteredData]);
@@ -2042,8 +2054,16 @@ export function DashboardPagePerformance() {
             numériquement (planification leviers / suivi RH réel / départs forcés uniquement) —
             l'icône ⓘ rend cette distinction explicite plutôt que de laisser croire à une erreur. */}
         <KPICard
-          label={t("dashboard.kpi.fteImpacted")}
-          value={String(summary.fteImpact)}
+          label={t("dashboard.kpi.fteImpacted", "ETP visés par les leviers")}
+          value={formatFteValue(summary.fteImpact, locale)}
+          sub={
+            movementCoveredFte !== null
+              ? t(
+                  "dashboard.kpi.fteCoveredByMovements",
+                  "dont {n} couverts par des mouvements RH"
+                ).replace("{n}", formatFteValue(movementCoveredFte, locale))
+              : undefined
+          }
           icon={Users}
           barPct={
             summary.suppressionsPlanned > 0
@@ -2052,7 +2072,7 @@ export function DashboardPagePerformance() {
           }
           infoTooltip={t(
             "dashboard.kpi.fteImpactedTooltip",
-            'Somme des ETP estimés au niveau des leviers (planification), à ne pas confondre avec le suivi RH réel (voir Dashboard RH). "X / Y postes supprimés" ne compte que les départs forcés réalisés/planifiés suivis dans le module RH — un SOUS-ENSEMBLE de cet impact ETP global, pas une décomposition complète.'
+            "Ambition ETP déclarée sur les leviers actifs (planification). « dont X couverts par des mouvements RH » : part de cette ambition déjà affectée à des personnes via des mouvements RH planifiés ou réalisés (voir Tableau de bord RH, bloc « Couverture des ETP visés »). La barre ne suit que les départs forcés réalisés / planifiés — un sous-ensemble."
           )}
           onClick={canOpen("/hr") ? () => router.push("/hr") : undefined}
         />

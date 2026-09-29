@@ -471,13 +471,22 @@ export function leverEngagedInvestCostByNature(
   return { capex: lever.capex * f, opexOneOff: lever.opexOneOff * f };
 }
 
+/** ETP visés par les leviers (KPI « ETP visés par les leviers » du dashboard) : somme signée des
+ *  `fteImpact` des leviers NON annulés, arrondie au dixième (0,1 + 0,2 ≠ 0,3 en flottant). Source
+ *  UNIQUE partagée par `programSummary` et le bloc de couverture du Dashboard RH. */
+export function leverTargetFte(levers: Pick<Lever, "status" | "fteImpact">[]): number {
+  const total = levers
+    .filter((l) => l.status !== "cancelled")
+    .reduce((s, l) => s + (Number.isFinite(l.fteImpact) ? l.fteImpact : 0), 0);
+  return Math.round(total * 10) / 10;
+}
+
 export function programSummary(data: BeTrackData): ProgramSummary {
   const active = data.levers.filter((l) => l.status !== "cancelled");
   const target = active.reduce((s, l) => s + l.netSavings, 0);
   const realized = active.reduce((s, l) => s + realizedSavings(l), 0);
   const capex = active.reduce((s, l) => s + l.capex, 0);
   const opex = active.reduce((s, l) => s + l.opexOneOff + l.opexRec, 0);
-  const fteImpact = active.reduce((s, l) => s + l.fteImpact, 0);
 
   // Cible réactualisée — même chaîne de repli que la courbe "Réactualisé" de sCurve3.
   const reforecastTarget = active.reduce((s, l) => s + displayedReforecastNet(l).value, 0);
@@ -522,7 +531,7 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     capex: Math.round(capex * 10) / 10,
     opex: Math.round(opex * 10) / 10,
     // Somme de flottants (0,1 + 0,2 = 0,30000000000000004) : arrondi au dixième d'ETP.
-    fteImpact: Math.round(fteImpact * 10) / 10,
+    fteImpact: leverTargetFte(active),
     leverCount: active.length,
     delivered: data.levers.filter((l) => l.status === "delivered").length,
     reforecastTarget: Math.round(reforecastTarget * 10) / 10,
