@@ -785,8 +785,6 @@ const es: Record<string, string> = {
   "adminProgramsPanel.namePlaceholder": "Nombre",
   "adminProgramsPanel.sponsor": "Patrocinador del programa",
   "adminProgramsPanel.owner": "Propietario",
-  "adminProgramsPanel.ambitionLabel": "Ambición",
-  "adminProgramsPanel.ambitionPlaceholder": "Ej. Ser líder del mercado antes de 2027",
   "adminProgramsPanel.budgetLabel": "Presupuesto previsional",
   "adminProgramsPanel.budgetPlaceholder": "Ej. 5000000",
   "adminProgramsPanel.count": "{n} programas",
@@ -2498,7 +2496,6 @@ const es: Record<string, string> = {
   // Ronda 12: banner "ambición" (recordatorio permanente, configurado una vez en admin) +
   // etiquetas de las listas abiertas por las chips de cabecera clicables (ejes/frentes de
   // trabajo/indicadores/presupuesto).
-  "strategicDashboard.ambitionLabel": "Ambición",
   // Ronda 28: presupuesto previsional total del programa (`Program.budget`) frente a la suma real
   // de los presupuestos de los frentes, bajo el banner Ambición.
   "strategicDashboard.budgetTooltip.overrunTitle": "Presupuesto previsional superado",
@@ -3405,11 +3402,15 @@ const es: Record<string, string> = {
   "me.blocked.subtitle":
     "Vista de excepciones: validaciones pendientes en otra persona desde hace más de 7 días.",
   "me.blocked.empty": "Ninguna validación bloqueada.",
+  "me.blocked.emptyHint": "Los circuitos de validación avanzan con normalidad.",
+  "me.blocked.days": "{n} d",
+  "me.blocked.waiting": "en espera",
   "me.blocked.waitingOn": "en {who}",
   "me.blocked.since": "desde hace {n} d",
   "me.upcoming.title": "Próximo",
   "me.upcoming.subtitle": "Vencimientos de las próximas 4 semanas",
   "me.upcoming.empty": "Ningún vencimiento en las próximas 4 semanas.",
+  "me.upcoming.emptyHint": "Su agenda está despejada para el próximo mes.",
   "me.week.this": "Esta semana",
   "me.week.next": "La semana que viene",
   "me.week.inN": "Dentro de {n} semanas",
@@ -3418,6 +3419,8 @@ const es: Record<string, string> = {
   "me.perimeter.subtitle": "Los objetos en los que tiene un rol",
   "me.perimeter.subtitlePilot": "Salud de cada uno de sus programas",
   "me.perimeter.empty": "Ningún objeto vinculado a su perfil.",
+  "me.perimeter.emptyHint": "Aquí aparecerán los programas, palancas y frentes a su cargo.",
+  "me.perimeter.progress": "Avance",
   "me.health.green": "Bajo control",
   "me.health.amber": "A vigilar",
   "me.health.red": "En dificultad",

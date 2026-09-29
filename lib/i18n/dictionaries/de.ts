@@ -787,8 +787,6 @@ const de: Record<string, string> = {
   "adminProgramsPanel.namePlaceholder": "Name",
   "adminProgramsPanel.sponsor": "Programm-Sponsor",
   "adminProgramsPanel.owner": "Verantwortlicher",
-  "adminProgramsPanel.ambitionLabel": "Ambition",
-  "adminProgramsPanel.ambitionPlaceholder": "Z. B. Bis 2027 Marktführer werden",
   "adminProgramsPanel.budgetLabel": "Geplantes Budget",
   "adminProgramsPanel.budgetPlaceholder": "Z. B. 5000000",
   "adminProgramsPanel.count": "{n} Programme",
@@ -2500,12 +2498,11 @@ const de: Record<string, string> = {
   "strategicDashboard.chantiersSuffix": "Arbeitspakete",
   "strategicDashboard.indicatorsSuffix": "Indikatoren",
   "strategicDashboard.allocatedBudget": "Zugewiesenes Budget",
-  // Runde 12: Banner "Ambition" (dauerhafte Erinnerung, einmal im Admin festgelegt) + Beschriftungen
+  // Runde 12: Beschriftungen
   // der Listen, die über die klickbaren Kopf-Chips geöffnet werden (Achsen/Arbeitspakete/
   // Indikatoren/Budget).
-  "strategicDashboard.ambitionLabel": "Ambition",
   // Runde 28: geplantes Gesamtbudget des Programms (`Program.budget`) vs. tatsächliche Summe der
-  // Arbeitspaket-Budgets, unter dem Ambition-Banner.
+  // Arbeitspaket-Budgets.
   "strategicDashboard.budgetTooltip.overrunTitle": "Geplantes Budget überschritten",
   "strategicDashboard.budgetTooltip.allocatedOver":
     "Zugewiesenes Budget {amount} > geplantes Budget {forecast} ({diff}, {pct})",
@@ -3417,11 +3414,15 @@ const de: Record<string, string> = {
   "me.blocked.subtitle":
     "Ausnahmeansicht: Freigaben, die seit mehr als 7 Tagen bei einer anderen Person ausstehen.",
   "me.blocked.empty": "Keine blockierte Freigabe.",
+  "me.blocked.emptyHint": "Die Freigabeprozesse laufen normal.",
+  "me.blocked.days": "{n} T",
+  "me.blocked.waiting": "wartend",
   "me.blocked.waitingOn": "bei {who}",
   "me.blocked.since": "seit {n} T",
   "me.upcoming.title": "Anstehend",
   "me.upcoming.subtitle": "Fristen der nächsten 4 Wochen",
   "me.upcoming.empty": "Keine Frist in den nächsten 4 Wochen.",
+  "me.upcoming.emptyHint": "Ihr Kalender ist für den kommenden Monat frei.",
   "me.week.this": "Diese Woche",
   "me.week.next": "Nächste Woche",
   "me.week.inN": "In {n} Wochen",
@@ -3430,6 +3431,9 @@ const de: Record<string, string> = {
   "me.perimeter.subtitle": "Objekte, in denen Sie eine Rolle haben",
   "me.perimeter.subtitlePilot": "Zustand jedes Ihrer Programme",
   "me.perimeter.empty": "Kein Objekt mit Ihrem Profil verknüpft.",
+  "me.perimeter.emptyHint":
+    "Programme, Hebel und Arbeitspakete in Ihrer Verantwortung werden hier angezeigt.",
+  "me.perimeter.progress": "Fortschritt",
   "me.health.green": "Im Plan",
   "me.health.amber": "Beobachten",
   "me.health.red": "Kritisch",

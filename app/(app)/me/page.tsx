@@ -8,6 +8,7 @@ import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { programSwitchForLink } from "@/lib/activeProgramSelection";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
+import { formatDate } from "@/lib/format";
 import {
   categoryLabel,
   effectiveCategory,
@@ -39,7 +40,7 @@ import {
  *  En tête, la barre de répartition (`WorkspaceBreakdown`) : un clic sur une catégorie filtre la
  *  page sur le seul bloc correspondant (colonne principale, surligné, puce « Filtre : … ✕ »). */
 export default function MyWorkspacePage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const router = useRouter();
   const { user } = useRole();
   const { workspace, loading } = useMyWorkspace();
@@ -98,6 +99,11 @@ export default function MyWorkspacePage() {
   }, [active]);
 
   const firstName = greetingName(user);
+  // Date du jour en toutes lettres (« Mardi 29 septembre »), dans la langue de l'interface.
+  const todayLabel = useMemo(() => {
+    const s = formatDate(today, { weekday: "long", day: "numeric", month: "long" }, locale);
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }, [today, locale]);
   const upcomingBlock = (
     <div ref={upcomingRef} className="scroll-mt-4">
       <UpcomingSection
@@ -113,18 +119,36 @@ export default function MyWorkspacePage() {
 
   return (
     <div className="animate-fade-up">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+      {/* En-tête : sur-titre discret (nom de la page · date du jour), salutation en titre de page
+          (même filet coral que les autres écrans), puis la phrase de synthèse. */}
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
-          <h1 className="relative pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
             {t("nav.myWorkspace", "Mon espace")}
-          </h1>
-          <p className="mt-3 text-[14px] font-semibold text-primary">
+            <span aria-hidden className="mx-1.5 text-neutral-300">
+              ·
+            </span>
+            <time
+              dateTime={today.toISOString().slice(0, 10)}
+              className="normal-case tracking-normal"
+            >
+              {todayLabel}
+            </time>
+          </p>
+          <h1 className="relative mt-1.5 pb-2 text-[22px] font-bold tracking-tight text-primary after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-9 after:bg-bp-coral">
             {firstName
               ? t("me.greeting", "Bonjour {name}").replace("{name}", firstName)
               : t("me.greetingAnonymous", "Bonjour")}
-          </p>
-          {!loading && (
-            <p className="mt-0.5 text-[13px] text-secondary">{summarySentence(counts, t)}</p>
+          </h1>
+          {loading ? (
+            <span
+              aria-hidden
+              className="mt-3 block h-4 w-72 max-w-full animate-pulse bg-neutral-100"
+            />
+          ) : (
+            <p className="mt-3 text-[13px] leading-relaxed text-secondary">
+              {summarySentence(counts, t)}
+            </p>
           )}
         </div>
         {showPlanFilter && !loading && (
@@ -139,7 +163,7 @@ export default function MyWorkspacePage() {
             ]}
           />
         )}
-      </div>
+      </header>
 
       {loading ? (
         <WorkspaceSkeleton label={t("me.loading", "Chargement de votre espace…")} />

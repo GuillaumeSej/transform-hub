@@ -784,8 +784,6 @@ const en: Record<string, string> = {
   "adminProgramsPanel.namePlaceholder": "Name",
   "adminProgramsPanel.sponsor": "Program sponsor",
   "adminProgramsPanel.owner": "Owner",
-  "adminProgramsPanel.ambitionLabel": "Ambition",
-  "adminProgramsPanel.ambitionPlaceholder": "E.g. Become the market leader by 2027",
   "adminProgramsPanel.budgetLabel": "Forecasted budget",
   "adminProgramsPanel.budgetPlaceholder": "E.g. 5000000",
   "adminProgramsPanel.count": "{n} programs",
@@ -2455,11 +2453,9 @@ const en: Record<string, string> = {
   "strategicDashboard.chantiersSuffix": "work packages",
   "strategicDashboard.indicatorsSuffix": "indicators",
   "strategicDashboard.allocatedBudget": "Allocated budget",
-  // Round 12: "ambition" banner (persistent reminder, set once in admin) + labels for the lists
+  // Round 12: labels for the lists
   // opened by the clickable header chips (axes/work packages/indicators/budget).
-  "strategicDashboard.ambitionLabel": "Ambition",
-  // Round 28: forecasted total program budget (`Program.budget`) vs actual sum of lever budgets,
-  // under the Ambition banner.
+  // Round 28: forecasted total program budget (`Program.budget`) vs actual sum of lever budgets.
   "strategicDashboard.budgetTooltip.overrunTitle": "Forecasted budget exceeded",
   "strategicDashboard.budgetTooltip.allocatedOver":
     "Allocated budget {amount} > forecasted budget {forecast} ({diff}, {pct})",
@@ -3340,11 +3336,15 @@ const en: Record<string, string> = {
   "me.blocked.subtitle":
     "Exceptions view: approvals pending with someone else for more than 7 days.",
   "me.blocked.empty": "No blocked approval.",
+  "me.blocked.emptyHint": "Approval workflows are moving normally.",
+  "me.blocked.days": "{n} d",
+  "me.blocked.waiting": "waiting",
   "me.blocked.waitingOn": "with {who}",
   "me.blocked.since": "for {n} d",
   "me.upcoming.title": "Upcoming",
   "me.upcoming.subtitle": "Deadlines in the next 4 weeks",
   "me.upcoming.empty": "No deadline in the next 4 weeks.",
+  "me.upcoming.emptyHint": "Your schedule is clear for the coming month.",
   "me.week.this": "This week",
   "me.week.next": "Next week",
   "me.week.inN": "In {n} weeks",
@@ -3353,6 +3353,9 @@ const en: Record<string, string> = {
   "me.perimeter.subtitle": "Items on which you have a role",
   "me.perimeter.subtitlePilot": "Health of each of your programs",
   "me.perimeter.empty": "No item linked to your profile.",
+  "me.perimeter.emptyHint":
+    "Programs, initiatives and workstreams you are responsible for will appear here.",
+  "me.perimeter.progress": "Progress",
   "me.health.green": "On track",
   "me.health.amber": "To watch",
   "me.health.red": "In trouble",

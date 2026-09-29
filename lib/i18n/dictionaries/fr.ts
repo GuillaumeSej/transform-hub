@@ -823,8 +823,6 @@ const fr: Record<string, string> = {
   "adminProgramsPanel.namePlaceholder": "Nom",
   "adminProgramsPanel.sponsor": "Commanditaire du programme",
   "adminProgramsPanel.owner": "Responsable",
-  "adminProgramsPanel.ambitionLabel": "Ambition",
-  "adminProgramsPanel.ambitionPlaceholder": "Ex. Devenir leader du marché d'ici 2027",
   "adminProgramsPanel.budgetLabel": "Budget prévisionnel",
   "adminProgramsPanel.budgetPlaceholder": "Ex. 5000000",
   "adminProgramsPanel.count": "{n} programmes",
@@ -2596,11 +2594,10 @@ const fr: Record<string, string> = {
   "strategicDashboard.chantiersSuffix": "chantiers",
   "strategicDashboard.indicatorsSuffix": "indicateurs",
   "strategicDashboard.allocatedBudget": "Budget alloué",
-  // Round 12 : bandeau "ambition" (rappel permanent, réglé une fois en admin) + libellés des
+  // Round 12 : libellés des
   // listes ouvertes par les puces d'en-tête cliquables (axes/chantiers/indicateurs/budget).
-  "strategicDashboard.ambitionLabel": "Ambition",
   // Round 28 : résumé budget prévisionnel total du programme (`Program.budget`) vs somme réelle
-  // des budgets leviers, sous le bandeau Ambition.
+  // des budgets leviers.
   "strategicDashboard.budgetTooltip.overrunTitle": "Budget prévisionnel dépassé",
   "strategicDashboard.budgetTooltip.allocatedOver":
     "Budget alloué {amount} > budget prévisionnel {forecast} ({diff}, {pct})",
@@ -3497,11 +3494,15 @@ const fr: Record<string, string> = {
   "me.blocked.subtitle":
     "Vue par exception : validations en attente chez un autre acteur depuis plus de 7 jours.",
   "me.blocked.empty": "Aucune validation bloquée.",
+  "me.blocked.emptyHint": "Les circuits de validation avancent normalement.",
+  "me.blocked.days": "{n} j",
+  "me.blocked.waiting": "en attente",
   "me.blocked.waitingOn": "chez {who}",
   "me.blocked.since": "depuis {n} j",
   "me.upcoming.title": "À venir",
   "me.upcoming.subtitle": "Échéances des 4 prochaines semaines",
   "me.upcoming.empty": "Aucune échéance dans les 4 prochaines semaines.",
+  "me.upcoming.emptyHint": "Votre agenda est dégagé pour le mois à venir.",
   "me.week.this": "Cette semaine",
   "me.week.next": "Semaine prochaine",
   "me.week.inN": "Dans {n} semaines",
@@ -3510,6 +3511,9 @@ const fr: Record<string, string> = {
   "me.perimeter.subtitle": "Les objets sur lesquels vous avez un rôle",
   "me.perimeter.subtitlePilot": "Santé de chacun de vos programmes",
   "me.perimeter.empty": "Aucun objet rattaché à votre profil.",
+  "me.perimeter.emptyHint":
+    "Les programmes, leviers et chantiers dont vous avez la charge apparaîtront ici.",
+  "me.perimeter.progress": "Avancement",
   "me.health.green": "Sous contrôle",
   "me.health.amber": "À surveiller",
   "me.health.red": "En difficulté",
