@@ -13,6 +13,7 @@ import {
   investCostRowsBySegment,
   isCostEngaged,
   isInvestNature,
+  recurringOpexReconciliation,
   sortedHierarchyLevels,
   splitByNature,
   splitEngagedVsUpcoming,
@@ -654,5 +655,33 @@ describe("financeCosts — sortedHierarchyLevels / costsByHierarchyNode", () => 
       action({ impacts: [impact({ id: "c1", nature: "oneoff", amount: 4 })] }),
     ];
     expect(costsByHierarchyNode(data, nodes, "bu", null)).toEqual([]);
+  });
+});
+
+describe("financeCosts — recurringOpexReconciliation (OPEX récurrent Finance vs cascade)", () => {
+  it("la cascade = lignes de coût récurrentes + salaires des recrutements ETP", () => {
+    const lever: Lever = {
+      ...baseLever,
+      impacts: [
+        { id: "s1", label: "Gain", type: "saving", amount: 10 },
+        { id: "c1", label: "Run", type: "cost", nature: "opex_rec", amount: 1.7 },
+        { id: "c2", label: "Capex", type: "cost", nature: "capex", amount: 5 },
+        {
+          id: "f1",
+          label: "Recrutement",
+          type: "fte",
+          fteDirection: "hire",
+          fteCount: 3,
+          amount: 0.35,
+        },
+      ] as Lever["impacts"],
+    };
+    const cancelled: Lever = { ...lever, id: "LX", status: "cancelled" };
+    const r = recurringOpexReconciliation(makeData([lever, cancelled]));
+    expect(r.costLines).toBe(1.7);
+    expect(r.costLines).toBe(splitByNature(makeData([lever])).opexRec);
+    expect(r.fteHires).toBe(0.35);
+    expect(r.dashboard).toBe(2.05);
+    expect(r.other).toBe(0);
   });
 });

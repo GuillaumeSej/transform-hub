@@ -2612,9 +2612,13 @@ const en: Record<string, string> = {
   "finance.chart.hierarchyTitleAllCosts":
     "Total costs incl. recurring OPEX, by P&L account / cost center",
   "finance.chart.hierarchyScopeNote":
-    "Total {total} = one-off costs (CAPEX + one-off OPEX) {oneOff} + recurring OPEX {rec}. Each cost is assigned to the P&L account of its cost center (cost line, otherwise lever): an income account (e.g. Revenue) can therefore carry the costs of the levers that impact it.",
+    "Total {total} = one-off costs (CAPEX + one-off OPEX) {oneOff} + annual recurring OPEX (cost lines) {rec}. Each cost is assigned to the P&L account of its cost center (cost line, otherwise lever): an income account (e.g. Revenue) can therefore carry the costs of the levers that impact it.",
   "finance.chart.hierarchyUnattachedNote":
     "Of which {amount} not attached to the hierarchy (not in the chart).",
+  "finance.chart.hierarchyOpexRecReconNote":
+    "The annual recurring OPEX of the dashboard waterfall ({dashboard}) also includes the loaded salaries of FTE hires ({fte}){other}, which are not cost lines.",
+  "finance.chart.hierarchyOpexRecReconOther":
+    " and {amount} entered at lever level without an impact line",
   "finance.chart.hierarchyNoConfig": "No financial hierarchy is configured for this company.",
   "finance.chart.investVsSavingsTitle": "Investment cost vs Savings",
   "finance.chart.investCost": "Investment cost",
@@ -2879,6 +2883,10 @@ const en: Record<string, string> = {
   "columns.toggle": "Columns",
   "impactsEditor.fte": "FTE",
   "impactsEditor.empty": "No impact entered.",
+  "impactsEditor.fteFromFinancial":
+    "Financial impact line carrying an FTE effect ({status}) — edit it in the “Financial impact” table.",
+  "impactsEditor.fteFromFinancial.done": "actual",
+  "impactsEditor.fteFromFinancial.planned": "planned",
   "impactsEditor.confirmDelete": "Delete this impact? This action cannot be undone.",
   "impactsEditor.label": "Label",
   "impactsEditor.amount": "Amount (€M)",
@@ -3037,7 +3045,7 @@ const en: Record<string, string> = {
   "chart.waterfall.step.cancelled": "− Cancelled",
   "chart.waterfall.step.target": "= Reforecast target",
   "chart.waterfall.step.gross": "Annualized gross gain",
-  "chart.waterfall.step.opexRec": "− Recurring OPEX",
+  "chart.waterfall.step.opexRec": "− Annual recurring OPEX",
   "chart.waterfall.step.net": "= Annualized net",
   "chart.waterfall.opex.others": "Others",
   "chart.waterfall.opex.unspecified": "Unspecified nature",
@@ -3065,7 +3073,7 @@ const en: Record<string, string> = {
   "chart.waterfall.drill.intro.target":
     'Reforecast target = actual + remaining (same figures as "Savings realization").',
   "chart.waterfall.drill.intro.opexRec":
-    "Annual recurring OPEX of active levers by impact nature, deducted from gross to get net.",
+    "Annual recurring OPEX of active levers (recurring cost lines + loaded salaries of FTE hires) by impact nature, deducted from gross to get net.",
   "strategicOnboarding.defaultProgramName": "Strategic plan",
   "strategicOnboarding.doneTitle": "Strategic plan imported",
   "strategicOnboarding.doneBody":

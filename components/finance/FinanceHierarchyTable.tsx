@@ -41,10 +41,14 @@ export function FinanceHierarchyTable({
   data,
   hierarchyLevels,
   hierarchyNodes,
+  fyStartMonth = 0,
 }: {
   data: BeTrackData;
   hierarchyLevels: HierarchyLevelDef[];
   hierarchyNodes: HierarchyNode[];
+  /** Mois (0-11) de début d'exercice du programme : le filtre « Années » porte sur les EXERCICES
+   *  FISCAUX (« 2026 » = exercice commençant en 2026), comme le P&L de la page Finance. */
+  fyStartMonth?: number;
 }) {
   const { t } = useTranslation();
   const levels = useMemo(() => sortedHierarchyLevels(hierarchyLevels), [hierarchyLevels]);
@@ -58,7 +62,10 @@ export function FinanceHierarchyTable({
   // Filtre années : ensemble vide = toutes les années (case décochée globalement = pas de filtre).
   // Années proposées : mêmes plages que le filtre (`engine.impactYearRange` — un impact récurrent
   // court chaque année depuis son début, jusqu'à sa fin si renseignée ; audit M4).
-  const allYears = useMemo(() => engine.financeYearOptions(data.levers), [data.levers]);
+  const allYears = useMemo(
+    () => engine.financeYearOptions(data.levers, new Date(), fyStartMonth),
+    [data.levers, fyStartMonth]
+  );
   const [selectedYears, setSelectedYears] = useState<Set<number>>(new Set());
   const yearFilterActive = selectedYears.size > 0;
   const toggleYear = (y: number) =>
@@ -93,9 +100,10 @@ export function FinanceHierarchyTable({
         ? engine.financeByHierarchyLevel(data, company, level.order, hierarchyNodes, {
             years: yearsOpt,
             unrounded: true,
+            fyStartMonth,
           })
         : [],
-    [data, company, level, hierarchyNodes, yearsOpt]
+    [data, company, level, hierarchyNodes, yearsOpt, fyStartMonth]
   );
   const children = useMemo(
     () =>
@@ -103,9 +111,10 @@ export function FinanceHierarchyTable({
         ? engine.financeByHierarchyLevel(data, company, childLevel.order, hierarchyNodes, {
             years: yearsOpt,
             unrounded: true,
+            fyStartMonth,
           })
         : [],
-    [data, company, childLevel, hierarchyNodes, yearsOpt]
+    [data, company, childLevel, hierarchyNodes, yearsOpt, fyStartMonth]
   );
   const totals = useMemo(() => financeTotals(parents), [parents]);
   const tree = useMemo(() => {

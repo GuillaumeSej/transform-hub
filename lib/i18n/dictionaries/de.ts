@@ -2664,9 +2664,13 @@ const de: Record<string, string> = {
   "finance.chart.hierarchyTitleAllCosts":
     "Gesamtkosten inkl. wiederkehrendem OPEX, nach GuV-Konto / Kostenstelle",
   "finance.chart.hierarchyScopeNote":
-    "Gesamt {total} = Einmalkosten (CAPEX + einmaliger OPEX) {oneOff} + wiederkehrender OPEX {rec}. Jede Kostenposition wird dem GuV-Konto ihrer Kostenstelle zugeordnet (Kostenzeile, sonst Hebel): ein Ertragskonto (z. B. Revenue) kann daher die Kosten der Hebel tragen, die es beeinflussen.",
+    "Gesamt {total} = Einmalkosten (CAPEX + einmaliger OPEX) {oneOff} + jährlicher wiederkehrender OPEX (Kostenzeilen) {rec}. Jede Kostenposition wird dem GuV-Konto ihrer Kostenstelle zugeordnet (Kostenzeile, sonst Hebel): ein Ertragskonto (z. B. Revenue) kann daher die Kosten der Hebel tragen, die es beeinflussen.",
   "finance.chart.hierarchyUnattachedNote":
     "Davon {amount} ohne Zuordnung zur Hierarchie (nicht im Diagramm).",
+  "finance.chart.hierarchyOpexRecReconNote":
+    "Der jährliche wiederkehrende OPEX des Dashboard-Wasserfalls ({dashboard}) enthält zusätzlich die Vollkosten der FTE-Einstellungen ({fte}){other}, die keine Kostenzeilen sind.",
+  "finance.chart.hierarchyOpexRecReconOther":
+    " und {amount} auf Hebelebene ohne Wirkungszeile erfasst",
   "finance.chart.hierarchyNoConfig":
     "Für dieses Unternehmen ist keine Finanzhierarchie konfiguriert.",
   "finance.chart.investVsSavingsTitle": "Investitionskosten vs. Savings",
@@ -2890,6 +2894,10 @@ const de: Record<string, string> = {
   "columns.toggle": "Spalten",
   "impactsEditor.fte": "VZÄ",
   "impactsEditor.empty": "Keine Auswirkung erfasst.",
+  "impactsEditor.fteFromFinancial":
+    "Finanzielle Wirkungszeile mit FTE-Effekt ({status}) — in der Tabelle „Finanzielle Wirkung“ bearbeiten.",
+  "impactsEditor.fteFromFinancial.done": "realisiert",
+  "impactsEditor.fteFromFinancial.planned": "geplant",
   "impactsEditor.confirmDelete": "Diese Auswirkung löschen? Diese Aktion ist unwiderruflich.",
   "impactsEditor.label": "Bezeichnung",
   "impactsEditor.amount": "Betrag (€M)",
@@ -3051,7 +3059,7 @@ const de: Record<string, string> = {
   "chart.waterfall.step.cancelled": "− Storniert",
   "chart.waterfall.step.target": "= Neuprognose-Ziel",
   "chart.waterfall.step.gross": "Annualisierter Bruttogewinn",
-  "chart.waterfall.step.opexRec": "− Wiederkehrende OPEX",
+  "chart.waterfall.step.opexRec": "− Jährliche wiederkehrende OPEX",
   "chart.waterfall.step.net": "= Annualisiertes Netto",
   "chart.waterfall.opex.others": "Sonstige",
   "chart.waterfall.opex.unspecified": "Art nicht angegeben",
@@ -3079,7 +3087,7 @@ const de: Record<string, string> = {
   "chart.waterfall.drill.intro.target":
     "Neuprognose netto (brutto − wiederkehrende OPEX) = realisiert + verbleibend (gleiche Zahlen wie « Einsparungsrealisierung »).",
   "chart.waterfall.drill.intro.opexRec":
-    "Jährliche wiederkehrende OPEX der aktiven Hebel nach Wirkungsart, vom Brutto abgezogen, um das Netto zu erhalten.",
+    "Jährliche wiederkehrende OPEX der aktiven Hebel (wiederkehrende Kostenzeilen + Vollkosten der FTE-Einstellungen) nach Wirkungsart, vom Brutto abgezogen, um das Netto zu erhalten.",
   "chart.bar.planned": "Ursprünglich geplant",
   "chart.bar.noLeverDetail": "Keine Aufschlüsselung nach Hebel verfügbar.",
   "chart.scurve.gapBadge": "Abweichung",

@@ -1102,14 +1102,23 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
     expect(s.suppressionsRealized).toBe(3);
   });
 
-  it("cancelled levers are excluded from all cost aggregates", () => {
+  it("cancelled levers count in the PLANNED (initial) costs only — engaged/reforecast exclude them", () => {
+    // Décision C2 : le plan initial inclut les abandonnés (comme `plannedInitialNet`), l'abandon se
+    // lit dans le réactualisé.
     const data = makeData({
       levers: [
-        { ...baseLever, id: "L001", status: "cancelled" as LeverStatus, capex: 10, opexOneOff: 5 },
+        {
+          ...baseLever,
+          id: "L001",
+          status: "cancelled" as LeverStatus,
+          capex: 10,
+          opexOneOff: 5,
+          lockedPlan: { grossSavings: 0, netSavings: 0, opexOneOff: 2, opexRec: 0, capex: 4 },
+        },
       ],
     });
     const s = programSummary(data);
-    expect(s.plannedCosts).toBe(0);
+    expect(s.plannedCosts).toBe(6); // plan figé : 4 + 2
     expect(s.engagedCosts).toBe(0);
     expect(s.reforecastCosts).toBe(0);
   });

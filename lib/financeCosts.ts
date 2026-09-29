@@ -6,7 +6,7 @@ import type {
   Lever,
   Workstream,
 } from "@/types";
-import { MONTH_LABELS, isInvestCostEngaged, leverImpactsOf } from "@/lib/engine";
+import { MONTH_LABELS, isInvestCostEngaged, leverImpactsOf, leverOpexRecOf } from "@/lib/engine";
 import { impactDatesOf } from "@/lib/impactKinds";
 import { parseLocalDate } from "@/lib/impactStatus";
 
@@ -180,6 +180,35 @@ export function splitByNature(data: BeTrackData): {
     else oneoff += impact.amount;
   }
   return { capex: round2(capex), opexRec: round2(opexRec), oneoff: round2(oneoff) };
+}
+
+/** Réconciliation de l'OPEX récurrent ANNUEL entre la page Finance et la cascade du dashboard
+ *  (`engine.savingsWaterfall`) — ce sont deux périmètres différents, pas deux périodes : tous deux
+ *  sont des montants annualisés (run-rate), sans prorata sur la période du programme.
+ *  - `costLines` : lignes d'impact de coût « OPEX récurrent » (= `splitByNature(data).opexRec`),
+ *    seules ventilables par compte P&L / centre de coût ;
+ *  - `fteHires` : salaires chargés des recrutements ETP (impacts « fte » de direction recrutement),
+ *    que le moteur compte en OPEX récurrent (`leverImpactTotals.opexRec`) mais qui ne sont pas des
+ *    lignes de coût ;
+ *  - `dashboard` : OPEX récurrent de la cascade (Σ `leverOpexRecOf` des leviers actifs) ;
+ *  - `other` : reste (montants saisis au niveau du levier sans ligne d'impact, arrondis). */
+export function recurringOpexReconciliation(data: BeTrackData): {
+  costLines: number;
+  fteHires: number;
+  other: number;
+  dashboard: number;
+} {
+  const active = data.levers.filter((l) => l.status !== "cancelled");
+  const costLines = splitByNature(data).opexRec;
+  let fteHires = 0;
+  for (const lever of active) {
+    for (const imp of leverImpactsOf(lever)) {
+      if (imp.type === "fte" && imp.fteDirection === "hire") fteHires += imp.amount;
+    }
+  }
+  const dashboard = round2(active.reduce((s, l) => s + leverOpexRecOf(l), 0));
+  fteHires = round2(fteHires);
+  return { costLines, fteHires, other: round2(dashboard - costLines - fteHires) || 0, dashboard };
 }
 
 export type CostPeriodPoint = {

@@ -324,6 +324,70 @@ describe("M5 — P&L plan / réactualisé / réalisé match the lever totals", (
   });
 });
 
+// ─── P&L : même étalement que le tableau Finance, périodes = exercice fiscal ────────────────────
+
+describe("P&L period filter — same spreading rule as the finance table, fiscal-year periods", () => {
+  const today = new Date("2026-06-15");
+  // 1 M€/an récurrent depuis mars 2026, sans fin.
+  const l = lever({
+    pnlMap: "P1",
+    impacts: [imp("g", { amount: 1, gainDate: "2026-03-01", hierarchyLeafId: "A" })],
+  });
+  const d = data([l]);
+  const pnlTotal = (f: engine.PnlPeriodFilter) =>
+    engine
+      .pnlImpactDetailed(d, f, undefined, undefined, today)
+      .reduce((s, p) => s + p.reforecast, 0);
+  const tableTotal = (years: number[], fyStartMonth?: number) =>
+    financeTotals(
+      engine.financeByHierarchyLevel(d, { hierarchyLevels: levels }, 0, [node("A")], {
+        years: new Set(years),
+        unrounded: true,
+        today,
+        fyStartMonth,
+      })
+    ).reforecast;
+
+  it("a recurring gain counts every year after its start year (was: nothing in 2027)", () => {
+    expect(pnlTotal({ year: "2027" })).toBe(1);
+    expect(pnlTotal({ year: "2027" })).toBe(tableTotal([2027]));
+    expect(pnlTotal({ year: "2026" })).toBe(1);
+    expect(pnlTotal({ year: "2025" })).toBe(0);
+    expect(tableTotal([2025])).toBe(0);
+  });
+
+  it("quarters / months: active from the start month onward (run-rate)", () => {
+    expect(pnlTotal({ year: "2026", quarter: "Q1", month: "Feb" })).toBe(0);
+    expect(pnlTotal({ year: "2026", quarter: "Q1", month: "Mar" })).toBe(1);
+    expect(pnlTotal({ year: "2027", quarter: "Q3" })).toBe(1);
+  });
+
+  it("fiscal year (April start): « 2025 » = Apr 2025–Mar 2026, fiscal quarters", () => {
+    // Mars 2026 = dernier mois de l'exercice 2025 (Q4 fiscal).
+    expect(pnlTotal({ year: "2025", fyStartMonth: 3 })).toBe(1);
+    expect(tableTotal([2025], 3)).toBe(1);
+    expect(pnlTotal({ year: "2025", quarter: "Q3", fyStartMonth: 3 })).toBe(0); // Oct–Dec 2025
+    expect(pnlTotal({ year: "2025", quarter: "Q4", month: "Mar", fyStartMonth: 3 })).toBe(1);
+    expect(pnlTotal({ year: "2025", quarter: "Q4", month: "Feb", fyStartMonth: 3 })).toBe(0);
+    // Un mois hors du trimestre choisi : rien.
+    expect(pnlTotal({ year: "2025", quarter: "Q1", month: "Mar", fyStartMonth: 3 })).toBe(0);
+    expect(engine.financeYearOptions([l], today, 3)).toEqual([2025, 2026]);
+  });
+
+  it("a gain with an end date stops after it", () => {
+    const ended = lever({
+      pnlMap: "P1",
+      impacts: [imp("g", { amount: 2, gainDate: "2026-03-01", endDate: "2027-02-28" })],
+    });
+    const f = (y: string) =>
+      engine
+        .pnlImpactDetailed(data([ended]), { year: y }, undefined, undefined, today)
+        .reduce((s, p) => s + p.reforecast, 0);
+    expect(f("2027")).toBe(2);
+    expect(f("2028")).toBe(0);
+  });
+});
+
 // ─── M7 : une seule règle « réalisé » / « en retard » ───────────────────────────────────────────
 
 describe("M7 — one realized/late rule", () => {

@@ -257,17 +257,26 @@ export default function FinancePage() {
   // `pnlYear` littéralement "NaN" (aucune ligne ne matchait alors jamais aucune période, tout le
   // tableau "Compte de résultat configuré" et le graphique "Impact P&L par compte" affichaient
   // 0 partout). Priorité : Programme actif (moderne) > ProgramConfig (legacy) > année courante.
-  const fyYear = useMemo(() => {
-    const fromActiveProgram = activeProgram?.fyStart ? new Date(activeProgram.fyStart) : null;
-    if (fromActiveProgram && !isNaN(fromActiveProgram.getTime())) {
-      return String(fromActiveProgram.getFullYear());
-    }
-    const fromLegacy = data.program.fyStart ? new Date(data.program.fyStart) : null;
-    if (fromLegacy && !isNaN(fromLegacy.getTime())) {
-      return String(fromLegacy.getFullYear());
-    }
-    return String(new Date().getFullYear());
-  }, [activeProgram, data.program.fyStart]);
+  //
+  // Périodes = EXERCICE FISCAL du programme (décision PO) : « 2026 » = l'exercice qui COMMENCE en
+  // 2026, Q1 = ses 3 premiers mois — pour le P&L comme pour le tableau par niveau financier
+  // (`fyStartMonth` passé aux deux). `resolveFiscalYearStart` lit la date en calendrier LOCAL
+  // (`new Date("2026-04-01")` est lu en UTC et peut glisser au mois précédent).
+  const fyStartDate = useMemo(
+    () => engine.resolveFiscalYearStart(activeProgram?.fyStart || data.program.fyStart),
+    [activeProgram, data.program.fyStart]
+  );
+  const fyStartMonth = fyStartDate.getMonth();
+  const fyYear = String(fyStartDate.getFullYear());
+  // Exercices proposés : ceux couverts par les impacts des leviers (même règle d'étalement que le
+  // tableau Finance, `financeYearOptions`) + l'exercice de départ du programme.
+  const pnlYearOptions = useMemo(() => {
+    const years = new Set(
+      engine.financeYearOptions(pnlFilteredData.levers, new Date(), fyStartMonth).map(String)
+    );
+    years.add(fyYear);
+    return Array.from(years).sort();
+  }, [pnlFilteredData, fyStartMonth, fyYear]);
   const [pnlYear, setPnlYear] = useState(fyYear);
   // `activeProgram` se résout de façon asynchrone (souscription Firestore) : au tout premier
   // rendu il peut encore être `null`, donc `fyYear` initial retombe sur le legacy/l'année
@@ -303,14 +312,20 @@ export default function FinancePage() {
       year: pnlYear,
       ...(pnlQuarter ? { quarter: pnlQuarter } : {}),
       ...(pnlMonth ? { month: pnlMonth } : {}),
+      fyStartMonth,
     };
-  }, [pnlYear, pnlQuarter, pnlMonth]);
+  }, [pnlYear, pnlQuarter, pnlMonth, fyStartMonth]);
 
+  // Mois de l'exercice, dans l'ordre fiscal (ex. Apr … Mar pour un exercice d'avril).
+  const fiscalMonths: string[] = useMemo(
+    () => Array.from({ length: 12 }, (_, i) => engine.MONTH_LABELS[(fyStartMonth + i) % 12]),
+    [fyStartMonth]
+  );
   const pnlQuarterMonths: string[] = useMemo(() => {
-    if (!pnlQuarter) return engine.MONTH_LABELS;
+    if (!pnlQuarter) return fiscalMonths;
     const qIdx = parseInt(pnlQuarter.replace("Q", "")) - 1;
-    return engine.MONTH_LABELS.slice(qIdx * 3, qIdx * 3 + 3);
-  }, [pnlQuarter]);
+    return fiscalMonths.slice(qIdx * 3, qIdx * 3 + 3);
+  }, [pnlQuarter, fiscalMonths]);
 
   const pnlDetailedData = useMemo(
     () =>
@@ -376,6 +391,7 @@ export default function FinancePage() {
         data={hierarchyTableData}
         hierarchyLevels={hierarchyLevels}
         hierarchyNodes={hierarchyNodes}
+        fyStartMonth={fyStartMonth}
       />
 
       <InvestVsSavingsChart data={filteredData} />
@@ -426,7 +442,11 @@ export default function FinancePage() {
                   setPnlMonth("");
                 }}
               >
-                <option value={fyYear}>{fyYear}</option>
+                {pnlYearOptions.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
               </select>
               <select
                 className="rounded-sm border border-border bg-white px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary focus:border-bp-coral focus:outline-none"
@@ -437,9 +457,10 @@ export default function FinancePage() {
                 }}
               >
                 <option value="">{t("pnl.allQuarters")}</option>
-                {["Q1", "Q2", "Q3", "Q4"].map((q) => (
+                {/* Trimestres FISCAUX : libellé suffixé de leurs mois (ex. « Q1 (Apr–Jun) »). */}
+                {["Q1", "Q2", "Q3", "Q4"].map((q, i) => (
                   <option key={q} value={q}>
-                    {q}
+                    {`${q} (${fiscalMonths[i * 3]}–${fiscalMonths[i * 3 + 2]})`}
                   </option>
                 ))}
               </select>

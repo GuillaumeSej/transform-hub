@@ -150,7 +150,7 @@ export function SavingsStepDrilldownModal({
     ),
     opexRec: t(
       "chart.waterfall.drill.intro.opexRec",
-      "OPEX récurrent annuel des leviers actifs, par nature d'impact, déduit du brut pour obtenir le net."
+      "OPEX récurrent annuel des leviers actifs (lignes de coût récurrentes + salaires chargés des recrutements ETP), par nature d'impact, déduit du brut pour obtenir le net."
     ),
   };
 

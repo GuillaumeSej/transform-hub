@@ -386,6 +386,123 @@ describe("alertEngine — generateAlerts", () => {
     expect(alerts[2].id).toBe("M1");
   });
 
+  // ── Réactualisé recalculé depuis les impacts (règle C3) ──────────────────────
+  // applyPlanLock initialise `reforecast = lockedPlan` au passage à « Exécuté » sans recalculer
+  // depuis les impacts : le snapshot stocké peut donc être périmé. Les alertes de dépassement
+  // doivent lire la même source que le KPI coûts (displayedReforecastSnapshot).
+  describe("cost/OPEX overrun alerts read the reforecast recomputed from impacts", () => {
+    const plan = { grossSavings: 10, netSavings: 9.5, opexOneOff: 0, opexRec: 0.5, capex: 1 };
+    const impacts = (capex: number, opexRec: number) => [
+      { id: "i1", label: "Gain", type: "saving" as const, nature: "opex_rec" as const, amount: 10 },
+      { id: "i2", label: "CAPEX", type: "cost" as const, nature: "capex" as const, amount: capex },
+      {
+        id: "i3",
+        label: "OPEX rec",
+        type: "cost" as const,
+        nature: "opex_rec" as const,
+        amount: opexRec,
+      },
+    ];
+
+    it("raises a cost overrun when impacts CAPEX exceeds plan even if stored reforecast = plan", () => {
+      const data = makeData({
+        levers: [
+          { ...baseLever, lockedPlan: plan, reforecast: { ...plan }, impacts: impacts(2, 0.5) },
+        ],
+      });
+      const cost = generateAlerts(data).filter((a) => a.id === "AUTO-COST-L001");
+      expect(cost).toHaveLength(1);
+      expect(cost[0].i18n?.amounts).toEqual({ reforecast: 2, plan: 1, delta: 1 });
+      expect(cost[0].impactEur).toBe(-1000000);
+    });
+
+    it("raises a recurring OPEX overrun when impacts opexRec exceeds plan even if stored reforecast = plan", () => {
+      const data = makeData({
+        levers: [
+          { ...baseLever, lockedPlan: plan, reforecast: { ...plan }, impacts: impacts(1, 0.8) },
+        ],
+      });
+      const opex = generateAlerts(data).filter((a) => a.id === "AUTO-OPEXREC-L001");
+      expect(opex).toHaveLength(1);
+      expect(opex[0].i18n?.amounts?.reforecast).toBeCloseTo(0.8);
+    });
+
+    it("does NOT raise a cost overrun from a stale stored reforecast when impacts match plan", () => {
+      const data = makeData({
+        levers: [
+          {
+            ...baseLever,
+            lockedPlan: plan,
+            reforecast: { ...plan, capex: 5, opexRec: 3 },
+            impacts: impacts(1, 0.5),
+          },
+        ],
+      });
+      const ids = generateAlerts(data).map((a) => a.id);
+      expect(ids).not.toContain("AUTO-COST-L001");
+      expect(ids).not.toContain("AUTO-OPEXREC-L001");
+    });
+  });
+
+  // ── Levier en retard : ratio pondéré par weightPct (si somme = 100) ──────────
+  describe("delay alert ratio uses action weights when they sum to 100", () => {
+    it("is red when a single late action weighs > 50% (1 action out of 4)", () => {
+      const data = makeData({
+        levers: [
+          {
+            ...baseLever,
+            actions: [
+              { ...lateAction("a1"), weightPct: 70 },
+              { ...onTimeAction("a2"), weightPct: 10 },
+              { ...onTimeAction("a3"), weightPct: 10 },
+              { ...onTimeAction("a4"), weightPct: 10 },
+            ],
+          },
+        ],
+      });
+      const delay = generateAlerts(data).find((a) => a.id === "AUTO-DELAY-L001");
+      expect(delay?.type).toBe("red");
+      // Gains récurrents du levier (impacts des actions) = 1 → impact = −0,7
+      expect(delay?.impactEur).toBe(-700000);
+    });
+
+    it("is amber when late actions are the majority by count but light by weight", () => {
+      const data = makeData({
+        levers: [
+          {
+            ...baseLever,
+            actions: [
+              { ...lateAction("a1"), weightPct: 10 },
+              { ...lateAction("a2"), weightPct: 10 },
+              { ...lateAction("a3"), weightPct: 10 },
+              { ...onTimeAction("a4"), weightPct: 70 },
+            ],
+          },
+        ],
+      });
+      const delay = generateAlerts(data).find((a) => a.id === "AUTO-DELAY-L001");
+      expect(delay?.type).toBe("amber");
+    });
+
+    it("falls back to a simple count when weights do not sum to 100", () => {
+      const data = makeData({
+        levers: [
+          {
+            ...baseLever,
+            actions: [
+              { ...lateAction("a1"), weightPct: 70 },
+              { ...onTimeAction("a2"), weightPct: 10 },
+              { ...onTimeAction("a3"), weightPct: 10 },
+              { ...onTimeAction("a4") },
+            ],
+          },
+        ],
+      });
+      const delay = generateAlerts(data).find((a) => a.id === "AUTO-DELAY-L001");
+      expect(delay?.type).toBe("amber"); // 1/4
+    });
+  });
+
   it("cancelled levers do not generate any auto alerts", () => {
     const data = makeData({
       levers: [{ ...baseLever, status: "cancelled" as LeverStatus, progress: 0 }],

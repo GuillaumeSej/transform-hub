@@ -303,6 +303,48 @@ describe("leverExcel — « Impact estimé net » = réactualisé net affiché",
     expect(preview.warnings).toEqual([]);
     expect(preview.unchangedCodes).toEqual([lever.code]);
   });
+
+  it("macro lever with a reforecast: brut / CAPEX / OPEX / net all read the reforecast (brut − OPEX réc. = net)", () => {
+    const snap = (g: number, n: number, rec: number, one: number, capex: number) => ({
+      grossSavings: g,
+      netSavings: n,
+      opexRec: rec,
+      opexOneOff: one,
+      capex,
+    });
+    const lever: Lever = {
+      ...baseLever,
+      progress: 0,
+      grossSavings: 10,
+      netSavings: 8,
+      opexRec: 2,
+      opexOneOff: 1,
+      capex: 3,
+      fteImpact: 0,
+      lockedPlan: snap(10, 8, 2, 1, 3),
+      reforecast: snap(6, 5, 1, 0.5, 2),
+    };
+    const row = leverToExcelRow(lever, makeData(), noAlerts);
+    expect(row["Impact estimé brut (€M)"]).toBe(6);
+    expect(row["Impact estimé net (€M)"]).toBe(5);
+    expect(row["OPEX récurrent (€M/an)"]).toBe(1);
+    expect(row["OPEX one-off (€M)"]).toBe(0.5);
+    expect(row["CAPEX (€M)"]).toBe(2);
+    expect(
+      (row["Impact estimé brut (€M)"] as number) - (row["OPEX récurrent (€M/an)"] as number)
+    ).toBe(row["Impact estimé net (€M)"]);
+    expect(row["Planifié initial"]).toBe(8);
+
+    // Round-trip : l'import conserve les montants du levier (plan figé / réactualisé).
+    const preview = validateLeverImportRows(
+      { leviers: [row], actions: [], impacts: [] },
+      { levers: [lever], workstreams, pnlAccounts },
+      "c1",
+      singleProgram
+    );
+    expect(preview.errors).toEqual([]);
+    expect(preview.unchangedCodes).toEqual([lever.code]);
+  });
 });
 
 describe("leverExcel — full export -> re-import round trip", () => {

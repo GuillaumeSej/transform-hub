@@ -46,6 +46,13 @@ export function leverToExcelRow(
 ): Record<string, string | number> {
   const ws = data.workstreams.find((w) => w.id === lever.ws);
   const pnl = data.pnlAccounts.find((p) => p.id === lever.pnlMap);
+  // Montants financiers : TOUS sur la même base, le réactualisé affiché (`displayedReforecastSnapshot`
+  // — impacts si le levier en porte, sinon reforecast enregistré, sinon plan figé, sinon champs
+  // courants), pour que brut − OPEX récurrent = net dans le fichier. Avant, brut/CAPEX/OPEX lisaient
+  // les champs courants et le net le réactualisé : incohérent pour un levier macro réactualisé.
+  // Ré-import : un levier sans impact ni plan figé a par construction snapshot = champs courants
+  // (round-trip inchangé) ; sinon l'import conserve ses montants calculés (lib/leverExcelImport.ts).
+  const refo = engine.displayedReforecastSnapshot(lever);
   return {
     Code: lever.code,
     "Type de levier": lever.type,
@@ -67,7 +74,7 @@ export function leverToExcelRow(
     Statut: resolveStatusLabel(lever.status, lifecycleStages),
     "Progression (%)": engine.leverProgressPct(lever),
     Risque: engine.computeLeverRisk(lever.id, alerts, riskThresholds).level,
-    "Impact estimé brut (€M)": lever.grossSavings,
+    "Impact estimé brut (€M)": refo.grossSavings,
     // Même valeur que la colonne « Réactualisé (net) » du tableau des leviers
     // (`displayedReforecastNet` : net des impacts si le levier en porte, sinon réactualisation,
     // plan figé ou net courant) — l'ancienne colonne « Réactualisé (net) » séparée en était un
@@ -82,9 +89,9 @@ export function leverToExcelRow(
     "Réalisé à date (ETP)": engine.realizedFte(lever),
     "Gains one-off (€M)": engine.leverImpactTotals(lever).oneOffGains,
     "Population impactée": typeof lever.popImpacted === "number" ? lever.popImpacted : "",
-    "CAPEX (€M)": lever.capex,
-    "OPEX one-off (€M)": lever.opexOneOff,
-    "OPEX récurrent (€M/an)": lever.opexRec,
+    "CAPEX (€M)": refo.capex,
+    "OPEX one-off (€M)": refo.opexOneOff,
+    "OPEX récurrent (€M/an)": refo.opexRec,
     "Dépendances (ID:type, séparées par ;)": lever.dependencies
       .map((d) => `${d.targetId}:${d.type}`)
       .join("; "),

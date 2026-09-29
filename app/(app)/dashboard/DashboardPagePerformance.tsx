@@ -84,7 +84,7 @@ import { InitiativeHealthMatrix } from "@/components/shared/charts/InitiativeHea
 import { StageFunnel } from "@/components/shared/charts/StageFunnel";
 import { MarimekkoChart } from "@/components/shared/charts/MarimekkoChart";
 import { SavingsWaterfallChart } from "@/components/shared/charts/SavingsWaterfallChart";
-import { oneOffGainsTotal, savingsTriple } from "@/lib/dashboardSavings";
+import { oneOffGainsTotal, programSavingsBars, savingsTriple } from "@/lib/dashboardSavings";
 import type { Lever, LeverStatus } from "@/types";
 import {
   DASHBOARD_WIDGET_REGISTRY,
@@ -765,46 +765,14 @@ export function DashboardPagePerformance() {
   // Barres « par programme » : MÊME périmètre que le reste du dashboard (programme(s) affiché(s) +
   // filtres de la barre, `filteredData`) — avant, elles portaient sur TOUS les programmes de
   // l'entreprise, sans les filtres actifs. Seuls les programmes présents dans ce périmètre sont listés.
-  const programMap = engine.byProgram(filteredData, programs);
-  const scopedProgramIds = new Set(filteredData.levers.map((l) => l.programId).filter(Boolean));
-  // Program.target a été retiré (cible saisie à la main, jamais alignée avec la cible bottom-up —
-  // voir le commentaire plus bas sur l'ambition programme) : la cible affichée ici est recalculée
-  // par programme sur le même principe que engine.programSummary — somme des netSavings des
-  // leviers actifs rattachés au programme.
-  const programTargetById = new Map<string, number>();
-  const programPlannedById = new Map<string, number>();
-  filteredData.levers.forEach((l) => {
-    if (!l.programId) return;
-    // Planifié initial : abandonnés compris (`plannedInitialNet`) ; cible réactualisée : actifs.
-    programPlannedById.set(
-      l.programId,
-      (programPlannedById.get(l.programId) ?? 0) + engine.displayedLockedPlanNet(l).value
-    );
-    if (l.status === "cancelled") return;
-    programTargetById.set(
-      l.programId,
-      (programTargetById.get(l.programId) ?? 0) + engine.displayedReforecastNet(l).value
-    );
-  });
-  const programBars = [
-    ...programs
-      .filter((p) => scopedProgramIds.has(p.id))
-      .map((p) => ({
-        label: p.name,
-        realized: programMap[p.name] ?? 0,
-        target: Math.round((programTargetById.get(p.id) ?? 0) * 10) / 10,
-        planned: Math.round((programPlannedById.get(p.id) ?? 0) * 10) / 10,
-      })),
-    ...(programMap["Non assigné"]
-      ? [
-          {
-            label: t("leverForm.notAssigned", "Non assigné"),
-            realized: programMap["Non assigné"],
-            target: 0,
-          },
-        ]
-      : []),
-  ];
+  // Planifié / cible / réalisé par programme via `programSavingsBars` (mêmes règles que
+  // `savingsTriple`) — le groupe « Non assigné » est calculé comme les autres (avant : réalisé seul,
+  // cible 0 et pas de planifié → ratio visuel faux en vue consolidée).
+  const programBars = programSavingsBars(
+    filteredData.levers,
+    programs,
+    t("leverForm.notAssigned", "Non assigné")
+  );
 
   const geoDataFor = (dimension: string) => {
     const map =

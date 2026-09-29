@@ -3,6 +3,7 @@ import {
   attachChildren,
   financeTotals,
   limitSegments,
+  programSavingsBars,
   savingsTriple,
   seriesToBridge,
   sortFinanceRows,
@@ -160,5 +161,35 @@ describe("seriesToBridge", () => {
       { quarter: "Jan", delta: 2, cumulative: 2 },
       { quarter: "Feb", delta: 0, cumulative: null },
     ]);
+  });
+});
+
+describe("programSavingsBars", () => {
+  const programs = [
+    { id: "P1", name: "Prog 1" },
+    { id: "P2", name: "Prog 2" },
+  ];
+  it("« Non assigné » a sa cible et son planifié, comme les autres programmes", () => {
+    const levers = [
+      lever({ id: "A", programId: "P1" }),
+      lever({ id: "B" }), // sans programme
+      lever({ id: "C", programId: "GHOST" }), // programme hors liste → non assigné
+      lever({ id: "D", status: "cancelled" }), // annulé : planifié seulement
+    ];
+    const bars = programSavingsBars(levers, programs, "Non assigné");
+    expect(bars.map((b) => b.label)).toEqual(["Prog 1", "Non assigné"]);
+    const unassigned = bars[1];
+    const expected = savingsTriple([levers[1], levers[2], levers[3]]);
+    expect(unassigned.programId).toBeNull();
+    expect(unassigned.planned).toBe(expected.planned);
+    expect(unassigned.target).toBe(expected.reforecast);
+    expect(unassigned.realized).toBe(expected.realized);
+    expect(unassigned.planned).toBe(24);
+    expect(unassigned.target).toBe(24);
+    expect(bars[0]).toMatchObject({ programId: "P1", planned: 8, target: 12 });
+  });
+  it("aucun groupe « Non assigné » quand tous les leviers ont un programme connu", () => {
+    const bars = programSavingsBars([lever({ programId: "P2" })], programs, "Non assigné");
+    expect(bars.map((b) => b.programId)).toEqual(["P2"]);
   });
 });

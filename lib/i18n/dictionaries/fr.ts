@@ -2761,9 +2761,13 @@ const fr: Record<string, string> = {
   "finance.chart.hierarchyTitleAllCosts":
     "Coûts totaux yc OPEX récurrent, par compte P&L / centre de coût",
   "finance.chart.hierarchyScopeNote":
-    "Total {total} = coûts ponctuels (CAPEX + OPEX ponctuel) {oneOff} + OPEX récurrent {rec}. Chaque coût est affecté au compte P&L de son centre de coût (ligne de coût, sinon levier) : un compte de produits (ex. Revenue) peut donc porter les coûts des leviers qui l'impactent.",
+    "Total {total} = coûts ponctuels (CAPEX + OPEX ponctuel) {oneOff} + OPEX récurrent annuel (lignes de coût) {rec}. Chaque coût est affecté au compte P&L de son centre de coût (ligne de coût, sinon levier) : un compte de produits (ex. Revenue) peut donc porter les coûts des leviers qui l'impactent.",
   "finance.chart.hierarchyUnattachedNote":
     "Dont {amount} sans rattachement à l'arborescence (absent du graphique).",
+  "finance.chart.hierarchyOpexRecReconNote":
+    "L'OPEX récurrent annuel de la cascade du dashboard ({dashboard}) inclut en plus les salaires chargés des recrutements ETP ({fte}){other}, qui ne sont pas des lignes de coût.",
+  "finance.chart.hierarchyOpexRecReconOther":
+    " et {amount} saisis au niveau du levier sans ligne d'impact",
   "finance.chart.hierarchyNoConfig":
     "Aucune arborescence financière n'est configurée pour cette entreprise.",
   "finance.chart.investVsSavingsTitle": "Coût d'investissement vs Économies",
@@ -3044,6 +3048,10 @@ const fr: Record<string, string> = {
   "columns.toggle": "Colonnes",
   "impactsEditor.fte": "ETP",
   "impactsEditor.empty": "Aucun impact renseigné.",
+  "impactsEditor.fteFromFinancial":
+    "Ligne d'impact financier portant un effet ETP ({status}) — à modifier dans le tableau « Impact financier ».",
+  "impactsEditor.fteFromFinancial.done": "réalisé",
+  "impactsEditor.fteFromFinancial.planned": "prévu",
   "impactsEditor.confirmDelete": "Supprimer cet impact ? Cette action est irréversible.",
   "impactsEditor.label": "Libellé",
   "impactsEditor.amount": "Montant (€M)",
@@ -3182,7 +3190,7 @@ const fr: Record<string, string> = {
   "chart.waterfall.step.cancelled": "− Annulé",
   "chart.waterfall.step.target": "= Cible réactualisée",
   "chart.waterfall.step.gross": "Gain brut annualisé",
-  "chart.waterfall.step.opexRec": "− OPEX récurrent",
+  "chart.waterfall.step.opexRec": "− OPEX récurrent annuel",
   "chart.waterfall.step.net": "= Net annualisé",
   "chart.waterfall.opex.others": "Autres",
   "chart.waterfall.opex.unspecified": "Nature non précisée",
@@ -3210,7 +3218,7 @@ const fr: Record<string, string> = {
   "chart.waterfall.drill.intro.target":
     "Net réactualisé (brut − OPEX récurrent) = réalisé + reste à faire (mêmes chiffres que « Réalisation des économies »).",
   "chart.waterfall.drill.intro.opexRec":
-    "OPEX récurrent annuel des leviers actifs, par nature d'impact, déduit du brut pour obtenir le net.",
+    "OPEX récurrent annuel des leviers actifs (lignes de coût récurrentes + salaires chargés des recrutements ETP), par nature d'impact, déduit du brut pour obtenir le net.",
   "strategicOnboarding.defaultProgramName": "Plan stratégique",
   "strategicOnboarding.doneTitle": "Plan stratégique importé",
   "strategicOnboarding.doneBody":

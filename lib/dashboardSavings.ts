@@ -31,6 +31,60 @@ export function savingsTriple(levers: Lever[]): {
   };
 }
 
+export type ProgramSavingsBar = {
+  /** Id du programme, `null` pour le groupe « Non assigné ». */
+  programId: string | null;
+  label: string;
+  planned: number;
+  target: number;
+  realized: number;
+};
+
+/** Barres « par programme » (vue consolidée) : planifié initial / cible réactualisée / réalisé par
+ *  programme, via `savingsTriple` — MÊMES règles pour tous les groupes, y compris « Non assigné »
+ *  (leviers sans programme ou rattachés à un programme hors de `programs`, même critère que
+ *  `engine.byProgram`). Avant, le groupe « Non assigné » n'affichait que son réalisé (cible 0, pas
+ *  de planifié) : ratio visuel faux. Ordre : celui de `programs`, puis « Non assigné ». Seuls les
+ *  groupes portant au moins un levier sont renvoyés. */
+export function programSavingsBars(
+  levers: Lever[],
+  programs: { id: string; name: string }[],
+  unassignedLabel: string
+): ProgramSavingsBar[] {
+  const known = new Set(programs.map((p) => p.id));
+  const byId = new Map<string, Lever[]>();
+  const unassigned: Lever[] = [];
+  for (const l of levers) {
+    if (l.programId && known.has(l.programId)) {
+      if (!byId.has(l.programId)) byId.set(l.programId, []);
+      byId.get(l.programId)!.push(l);
+    } else unassigned.push(l);
+  }
+  const bars: ProgramSavingsBar[] = programs
+    .filter((p) => byId.has(p.id))
+    .map((p) => {
+      const t = savingsTriple(byId.get(p.id)!);
+      return {
+        programId: p.id,
+        label: p.name,
+        planned: t.planned,
+        target: t.reforecast,
+        realized: t.realized,
+      };
+    });
+  if (unassigned.length > 0) {
+    const t = savingsTriple(unassigned);
+    bars.push({
+      programId: null,
+      label: unassignedLabel,
+      planned: t.planned,
+      target: t.reforecast,
+      realized: t.realized,
+    });
+  }
+  return bars;
+}
+
 // ─── Cascade (waterfall) ────────────────────────────────────────────────────
 
 export type WaterfallBar = {

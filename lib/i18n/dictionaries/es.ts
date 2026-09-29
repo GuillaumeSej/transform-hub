@@ -2657,9 +2657,13 @@ const es: Record<string, string> = {
   "finance.chart.hierarchyTitleAllCosts":
     "Costes totales incl. OPEX recurrente, por cuenta P&L / centro de coste",
   "finance.chart.hierarchyScopeNote":
-    "Total {total} = costes puntuales (CAPEX + OPEX puntual) {oneOff} + OPEX recurrente {rec}. Cada coste se asigna a la cuenta P&L de su centro de coste (línea de coste, si no palanca): una cuenta de ingresos (p. ej. Revenue) puede por tanto soportar los costes de las palancas que la impactan.",
+    "Total {total} = costes puntuales (CAPEX + OPEX puntual) {oneOff} + OPEX recurrente anual (líneas de coste) {rec}. Cada coste se asigna a la cuenta P&L de su centro de coste (línea de coste, si no palanca): una cuenta de ingresos (p. ej. Revenue) puede por tanto soportar los costes de las palancas que la impactan.",
   "finance.chart.hierarchyUnattachedNote":
     "De los cuales {amount} sin vínculo con la jerarquía (fuera del gráfico).",
+  "finance.chart.hierarchyOpexRecReconNote":
+    "El OPEX recurrente anual de la cascada del dashboard ({dashboard}) incluye además los salarios cargados de las contrataciones ETC ({fte}){other}, que no son líneas de coste.",
+  "finance.chart.hierarchyOpexRecReconOther":
+    " y {amount} introducidos a nivel de palanca sin línea de impacto",
   "finance.chart.hierarchyNoConfig":
     "No hay ninguna jerarquía financiera configurada para esta empresa.",
   "finance.chart.investVsSavingsTitle": "Coste de inversión vs Savings",
@@ -2882,6 +2886,10 @@ const es: Record<string, string> = {
   "columns.toggle": "Columnas",
   "impactsEditor.fte": "FTE",
   "impactsEditor.empty": "Ningún impacto introducido.",
+  "impactsEditor.fteFromFinancial":
+    "Línea de impacto financiero con efecto ETC ({status}) — modifíquela en la tabla «Impacto financiero».",
+  "impactsEditor.fteFromFinancial.done": "realizado",
+  "impactsEditor.fteFromFinancial.planned": "previsto",
   "impactsEditor.confirmDelete": "¿Eliminar este impacto? Esta acción es irreversible.",
   "impactsEditor.label": "Etiqueta",
   "impactsEditor.amount": "Importe (€M)",
@@ -3043,7 +3051,7 @@ const es: Record<string, string> = {
   "chart.waterfall.step.cancelled": "− Cancelado",
   "chart.waterfall.step.target": "= Objetivo reprevisto",
   "chart.waterfall.step.gross": "Ganancia bruta anualizada",
-  "chart.waterfall.step.opexRec": "− OPEX recurrente",
+  "chart.waterfall.step.opexRec": "− OPEX recurrente anual",
   "chart.waterfall.step.net": "= Neto anualizado",
   "chart.waterfall.opex.others": "Otros",
   "chart.waterfall.opex.unspecified": "Naturaleza sin especificar",
@@ -3071,7 +3079,7 @@ const es: Record<string, string> = {
   "chart.waterfall.drill.intro.target":
     "Neto reprevisto (bruto − OPEX recurrente) = realizado + pendiente (mismas cifras que « Realización de ahorros »).",
   "chart.waterfall.drill.intro.opexRec":
-    "OPEX recurrente anual de las palancas activas por naturaleza de impacto, deducido del bruto para obtener el neto.",
+    "OPEX recurrente anual de las palancas activas (líneas de coste recurrentes + salarios cargados de las contrataciones ETC) por naturaleza de impacto, deducido del bruto para obtener el neto.",
   "chart.bar.planned": "Planificado inicial",
   "chart.bar.noLeverDetail": "No hay detalle por palanca disponible.",
   "chart.scurve.gapBadge": "Desviación",

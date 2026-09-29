@@ -1515,10 +1515,12 @@ export function validateLeverImportRows(
 
     if (existing) {
       // Champs dérivés : l'avancement suit le plan d'action ; les montants suivent les impacts
-      // (ou le plan figé) — les valeurs du fichier ne s'appliquent donc pas dans ces cas.
+      // (ou le plan figé / le réactualisé) — les valeurs du fichier ne s'appliquent donc pas dans ces
+      // cas : l'export écrit le réactualisé affiché (`displayedReforecastSnapshot`), qui diffère alors
+      // des champs courants.
       if ((values.actions ?? []).length > 0) values.progress = existing.progress;
       const hasImpacts = (values.impacts ?? []).length > 0;
-      if (hasImpacts || existing.lockedPlan) {
+      if (hasImpacts || existing.lockedPlan || existing.reforecast) {
         values.grossSavings = existing.grossSavings;
         values.netSavings = existing.netSavings;
         values.opexOneOff = existing.opexOneOff;

@@ -46,7 +46,8 @@ describe("impactTrajectory & statut", () => {
   const lever = (impacts: LeverImpact[]) =>
     ({
       id: "L",
-      status: "on_track",
+      // Levier lancé (« Exécuté ») : sinon, règle C4, rien n'est effectif sans coche « Réalisé ».
+      status: "in_progress",
       start: "2026-01-01",
       end: "2026-12-31",
       impacts,

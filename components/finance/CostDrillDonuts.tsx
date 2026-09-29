@@ -14,6 +14,7 @@ import {
   isCostEngaged,
   isInvestNature,
   sortedHierarchyLevels,
+  recurringOpexReconciliation,
   splitByNature,
   type HierarchyCostSlice,
   type WorkstreamCostGroup,
@@ -287,6 +288,10 @@ export function CostByHierarchyChart({
   // natures de coût (CAPEX + OPEX ponctuel + OPEX récurrent) — d'où un total supérieur. Les lignes
   // sans rattachement à l'arborescence n'apparaissent dans aucune part : leur montant est signalé.
   const natureTotals = useMemo(() => splitByNature(data), [data]);
+  // OPEX récurrent : ce donut ne ventile que les LIGNES DE COÛT récurrentes ; la cascade du
+  // dashboard (« − OPEX récurrent annuel ») y ajoute les salaires chargés des recrutements ETP —
+  // même base annuelle, périmètre différent : on l'écrit pour que 1,7 ≠ 2 se lise sans enquête.
+  const opexRecRecon = useMemo(() => recurringOpexReconciliation(data), [data]);
   const allCostsTotal = natureTotals.capex + natureTotals.oneoff + natureTotals.opexRec;
   const rootTotal = useMemo(() => {
     const rootKey = levels[0]?.key;
@@ -323,11 +328,27 @@ export function CostByHierarchyChart({
         <p className="mb-2 text-[11.5px] text-secondary">
           {t(
             "finance.chart.hierarchyScopeNote",
-            "Total {total} = coûts ponctuels (CAPEX + OPEX ponctuel) {oneOff} + OPEX récurrent {rec}. Chaque coût est affecté au compte P&L de son centre de coût (ligne de coût, sinon levier) : un compte de produits (ex. Revenue) peut donc porter les coûts des leviers qui l'impactent."
+            "Total {total} = coûts ponctuels (CAPEX + OPEX ponctuel) {oneOff} + OPEX récurrent annuel (lignes de coût) {rec}. Chaque coût est affecté au compte P&L de son centre de coût (ligne de coût, sinon levier) : un compte de produits (ex. Revenue) peut donc porter les coûts des leviers qui l'impactent."
           )
             .replace("{total}", fmt(round2(allCostsTotal)))
             .replace("{oneOff}", fmt(round2(natureTotals.capex + natureTotals.oneoff)))
             .replace("{rec}", fmt(natureTotals.opexRec))}
+          {(opexRecRecon.fteHires > 0.005 || Math.abs(opexRecRecon.other) > 0.005) &&
+            ` ${t(
+              "finance.chart.hierarchyOpexRecReconNote",
+              "L'OPEX récurrent annuel de la cascade du dashboard ({dashboard}) inclut en plus les salaires chargés des recrutements ETP ({fte}){other}, qui ne sont pas des lignes de coût."
+            )
+              .replace("{dashboard}", fmt(opexRecRecon.dashboard))
+              .replace("{fte}", fmt(opexRecRecon.fteHires))
+              .replace(
+                "{other}",
+                Math.abs(opexRecRecon.other) > 0.005
+                  ? t(
+                      "finance.chart.hierarchyOpexRecReconOther",
+                      " et {amount} saisis au niveau du levier sans ligne d'impact"
+                    ).replace("{amount}", fmt(opexRecRecon.other))
+                  : ""
+              )}`}
           {unattached > 0.005 &&
             ` ${t(
               "finance.chart.hierarchyUnattachedNote",

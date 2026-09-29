@@ -30,7 +30,8 @@ import { effectiveLeafLevel, leafLevels } from "@/lib/hierarchyLogic";
 import { useRole } from "@/lib/hooks/useRole";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Comment, Company, HierarchyNode, LeverImpact } from "@/types";
-import { intlTag } from "@/lib/format";
+import { formatFte, intlTag } from "@/lib/format";
+import { financialImpactsWithFte, impactFteContribution } from "@/lib/fteImpactLines";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 
 const inputClass =
@@ -331,6 +332,12 @@ export function ImpactsEditor({
   const showGeo = !!(geoLevel && companyId);
   const isFteScope = scope === "fte";
   const rows = impacts.filter((imp) => (impactTypeOf(imp) === "fte") === isFteScope);
+  // Vue ETP : les lignes FINANCIÈRES portant un `fteCount` (ex. gain « Réduction 1 ETP ») comptent
+  // dans les tuiles « Impact RH » (`leverImpactTotals.fteNet`, réalisé ETP) — on les liste en
+  // lecture seule sous les lignes ETP, pour que le tableau lise la même source que les tuiles
+  // (avant : « Aucun impact renseigné » sous « Impact estimé −1 »). Elles se modifient dans le
+  // tableau « Impact financier ».
+  const linkedFteRows = isFteScope ? financialImpactsWithFte(impacts) : [];
   // Colonne crayon/coche (édition par ligne) en plus de la colonne suppression quand éditable.
   const colCount = (isFteScope ? 6 : 8) + (showGeo ? 1 : 0) + (editable ? 1 : 0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -502,7 +509,7 @@ export function ImpactsEditor({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
+            {rows.length === 0 && linkedFteRows.length === 0 && (
               <tr>
                 <td colSpan={colCount} className="px-3 py-5 text-center text-[11px] text-tertiary">
                   {t("impactsEditor.empty", "Aucun impact renseigné.")}
@@ -878,6 +885,43 @@ export function ImpactsEditor({
                       </div>
                     </td>
                   )}
+                </tr>
+              );
+            })}
+            {linkedFteRows.map((imp) => {
+              const key = impactTypeOf(imp);
+              const fte = impactFteContribution(imp);
+              const fteText = formatFte(fte);
+              const realized = impactStatusOf(imp) !== "planned";
+              return (
+                <tr
+                  key={`linked-${imp.id}`}
+                  className="border-b border-border align-middle text-secondary last:border-b-0 even:bg-neutral-50/70"
+                >
+                  <td className="px-1 py-1">
+                    <span
+                      className={`inline-flex shrink-0 items-center truncate rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${TYPE_STYLE[key]}`}
+                    >
+                      {TYPE_LABELS[key]}
+                    </span>
+                  </td>
+                  <td className="truncate px-2 py-1" title={imp.label}>
+                    {imp.label || "—"}
+                  </td>
+                  <td className="px-2 py-1 text-right tabular-nums">
+                    {fte > 0 && fteText !== "0" ? `+${fteText}` : fteText}
+                  </td>
+                  <td colSpan={colCount - 3} className="px-2 py-1 text-[11px] italic text-tertiary">
+                    {t(
+                      "impactsEditor.fteFromFinancial",
+                      "Ligne d'impact financier portant un effet ETP ({status}) — à modifier dans le tableau « Impact financier »."
+                    ).replace(
+                      "{status}",
+                      realized
+                        ? t("impactsEditor.fteFromFinancial.done", "réalisé")
+                        : t("impactsEditor.fteFromFinancial.planned", "prévu")
+                    )}
+                  </td>
                 </tr>
               );
             })}

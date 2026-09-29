@@ -97,7 +97,7 @@ export function SavingsWaterfallChart({
       case "target":
         return t("chart.waterfall.step.target", "= Cible réactualisée");
       case "opexRec":
-        return t("chart.waterfall.step.opexRec", "− OPEX récurrent");
+        return t("chart.waterfall.step.opexRec", "− OPEX récurrent annuel");
       case "net":
         return t("chart.waterfall.step.net", "= Net annualisé");
       case "gap":
@@ -317,7 +317,7 @@ export function SavingsWaterfallChart({
             className="inline-block h-2.5 w-2.5 rounded-sm"
             style={{ background: WATERFALL_COLORS.down }}
           />
-          {t("chart.waterfall.step.opexRec", "OPEX récurrent")}
+          {t("chart.waterfall.step.opexRec", "− OPEX récurrent annuel")}
         </span>
       </div>
       <HoverDetailsHint enabled={clickable}>

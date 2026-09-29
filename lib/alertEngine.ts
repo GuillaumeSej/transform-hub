@@ -3,6 +3,8 @@ import {
   underperformers,
   dependencyAlerts,
   displayedReforecastNet,
+  displayedReforecastSnapshot,
+  leverActionWeighting,
   leverImpactsOf,
 } from "@/lib/engine";
 import { formatAmountM } from "@/lib/format";
@@ -56,7 +58,11 @@ export function generateAlerts(
   const underperf = underperformers(data);
   for (const u of underperf) {
     const totalActions = u.actions?.length ?? 0;
-    const lateRatio = totalActions > 0 ? u.lateActionsCount / totalActions : 0;
+    // Part (0-1) des actions en retard, pondérée par `weightPct` si les poids somment à 100
+    // (même règle que l'avancement — `leverActionWeighting`), sinon simple comptage.
+    const { weights } = leverActionWeighting(u);
+    const lateRatio =
+      totalActions > 0 ? u.lateActions.reduce((s, a) => s + (weights[a.id] ?? 0), 0) / 100 : 0;
     // Impact = montant RÉEL des actions en retard (somme des ActionImpact.amount de type "saving"
     // des actions en retard), pas netSavings du levier × ratio d'actions en retard — c'est le gain
     // potentiellement perdu si ces actions en retard ne se réalisent pas, pas une estimation
@@ -123,8 +129,10 @@ export function generateAlerts(
   // ── 3. Dépassement de coûts (dès le 1er €) — Plan Performance uniquement ───
   for (const l of financialAlertsEnabled ? active : []) {
     if (!l.reforecast || !l.lockedPlan) continue;
+    // Réactualisé EFFECTIF (recalculé depuis les impacts, règle C3) — même source que le KPI coûts.
+    // Le snapshot `l.reforecast` stocké peut être périmé (applyPlanLock l'initialise au plan figé).
     const planCost = implCosts(l.lockedPlan);
-    const refCost = implCosts(l.reforecast);
+    const refCost = implCosts(displayedReforecastSnapshot(l));
     if (refCost > planCost) {
       const delta = refCost - planCost;
       auto.push({
@@ -158,25 +166,27 @@ export function generateAlerts(
   // ── 3bis. Dépassement OPEX récurrent (dès le 1er €) — Plan Performance uniquement ─
   for (const l of financialAlertsEnabled ? active : []) {
     if (!l.reforecast || !l.lockedPlan) continue;
-    if (l.reforecast.opexRec > l.lockedPlan.opexRec) {
-      const delta = l.reforecast.opexRec - l.lockedPlan.opexRec;
+    // Réactualisé EFFECTIF (recalculé depuis les impacts, règle C3) — voir § 3.
+    const refOpexRec = displayedReforecastSnapshot(l).opexRec;
+    if (refOpexRec > l.lockedPlan.opexRec) {
+      const delta = refOpexRec - l.lockedPlan.opexRec;
       auto.push({
         id: `AUTO-OPEXREC-${l.id}`,
         type: "red",
         ts: l.lastUpdate,
         scope: l.id,
         title: `Dépassement OPEX récurrent : ${l.name}`,
-        desc: `Reforecast ${fmtImpact(l.reforecast.opexRec)} vs plan ${fmtImpact(l.lockedPlan.opexRec)} (+${fmtImpact(delta)}).`,
+        desc: `Reforecast ${fmtImpact(refOpexRec)} vs plan ${fmtImpact(l.lockedPlan.opexRec)} (+${fmtImpact(delta)}).`,
         i18n: {
           titleKey: "alerts.auto.opexRecOverrun.title",
           descKey: "alerts.auto.overrun.desc",
           vars: {
             name: l.name,
-            reforecast: fmtImpact(l.reforecast.opexRec),
+            reforecast: fmtImpact(refOpexRec),
             plan: fmtImpact(l.lockedPlan.opexRec),
             delta: fmtImpact(delta),
           },
-          amounts: { reforecast: l.reforecast.opexRec, plan: l.lockedPlan.opexRec, delta },
+          amounts: { reforecast: refOpexRec, plan: l.lockedPlan.opexRec, delta },
         },
         actorRole: "finance",
         impactEur: Math.round(-delta * 1000000),
