@@ -1,5 +1,6 @@
 "use client";
 
+import { pendingSubmissionMessage } from "@/lib/approvalNotices";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { subscribeCompanies, subscribePrograms } from "@/lib/firestore/admin";
@@ -553,7 +554,26 @@ export function LeverDetailClientPerformance() {
                           showToast(
                             // CTO : sommet de la hiérarchie, la porte est franchie directement.
                             updated.approval
-                              ? t("leverDetail.approval.requested", "Demande de validation envoyée")
+                              ? pendingSubmissionMessage(
+                                  (updated.approval.chain ?? [])
+                                    .slice(updated.approval.stepIndex ?? 0)
+                                    .map((step) =>
+                                      step.usernames.map(
+                                        (u) => companyUsers.find((x) => x.username === u)?.name ?? u
+                                      )
+                                    ),
+                                  {
+                                    withChain: t(
+                                      "approvalFeedback.pendingWithChain",
+                                      "Demande envoyée — en attente de validation par {chain}"
+                                    ),
+                                    noChain: t(
+                                      "approvalFeedback.pending",
+                                      "Demande envoyée — en attente de validation"
+                                    ),
+                                    joiner: t("strategicFiche.chain.then", "puis"),
+                                  }
+                                )
                               : t("leverDetail.approval.approved", "Demande approuvée"),
                             leverName,
                             "success"

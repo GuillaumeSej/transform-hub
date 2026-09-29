@@ -171,7 +171,10 @@ export function LeverDeletionDialog({
             onClick={() =>
               run(
                 () => data.requestLeverDeletion(lever.id, reason, users),
-                t("leverDeletion.requested", "Demande de suppression envoyée")
+                t(
+                  "approvalFeedback.deletionRequested",
+                  "Demande de suppression envoyée — en attente de confirmation par {role}"
+                ).replace("{role}", approverLabel)
               )
             }
           >

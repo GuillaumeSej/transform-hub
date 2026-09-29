@@ -41,6 +41,9 @@ import { canAccessPerformanceProgram } from "@/lib/roleProfiles";
 import { useStrategicApprovals } from "@/lib/hooks/useStrategicApprovals";
 import { StrategicApprovalsProvider } from "@/lib/hooks/useStrategicApprovalsContext";
 import { APPROVAL_ALERT_ROUTE } from "@/lib/strategicApprovals";
+import { decisionNoticesFor } from "@/lib/approvalNotices";
+import { approvalTargetHref } from "@/lib/strategicLinks";
+import { KIND_FALLBACK, kindLabelKey } from "@/lib/strategicApprovalView";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Alert } from "@/types";
 import { formatCurrency } from "@/lib/format";
@@ -285,6 +288,48 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
     }
 
+    // 5. Décisions sur MES demandes (validée / refusée par quelqu'un d'autre, 7 derniers jours) —
+    //    la personne qui a saisi est prévenue ; lien vers l'objet concerné.
+    for (const notice of decisionNoticesFor(user?.username, strategicApprovals.approvals, today)) {
+      const kindLabel = t(kindLabelKey(notice.kind), KIND_FALLBACK[notice.kind]);
+      alerts.push({
+        id: notice.id,
+        type: notice.status === "approved" ? "green" : "red",
+        ts: notice.decidedAt.slice(0, 10),
+        createdAt: notice.decidedAt.slice(0, 10),
+        scope: notice.targetId,
+        scopeLabel: notice.targetName,
+        title: (notice.status === "approved"
+          ? t("approvalFeedback.decisionApproved", "Demande validée · {kind}")
+          : t("approvalFeedback.decisionRejected", "Demande refusée · {kind}")
+        ).replace("{kind}", kindLabel),
+        desc:
+          t("approvalFeedback.decisionDesc", "« {target} » — décision de {name}.")
+            .replace("{target}", notice.targetName)
+            .replace("{name}", notice.decidedByName) +
+          (notice.comment
+            ? " " +
+              t("approvalFeedback.decisionComment", "Commentaire : {comment}").replace(
+                "{comment}",
+                notice.comment
+              )
+            : ""),
+        actorRole: "",
+        resolved: false,
+        source: "auto",
+        companyId,
+      });
+      routes[notice.id] = reachable(
+        approvalTargetHref(notice, {
+          axes: strategic.axes,
+          chantiers: strategic.chantiers,
+          chantierActions: strategic.chantierActions,
+          indicators: strategic.indicators,
+        }) ?? undefined,
+        APPROVAL_ALERT_ROUTE
+      );
+    }
+
     for (const alert of strategicApprovals.alerts) {
       alerts.push(alert);
       routes[alert.id] = reachable(APPROVAL_ALERT_ROUTE);
@@ -293,6 +338,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return { alerts, routes };
   }, [
     strategicApprovals.alerts,
+    strategicApprovals.approvals,
     isStrategic,
     activeProgram,
     strategic.chantiers,
@@ -301,6 +347,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     strategic.measurements,
     strategic.fullScope,
     strategic.staffing,
+    strategic.axes,
     staffingRecipient,
     staffingFteByDept,
     staffingThresholds,

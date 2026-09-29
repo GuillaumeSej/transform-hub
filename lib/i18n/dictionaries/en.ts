@@ -3549,7 +3549,7 @@ const en: Record<string, string> = {
   "strategicFiche.chain.then": "then",
   "strategicFiche.chain.preview": "Will be approved by {chain}",
   "strategicFiche.toast.applied": "Applied",
-  "strategicFiche.toast.pending": "Sent for approval: {chain}",
+  "strategicFiche.toast.pending": "Request sent — awaiting approval by {chain}",
   "strategicFiche.toast.partial": "Partly applied — the rest is sent for approval: {chain}",
   "strategicFiche.toast.milestoneApplied": "Milestone move applied",
   "strategicFiche.contributors.label": "Contributors",
@@ -3612,6 +3612,13 @@ const en: Record<string, string> = {
   "staffingAlert.descNoBase":
     "{mobilised} assigned while the team has no availability in the FTE base, over {period}",
   "staffingAlert.bannerTitle": "Over-staffed teams (current and upcoming months)",
+  "approvalFeedback.pending": "Request sent — awaiting approval",
+  "approvalFeedback.pendingWithChain": "Request sent — awaiting approval by {chain}",
+  "approvalFeedback.deletionRequested": "Deletion request sent — awaiting confirmation by {role}",
+  "approvalFeedback.decisionApproved": "Request approved · {kind}",
+  "approvalFeedback.decisionRejected": "Request rejected · {kind}",
+  "approvalFeedback.decisionDesc": "“{target}” — decided by {name}.",
+  "approvalFeedback.decisionComment": "Comment: {comment}",
 };
 
 export default en;

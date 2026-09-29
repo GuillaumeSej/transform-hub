@@ -3629,7 +3629,7 @@ const de: Record<string, string> = {
   "strategicFiche.chain.then": "dann",
   "strategicFiche.chain.preview": "Wird freigegeben von {chain}",
   "strategicFiche.toast.applied": "Übernommen",
-  "strategicFiche.toast.pending": "Zur Freigabe gesendet: {chain}",
+  "strategicFiche.toast.pending": "Anfrage gesendet — wartet auf Freigabe durch {chain}",
   "strategicFiche.toast.partial":
     "Teilweise übernommen — der Rest wurde zur Freigabe gesendet: {chain}",
   "strategicFiche.toast.milestoneApplied": "Meilensteinübergang übernommen",
@@ -3695,6 +3695,14 @@ const de: Record<string, string> = {
   "staffingAlert.descNoBase":
     "{mobilised} eingesetzt, obwohl das Team in der VZÄ-Basis keine Verfügbarkeit hat, im Zeitraum {period}",
   "staffingAlert.bannerTitle": "Überbesetzte Teams (laufende und kommende Monate)",
+  "approvalFeedback.pending": "Anfrage gesendet — wartet auf Freigabe",
+  "approvalFeedback.pendingWithChain": "Anfrage gesendet — wartet auf Freigabe durch {chain}",
+  "approvalFeedback.deletionRequested":
+    "Löschanfrage gesendet — wartet auf Bestätigung durch {role}",
+  "approvalFeedback.decisionApproved": "Anfrage freigegeben · {kind}",
+  "approvalFeedback.decisionRejected": "Anfrage abgelehnt · {kind}",
+  "approvalFeedback.decisionDesc": "„{target}“ — Entscheidung von {name}.",
+  "approvalFeedback.decisionComment": "Kommentar: {comment}",
 };
 
 export default de;

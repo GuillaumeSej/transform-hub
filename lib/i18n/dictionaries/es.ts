@@ -3616,7 +3616,7 @@ const es: Record<string, string> = {
   "strategicFiche.chain.then": "luego",
   "strategicFiche.chain.preview": "Será validado por {chain}",
   "strategicFiche.toast.applied": "Aplicado",
-  "strategicFiche.toast.pending": "Enviado a validación: {chain}",
+  "strategicFiche.toast.pending": "Solicitud enviada — pendiente de validación por {chain}",
   "strategicFiche.toast.partial": "Aplicado en parte — el resto se envía a validación: {chain}",
   "strategicFiche.toast.milestoneApplied": "Paso de hito aplicado",
   "strategicFiche.contributors.label": "Colaboradores",
@@ -3680,6 +3680,14 @@ const es: Record<string, string> = {
   "staffingAlert.descNoBase":
     "{mobilised} asignados aunque el equipo no tiene disponibilidad en la base ETC, en {period}",
   "staffingAlert.bannerTitle": "Equipos sobreasignados (meses en curso y próximos)",
+  "approvalFeedback.pending": "Solicitud enviada — pendiente de validación",
+  "approvalFeedback.pendingWithChain": "Solicitud enviada — pendiente de validación por {chain}",
+  "approvalFeedback.deletionRequested":
+    "Solicitud de eliminación enviada — pendiente de confirmación por {role}",
+  "approvalFeedback.decisionApproved": "Solicitud validada · {kind}",
+  "approvalFeedback.decisionRejected": "Solicitud rechazada · {kind}",
+  "approvalFeedback.decisionDesc": "«{target}» — decisión de {name}.",
+  "approvalFeedback.decisionComment": "Comentario: {comment}",
 };
 
 export default es;
