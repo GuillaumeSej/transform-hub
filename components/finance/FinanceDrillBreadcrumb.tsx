@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, MousePointerClick } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { drillLevelInfo, type DrillStep } from "@/lib/financeDrilldown";
 
@@ -12,9 +12,8 @@ import { drillLevelInfo, type DrillStep } from "@/lib/financeDrilldown";
  *    "Tous › Procurement Excellence › …" (chaque miette ramène à son niveau) ;
  *  - ligne 2 : repère "Niveau 2/4 : Agrégat" + les niveaux de la hiérarchie (niveau courant en
  *    pastille sombre, niveaux déjà parcourus en gris foncé, niveaux restants en gris clair) ;
- *  - ligne 3 : consigne de clic — "Cliquez pour détailler par X" tant qu'il reste un niveau,
- *    "Dernier niveau : cliquez pour ouvrir le détail" au niveau feuille (seul niveau qui ouvre la
- *    modale de détail).
+ *  La consigne de clic n'est plus affichée ici : l'aperçu au survol de chaque part l'indique
+ *  (« Cliquer pour détailler → » / « Cliquer pour ouvrir le détail → »).
  * La logique de chemin (troncature, position) vit dans lib/financeDrilldown.ts (pure, testée).
  */
 export function FinanceDrillBreadcrumb({
@@ -32,61 +31,52 @@ export function FinanceDrillBreadcrumb({
   const { t } = useTranslation();
   if (levels.length === 0) return null;
   const info = drillLevelInfo(path.length, levels.length);
-  const currentLevel = levels[info.levelNumber - 1];
-  const nextLevel = levels[info.levelNumber];
-
-  const levelText = t("finance.drill.levelOf", "Niveau {n}/{total} : {level}")
-    .replace("{n}", String(info.levelNumber))
-    .replace("{total}", String(info.totalLevels))
-    .replace("{level}", currentLevel ?? "");
-  const hint = info.isLastLevel
-    ? t("finance.drill.hintLeaf", "Dernier niveau : cliquez sur une part pour ouvrir le détail")
-    : t("finance.drill.hintNext", "Cliquez sur une part pour détailler par {level}").replace(
-        "{level}",
-        nextLevel ?? ""
-      ) +
-      " · " +
-      t("finance.drill.remaining", "{n} niveau(x) restant(s)").replace(
-        "{n}",
-        String(info.remaining)
-      );
 
   return (
     <div className="mb-3 space-y-1.5">
-      <nav
-        aria-label={t("finance.drill.breadcrumbAria", "Chemin de détail")}
-        className="flex flex-wrap items-center gap-1 text-[11.5px]"
-      >
-        {path.length > 0 && (
-          <button
-            type="button"
-            onClick={() => onNavigate(path.length - 2)}
-            className="mr-1 inline-flex items-center gap-0.5 rounded-md border border-border px-1.5 py-0.5 font-semibold text-secondary transition hover:bg-neutral-50 hover:text-primary"
-          >
-            <ChevronLeft size={13} />
-            {t("finance.drill.back", "Retour")}
-          </button>
-        )}
-        <Crumb
-          label={t("finance.drill.all", "Tous")}
-          current={path.length === 0}
-          onClick={() => onNavigate(-1)}
-        />
-        {path.map((step, index) => (
-          <span key={`${step.id}-${index}`} className="flex min-w-0 items-center gap-1">
-            <ChevronRight size={12} className="shrink-0 text-tertiary" />
-            <Crumb
-              label={step.label}
-              current={index === path.length - 1}
-              onClick={() => onNavigate(index)}
-            />
-          </span>
-        ))}
-      </nav>
+      {/* Chemin (retour + miettes) : seulement une fois qu'on a détaillé une part (retour PO :
+          moins de texte au repos — la consigne de clic est portée par l'aperçu au survol). */}
+      {path.length > 0 && (
+        <nav
+          aria-label={t("finance.drill.breadcrumbAria", "Chemin de détail")}
+          className="flex flex-wrap items-center gap-1 text-[11.5px]"
+        >
+          {path.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onNavigate(path.length - 2)}
+              className="mr-1 inline-flex items-center gap-0.5 rounded-md border border-border px-1.5 py-0.5 font-semibold text-secondary transition hover:bg-neutral-50 hover:text-primary"
+            >
+              <ChevronLeft size={13} />
+              {t("finance.drill.back", "Retour")}
+            </button>
+          )}
+          <Crumb
+            label={t("finance.drill.all", "Tous")}
+            current={path.length === 0}
+            onClick={() => onNavigate(-1)}
+          />
+          {path.map((step, index) => (
+            <span key={`${step.id}-${index}`} className="flex min-w-0 items-center gap-1">
+              <ChevronRight size={12} className="shrink-0 text-tertiary" />
+              <Crumb
+                label={step.label}
+                current={index === path.length - 1}
+                onClick={() => onNavigate(index)}
+              />
+            </span>
+          ))}
+        </nav>
+      )}
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-[11px] font-semibold text-primary">{levelText}</span>
-        <span className="flex flex-wrap items-center gap-1" aria-hidden>
+        <span
+          className="flex flex-wrap items-center gap-1"
+          aria-label={t("finance.drill.levelOf", "Niveau {n}/{total} : {level}")
+            .replace("{n}", String(info.levelNumber))
+            .replace("{total}", String(info.totalLevels))
+            .replace("{level}", levels[info.levelNumber - 1] ?? "")}
+        >
           {levels.map((label, index) => {
             const isCurrent = index === info.levelNumber - 1;
             const isPast = index < info.levelNumber - 1;
@@ -96,10 +86,10 @@ export function FinanceDrillBreadcrumb({
                 <span
                   className={
                     isCurrent
-                      ? "rounded-full bg-black px-2 py-0.5 text-[10.5px] font-semibold text-white"
+                      ? "bg-black px-2 py-0.5 text-[10.5px] font-semibold text-white"
                       : isPast
-                        ? "rounded-full px-2 py-0.5 text-[10.5px] font-medium text-secondary"
-                        : "rounded-full px-2 py-0.5 text-[10.5px] font-medium text-tertiary"
+                        ? "px-2 py-0.5 text-[10.5px] font-medium text-secondary"
+                        : "px-2 py-0.5 text-[10.5px] font-medium text-tertiary"
                   }
                 >
                   {label}
@@ -109,11 +99,6 @@ export function FinanceDrillBreadcrumb({
           })}
         </span>
       </div>
-
-      <p className="flex items-center gap-1 text-[10.5px] text-tertiary">
-        <MousePointerClick size={12} className="shrink-0" />
-        {hint}
-      </p>
     </div>
   );
 }

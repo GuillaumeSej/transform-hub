@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Info } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
+import { Tooltip } from "@/components/shared/Tooltip";
 import {
   BudgetDonutChart,
   type BudgetDonutPreviewSlice,
@@ -252,23 +254,30 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
   return (
     <Card>
       <CardHeader
-        title={t(
-          "finance.chart.engagedTitleOneOff",
-          "Coûts ponctuels (CAPEX + OPEX ponctuel) : engagés vs à venir"
-        )}
+        title={
+          <>
+            {t(
+              "finance.chart.engagedTitleOneOff",
+              "Coûts ponctuels (CAPEX + OPEX ponctuel) : engagés vs à venir"
+            )}
+            {/* Périmètre (audit fix #2 : OPEX récurrent exclu, même total que le KPI du dashboard)
+                en infobulle plutôt qu'en paragraphe sous le titre (retour PO : trop de texte). */}
+            <Tooltip
+              position="bottom"
+              text={t(
+                "finance.chart.engagedScopeNote",
+                "Total {total} (engagé {engaged} · à venir {upcoming}) — OPEX récurrent exclu, même périmètre que le KPI « CAPEX & coûts ponctuels » du dashboard."
+              )
+                .replace("{total}", fmt(split.total))
+                .replace("{engaged}", fmt(split.engaged))
+                .replace("{upcoming}", fmt(split.upcoming))}
+            >
+              <Info size={13} className="shrink-0 text-tertiary" />
+            </Tooltip>
+          </>
+        }
       />
       <CardBody>
-        {/* Périmètre explicite (audit fix #2) : OPEX récurrent EXCLU — même total que le
-            « Réactualisé » du KPI « CAPEX & coûts ponctuels » du dashboard, et même « engagé ». */}
-        <p className="mb-2 text-[11.5px] text-secondary">
-          {t(
-            "finance.chart.engagedScopeNote",
-            "Total {total} (engagé {engaged} · à venir {upcoming}) — OPEX récurrent exclu, même périmètre que le KPI « CAPEX & coûts ponctuels » du dashboard."
-          )
-            .replace("{total}", fmt(split.total))
-            .replace("{engaged}", fmt(split.engaged))
-            .replace("{upcoming}", fmt(split.upcoming))}
-        </p>
         {split.total === 0 ? (
           <EmptyState />
         ) : (
@@ -448,40 +457,54 @@ export function CostByHierarchyChart({
 
   const info = drillLevelInfo(path.length, levels.length);
 
+  // Note de périmètre (répartition ponctuel / récurrent, rapprochement avec la cascade du
+  // dashboard, coûts non rattachés) : en infobulle à côté du titre (retour PO : trop de texte).
+  const scopeNote = [
+    t(
+      "finance.chart.hierarchyScopeNote",
+      "Total {total} = coûts ponctuels (CAPEX + OPEX ponctuel) {oneOff} + OPEX récurrent annuel (lignes de coût) {rec}. Chaque coût est affecté au compte P&L de son centre de coût (ligne de coût, sinon levier) : un compte de produits (ex. Revenue) peut donc porter les coûts des leviers qui l'impactent."
+    )
+      .replace("{total}", fmt(round2(allCostsTotal)))
+      .replace("{oneOff}", fmt(round2(natureTotals.capex + natureTotals.oneoff)))
+      .replace("{rec}", fmt(natureTotals.opexRec)),
+    (opexRecRecon.fteHires > 0.005 || Math.abs(opexRecRecon.other) > 0.005) &&
+      ` ${t(
+        "finance.chart.hierarchyOpexRecReconNote",
+        "L'OPEX récurrent annuel de la cascade du dashboard ({dashboard}) inclut en plus les salaires chargés des recrutements ETP ({fte}){other}, qui ne sont pas des lignes de coût."
+      )
+        .replace("{dashboard}", fmt(opexRecRecon.dashboard))
+        .replace("{fte}", fmt(opexRecRecon.fteHires))
+        .replace(
+          "{other}",
+          Math.abs(opexRecRecon.other) > 0.005
+            ? t(
+                "finance.chart.hierarchyOpexRecReconOther",
+                " et {amount} saisis au niveau du levier sans ligne d'impact"
+              ).replace("{amount}", fmt(opexRecRecon.other))
+            : ""
+        )}`,
+    unattached > 0.005 &&
+      ` ${t(
+        "finance.chart.hierarchyUnattachedNote",
+        "Dont {amount} sans rattachement à l'arborescence (absent du graphique)."
+      ).replace("{amount}", fmt(unattached))}`,
+  ]
+    .filter(Boolean)
+    .join("");
+
   return (
     <Card>
-      <CardHeader title={title} />
+      <CardHeader
+        title={
+          <>
+            {title}
+            <Tooltip position="bottom" text={scopeNote}>
+              <Info size={13} className="shrink-0 text-tertiary" />
+            </Tooltip>
+          </>
+        }
+      />
       <CardBody>
-        <p className="mb-2 text-[11.5px] text-secondary">
-          {t(
-            "finance.chart.hierarchyScopeNote",
-            "Total {total} = coûts ponctuels (CAPEX + OPEX ponctuel) {oneOff} + OPEX récurrent annuel (lignes de coût) {rec}. Chaque coût est affecté au compte P&L de son centre de coût (ligne de coût, sinon levier) : un compte de produits (ex. Revenue) peut donc porter les coûts des leviers qui l'impactent."
-          )
-            .replace("{total}", fmt(round2(allCostsTotal)))
-            .replace("{oneOff}", fmt(round2(natureTotals.capex + natureTotals.oneoff)))
-            .replace("{rec}", fmt(natureTotals.opexRec))}
-          {(opexRecRecon.fteHires > 0.005 || Math.abs(opexRecRecon.other) > 0.005) &&
-            ` ${t(
-              "finance.chart.hierarchyOpexRecReconNote",
-              "L'OPEX récurrent annuel de la cascade du dashboard ({dashboard}) inclut en plus les salaires chargés des recrutements ETP ({fte}){other}, qui ne sont pas des lignes de coût."
-            )
-              .replace("{dashboard}", fmt(opexRecRecon.dashboard))
-              .replace("{fte}", fmt(opexRecRecon.fteHires))
-              .replace(
-                "{other}",
-                Math.abs(opexRecRecon.other) > 0.005
-                  ? t(
-                      "finance.chart.hierarchyOpexRecReconOther",
-                      " et {amount} saisis au niveau du levier sans ligne d'impact"
-                    ).replace("{amount}", fmt(opexRecRecon.other))
-                  : ""
-              )}`}
-          {unattached > 0.005 &&
-            ` ${t(
-              "finance.chart.hierarchyUnattachedNote",
-              "Dont {amount} sans rattachement à l'arborescence (absent du graphique)."
-            ).replace("{amount}", fmt(unattached))}`}
-        </p>
         <FinanceDrillBreadcrumb
           levels={levels.map((l) => l.label)}
           path={path}
