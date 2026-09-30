@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { useElementWidth } from "@/components/shared/charts/useElementWidth";
 import {
   Bar,
   BarChart,
@@ -305,16 +306,11 @@ export function WorkstreamBarChart({
 }) {
   const { t } = useTranslation();
   // Largeur de barre en px (Recharts 3 ignore barSize en % avec 2 axes X) : ~80 % de la bande.
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [wrapW, setWrapW] = useState(0);
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setWrapW(el.clientWidth));
-    ro.observe(el);
-    setWrapW(el.clientWidth);
-    return () => ro.disconnect();
-  }, []);
+  // Mesure via callback ref : le conteneur n'existe pas pendant l'état vide (données en cours de
+  // chargement) — avec un useRef + useEffect([]), la largeur restait à 0 et les barres tombaient à
+  // leur minimum (graphique « tout fin » jusqu'au rafraîchissement).
+  const [wrapRef, measuredW] = useElementWidth();
+  const wrapW = measuredW ?? 0;
   const resolvedLabelTarget = labelTarget ?? t("chart.bar.target", "Cible réactualisée");
   const resolvedLabelRealized = labelRealized ?? t("chart.bar.realized", "Réalisé");
   const resolvedLabelPlanned = labelPlanned ?? t("chart.bar.planned", "Planifié initial");

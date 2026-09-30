@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useState, type ReactNode } from "react";
 import { Cell, Pie, PieChart, Sector, Tooltip, type PieProps } from "recharts";
 import { useLatestCallback, useStableValue } from "@/lib/hooks/useStableChartData";
 import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
@@ -233,10 +233,12 @@ function donutGeometry(size: number, withConsumedRing: boolean) {
  *  provisoire puis un second à la bonne taille relancerait l'animation d'entrée du `Pie`).
  *  Environnement sans mise en page (jsdom) : largeur 0 ⇒ repli sur `fallback`. */
 function useMeasuredWidth(fallback: number) {
-  const ref = useRef<HTMLDivElement>(null);
+  // Callback ref (élément en état) : la mesure repart si le conteneur est monté après le premier
+  // rendu (voir `useElementWidth` — bug du graphique affiché tout fin à l'ouverture).
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const ref = useCallback((node: HTMLDivElement | null) => setEl(node), []);
   const [width, setWidth] = useState<number | null>(null);
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
     const measure = () => {
       const w = Math.floor(el.clientWidth);
@@ -247,7 +249,7 @@ function useMeasuredWidth(fallback: number) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [fallback]);
+  }, [el, fallback]);
   return [ref, width] as const;
 }
 
