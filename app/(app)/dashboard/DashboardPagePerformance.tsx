@@ -70,7 +70,11 @@ import { generateAlerts } from "@/lib/alertEngine";
 import { riskLevelLabel } from "@/lib/leverRiskText";
 import { ArrowDown, ArrowRight, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/shared/Avatar";
-import { SCurveChart, type SCurvePoint } from "@/components/shared/charts/SCurveChart";
+import {
+  SCurveChart,
+  type SCurveGapContributor,
+  type SCurvePoint,
+} from "@/components/shared/charts/SCurveChart";
 import { SCurveDetail } from "@/components/shared/charts/SCurveDetail";
 import { gapEntriesAt } from "@/lib/scurveDetail";
 import { currentPointIndex } from "@/components/shared/charts/SCurveChart";
@@ -645,6 +649,20 @@ export function DashboardPagePerformance() {
     const month = (clickedPoint?.actual != null ? clickedPoint : cur)?.month ?? points[0]?.month;
     if (month) setScurveDetail({ points, granularity, month });
   };
+  // Aperçu au survol de la trajectoire : principaux leviers de l'écart d'une période, calculés à la
+  // demande (mêmes données que le détail au clic, `gapEntriesAt`) et mis en cache par période.
+  const trajGapContributors = useMemo(() => {
+    const cache = new Map<string, SCurveGapContributor[]>();
+    return (month: string) => {
+      const hit = cache.get(month);
+      if (hit) return hit;
+      const list = gapEntriesAt(filteredData, trajGranularity, month)
+        .map((e) => ({ id: e.leverId, name: e.name, value: e.value }))
+        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+      cache.set(month, list);
+      return list;
+    };
+  }, [filteredData, trajGranularity]);
   const scurveGapEntries = useMemo(
     () =>
       scurveDetail ? gapEntriesAt(filteredData, scurveDetail.granularity, scurveDetail.month) : [],
@@ -1453,6 +1471,7 @@ export function DashboardPagePerformance() {
                 data={trajSCurve}
                 height={360}
                 onPointClick={(month) => openScurveDetail(trajSCurve, trajGranularity, month)}
+                gapContributors={trajGapContributors}
                 labelActual={t("chart.scurve.actual")}
                 labelPlanned={t("chart.scurve.planned")}
                 labelReforecast={t("chart.scurve.reforecast")}
