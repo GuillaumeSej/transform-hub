@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Layers, TriangleAlert } from "lucide-react";
 import {
+  axisDisplayColor,
   axisSponsorLabel,
   chantierDeclaredProgress,
   chantierShadesByAxis,
@@ -29,7 +30,6 @@ import {
   TimelineMarker,
   TimelineProgressGauge,
   TimelineScaleToggle,
-  hexToRgb,
   withAlpha,
   type TimelineScale,
 } from "@/components/strategic/TimelineBars";
@@ -109,12 +109,6 @@ export type ProgramRoadmapLabels = {
 // `w-80` (au lieu de `w-72`) : place pour l'indicateur d'avancement compact
 // (`TimelineProgressGauge`) en fin de colonne d'identité, sans rogner le nom des projets.
 const ROW_LABEL_WIDTH = "w-80";
-
-/** Couleur de repli quand l'axe n'a pas de couleur choisie — même taupe BearingPoint que
- *  `ChantierGantt.tsx` (`FALLBACK_COLOR`), dupliqué ici plutôt qu'exporté depuis ce fichier (pas de
- *  point de partage naturel pour une seule constante, et `ChantierGantt.tsx` n'est pas dans le
- *  périmètre modifiable de ce lot). */
-const FALLBACK_COLOR = "#a99e9a";
 
 // Code couleur des losanges de livrable : module partagé `deliverableMarker.tsx` (Fait plein encre,
 // À faire creux, En retard plein rouge corail) — plus de copie locale.
@@ -328,10 +322,7 @@ export function ProgramRoadmap({
             </div>
 
             {grouped.map((axisGroup) => {
-              const axisColor =
-                axisGroup.axis.color && hexToRgb(axisGroup.axis.color)
-                  ? axisGroup.axis.color
-                  : FALLBACK_COLOR;
+              const axisColor = axisDisplayColor(axisGroup.axis, axes);
 
               return (
                 <div

@@ -112,7 +112,7 @@ export function readableTextColor(color: string): string {
   const rgb = hexToRgb(color);
   if (!rgb) return "#ffffff";
   const luminance = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
-  return luminance > 0.6 ? "#1f1512" : "#ffffff";
+  return luminance > 0.6 ? "#1A1A1A" : "#ffffff";
 }
 
 // ─── Couloirs (évite le chevauchement de deux items sur une même ligne) ──────────────────────────

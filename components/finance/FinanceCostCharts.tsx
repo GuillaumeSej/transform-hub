@@ -213,7 +213,7 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
                 type="monotone"
                 dataKey="netPeriodResult"
                 name={netLabel}
-                stroke="#a3a3a3"
+                stroke="#969696"
                 strokeWidth={1}
                 strokeDasharray="4 3"
                 dot={(props: {

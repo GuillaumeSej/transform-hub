@@ -3,6 +3,7 @@
 import { TriangleAlert } from "lucide-react";
 import { MilestoneTransitionBadge } from "@/components/strategic/MilestoneTransitionBadge";
 import {
+  AXIS_FALLBACK_COLOR,
   currentMilestoneFillPct,
   displayMilestoneId,
   isProjetLate,
@@ -50,7 +51,8 @@ export type ProjetBoardGroup = {
   key: string;
   /** Nom de l'axe — en-tête de section. */
   label: string;
-  /** `StrategicAxis.color` — même convention d'accent que l'ancien widget "Répartition par axe". */
+  /** Couleur d'affichage de l'axe (`axisDisplayColor`, lib/axisLogic.ts) — même convention d'accent
+   *  que l'ancien widget "Répartition par axe". */
   color?: string;
   /** TOUS les leviers de l'axe (avec ou sans KPI rattaché, round 18), groupés par jalon courant
    *  (E0…E4). */
@@ -244,7 +246,7 @@ export function ProjetMilestoneBoard({
             <span
               aria-hidden
               className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: group.color ?? "var(--bp-warm-taupe)" }}
+              style={{ backgroundColor: group.color ?? AXIS_FALLBACK_COLOR }}
             />
             <span className="text-[12.5px] font-bold uppercase tracking-wide text-primary">
               {group.label}

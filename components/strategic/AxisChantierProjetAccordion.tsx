@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import {
+  axisDisplayColor,
   axisProgressPct,
   chantierDeclaredProgress,
   AXIS_FALLBACK_COLOR,
@@ -230,7 +231,7 @@ export function AxisChantierProjetAccordion({
         const axisChantiers = chantiers.filter((c) => c.axisIds.includes(axis.id));
         // Nuance de la couleur d'axe par chantier — même calcul que l'onglet "Avancement" et les
         // Gantt (`chantierShadesForAxis`, lib/axisLogic.ts) : un chantier a la même couleur partout.
-        const chantierShades = chantierShadesForAxis(axis.color, axisChantiers);
+        const chantierShades = chantierShadesForAxis(axisDisplayColor(axis, axes), axisChantiers);
         const axisOpen = expandedAxisIds.has(axis.id);
         return (
           <div key={axis.id} className="overflow-hidden rounded-lg border border-border bg-white">
@@ -245,7 +246,7 @@ export function AxisChantierProjetAccordion({
                 <span
                   aria-hidden
                   className="h-3 w-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
+                  style={{ backgroundColor: axisDisplayColor(axis, axes) }}
                 />
               }
               name={t("strategicAxes.axisNumberPrefix", "Axe {n} : {name}")

@@ -1080,7 +1080,7 @@ export default function HrDashboardPage() {
     "Chiffres absolus masqués : le filtre « {filters} » ne porte que sur les mouvements, pas sur la base ETP — les trajectoires affichent des variations."
   ).replace("{filters}", nonScopableFilterLabels.join(", "));
   const baselineNoteBlock = !absoluteAvailable ? (
-    <p className="mb-2 rounded-sm border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-secondary">
+    <p className="mb-2 rounded-sm border border-rag-amber bg-rag-amber-light px-2.5 py-1.5 text-[11px] text-secondary">
       {baselineNote}
     </p>
   ) : null;

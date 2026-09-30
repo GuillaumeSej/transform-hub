@@ -20,7 +20,12 @@ import {
   chantierShadeForAxis,
   chantierShadesByAxis,
   chantierShadesForAxis,
+  AXIS_COLOR_PALETTE,
   AXIS_FALLBACK_COLOR,
+  axisColorMap,
+  axisDisplayColor,
+  charterAxisColor,
+  withAxisDisplayColors,
   baselineMeasurement,
   computeIndicatorDelta,
   computeIndicatorStatus,
@@ -2098,16 +2103,95 @@ describe("chantierShadesForAxis / chantierShadesByAxis", () => {
 
   it("gives a multi-axis chantier a shade of each of its axes", () => {
     const axes = [
-      { id: "AX1", color: "#646464" },
-      { id: "AX2", color: "#8a2be2" },
+      { id: "AX1", color: "#806659" },
+      { id: "AX2", color: "#421799" },
     ] as unknown as StrategicAxis[];
     const shared = ch("CH1", "2026-01-01", ["AX1", "AX2"]);
     const only1 = ch("CH0", "2025-01-01", ["AX1"]);
     const byAxis = chantierShadesByAxis(axes, [shared, only1]);
-    expect(byAxis.get("AX1")?.get("CH0")).toBe("#646464");
-    expect(byAxis.get("AX1")?.get("CH1")).toBe(chantierShadeForAxis("#646464", 1));
-    expect(byAxis.get("AX2")?.get("CH1")).toBe("#8a2be2");
+    expect(byAxis.get("AX1")?.get("CH0")).toBe("#806659");
+    expect(byAxis.get("AX1")?.get("CH1")).toBe(chantierShadeForAxis("#806659", 1));
+    expect(byAxis.get("AX2")?.get("CH1")).toBe("#421799");
     expect(byAxis.get("AX2")?.has("CH0")).toBe(false);
+  });
+
+  it("derives shades from the resolved charter color of an off-charter axis", () => {
+    const axes = [{ id: "AX1", programId: "P1", color: "#FFD700" }] as unknown as StrategicAxis[];
+    const byAxis = chantierShadesByAxis(axes, [ch("CH0", "2025-01-01", ["AX1"])]);
+    expect(byAxis.get("AX1")?.get("CH0")?.toUpperCase()).toBe(axisDisplayColor(axes[0], axes));
+    expect(AXIS_COLOR_PALETTE).toContain(byAxis.get("AX1")?.get("CH0")?.toUpperCase());
+  });
+});
+
+// ─── Couleur d'affichage d'un axe (charte) ─────────────────────────────────────────────────────
+
+describe("axisDisplayColor / axisColorMap", () => {
+  const ax = (id: string, color: string | undefined, createdAt: string, programId = "P1") =>
+    ({ id, color, createdAt, programId }) as unknown as StrategicAxis;
+
+  it("passes a charter color through, canonicalized (case-insensitive, #rgb-safe)", () => {
+    expect(axisDisplayColor(ax("A", "#ff3c47", "2026-01-01"))).toBe("#FF3C47");
+    expect(axisDisplayColor(ax("A", "#421799", "2026-01-01"), [])).toBe("#421799");
+    expect(charterAxisColor("#320300")).toBe("#320300");
+    expect(charterAxisColor("#2F5D8C")).toBeNull();
+    expect(charterAxisColor("var(--bp-coral)")).toBeNull();
+    expect(charterAxisColor(undefined)).toBeNull();
+  });
+
+  it("maps off-charter / invalid / missing colors to distinct free charter colors", () => {
+    const axes = [
+      ax("A1", "#FF3C47", "2026-01-01"), // charte : conservée
+      ax("A2", "#E68900", "2026-01-02"), // orange
+      ax("A3", "#1565C0", "2026-01-03"), // bleu
+      ax("A4", undefined, "2026-01-04"),
+      ax("A5", "not-a-color", "2026-01-05"),
+    ];
+    const map = axisColorMap(axes);
+    expect(map.get("A1")).toBe("#FF3C47");
+    // Couleur charte libre la plus proche (orange → rose corail, bleu → violet) ; couleur absente
+    // ou invalide → première couleur libre, dans l'ordre canonique des axes.
+    expect(map.get("A2")).toBe("#FF797B");
+    expect(map.get("A3")).toBe("#421799");
+    expect(map.get("A4")).toBe("#320300");
+    expect(map.get("A5")).toBe("#806659");
+    expect(new Set(map.values()).size).toBe(axes.length);
+    for (const axis of axes) expect(axisDisplayColor(axis, axes)).toBe(map.get(axis.id));
+  });
+
+  it("is deterministic: independent of input order and of other programs' axes", () => {
+    const p1 = [ax("A1", "#FFD700", "2026-01-01"), ax("A2", "#2E7D32", "2026-02-01")];
+    const other = [ax("B1", "#320300", "2025-01-01", "P2")];
+    const forward = axisColorMap([...p1, ...other]);
+    const reversed = axisColorMap([...other, ...p1].reverse());
+    expect(forward).toEqual(reversed);
+    expect(forward.get("A1")).toBe("#FF797B"); // or → rose corail, la plus proche
+    expect(axisDisplayColor(p1[1], [...other, ...p1])).toBe(axisDisplayColor(p1[1], p1));
+    // Sans liste : repli stable par hash d'id, toujours dans la charte.
+    expect(axisDisplayColor(p1[0])).toBe(axisDisplayColor(p1[0]));
+    expect(AXIS_COLOR_PALETTE).toContain(axisDisplayColor(p1[0]));
+  });
+
+  it("cycles the palette when a program has more axes than charter colors", () => {
+    const axes = Array.from({ length: AXIS_COLOR_PALETTE.length + 2 }, (_, i) =>
+      ax(`A${i}`, "#123456", `2026-01-${String(i + 1).padStart(2, "0")}`)
+    );
+    const map = axisColorMap(axes);
+    for (const color of Array.from(map.values())) expect(AXIS_COLOR_PALETTE).toContain(color);
+    expect(new Set(map.values()).size).toBe(AXIS_COLOR_PALETTE.length);
+  });
+
+  it("withAxisDisplayColors rewrites only off-charter colors, keeping references otherwise", () => {
+    const ok = ax("A1", "#806659", "2026-01-01");
+    const off = ax("A2", "#FFD700", "2026-01-02");
+    const [r1, r2] = withAxisDisplayColors([ok, off]);
+    expect(r1).toBe(ok);
+    expect(r2).not.toBe(off);
+    expect(r2.color).toBe("#FF797B");
+    expect(off.color).toBe("#FFD700"); // pas de mutation
+  });
+
+  it("falls back to the neutral color when there is no axis", () => {
+    expect(axisDisplayColor(undefined)).toBe(AXIS_FALLBACK_COLOR);
   });
 });
 

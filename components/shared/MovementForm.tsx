@@ -659,7 +659,7 @@ export function MovementForm({
                   })
                 );
               }}
-              className="accent-[#0F172A]"
+              className="accent-[#1A1A1A]"
             />
             <span className="text-xs font-medium text-primary">
               {translate(

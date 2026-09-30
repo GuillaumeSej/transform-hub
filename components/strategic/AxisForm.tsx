@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { UserPicker } from "@/components/strategic/UserPicker";
+import { AXIS_COLOR_PALETTE, charterAxisColor } from "@/lib/axisLogic";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { AuthUser, MaturityStageConfig, StrategicAxis } from "@/types";
 
@@ -19,7 +20,9 @@ export type AxisFormValues = Pick<
   "name" | "description" | "owner" | "color" | "stage" | "confidentialityLevel"
 >;
 
-const COLOR_CHOICES = ["#320300", "#FF3C47", "#806659", "#B8A99A", "#4A7C59", "#2F5D8C"];
+/** Couleurs proposées = palette charte des axes, source unique partagée avec `axisDisplayColor`
+ *  (lib/axisLogic.ts) — un axe affiche donc toujours l'une de ces pastilles. */
+const COLOR_CHOICES: readonly string[] = AXIS_COLOR_PALETTE;
 
 export function AxisForm({
   users,
@@ -64,7 +67,10 @@ export function AxisForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [owner, setOwner] = useState<string | undefined>(initial?.owner);
-  const [color, setColor] = useState(initial?.color ?? COLOR_CHOICES[0]);
+  // Édition d'un axe : `initial.color` arrive déjà résolue en couleur charte (`useStrategicData`
+  // applique `axisDisplayColor` à la lecture), elle est donc présélectionnée même si la valeur
+  // stockée en base est une ancienne couleur hors charte. Repli défensif sur la 1re pastille.
+  const [color, setColor] = useState<string>(charterAxisColor(initial?.color) ?? COLOR_CHOICES[0]);
   const [stage, setStage] = useState(initial?.stage ?? stages[0]?.id ?? "");
   const [confidentialityLevel, setConfidentialityLevel] = useState(
     initial?.confidentialityLevel ?? ""

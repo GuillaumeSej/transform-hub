@@ -11,10 +11,10 @@ const COLORS = [
   "#FFB1B5",
   "#421799",
   "#320300",
-  "#7C6EF0",
+  "#991D1F",
   "#CCC1BD",
-  "#E68900",
-  "#2E7D32",
+  "#FF797B",
+  "#A99E9A",
 ];
 
 /** Vrai Marimekko à deux dimensions : la largeur des colonnes = poids de la dimension primaire

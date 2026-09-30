@@ -12,7 +12,7 @@ import type {
 } from "@/types";
 import { subscribeUsers, subscribeCompanies } from "@/lib/firestore/admin";
 import { saveIndicator } from "@/lib/firestore/indicators";
-import { canBeKpiResponsible, computeIndicatorStatus } from "@/lib/axisLogic";
+import { canBeKpiResponsible, computeIndicatorStatus, firstFreeAxisColor } from "@/lib/axisLogic";
 import { roles as roleDefinitions } from "@/lib/nav-config";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useMaturityStages } from "@/lib/hooks/useMaturityStages";
@@ -956,6 +956,7 @@ export function IndicatorsEditor({
           compact
           users={users}
           stages={stages}
+          initial={{ color: firstFreeAxisColor(axes) }}
           confidentialityLevels={confidentialityLevels}
           submitLabel={t("common.add", "Ajouter")}
           onCancel={() => setAxisModalOpen(false)}

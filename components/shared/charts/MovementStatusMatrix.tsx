@@ -37,8 +37,8 @@ const ICON: Record<MovementExecutionStatus, LucideIcon> = {
 const ICON_COLOR: Record<MovementExecutionStatus, string> = {
   realized: "text-white/80",
   overdue: "text-white/80",
-  dueSoon: "text-[#1f1512]/60",
-  later: "text-[#1f1512]/60",
+  dueSoon: "text-[#1A1A1A]/60",
+  later: "text-[#1A1A1A]/60",
   abandoned: "text-white/80",
 };
 const ORDER: MovementExecutionStatus[] = ["overdue", "dueSoon", "later", "realized", "abandoned"];

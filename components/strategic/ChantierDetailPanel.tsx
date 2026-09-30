@@ -33,7 +33,6 @@ import { DeleteRequestModal } from "@/components/strategic/DeleteRequestModal";
 import { SuccessKpiList } from "@/components/strategic/SuccessKpiList";
 import {
   formatTimelineDay,
-  hexToRgb,
   timelineColumns,
   timelinePctOf,
   timelineRange,
@@ -60,6 +59,8 @@ import {
   isDeliverableDone,
 } from "@/lib/deliverableState";
 import {
+  AXIS_FALLBACK_COLOR,
+  axisDisplayColor,
   canStartAction,
   chantierBounds,
   chantierDeclaredProgress,
@@ -257,9 +258,6 @@ const TIMELINE_LABEL_WIDTH = "w-56";
  *  programme (`ProgramRoadmap.tsx`) — plus de sous-piste dédiée sous la barre. */
 const DELIVERABLE_LANE_HEIGHT = 30;
 const DELIVERABLE_BAR_HEIGHT = 24;
-/** Repli de couleur de barre quand l'axe primaire n'a pas de couleur valide — même taupe que
- *  `ProgramRoadmap.tsx` (`FALLBACK_COLOR`). */
-const TIMELINE_FALLBACK_COLOR = "#a99e9a";
 
 /** Date ISO ("2026-09-03") → « 03/09/2026 » — même analyse de date que `formatTimelineDay`
  *  (`parseISO`, `lib/dateUtils.ts`) mais rendu numérique DD/MM/YYYY, jour/mois zéro-paddés, plus
@@ -1988,13 +1986,12 @@ export function ChantierDetailPanel({
   // le brief round 24, tranché pour rester cohérent avec les autres usages "primaires" du modèle).
   const primaryAxis = chantierAxes[0];
 
-  /** Couleur d'accent (liséré + fond teinté) de la carte "Vue d'ensemble" ci-dessous — même hex
-   *  brut que celui déjà consommé par `TimelineBar` (`hexToRgb`/`withAlpha`), avec repli sur le
-   *  même gris neutre que `ProgramRoadmap.tsx` (`FALLBACK_COLOR`) quand l'axe n'a pas de couleur
-   *  valide, pour rester cohérent avec le reste de l'appli plutôt que d'inventer un nouveau gris. */
+  /** Couleur d'accent (liséré + fond teinté + barre d'avancement) de la carte "Vue d'ensemble"
+   *  ci-dessous — couleur d'affichage charte de l'axe primaire (`axisDisplayColor`,
+   *  lib/axisLogic.ts), la même que sur tous les autres écrans. */
   const axisAccentColor = useMemo(
-    () => (primaryAxis?.color && hexToRgb(primaryAxis.color) ? primaryAxis.color : "#a99e9a"),
-    [primaryAxis]
+    () => axisDisplayColor(primaryAxis, data.axes),
+    [primaryAxis, data.axes]
   );
 
   const chantierActions = useMemo(
@@ -2205,18 +2202,14 @@ export function ChantierDetailPanel({
    *  primaire (`chantierShadesForAxis`), EXACTEMENT celle de ses barres sur la feuille de route
    *  programme (`ProgramRoadmap.tsx`, variante `"soft"`). */
   const progressionBarColor = useMemo(() => {
-    if (!chantier || !primaryAxis) return TIMELINE_FALLBACK_COLOR;
-    const axisColor =
-      primaryAxis.color && hexToRgb(primaryAxis.color)
-        ? primaryAxis.color
-        : TIMELINE_FALLBACK_COLOR;
+    if (!chantier || !primaryAxis) return AXIS_FALLBACK_COLOR;
     return (
       chantierShadesForAxis(
-        axisColor,
+        axisAccentColor,
         data.chantiers.filter((c) => c.axisIds.includes(primaryAxis.id))
-      ).get(chantier.id) ?? axisColor
+      ).get(chantier.id) ?? axisAccentColor
     );
-  }, [chantier, primaryAxis, data.chantiers]);
+  }, [chantier, primaryAxis, axisAccentColor, data.chantiers]);
   const progressionColumns = useMemo(
     () =>
       chantierActions.length === 0
@@ -3067,7 +3060,7 @@ export function ChantierDetailPanel({
                         className="h-full rounded-full"
                         style={{
                           width: `${progressPct}%`,
-                          backgroundColor: primaryAxis?.color ?? "var(--bp-warm-taupe)",
+                          backgroundColor: axisAccentColor,
                         }}
                       />
                     </div>

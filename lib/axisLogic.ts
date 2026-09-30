@@ -1970,6 +1970,143 @@ export function hexToRgb(color: string): [number, number, number] | null {
   return null;
 }
 
+// ─── Couleur d'affichage d'un axe (charte BearingPoint) ────────────────────────────────────────
+
+/**
+ * Palette CHARTE des axes stratégiques — source unique, reprise telle quelle par le sélecteur de
+ * couleur de `AxisForm` (`COLOR_CHOICES`) et par `axisDisplayColor` ci-dessous. Ordre = ordre
+ * d'attribution aux axes hors charte (couleurs franches d'abord, les plus claires en dernier).
+ * Volontairement sans `--bp-light-pink`/`--bp-warm-gray` : trop pâles pour une pastille d'axe et
+ * pour les nuances de chantier éclaircies (`chantierShadeForAxis`).
+ */
+export const AXIS_COLOR_PALETTE = [
+  "#320300", // --bp-deep-red
+  "#FF3C47", // --bp-coral
+  "#806659", // --bp-warm-brown
+  "#421799", // --bp-purple
+  "#991D1F", // --bp-red-brick
+  "#FF797B", // --bp-coral-pink
+  "#A99E9A", // --bp-warm-taupe
+] as const;
+
+/** Entrée canonique de `AXIS_COLOR_PALETTE` correspondant à `color` (casse et notation `#rgb`
+ *  ignorées), `null` si `color` est absente, invalide ou hors charte. */
+export function charterAxisColor(color: string | undefined | null): string | null {
+  if (!color) return null;
+  const rgb = hexToRgb(color);
+  if (!rgb) return null;
+  return AXIS_COLOR_PALETTE.find((c) => hexToRgb(c)!.every((v, i) => v === rgb[i])) ?? null;
+}
+
+type AxisColorInput = Pick<StrategicAxis, "id" | "color"> &
+  Partial<Pick<StrategicAxis, "programId" | "createdAt">>;
+
+/** Ordre canonique des axes d'un programme pour l'attribution des couleurs — date de création puis
+ *  id, indépendant de l'ordre de rendu (même principe que `compareChantiersForShade`). */
+function compareAxesForColor(a: AxisColorInput, b: AxisColorInput): number {
+  return (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id);
+}
+
+/** Couleur de `AXIS_COLOR_PALETTE` absente de `used` la plus proche (distance RGB) de `color` —
+ *  un axe historique rouge foncé reste ainsi rouge brique plutôt que de changer de teinte. Couleur
+ *  invalide ou absente : première couleur libre. `null` si la palette est épuisée. */
+function nearestFreeAxisColor(color: string | undefined, used: ReadonlySet<string>): string | null {
+  const free = AXIS_COLOR_PALETTE.filter((c) => !used.has(c));
+  if (free.length === 0) return null;
+  const rgb = color ? hexToRgb(color) : null;
+  if (!rgb) return free[0];
+  const distance = (c: string) => {
+    const [r, g, b] = hexToRgb(c)!;
+    return (r - rgb[0]) ** 2 + (g - rgb[1]) ** 2 + (b - rgb[2]) ** 2;
+  };
+  return free.reduce((best, c) => (distance(c) < distance(best) ? c : best));
+}
+
+/** Première couleur de la palette charte non utilisée par `axes` (couleurs d'affichage) — couleur
+ *  proposée par défaut à la création d'un axe, pour que deux nouveaux axes ne partent pas avec la
+ *  même pastille. Palette épuisée : première couleur. */
+export function firstFreeAxisColor(axes: readonly AxisColorInput[]): string {
+  const used = new Set(Array.from(axisColorMap(axes).values()));
+  return AXIS_COLOR_PALETTE.find((c) => !used.has(c)) ?? AXIS_COLOR_PALETTE[0];
+}
+
+/**
+ * `axisId` → couleur d'affichage CHARTE pour tous les axes de `axes` (regroupés par programme).
+ * Un axe dont la couleur stockée est déjà dans `AXIS_COLOR_PALETTE` la garde ; les autres (couleur
+ * historique hors charte — jaune, bleu… —, invalide ou absente) reçoivent, dans l'ordre canonique
+ * (`compareAxesForColor`), la couleur de la palette encore libre la PLUS PROCHE de leur couleur
+ * d'origine (`nearestFreeAxisColor`), puis cycliquement si la palette est épuisée. Lecture seule :
+ * la donnée Firestore n'est pas migrée.
+ */
+export function axisColorMap(axes: readonly AxisColorInput[]): Map<string, string> {
+  const map = new Map<string, string>();
+  const byProgram = new Map<string, AxisColorInput[]>();
+  for (const axis of axes) {
+    const key = axis.programId ?? "";
+    const list = byProgram.get(key);
+    if (list) list.push(axis);
+    else byProgram.set(key, [axis]);
+  }
+  for (const programAxes of Array.from(byProgram.values())) {
+    const sorted = [...programAxes].sort(compareAxesForColor);
+    const used = new Set<string>();
+    for (const axis of sorted) {
+      const charter = charterAxisColor(axis.color);
+      if (charter) {
+        map.set(axis.id, charter);
+        used.add(charter);
+      }
+    }
+    sorted.forEach((axis, index) => {
+      if (map.has(axis.id)) return;
+      const color =
+        nearestFreeAxisColor(axis.color, used) ??
+        AXIS_COLOR_PALETTE[index % AXIS_COLOR_PALETTE.length];
+      used.add(color);
+      map.set(axis.id, color);
+    });
+  }
+  return map;
+}
+
+/**
+ * Couleur d'affichage d'un axe — SEUL point de lecture de `StrategicAxis.color` pour l'UI (pastilles,
+ * feuille de route, Gantt, graphiques staffing, filtres KPI…), pour qu'un même axe ait la même
+ * couleur sur tous les écrans. `programAxes` = tous les axes de son programme (idéalement
+ * `useStrategicData().axes`, dont les couleurs sont déjà résolues sur le programme COMPLET) ; sans
+ * liste, ou si l'axe n'y figure pas, repli déterministe sur un hash de l'id.
+ */
+export function axisDisplayColor(
+  axis: AxisColorInput | null | undefined,
+  programAxes?: readonly AxisColorInput[]
+): string {
+  if (!axis) return AXIS_FALLBACK_COLOR;
+  const charter = charterAxisColor(axis.color);
+  if (charter) return charter;
+  if (programAxes?.some((a) => a.id === axis.id)) {
+    const programId = axis.programId ?? programAxes.find((a) => a.id === axis.id)?.programId;
+    const resolved = axisColorMap(
+      programAxes.filter((a) => (a.programId ?? "") === (programId ?? ""))
+    ).get(axis.id);
+    if (resolved) return resolved;
+  }
+  let sum = 0;
+  for (let i = 0; i < axis.id.length; i += 1) sum += axis.id.charCodeAt(i);
+  return AXIS_COLOR_PALETTE[sum % AXIS_COLOR_PALETTE.length];
+}
+
+/** Copie de `axes` dont `color` est remplacée par `axisDisplayColor` (calculée sur `axes` entier) —
+ *  appliquée une fois à la source dans `useStrategicData`, pour que tout consommateur, y compris un
+ *  écran qui ne reçoit qu'un sous-ensemble filtré d'axes, retombe sur la même couleur. Les axes
+ *  déjà conformes sont renvoyés tels quels (même référence). */
+export function withAxisDisplayColors<T extends AxisColorInput>(axes: readonly T[]): T[] {
+  const map = axisColorMap(axes);
+  return axes.map((axis) => {
+    const color = map.get(axis.id);
+    return color && color !== axis.color ? { ...axis, color } : axis;
+  });
+}
+
 /** Échelle de nuances d'un chantier au sein de son axe : >0 = mélange avec du BLANC (plus clair),
  *  <0 = mélange avec du NOIR (plus sombre), 0 = la couleur d'axe elle-même. Alterne clair/sombre
  *  pour que deux chantiers voisins restent bien distincts ; cyclique au-delà de sa longueur. */
@@ -2029,7 +2166,7 @@ export function chantierShadesByAxis(
     byAxis.set(
       axis.id,
       chantierShadesForAxis(
-        axis.color,
+        axisDisplayColor(axis, axes),
         chantiers.filter((c) => c.axisIds.includes(axis.id))
       )
     );

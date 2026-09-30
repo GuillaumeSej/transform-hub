@@ -19,8 +19,7 @@ import {
   StaffingPeriodModal,
   type PeriodModalRow,
 } from "@/components/strategic/StaffingPeriodModal";
-import { hexToRgb } from "@/components/strategic/TimelineBars";
-import { hexForDepartment, staffingPeriodBuckets } from "@/lib/axisLogic";
+import { axisDisplayColor, hexForDepartment, staffingPeriodBuckets } from "@/lib/axisLogic";
 import { staffingPeriodShares, todayIso } from "@/lib/staffingNeed";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ChantierStaffing, StrategicAxis } from "@/types";
@@ -43,18 +42,15 @@ type UnifiedBucket = { period: string; totalFte: number; byGroup: Record<string,
  *  "axis", jamais en mode "period". */
 type SeriesDef = { key: string; name: string; color: string };
 
-/** Couleur de repli quand l'axe n'a pas de `color` choisie (ou une valeur invalide) — même taupe
- *  BearingPoint que `ProgramRoadmap.tsx`/`ChantierGantt.tsx` (`FALLBACK_COLOR`), dupliquée ici pour
- *  la même raison qu'eux : pas de point de partage naturel pour une seule constante hex. */
-const FALLBACK_AXIS_COLOR = "#a99e9a";
-
 function findAxisName(axes: StrategicAxis[], t: (key: string) => string, axisId: string): string {
   return axes.find((a) => a.id === axisId)?.name ?? t("effectifs.axisUnknown");
 }
 
 function findAxisColor(axes: StrategicAxis[], axisId: string): string {
-  const axis = axes.find((a) => a.id === axisId);
-  return axis?.color && hexToRgb(axis.color) ? axis.color : FALLBACK_AXIS_COLOR;
+  return axisDisplayColor(
+    axes.find((a) => a.id === axisId),
+    axes
+  );
 }
 
 /**

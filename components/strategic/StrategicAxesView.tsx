@@ -15,12 +15,14 @@ import {
   type ProjetBoardGroup,
 } from "@/components/strategic/ProjetMilestoneBoard";
 import { StrategicImportButton } from "@/components/strategic/StrategicImportButton";
-import { hexToRgb, withAlpha } from "@/components/strategic/TimelineBars";
+import { withAlpha } from "@/components/strategic/TimelineBars";
 import {
+  axisDisplayColor,
   AXIS_FALLBACK_COLOR,
   chantierDeclaredProgress,
   chantierShadesByAxis,
   resolveUserFullName,
+  firstFreeAxisColor,
 } from "@/lib/axisLogic";
 import { subscribeCompanies } from "@/lib/firestore/admin";
 import { writeStrategicImport } from "@/lib/firestore/strategicImportWrite";
@@ -189,7 +191,7 @@ export function StrategicAxesView() {
           return {
             key: row.axis.id,
             label: row.axis.name,
-            color: row.axis.color,
+            color: axisDisplayColor(row.axis, data.axes),
             milestones,
             chantiers: row.chantiers,
           };
@@ -380,6 +382,7 @@ export function StrategicAxesView() {
         <AxisForm
           users={data.users}
           stages={stages}
+          initial={{ color: firstFreeAxisColor(data.axes) }}
           confidentialityLevels={confidentialityLevels}
           submitLabel={t("strategicAxes.createAxis")}
           // Sponsor d'axe : désigné par le pilote du plan / un admin uniquement.
@@ -479,8 +482,7 @@ export function StrategicAxesView() {
             ) : (
               <div className="space-y-4">
                 {projetBoardGroups.map((group) => {
-                  const axisColor =
-                    group.color && hexToRgb(group.color) ? group.color : AXIS_FALLBACK_COLOR;
+                  const axisColor = group.color ?? AXIS_FALLBACK_COLOR;
                   const shades = chantierShades.get(group.key);
                   const axisNumber = axisNumberById.get(group.key);
                   return (

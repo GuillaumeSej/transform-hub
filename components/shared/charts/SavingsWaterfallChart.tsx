@@ -31,19 +31,21 @@ import { formatMillions } from "@/lib/format";
 
 export const WATERFALL_COLORS = {
   total: "#806659",
-  up: "#2E9E6B",
-  down: "#D64545",
+  // Charte : hausse = violet (même convention que les waterfalls ETP `FteWaterfallChart`), baisse =
+  // rouge brique (distinct du corail "réalisé"), reste à faire = taupe chaud translucide.
+  up: "#421799",
+  down: "#991D1F",
   realized: "#FF3C47",
-  remaining: "rgba(168,154,147,0.45)",
+  remaining: "rgba(169,158,154,0.45)",
 };
 /** Teintes des segments d'OPEX récurrent (par nature d'impact) — famille "coût" défavorable. */
 export const OPEX_SEGMENT_COLORS = [
-  "#B23A48",
-  "#E0707A",
-  "#D9822B",
-  "#8C4A5A",
-  "#C9A227",
-  "#9C6B6B",
+  "#991D1F",
+  "#FF797B",
+  "#320300",
+  "#FFB1B5",
+  "#806659",
+  "#A99E9A",
 ];
 
 /** Écart entre catégories (part de la bande) — sert aussi au calcul des traits de liaison. */

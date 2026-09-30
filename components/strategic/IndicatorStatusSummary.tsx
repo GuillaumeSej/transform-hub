@@ -16,6 +16,7 @@ import { IndicatorDonut } from "@/components/shared/IndicatorDonut";
 import { IndicatorProgressDetail } from "@/components/strategic/IndicatorProgressDetail";
 import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import {
+  axisDisplayColor,
   computeIndicatorDelta,
   countOnTrackAtRisk,
   indicatorStatusShares,
@@ -458,7 +459,7 @@ function IndicatorStatusOverview({
             </div>
             <ul className={`flex flex-col ${interaction ? "gap-1" : "gap-2.5"}`}>
               {perAxis.map((row) => {
-                const axisColor = row.axis.color ?? "var(--bp-warm-taupe)";
+                const axisColor = axisDisplayColor(row.axis, axes);
                 const rowSummary = `${row.axis.name} — ${l.onTrack} ${row.onTrack}/${row.total} · ${l.atRisk} ${row.atRisk} · ${l.noData} ${row.noData}`;
                 const selected = interaction?.selectedAxisId === row.axis.id;
                 const dimmed = !!interaction?.selectedAxisId && !selected;

@@ -20,8 +20,9 @@ import type { HierarchyLevelDef, HierarchyNode, Lever, Workstream } from "@/type
 import { formatMillions } from "@/lib/format";
 import { onActivateKey } from "@/lib/a11y";
 
-const GREEN = "#2E9E6B";
-const RED = "#D64545";
+// Tokens RAG de la charte (app/globals.css) — plus de vert/rouge littéraux hors charte.
+const GREEN = "var(--green)";
+const RED = "var(--red)";
 const fmt = (v: number) => formatMillions(v);
 const signed = (v: number) => (v === 0 ? fmt(0) : `${v > 0 ? "+" : "−"}${fmt(Math.abs(v))}`);
 

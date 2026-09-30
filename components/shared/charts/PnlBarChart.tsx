@@ -128,7 +128,7 @@ export function PnlBarChart({
           dataKey="remaining"
           name={resolvedLabelPlan}
           stackId="a"
-          fill="rgba(168,154,147,0.3)"
+          fill="rgba(169,158,154,0.3)"
           radius={[0, 4, 4, 0]}
         />
         {hasReforecast && (

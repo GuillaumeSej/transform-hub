@@ -529,7 +529,7 @@ export function StrategicImportButton({
             )}
             {outcome.accounts.length > 0 && (
               <>
-                <p className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+                <p className="rounded-md border border-rag-amber bg-rag-amber-light p-2.5 text-xs text-rag-amber">
                   {t(
                     "strategicImport.tempPasswordWarning",
                     "Mots de passe temporaires à transmettre à la personne concernée, non récupérables ensuite — notez-les maintenant."
@@ -614,13 +614,13 @@ export function StrategicImportButton({
 
             {!!preview?.warnings.length && (
               <div className="mt-3">
-                <p className="mb-1.5 text-[13px] font-semibold text-amber-900">
+                <p className="mb-1.5 text-[13px] font-semibold text-rag-amber">
                   {t("strategicImport.warningsTitle", "{n} avertissement(s)").replace(
                     "{n}",
                     String(preview.warnings.length)
                   )}
                 </p>
-                <div className="max-h-[160px] space-y-1.5 overflow-y-auto rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                <div className="max-h-[160px] space-y-1.5 overflow-y-auto rounded-md border border-rag-amber bg-rag-amber-light p-3 text-xs text-rag-amber">
                   {preview.warnings.map((w, i) => (
                     <div key={i}>
                       [{w.sheet}] {t("strategicImport.lineLabel", "Ligne")} {w.rowNumber} :{" "}
@@ -651,7 +651,7 @@ export function StrategicImportButton({
                       <span className={p.include ? "" : "text-tertiary line-through"}>
                         {p.name} <span className="text-tertiary">({p.username})</span>
                         {p.collisionWith && (
-                          <span className="ml-1 text-amber-700">
+                          <span className="ml-1 text-rag-amber">
                             {t(
                               "strategicImport.usernameCollision",
                               "identifiant « {username} » déjà pris : suffixé"

@@ -14,6 +14,40 @@ import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { UserPicker } from "@/components/strategic/UserPicker";
+import { CHARTER_CATEGORICAL, CHARTER_COLOR_LABEL, toCharterColor } from "@/lib/charterColors";
+
+/** Sélecteur de couleur limité à la charte (remplace l'ancien `<input type="color">` qui laissait
+ *  saisir n'importe quelle teinte — bleu, vert, jaune… — hors charte BearingPoint). */
+function CharterSwatchPicker({
+  value,
+  onChange,
+  label,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+  label: string;
+}) {
+  const current = toCharterColor(value);
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
+      {CHARTER_CATEGORICAL.map((c) => (
+        <button
+          key={c}
+          type="button"
+          role="radio"
+          aria-checked={current === c}
+          aria-label={CHARTER_COLOR_LABEL[c] ?? c}
+          title={CHARTER_COLOR_LABEL[c] ?? c}
+          onClick={() => onChange(c)}
+          className={`h-5 w-5 rounded-full border ${
+            current === c ? "border-neutral-900 ring-2 ring-neutral-900/20" : "border-neutral-200"
+          }`}
+          style={{ backgroundColor: c }}
+        />
+      ))}
+    </div>
+  );
+}
 
 /** Formulaire local — tous les champs numériques sont saisis en texte pour permettre un champ
  *  vide temporaire pendant la frappe (converti en nombre à la sauvegarde, 0 par défaut si vide).
@@ -101,7 +135,7 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
     name: "",
     sponsor: "",
     sponsorUsername: undefined,
-    color: "#e5484d",
+    color: CHARTER_CATEGORICAL[0],
     target: "",
   });
   // Sert au sélecteur "Sponsor" ci-dessous (round "sponsor scoping" — voir doc-comment
@@ -146,7 +180,13 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
       target: num(newWs.target),
     };
     setForm((f) => ({ ...f, workstreams: [...f.workstreams, ws] }));
-    setNewWs({ name: "", sponsor: "", sponsorUsername: undefined, color: "#e5484d", target: "" });
+    setNewWs({
+      name: "",
+      sponsor: "",
+      sponsorUsername: undefined,
+      color: CHARTER_CATEGORICAL[0],
+      target: "",
+    });
   };
 
   const save = async () => {
@@ -350,11 +390,10 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="color"
+                      <CharterSwatchPicker
                         value={w.color}
-                        onChange={(e) => updateWorkstream(w.id, { color: e.target.value })}
-                        className="h-7 w-12 cursor-pointer rounded border border-border bg-bg-surface p-0.5"
+                        onChange={(color) => updateWorkstream(w.id, { color })}
+                        label={t("adminProgramConfig.colColor", "Couleur")}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -414,12 +453,13 @@ export function ProgramConfigEditor({ companyId }: { companyId: string }) {
             <label className="text-xs font-medium text-text-secondary">
               {t("adminProgramConfig.colColor", "Couleur")}
             </label>
-            <input
-              type="color"
-              value={newWs.color}
-              onChange={(e) => setNewWs((f) => ({ ...f, color: e.target.value }))}
-              className="mt-1 h-9 w-14 cursor-pointer rounded-lg border border-border bg-bg-surface p-0.5"
-            />
+            <div className="mt-1 py-1.5">
+              <CharterSwatchPicker
+                value={newWs.color}
+                onChange={(color) => setNewWs((f) => ({ ...f, color }))}
+                label={t("adminProgramConfig.colColor", "Couleur")}
+              />
+            </div>
           </div>
           <div>
             <label className="text-xs font-medium text-text-secondary">

@@ -23,6 +23,7 @@ import {
   type TimelineScale,
 } from "@/components/strategic/TimelineBars";
 import {
+  AXIS_FALLBACK_COLOR,
   canStartAction,
   chantierBounds,
   chantierDeclaredProgress,
@@ -100,12 +101,8 @@ type PlannedRow = Row & { bounds: { start: string; end: string } };
 
 const ROW_LABEL_WIDTH = "w-64";
 
-/** Couleur de repli quand l'axe n'a pas de couleur choisie — le taupe de la palette BearingPoint
- *  (`--bp-warm-taupe`), en dur parce qu'on a besoin de la composante hex pour calculer les
- *  transparences ci-dessous. */
-const FALLBACK_COLOR = "#a99e9a";
-
-const ALERT_COLOR = "#f5a623";
+// Signal "chantier en alerte" : corail charte (`--red` / `--bp-coral`), plus l'ancien orange.
+const ALERT_COLOR = "#FF3C47";
 
 // Round 4, point 9 : blocs de chantier/action agrandis pour que les livrables/actions restent
 // lisibles à l'intérieur (demande PO explicite, format PERIAL).
@@ -215,7 +212,7 @@ export function ChantierGantt({
   // Trimestre par défaut : meilleur compromis lisibilité/détail sur un plan de 2-3 ans.
   const [scale, setScale] = useState<TimelineScale>("quarter");
 
-  const color = axisColor && hexToRgb(axisColor) ? axisColor : FALLBACK_COLOR;
+  const color = axisColor && hexToRgb(axisColor) ? axisColor : AXIS_FALLBACK_COLOR;
   const chantierShades = useMemo(() => chantierShadesForAxis(color, chantiers), [color, chantiers]);
 
   const rows = useMemo<Row[]>(

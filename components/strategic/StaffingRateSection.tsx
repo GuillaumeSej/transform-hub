@@ -22,7 +22,7 @@ import { MultiSelect } from "@/components/shared/MultiSelect";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { formatFte } from "@/components/strategic/ChantierStaffingEditor";
 import { StaffingThresholdsControl } from "@/components/strategic/StaffingThresholdsControl";
-import { hexToRgb } from "@/components/strategic/TimelineBars";
+import { axisDisplayColor } from "@/lib/axisLogic";
 import {
   periodBoundsForDate,
   todayIso,
@@ -63,8 +63,7 @@ import type { ChantierStaffing, StrategicAxis } from "@/types";
 type Granularity = Extract<NeedGranularity, "monthly" | "quarterly" | "semiannual" | "annual">;
 const GRANULARITIES: Granularity[] = ["monthly", "quarterly", "semiannual", "annual"];
 
-const FALLBACK_AXIS_COLOR = "#a99e9a";
-const AVAILABLE_FILL = "#d4d0cd";
+const AVAILABLE_FILL = "#CCC1BD"; // --bp-warm-gray
 const MOBILISED_FILL = "#1a1a1a";
 
 /** Couleurs de marque par niveau (app/globals.css) : coral = sur-staffé, coral-pink = tendu. */
@@ -98,10 +97,6 @@ const LEVEL_CELL_CLASS: Record<StaffingRateLevel, string> = {
 };
 
 type DetailState = { period: PeriodBounds; granularity: Granularity; team: string | null };
-
-function axisColor(axis: StrategicAxis): string {
-  return axis.color && hexToRgb(axis.color) ? axis.color : FALLBACK_AXIS_COLOR;
-}
 
 function formatMonth(label: string, locale: string, month: "short" | "long"): string {
   const [y, m] = label.split("-").map(Number);
@@ -195,7 +190,7 @@ export function StaffingRateSection({
   const teams = useMemo(() => staffingTeams(staffing, fteByDept), [staffing, fteByDept]);
 
   const axisOptions: DropdownOption[] = useMemo(
-    () => axes.map((a) => ({ value: a.id, label: a.name, color: axisColor(a) })),
+    () => axes.map((a) => ({ value: a.id, label: a.name, color: axisDisplayColor(a, axes) })),
     [axes]
   );
   const teamOptions: DropdownOption[] = useMemo(
@@ -209,7 +204,7 @@ export function StaffingRateSection({
     const ids = axisIdsByChantier[chantierId] ?? [];
     const preferred = ids.find((id) => selectedAxisIds.includes(id) && axisById.has(id));
     const axis = axisById.get(preferred ?? ids.find((id) => axisById.has(id)) ?? "");
-    return axis ? axisColor(axis) : FALLBACK_AXIS_COLOR;
+    return axisDisplayColor(axis, axes);
   };
 
   // ── Graphique par période (filtré axe + équipe) ─────────────────────────────────────────────

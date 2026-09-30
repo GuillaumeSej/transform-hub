@@ -158,7 +158,7 @@ export function WorkstreamBarDetail({
             </div>
             <div className="relative h-3 w-full overflow-hidden rounded-full">
               <div
-                className="absolute inset-y-0 left-0 rounded-full bg-[rgba(107,93,87,0.45)]"
+                className="absolute inset-y-0 left-0 rounded-full bg-bp-warm-brown/45"
                 style={{ width: `${targetWidth}%` }}
               />
               <div
@@ -228,7 +228,7 @@ function TotalTags({
         // testeur : "les premiers bar charts, j'ai pas de tag" sur les leviers avec un réalisé assez
         // grand pour déclencher l'ancien mode "à l'intérieur").
         const tags: { key: string; v: number; fill: string; dashed?: boolean }[] = [
-          { key: "t", v: d.target, fill: "#6B5D57" },
+          { key: "t", v: d.target, fill: "#806659" },
           { key: "r", v: d.realized, fill: "#FF3C47" },
         ];
         if (hasPlanned && d.planned !== undefined)
@@ -385,7 +385,7 @@ export function WorkstreamBarChart({
                   {resolvedLabelRealized}
                 </li>
                 <li className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[rgba(107,93,87,0.35)]" />
+                  <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-bp-warm-brown/35" />
                   {resolvedLabelTarget}
                 </li>
                 {hasPlanned && (
@@ -430,7 +430,7 @@ export function WorkstreamBarChart({
             dataKey="remaining"
             name={resolvedLabelTarget}
             stackId="a"
-            fill="rgba(107,93,87,0.35)"
+            fill="rgba(128,102,89,0.35)"
             radius={[4, 4, 0, 0]}
             cursor={onSegmentClick ? "pointer" : undefined}
             onClick={

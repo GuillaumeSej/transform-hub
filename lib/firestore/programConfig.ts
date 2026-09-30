@@ -2,6 +2,7 @@ import { doc, setDoc, onSnapshot, type Unsubscribe } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { onListenerError } from "@/lib/firestore/listenerError";
 import type { ProgramConfig, Workstream } from "@/types";
+import { toCharterColor } from "@/lib/charterColors";
 
 /**
  * Couche Firestore pour la configuration programme (ProgramConfig + Workstreams) — dernier
@@ -45,7 +46,16 @@ export function subscribeProgramConfig(
         return;
       }
       const data = snap.data() as ProgramConfigDoc;
-      cb({ program: data.program, workstreams: data.workstreams });
+      // Couleurs de workstream ramenées à la charte À LA LECTURE (pas de migration) : les
+      // anciennes saisies libres (`<input type="color">`, palette de l'import Excel) ne doivent
+      // plus faire apparaître de bleu/vert/jaune hors charte — voir lib/charterColors.ts.
+      cb({
+        program: data.program,
+        workstreams: (data.workstreams ?? []).map((w) => ({
+          ...w,
+          color: toCharterColor(w.color),
+        })),
+      });
     },
     onListenerError("programConfig")
   );

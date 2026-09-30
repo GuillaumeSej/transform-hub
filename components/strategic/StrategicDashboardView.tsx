@@ -26,6 +26,7 @@ import { useProgramChangeReset } from "@/lib/hooks/useProgramChangeReset";
 import { useStrategicData } from "@/lib/hooks/useStrategicData";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
+  axisDisplayColor,
   chantierDependencyAlerts,
   countOnTrackAtRisk,
   isProjetLate,
@@ -814,7 +815,7 @@ export function StrategicDashboardView() {
           <span
             aria-hidden
             className="mt-1 h-3 w-3 shrink-0 rounded-full"
-            style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
+            style={{ backgroundColor: axisDisplayColor(axis, axes) }}
           />
           <span className="min-w-0 flex-1">
             <button

@@ -128,7 +128,9 @@ export function DashboardExportButton({
       pptx.layout = "BETRACK_WIDE";
 
       const cover = pptx.addSlide();
-      cover.background = { color: "111111" };
+      // Charte BearingPoint : couverture Deep Red, textes blanc / gris chaud / taupe (plus de gris
+      // ardoise Tailwind), titres de slide en encre, contexte en gris neutre `--n-500`.
+      cover.background = { color: "320300" };
       cover.addText(coverTitle, {
         x: 0.6,
         y: 3.0,
@@ -144,7 +146,7 @@ export function DashboardExportButton({
         w: SLIDE_WIDTH_IN - 1.2,
         h: 0.5,
         fontSize: 14,
-        color: "CBD5E1",
+        color: "CCC1BD",
       });
       if (contextLines.length > 0) {
         cover.addText(contextLines.join("\n"), {
@@ -153,7 +155,7 @@ export function DashboardExportButton({
           w: SLIDE_WIDTH_IN - 1.2,
           h: 1.4,
           fontSize: 12,
-          color: "94A3B8",
+          color: "A99E9A",
           valign: "top",
         });
       }
@@ -183,7 +185,7 @@ export function DashboardExportButton({
             h: 0.5,
             fontSize: 20,
             bold: true,
-            color: "1F2937",
+            color: "1A1A1A",
           });
           if (slideContext) {
             slide.addText(slideContext, {
@@ -192,7 +194,7 @@ export function DashboardExportButton({
               w: SLIDE_WIDTH_IN - 1,
               h: 0.3,
               fontSize: 10,
-              color: "6B7280",
+              color: "737373",
             });
           }
 

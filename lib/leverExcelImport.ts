@@ -17,6 +17,7 @@ import {
   parseCellNumber,
 } from "@/lib/excelParse";
 import { coerceImpactStatus } from "@/lib/impactStatus";
+import { CHARTER_CATEGORICAL } from "@/lib/charterColors";
 import { leverImpactsOf } from "@/lib/engine";
 import { leverImportPatch, normalizeLeverCode } from "@/lib/leversLogic";
 import type {
@@ -34,7 +35,9 @@ import type {
   Workstream,
 } from "@/types";
 
-const WORKSTREAM_PALETTE = ["#C8102E", "#7B6B58", "#4A4A4A", "#8A9A5B", "#5B7A9A", "#9A7A5B"];
+/** Teintes des workstreams auto-créés par l'import — palette catégorielle de la charte (l'ancienne
+ *  palette contenait du vert olive et du bleu acier hors charte). */
+const WORKSTREAM_PALETTE = CHARTER_CATEGORICAL;
 
 /** Slug stable et lisible à partir d'un nom de workstream (utilisé comme id lors d'une
  *  auto-création — voir plus bas). */

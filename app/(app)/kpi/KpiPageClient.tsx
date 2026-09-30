@@ -16,6 +16,7 @@ import {
   IndicatorStatusSummary,
 } from "@/components/strategic/IndicatorStatusSummary";
 import {
+  axisDisplayColor,
   computeIndicatorDelta,
   latestMeasurement,
   latestNumericMeasurement,
@@ -1589,7 +1590,7 @@ export function KpiPageClient() {
                 return (
                   <FilterChip
                     key={axisId}
-                    color={axis.color ?? "var(--bp-warm-taupe)"}
+                    color={axisDisplayColor(axis, axes)}
                     label={`${t("kpi.filterAxis", "Axe")} : ${axis.name}`}
                     removeLabel={t("kpi.filterChip.remove", "Retirer le filtre {label}").replace(
                       "{label}",

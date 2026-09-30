@@ -112,11 +112,11 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
   };
 
   const CATS = [
-    { key: "gain", label: t("leverDetail.trajectory.legendGains", "Gains"), color: "#3f9d6a" },
+    { key: "gain", label: t("leverDetail.trajectory.legendGains", "Gains"), color: "#806659" },
     {
       key: "cost",
       label: t("leverDetail.trajectory.legendCosts", "Coûts (OPEX + CAPEX)"),
-      color: "#e0655a",
+      color: "#FF3C47",
     },
   ];
 
@@ -202,11 +202,11 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
                 fontSize: 10,
               }}
             />
-            <ReferenceLine y={0} stroke="#999" />
+            <ReferenceLine y={0} stroke="#969696" />
             {todayKey && (
               <ReferenceLine
                 x={todayKey}
-                stroke="#525252"
+                stroke="#595959"
                 strokeDasharray="4 3"
                 label={{
                   value: t("shared.actionGantt.today", "Aujourd'hui"),
@@ -222,7 +222,7 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
                 <Line
                   type="monotone"
                   dataKey="cumulativeNet"
-                  stroke="#111"
+                  stroke="#1A1A1A"
                   strokeWidth={2}
                   dot={false}
                   activeDot={false}

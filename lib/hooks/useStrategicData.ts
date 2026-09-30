@@ -34,6 +34,7 @@ import {
   resolveStrategicOwnershipScope,
   resolveStrategicRoleForProgram,
   type StrategicOwnershipScope,
+  withAxisDisplayColors,
 } from "@/lib/axisLogic";
 import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { isAnyAdmin } from "@/lib/roleProfiles";
@@ -403,8 +404,13 @@ export function useStrategicData(
   // confidentialité — les deux filtres sont INDÉPENDANTS (un axe doit passer les DEUX pour être
   // visible, voir `axes`/`chantiers`/`indicators`/`staffing` ci-dessous), et `owner`/`pilote` ne
   // sont pas affectés par la confidentialité.
+  // Couleurs d'axe résolues ICI sur le programme COMPLET (avant tout filtrage de visibilité) :
+  // une couleur stockée hors charte (données historiques) est remplacée à la lecture par une
+  // couleur de `AXIS_COLOR_PALETTE` (`axisDisplayColor`, lib/axisLogic.ts), si bien que tous les
+  // écrans — y compris ceux qui ne reçoivent qu'un sous-ensemble d'axes — affichent la MÊME
+  // couleur pour un même axe. Pas de migration Firestore.
   const programScopedAxes = useMemo(
-    () => allAxes.filter((a) => a.programId === programId),
+    () => withAxisDisplayColors(allAxes.filter((a) => a.programId === programId)),
     [allAxes, programId]
   );
   const programScopedChantiers = useMemo(

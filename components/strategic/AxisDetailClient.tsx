@@ -15,6 +15,7 @@ import { IndicatorChart } from "@/components/strategic/IndicatorChart";
 import { IndicatorStatusBadge } from "@/components/strategic/IndicatorStatusBadge";
 import { IndicatorStatusSummary } from "@/components/strategic/IndicatorStatusSummary";
 import {
+  axisDisplayColor,
   chantierDependencyAlerts,
   latestMeasurement,
   latestNumericMeasurement,
@@ -369,7 +370,7 @@ export function AxisDetailClient() {
             <span
               aria-hidden
               className="h-3 w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: axis.color ?? "var(--bp-warm-taupe)" }}
+              style={{ backgroundColor: axisDisplayColor(axis, data.axes) }}
             />
             <h1 className="text-xl font-bold text-primary">{axis.name}</h1>
           </div>
@@ -489,7 +490,7 @@ export function AxisDetailClient() {
             stages={stages}
             progressOf={data.projetProgress}
             users={data.users}
-            axisColor={axis.color}
+            axisColor={axisDisplayColor(axis, data.axes)}
             alerts={alerts}
             onChantierClick={(c) => openChantier(c.id)}
             onActionClick={(action, c) => openChantier(c.id, action.id)}
