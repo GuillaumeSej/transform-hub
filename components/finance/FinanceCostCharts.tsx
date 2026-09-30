@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Bar,
   CartesianGrid,
@@ -17,6 +17,20 @@ import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { GranularityToggle } from "@/components/shared/GranularityToggle";
 import { InvestVsSavingsCalcModal } from "@/components/finance/InvestVsSavingsCalcModal";
 import { CostDrilldownModal } from "@/components/finance/CostDrilldownModal";
+import { PreviewTopList } from "@/components/finance/FinancePreviews";
+import {
+  ChartHoverArea,
+  FloatingPreview,
+  HIDDEN_TOOLTIP_WRAPPER,
+} from "@/components/shared/charts/HoverPreview";
+import {
+  PreviewBar,
+  PreviewCard,
+  PreviewRow,
+  PreviewSection,
+} from "@/components/shared/charts/LeverGroupPreview";
+import { topContributors } from "@/lib/chartPreview";
+import { leverAmounts } from "@/lib/financePreview";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { useStableValue } from "@/lib/hooks/useStableChartData";
 import * as engine from "@/lib/engine";
@@ -25,7 +39,9 @@ import {
   bucketInvestVsSavingsByPeriod,
   costRowsForPeriod,
   groupCostsByWorkstream,
+  investVsSavingsRowsForPeriod,
   isInvestNature,
+  type CostPeriodPoint,
   type FinanceGranularity,
 } from "@/lib/financeCosts";
 import type { BeTrackData } from "@/types";
@@ -64,6 +80,29 @@ export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
     return groupCostsByWorkstream(rows, data.workstreams);
   }, [selectedPeriod, data, granularity]);
 
+  // Aperçu au survol (retour PO) : 3 principaux leviers de la période survolée — mêmes lignes que
+  // le détail ouvert au clic (`costRowsForPeriod`), calculées à la demande et mises en cache.
+  const topLeversOf = useMemo(() => {
+    const cache = new Map<string, ReturnType<typeof leverAmounts>>();
+    return (periodKey: string) => {
+      let top = cache.get(periodKey);
+      if (!top) {
+        top = topContributors(
+          leverAmounts(costRowsForPeriod(data, granularity, periodKey, isInvestNature)),
+          3,
+          0.005
+        );
+        cache.set(periodKey, top);
+      }
+      return top;
+    };
+  }, [data, granularity]);
+  const maxDelta = Math.max(1e-9, ...points.map((p) => Math.abs(p.delta)));
+  const totalCost = points.length > 0 ? points[points.length - 1].cumulative : 0;
+  const openPeriod = (p: { sortKey?: string; period?: string } | undefined) => {
+    if (p?.sortKey) setSelectedPeriod({ key: p.sortKey, label: p.period ?? p.sortKey });
+  };
+
   return (
     <Card>
       <CardHeader
@@ -74,40 +113,92 @@ export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
         {points.length === 0 ? (
           <EmptyState />
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <ComposedChart data={points} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-              <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => formatMillions(Number(v))}
-              />
-              <Tooltip formatter={(value) => formatMillions(Number(value))} />
-              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11 }} />
-              <Bar
-                dataKey="delta"
-                name={t("finance.chart.periodCost", "Coût de la période")}
-                fill="#FF3C47"
-                radius={[3, 3, 0, 0]}
-                cursor="pointer"
-                onClick={(entry) => {
-                  const p = entry as unknown as { sortKey?: string; period?: string };
-                  if (p.sortKey)
-                    setSelectedPeriod({ key: p.sortKey, label: p.period ?? p.sortKey });
+          <ChartHoverArea>
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart
+                data={points}
+                margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+                style={{ cursor: "pointer" }}
+                onClick={(state) => {
+                  const label = (state as { activeLabel?: string | number } | undefined)
+                    ?.activeLabel;
+                  openPeriod(points.find((p) => p.period === label));
                 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="cumulative"
-                name={t("finance.chart.cumulativeCost", "Coût cumulé")}
-                stroke="#806659"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+                <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => formatMillions(Number(v))}
+                />
+                {/* Aperçu au survol (portail, toujours visible) ; clic = détail de la période. */}
+                <Tooltip
+                  cursor={{ fill: "rgba(169,158,154,0.12)" }}
+                  wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+                  content={({ active, payload }) => {
+                    const p = payload?.[0]?.payload as CostPeriodPoint | undefined;
+                    if (!active || !p) return null;
+                    return (
+                      <FloatingPreview>
+                        <PreviewCard
+                          title={p.period}
+                          subtitle={t(
+                            "finance.preview.investScope",
+                            "Coûts Invest (CAPEX + OPEX ponctuel)"
+                          )}
+                          clickHint={t("finance.preview.clickDetail", "Cliquer pour le détail →")}
+                        >
+                          <div className="space-y-1">
+                            <PreviewRow
+                              color="#FF3C47"
+                              label={t("finance.chart.periodCost", "Coût de la période")}
+                              value={formatMillions(p.delta)}
+                              strong
+                            />
+                            <PreviewRow
+                              color="#806659"
+                              label={t("finance.chart.cumulativeCost", "Coût cumulé")}
+                              value={formatMillions(p.cumulative)}
+                            />
+                          </div>
+                          <div className="mt-2 space-y-1">
+                            <PreviewBar pct={(Math.abs(p.delta) / maxDelta) * 100} />
+                            <PreviewBar
+                              pct={totalCost > 0 ? (p.cumulative / totalCost) * 100 : 0}
+                              className="bg-bp-warm-brown/60"
+                            />
+                          </div>
+                          <PreviewTopList
+                            title={t("finance.preview.topLevers", "Principaux leviers")}
+                            items={topLeversOf(p.sortKey)}
+                          />
+                        </PreviewCard>
+                      </FloatingPreview>
+                    );
+                  }}
+                />
+                <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11 }} />
+                <Bar
+                  dataKey="delta"
+                  name={t("finance.chart.periodCost", "Coût de la période")}
+                  fill="#FF3C47"
+                  radius={[3, 3, 0, 0]}
+                  cursor="pointer"
+                  onClick={(entry) => openPeriod(entry as unknown as CostPeriodPoint)}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="cumulative"
+                  name={t("finance.chart.cumulativeCost", "Coût cumulé")}
+                  stroke="#806659"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </ChartHoverArea>
         )}
       </CardBody>
       <CostDrilldownModal
@@ -156,6 +247,34 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
   const open = (p: { sortKey?: string } | undefined) => {
     if (p?.sortKey) setCalcKey(p.sortKey);
   };
+  // Aperçu au survol : 3 leviers au résultat net le plus marqué sur la période (mêmes flux que le
+  // détail du calcul ouvert au clic, `investVsSavingsRowsForPeriod`), calculés à la demande.
+  const topLeversOf = useMemo(() => {
+    const cache = new Map<string, { id: string; code: string; name: string; value: number }[]>();
+    return (periodKey: string) => {
+      let top = cache.get(periodKey);
+      if (!top) {
+        top = topContributors(
+          investVsSavingsRowsForPeriod(data, granularity, periodKey).map((r) => ({
+            id: r.leverId,
+            code: r.leverCode,
+            name: r.leverName,
+            value: r.net,
+          })),
+          3,
+          0.005
+        );
+        cache.set(periodKey, top);
+      }
+      return top;
+    };
+  }, [data, granularity]);
+  const tooltipContent = useCallback(
+    (props: { active?: boolean; payload?: InvestVsSavingsTooltipPayload }) => (
+      <InvestVsSavingsTooltip {...props} topLeversOf={topLeversOf} />
+    ),
+    [topLeversOf]
+  );
   const gainsLabel = t("finance.chart.grossSavings", "Gains bruts");
   const opexLabel = t("finance.chart.opexRecShort", "OPEX récurrent");
   const investLabel = t("finance.chart.investCost", "Coût d'investissement");
@@ -173,80 +292,86 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
         {points.length === 0 ? (
           <EmptyState />
         ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart
-              data={points}
-              stackOffset="sign"
-              margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
-              style={{ cursor: "pointer" }}
-              onClick={(state) => {
-                const payload = (
-                  state as { activePayload?: { payload: (typeof points)[number] }[] }
-                )?.activePayload?.[0]?.payload;
-                open(payload);
-              }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-              <XAxis
-                dataKey="period"
-                tick={{ fontSize: 11, cursor: "pointer" }}
-                axisLine={false}
-                tickLine={false}
-                onClick={(tick: unknown) => {
-                  const label = (tick as { value?: string } | undefined)?.value;
-                  open(points.find((p) => p.period === label));
+          <ChartHoverArea>
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart
+                data={points}
+                stackOffset="sign"
+                margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+                style={{ cursor: "pointer" }}
+                onClick={(state) => {
+                  const payload = (
+                    state as { activePayload?: { payload: (typeof points)[number] }[] }
+                  )?.activePayload?.[0]?.payload;
+                  open(payload);
                 }}
-              />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => formatMillions(Number(v))}
-              />
-              <ReferenceLine y={0} stroke="rgba(0,0,0,0.2)" />
-              <Tooltip content={<InvestVsSavingsTooltip />} />
-              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="grossSavings" name={gainsLabel} stackId="s" fill={COLOR_POSITIVE} />
-              <Bar dataKey="negOpex" name={opexLabel} stackId="s" fill="#A99E9A" />
-              <Bar dataKey="negInvest" name={investLabel} stackId="s" fill={COLOR_NEGATIVE} />
-              <Line
-                type="monotone"
-                dataKey="netPeriodResult"
-                name={netLabel}
-                stroke="#969696"
-                strokeWidth={1}
-                strokeDasharray="4 3"
-                dot={(props: {
-                  cx?: number;
-                  cy?: number;
-                  payload?: { netPeriodResult: number; sortKey: string };
-                }) => {
-                  const { cx, cy, payload } = props;
-                  const neg = (payload?.netPeriodResult ?? 0) < 0;
-                  return (
-                    <circle
-                      key={payload?.sortKey}
-                      cx={cx}
-                      cy={cy}
-                      r={neg ? 6 : 4}
-                      fill={neg ? COLOR_NEGATIVE : COLOR_POSITIVE}
-                      stroke="#fff"
-                      strokeWidth={1.5}
-                    />
-                  );
-                }}
-                legendType="none"
-              />
-              <Line
-                type="monotone"
-                dataKey="netCumulative"
-                name={cumLabel}
-                stroke={COLOR_CUMULATIVE}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+                <XAxis
+                  dataKey="period"
+                  tick={{ fontSize: 11, cursor: "pointer" }}
+                  axisLine={false}
+                  tickLine={false}
+                  onClick={(tick: unknown) => {
+                    const label = (tick as { value?: string } | undefined)?.value;
+                    open(points.find((p) => p.period === label));
+                  }}
+                />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => formatMillions(Number(v))}
+                />
+                <ReferenceLine y={0} stroke="rgba(0,0,0,0.2)" />
+                <Tooltip
+                  cursor={{ fill: "rgba(169,158,154,0.12)" }}
+                  wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+                  content={tooltipContent as never}
+                />
+                <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="grossSavings" name={gainsLabel} stackId="s" fill={COLOR_POSITIVE} />
+                <Bar dataKey="negOpex" name={opexLabel} stackId="s" fill="#A99E9A" />
+                <Bar dataKey="negInvest" name={investLabel} stackId="s" fill={COLOR_NEGATIVE} />
+                <Line
+                  type="monotone"
+                  dataKey="netPeriodResult"
+                  name={netLabel}
+                  stroke="#969696"
+                  strokeWidth={1}
+                  strokeDasharray="4 3"
+                  dot={(props: {
+                    cx?: number;
+                    cy?: number;
+                    payload?: { netPeriodResult: number; sortKey: string };
+                  }) => {
+                    const { cx, cy, payload } = props;
+                    const neg = (payload?.netPeriodResult ?? 0) < 0;
+                    return (
+                      <circle
+                        key={payload?.sortKey}
+                        cx={cx}
+                        cy={cy}
+                        r={neg ? 6 : 4}
+                        fill={neg ? COLOR_NEGATIVE : COLOR_POSITIVE}
+                        stroke="#fff"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  }}
+                  legendType="none"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="netCumulative"
+                  name={cumLabel}
+                  stroke={COLOR_CUMULATIVE}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </ChartHoverArea>
         )}
         {points.length > 0 && (
           <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-[11px] text-secondary">
@@ -289,6 +414,7 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
 type InvestVsSavingsTooltipPayload = {
   payload: {
     period: string;
+    sortKey: string;
     investCost: number;
     grossSavings: number;
     opexRecStarted: number;
@@ -298,43 +424,89 @@ type InvestVsSavingsTooltipPayload = {
   };
 }[];
 
+/** Aperçu au survol d'une période (retour PO, même carte que la Trajectoire des économies) :
+ *  décomposition gains bruts → gains nets → résultat net de la période, cumul, 3 principaux
+ *  leviers ; rendu en portail (`FloatingPreview`), jamais rogné par la carte. */
 function InvestVsSavingsTooltip({
   active,
   payload,
+  topLeversOf,
 }: {
   active?: boolean;
   payload?: InvestVsSavingsTooltipPayload;
+  topLeversOf: (periodKey: string) => { id: string; code: string; name: string; value: number }[];
 }) {
   const { t } = useTranslation();
   if (!active || !payload || payload.length === 0) return null;
   const d = payload[0].payload;
+  const fmt = (v: number) => engine.fmtCurr(v);
+  const net = d.netPeriodResult;
+  const max = Math.max(Math.abs(d.grossSavings), Math.abs(d.opexRecStarted + d.investCost), 1e-9);
   return (
-    <div className="rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
-      <p className="text-[12px] font-semibold text-primary">{d.period}</p>
-      <p className="mt-1 text-[12px] text-secondary">
-        {t("finance.chart.grossSavings", "Gains bruts")} : {engine.fmtCurr(d.grossSavings)}
-      </p>
-      <p className="mt-0.5 text-[12px] text-secondary">
-        − {t("finance.chart.opexRecRunRate", "OPEX récurrent démarré")} :{" "}
-        {engine.fmtCurr(d.opexRecStarted)}
-      </p>
-      <p className="mt-0.5 text-[12px] text-secondary">
-        = {t("finance.chart.netSavings", "Gains nets")} : {engine.fmtCurr(d.netSavings)}
-      </p>
-      <p className="mt-0.5 text-[12px] text-secondary">
-        − {t("finance.chart.investCost", "Coût d'investissement")} : {engine.fmtCurr(d.investCost)}
-      </p>
-      <p className="mt-0.5 text-[12px] font-semibold text-primary">
-        = {t("finance.chart.netPeriodResult", "Résultat net de la période")} :{" "}
-        {engine.fmtCurr(d.netPeriodResult)}
-      </p>
-      <p className="mt-0.5 text-[12px] text-tertiary">
-        {t("finance.chart.netCumulative", "Cumul net")} : {engine.fmtCurr(d.netCumulative)}
-      </p>
-      <p className="mt-1 text-[10.5px] italic text-tertiary">
-        {t("finance.calc.clickHint", "Cliquer pour le détail du calcul")}
-      </p>
-    </div>
+    <FloatingPreview>
+      <PreviewCard
+        title={d.period}
+        clickHint={t("finance.preview.clickCalc", "Cliquer pour le détail du calcul →")}
+      >
+        <div className="space-y-1">
+          <PreviewRow
+            color={COLOR_POSITIVE}
+            label={t("finance.chart.grossSavings", "Gains bruts")}
+            value={fmt(d.grossSavings)}
+          />
+          <PreviewRow
+            color="#A99E9A"
+            label={`− ${t("finance.chart.opexRecRunRate", "OPEX récurrent démarré")}`}
+            value={fmt(d.opexRecStarted)}
+          />
+          <PreviewRow
+            label={`= ${t("finance.chart.netSavings", "Gains nets")}`}
+            value={fmt(d.netSavings)}
+          />
+          <PreviewRow
+            color={COLOR_NEGATIVE}
+            label={`− ${t("finance.chart.investCost", "Coût d'investissement")}`}
+            value={fmt(d.investCost)}
+          />
+        </div>
+        {/* Mini-comparaison : gains bruts vs coûts de la période (OPEX récurrent + Invest). */}
+        <div className="mt-2 space-y-1">
+          <PreviewBar
+            pct={(Math.abs(d.grossSavings) / max) * 100}
+            className="bg-bp-warm-brown/60"
+          />
+          <PreviewBar pct={(Math.abs(d.opexRecStarted + d.investCost) / max) * 100} />
+        </div>
+        <PreviewSection>
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-semibold text-primary">
+              {t("finance.chart.netPeriodResult", "Résultat net de la période")}
+            </span>
+            <span
+              className={
+                net < 0
+                  ? "font-bold tabular-nums text-bp-coral"
+                  : "font-bold tabular-nums text-primary"
+              }
+            >
+              {net > 0 ? "+" : ""}
+              {fmt(net)}
+            </span>
+          </div>
+          <div className="mt-1 flex justify-between gap-3 text-[11px] text-secondary">
+            <span>{t("finance.chart.netCumulative", "Cumul net")}</span>
+            <span className={d.netCumulative < 0 ? "tabular-nums text-bp-coral" : "tabular-nums"}>
+              {fmt(d.netCumulative)}
+            </span>
+          </div>
+        </PreviewSection>
+        <PreviewTopList
+          title={t("finance.preview.topLeversNet", "Principaux leviers (résultat net)")}
+          items={topLeversOf(d.sortKey)}
+          format={fmt}
+        />
+      </PreviewCard>
+    </FloatingPreview>
   );
 }
 

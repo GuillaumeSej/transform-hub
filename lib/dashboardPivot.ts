@@ -282,6 +282,13 @@ function aggregate(levers: Lever[], metric: MetricDef): number {
   return round2(metric.aggregation === "avg" ? total / levers.length : total);
 }
 
+/** Clé de regroupement d'un levier pour une dimension (valeur, ou libellé de repli si vide) —
+ *  SEULE règle de regroupement du pivot, partagée avec `leversInPivotCell`. */
+function dimensionKeyOf(lever: Lever, dim: DimensionDef, ctx: PivotContext): string {
+  const raw = dim.getValue(lever, ctx);
+  return raw && raw.trim() !== "" ? raw : (dim.fallbackLabel ?? FALLBACK_LABEL);
+}
+
 function groupByDimension(
   levers: Lever[],
   dim: DimensionDef,
@@ -289,8 +296,7 @@ function groupByDimension(
 ): Map<string, Lever[]> {
   const map = new Map<string, Lever[]>();
   levers.forEach((l) => {
-    const raw = dim.getValue(l, ctx);
-    const key = raw && raw.trim() !== "" ? raw : (dim.fallbackLabel ?? FALLBACK_LABEL);
+    const key = dimensionKeyOf(l, dim, ctx);
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(l);
   });
@@ -399,4 +405,30 @@ export function pivotByDimensions(
   const dim2 = getDimensionDef(dimensionKeys[1], context.hierarchyLevels);
   if (!dim2) return pivot1D(active, metric, dim1, fullCtx);
   return pivot2D(active, metric, dim1, dim2, fullCtx);
+}
+
+/**
+ * Leviers derrière une case du pivot (barre, part de donut ou segment Marimekko) — mêmes leviers
+ * actifs et MÊME règle de regroupement que `pivotByDimensions`, pour l'aperçu au survol des
+ * graphiques du dashboard. `keys[i]` = clé de la dimension `dimensionKeys[i]` (une clé absente =
+ * pas de filtre sur cette dimension, ex. colonne entière d'un Marimekko).
+ */
+export function leversInPivotCell(
+  data: BeTrackData,
+  dimensionKeys: string[],
+  keys: (string | undefined)[],
+  context: PivotContext = {}
+): Lever[] {
+  const fullCtx: PivotContext = {
+    ...context,
+    workstreams: context.workstreams ?? data.workstreams,
+    pnlAccounts: context.pnlAccounts ?? data.pnlAccounts,
+  };
+  const dims = dimensionKeys.map((k) => getDimensionDef(k, context.hierarchyLevels));
+  if (dims.length === 0 || dims.some((d) => !d)) return [];
+  return data.levers.filter(
+    (l) =>
+      l.status !== "cancelled" &&
+      dims.every((d, i) => keys[i] === undefined || dimensionKeyOf(l, d!, fullCtx) === keys[i])
+  );
 }

@@ -41,9 +41,18 @@ import {
   getAvailableDimensions,
   getDimensionDef,
   getMetricDef,
+  leversInPivotCell,
   pivotByDimensions,
   type PivotRow,
 } from "@/lib/dashboardPivot";
+import {
+  leverCellPreview,
+  leversByField,
+  metricValueFormatter,
+  pivotLeverRanking,
+  stagePreviews,
+  summarizeLeverGroup,
+} from "@/lib/chartHoverPreview";
 import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/leversLogic";
 import { isReadOnlyUser } from "@/lib/roleProfiles";
 import { KPICard } from "@/components/shared/KPICard";
@@ -663,6 +672,19 @@ export function DashboardPagePerformance() {
       return list;
     };
   }, [filteredData, trajGranularity]);
+  // Même aperçu pour le widget "Courbe en S" (sa propre granularité).
+  const sCurveGapContributors = useMemo(() => {
+    const cache = new Map<string, SCurveGapContributor[]>();
+    return (month: string) => {
+      const hit = cache.get(month);
+      if (hit) return hit;
+      const list = gapEntriesAt(filteredData, sCurveGranularity, month)
+        .map((e) => ({ id: e.leverId, name: e.name, value: e.value }))
+        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+      cache.set(month, list);
+      return list;
+    };
+  }, [filteredData, sCurveGranularity]);
   const scurveGapEntries = useMemo(
     () =>
       scurveDetail ? gapEntriesAt(filteredData, scurveDetail.granularity, scurveDetail.month) : [],
@@ -670,6 +692,8 @@ export function DashboardPagePerformance() {
   );
   const sCurve = engine.savingsSeries(filteredData, sCurveGranularity);
   const stages = engine.stageCounts(filteredData);
+  // Aperçu au survol de l'entonnoir des étapes (valeur, part du pipeline, principaux leviers).
+  const stageDetails = useMemo(() => stagePreviews(filteredData), [filteredData]);
   const savingsWaterfallData = useMemo(() => engine.savingsWaterfall(filteredData), [filteredData]);
   const oneOffGains = useMemo(() => oneOffGainsTotal(filteredData), [filteredData]);
 
@@ -1032,7 +1056,11 @@ export function DashboardPagePerformance() {
           <Card className="mb-0 h-full">
             <CardHeader title={t("dashboard.widgets.portfolioFunnel")} />
             <CardBody>
-              <StageFunnel data={stages} onStageClick={goToStage} />
+              <StageFunnel
+                data={stages}
+                onStageClick={goToStage}
+                details={(s) => stageDetails[s]}
+              />
             </CardBody>
           </Card>
         );
@@ -1042,7 +1070,11 @@ export function DashboardPagePerformance() {
           <Card className="mb-0 h-full">
             <CardHeader title={t("dashboard.widgets.stageFunnelFull")} />
             <CardBody>
-              <StageFunnel data={stages} onStageClick={goToStage} />
+              <StageFunnel
+                data={stages}
+                onStageClick={goToStage}
+                details={(s) => stageDetails[s]}
+              />
             </CardBody>
           </Card>
         );
@@ -1494,6 +1526,7 @@ export function DashboardPagePerformance() {
                 data={sCurve}
                 height={360}
                 onPointClick={(month) => openScurveDetail(sCurve, sCurveGranularity, month)}
+                gapContributors={sCurveGapContributors}
                 labelActual={t("chart.scurve.actual")}
                 labelPlanned={t("chart.scurve.planned")}
                 labelReforecast={t("chart.scurve.reforecast")}
@@ -1548,6 +1581,34 @@ export function DashboardPagePerformance() {
                 onSegmentClick={(primaryKey) => {
                   if (!activeView) return;
                   goToDimensionValue(activeView.dimensions[0], primaryKey);
+                }}
+                // Aperçu au survol : leviers du segment/de la colonne, MÊME regroupement que le
+                // calcul du graphique (marimekko2D historique ou pivot générique).
+                formatValue={isLegacy ? engine.fmtCurr : metricValueFormatter(activeView?.metric)}
+                formatLeverValue={
+                  isLegacy ? engine.fmtCurr : pivotLeverRanking(activeView?.metric).format
+                }
+                details={(primaryKey, secondaryKey) => {
+                  if (!activeView) return null;
+                  if (isLegacy)
+                    return summarizeLeverGroup(
+                      engine.marimekko2DLevers(
+                        filteredData,
+                        activeView.id as engine.MarimekkoPairKey,
+                        primaryKey,
+                        secondaryKey,
+                        programs
+                      )
+                    );
+                  return summarizeLeverGroup(
+                    leversInPivotCell(
+                      filteredData,
+                      activeView.dimensions,
+                      [primaryKey, secondaryKey],
+                      { programs, hierarchyLevels, hierarchyNodes, riskLabel: riskLabelOf }
+                    ),
+                    pivotLeverRanking(activeView.metric).rank
+                  );
                 }}
               />
             </CardBody>
@@ -1709,7 +1770,34 @@ export function DashboardPagePerformance() {
               }
             />
             <CardBody>
-              <GeoDonutChart data={donutData} />
+              <GeoDonutChart
+                data={donutData}
+                // Aperçu au survol : leviers de la part, MÊME regroupement que le calcul du donut
+                // (byCountry/byFunction = réalisé, ou pivot générique).
+                formatValue={
+                  !activeView || isLegacy ? undefined : metricValueFormatter(activeView.metric)
+                }
+                formatLeverValue={
+                  !activeView || isLegacy ? undefined : pivotLeverRanking(activeView.metric).format
+                }
+                details={(name) => {
+                  if (!activeView) return null;
+                  if (isLegacy)
+                    return summarizeLeverGroup(
+                      leversByField(filteredData, activeView.id as "country" | "function", name),
+                      engine.realizedSavings
+                    );
+                  return summarizeLeverGroup(
+                    leversInPivotCell(filteredData, activeView.dimensions, [name], {
+                      programs,
+                      hierarchyLevels,
+                      hierarchyNodes,
+                      riskLabel: riskLabelOf,
+                    }),
+                    pivotLeverRanking(activeView.metric).rank
+                  );
+                }}
+              />
             </CardBody>
           </Card>
         );
@@ -1904,6 +1992,9 @@ export function DashboardPagePerformance() {
                 groups={groups}
                 labels={healthLabels}
                 onLeverClick={(leverId) => router.push(`/levers/detail?id=${leverId}`)}
+                // Aperçu au survol : même source de risque que la matrice (alertes non ciblées).
+                details={(lever) => leverCellPreview(lever, riskAlerts, company?.riskThresholds)}
+                stageLabel={lifecycle.label}
               />
             </CardBody>
           </Card>

@@ -32,7 +32,11 @@ import {
 } from "@/components/shared/MovementNetBalanceSummary";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { WorkforceMovement } from "@/types";
-import { intlTag } from "@/lib/format";
+import { formatFte, intlTag } from "@/lib/format";
+import { planMovementFte } from "@/lib/hrProgramSummary";
+import { departmentContributors, shareOfTotal, sumAbs } from "@/lib/hrChartPreview";
+import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
+import { HrChartPreview } from "./HrChartPreview";
 
 // Palette catégorielle validée (dataviz, tous checks PASS sur surface claire).
 export const HR_CATEGORICAL = ["#FF3C47", "#421799", "#320300", "#FFB1B5", "#421799", "#A99E9A"];
@@ -131,8 +135,16 @@ export function DepartmentMovementsChart({
       transferDirection: (m) => d.transferDirections[m.id],
     }),
     movements: d.movements,
+    /** Volume brut ETP du groupe (somme des 5 séries) — part du total dans l'aperçu au survol. */
+    gross:
+      d.recrutements +
+      d.transfertEntrants +
+      d.attritions +
+      d.forcedDepartures +
+      d.transfertSortants,
   }));
   type Row = (typeof chartData)[number];
+  const totalGross = sumAbs(chartData.map((r) => r.gross));
 
   const handleBarClick = (payload: unknown) => {
     const row = payload as Partial<Row> | undefined;
@@ -152,151 +164,155 @@ export function DepartmentMovementsChart({
         ↑ {t("shared.hrBreakdownCharts.axisFtePerType", "ETP par type de mouvement")} (
         {t("shared.hrBreakdownCharts.axisSides", "entrées au-dessus de 0, sorties en dessous")})
       </div>
-      <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart
-          data={chartData}
-          stackOffset="sign"
-          margin={{ top: hasTransferLabels ? 30 : 18, right: 8, left: -8, bottom: 0 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-          <XAxis
-            dataKey="dimension"
-            tick={{ fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            interval={0}
-            angle={rotateTicks ? -25 : 0}
-            textAnchor={rotateTicks ? "end" : "middle"}
-            height={(rotateTicks ? 44 : 24) + (dimensionLabel ? 14 : 0)}
-            label={
-              dimensionLabel
-                ? {
-                    value: dimensionLabel,
-                    position: "insideBottom",
-                    offset: 0,
-                    fontSize: 10,
-                    fill: "#806659",
-                  }
-                : undefined
-            }
-          />
-          <YAxis
-            tick={{ fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={(v: number) => v.toLocaleString(intlTag())}
-          />
-          <Tooltip
-            cursor={{ fill: "rgba(0,0,0,0.04)" }}
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const row = payload[0]?.payload as Row | undefined;
-              if (!row) return null;
-              return (
-                <div className="max-w-[320px] rounded-md border border-border bg-white px-3 py-2 text-xs shadow-sm">
-                  <div className="mb-1 font-semibold text-primary">{row.dimension}</div>
-                  <div className="space-y-0.5">
-                    {series
-                      .filter((s) => row.counts[s.key] > 0)
-                      .map((s) => (
-                        <div key={s.key} className="flex items-center justify-between gap-3">
-                          <span className="inline-flex items-center gap-1.5 text-secondary">
-                            <span
-                              aria-hidden
-                              className="inline-block h-2 w-2 rounded-[2px]"
-                              style={{ backgroundColor: s.color }}
-                            />
-                            {s.label}
-                          </span>
-                          <span className="tabular-nums text-secondary">
-                            {t("shared.hrBreakdownCharts.countAndFte", "{n} pers. · {v} {etp}")
-                              .replace("{n}", String(row.counts[s.key]))
-                              .replace("{v}", formatSignedFr(row[s.key]))
-                              .replace("{etp}", etp)}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                  <div className="mt-1.5 border-t border-border pt-1.5">
-                    <MovementNetBalanceSummary balance={row.balance} compact />
-                  </div>
-                  {onBarClick && row.movements.length > 0 && (
-                    <div className="mt-1 text-[10.5px] italic text-tertiary">
-                      {t(
-                        "shared.hrBreakdownCharts.clickForDetail",
-                        "Cliquez sur la barre pour voir la liste des mouvements."
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            }}
-          />
-          <ReferenceLine y={0} stroke="rgba(0,0,0,0.35)" />
-          {series.map((s) => (
-            <Bar
-              key={s.key}
-              dataKey={s.key}
-              name={s.label}
-              stackId="mouv"
-              fill={s.color}
-              onClick={handleBarClick}
-              cursor={onBarClick ? "pointer" : undefined}
+      <ChartHoverArea>
+        <ResponsiveContainer width="100%" height={height}>
+          <ComposedChart
+            data={chartData}
+            stackOffset="sign"
+            margin={{ top: hasTransferLabels ? 30 : 18, right: 8, left: -8, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+            <XAxis
+              dataKey="dimension"
+              tick={{ fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              interval={0}
+              angle={rotateTicks ? -25 : 0}
+              textAnchor={rotateTicks ? "end" : "middle"}
+              height={(rotateTicks ? 44 : 24) + (dimensionLabel ? 14 : 0)}
+              label={
+                dimensionLabel
+                  ? {
+                      value: dimensionLabel,
+                      position: "insideBottom",
+                      offset: 0,
+                      fontSize: 10,
+                      fill: "#806659",
+                    }
+                  : undefined
+              }
             />
-          ))}
-          {/* Ancre invisible (hors légende) de l'étiquette « net ±N » au sommet de chaque groupe :
-           *  aucun trait, aucun point, seule la valeur signée colorée est dessinée. */}
-          <Line
-            dataKey="positiveTop"
-            legendType="none"
-            stroke="none"
-            dot={false}
-            activeDot={false}
-            isAnimationActive={false}
-            label={(props: NetLabelProps) => {
-              const row = chartData[props.index ?? -1];
-              if (!row || row.movements.length === 0) return <g />;
-              const net = row.balance.netFte;
-              const x = Number(props.x);
-              const y = Number(props.y);
-              const hasTransfers =
-                row.balance.transfersIn.count + row.balance.transfersOut.count > 0;
-              return (
-                <g>
-                  <text
-                    x={x}
-                    y={hasTransfers ? y - 17 : y - 6}
-                    textAnchor="middle"
-                    fontSize={10.5}
-                    fontWeight={700}
-                    fill={netBalanceColor(net) ?? "#806659"}
-                  >
-                    {t("shared.hrBreakdownCharts.netLabel", "net {v}").replace(
-                      "{v}",
-                      formatSignedFr(net)
-                    )}
-                  </text>
-                  {hasTransfers && (
+            <YAxis
+              tick={{ fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v: number) => v.toLocaleString(intlTag())}
+            />
+            {/* Aperçu au survol (retour PO) : ETP par type, part du volume total, bilan net,
+              principaux départements — puis clic = liste des mouvements. */}
+            <Tooltip
+              cursor={{ fill: "rgba(0,0,0,0.04)" }}
+              wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const row = payload[0]?.payload as Row | undefined;
+                if (!row) return null;
+                // Groupe survolé exclu : en vue Département, seuls les départements d'origine /
+                // destination des transferts ressortent.
+                const contributors = departmentContributors(row.movements, planMovementFte, {
+                  exclude: [row.dimension],
+                });
+                return (
+                  <FloatingPreview>
+                    <HrChartPreview
+                      title={row.dimension}
+                      rows={series
+                        .filter((s) => row.counts[s.key] > 0)
+                        .map((s) => ({
+                          label: s.label,
+                          value: t("shared.hrBreakdownCharts.countAndFte", "{n} pers. · {v} {etp}")
+                            .replace("{n}", String(row.counts[s.key]))
+                            .replace("{v}", formatSignedFr(row[s.key]))
+                            .replace("{etp}", etp),
+                          marker: { color: s.color },
+                        }))}
+                      share={{
+                        label: t("chart.hrPreview.shareOfVolume", "Part du volume total (ETP)"),
+                        pct: shareOfTotal(row.gross, totalGross),
+                      }}
+                      list={{
+                        title: t("chart.hrPreview.topDepartments", "Principaux départements"),
+                        items: contributors.map((c) => ({
+                          key: c.key,
+                          label: c.label,
+                          value: formatFte(c.value, { unit: etp }),
+                        })),
+                      }}
+                      clickHint={onBarClick && row.movements.length > 0}
+                    >
+                      <MovementNetBalanceSummary balance={row.balance} compact />
+                    </HrChartPreview>
+                  </FloatingPreview>
+                );
+              }}
+            />
+            <ReferenceLine y={0} stroke="rgba(0,0,0,0.35)" />
+            {series.map((s) => (
+              <Bar
+                key={s.key}
+                dataKey={s.key}
+                name={s.label}
+                stackId="mouv"
+                fill={s.color}
+                onClick={handleBarClick}
+                cursor={onBarClick ? "pointer" : undefined}
+              />
+            ))}
+            {/* Ancre invisible (hors légende) de l'étiquette « net ±N » au sommet de chaque groupe :
+             *  aucun trait, aucun point, seule la valeur signée colorée est dessinée. */}
+            <Line
+              dataKey="positiveTop"
+              legendType="none"
+              stroke="none"
+              dot={false}
+              activeDot={false}
+              isAnimationActive={false}
+              label={(props: NetLabelProps) => {
+                const row = chartData[props.index ?? -1];
+                if (!row || row.movements.length === 0) return <g />;
+                const net = row.balance.netFte;
+                const x = Number(props.x);
+                const y = Number(props.y);
+                const hasTransfers =
+                  row.balance.transfersIn.count + row.balance.transfersOut.count > 0;
+                return (
+                  <g>
                     <text
                       x={x}
-                      y={y - 6}
+                      y={hasTransfers ? y - 17 : y - 6}
                       textAnchor="middle"
-                      fontSize={9.5}
-                      fontWeight={600}
-                      fill={COLOR_NEUTRAL}
+                      fontSize={10.5}
+                      fontWeight={700}
+                      fill={netBalanceColor(net) ?? "#806659"}
                     >
-                      {t("shared.hrBreakdownCharts.transferLabel", "transf. {v}").replace(
+                      {t("shared.hrBreakdownCharts.netLabel", "net {v}").replace(
                         "{v}",
-                        formatSignedFr(row.balance.transferNetFte)
+                        formatSignedFr(net)
                       )}
                     </text>
-                  )}
-                </g>
-              );
-            }}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
+                    {hasTransfers && (
+                      <text
+                        x={x}
+                        y={y - 6}
+                        textAnchor="middle"
+                        fontSize={9.5}
+                        fontWeight={600}
+                        fill={COLOR_NEUTRAL}
+                      >
+                        {t("shared.hrBreakdownCharts.transferLabel", "transf. {v}").replace(
+                          "{v}",
+                          formatSignedFr(row.balance.transferNetFte)
+                        )}
+                      </text>
+                    )}
+                  </g>
+                );
+              }}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </ChartHoverArea>
       {/* Légende HTML en bas, centrée, carrés uniformes — même style que
           `MovementProgressByDimensionChart` ; hors du SVG, elle ne chevauche ni les barres ni les
           libellés d'axe inclinés et se replie proprement en lignes centrées. */}
@@ -433,25 +449,64 @@ export function HrPivotBarChart({
 }) {
   const { t } = useTranslation();
   const resolvedFormatValue = formatValue ?? defaultFteFormat(t);
+  const total = sumAbs(data.map((d) => d.value));
+  // Rang de chaque libellé (valeur absolue décroissante) — repère de l'aperçu au survol.
+  const rankByLabel = new Map(
+    [...data]
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      .map((d, i) => [d.label, i + 1] as const)
+  );
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-        <Tooltip formatter={(value) => resolvedFormatValue(Number(value))} />
-        <Bar
-          dataKey="value"
-          fill={HR_CATEGORICAL[0]}
-          radius={[3, 3, 0, 0]}
-          onClick={(d) => {
-            const label = (d as { label?: string })?.label;
-            if (label) onBarClick?.(label);
-          }}
-          cursor={onBarClick ? "pointer" : undefined}
-        />
-      </BarChart>
-    </ResponsiveContainer>
+    <ChartHoverArea>
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart data={data} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+          {/* Aperçu au survol (retour PO) : valeur, rang, part du total — puis clic = mouvements. */}
+          <Tooltip
+            cursor={{ fill: "rgba(0,0,0,0.04)" }}
+            wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+            content={({ active, payload }) => {
+              const d = payload?.[0]?.payload as { label: string; value: number } | undefined;
+              if (!active || !d) return null;
+              return (
+                <FloatingPreview>
+                  <HrChartPreview
+                    title={d.label}
+                    rows={[
+                      {
+                        label: t("chart.hrPreview.value", "Valeur"),
+                        value: resolvedFormatValue(d.value),
+                        marker: { color: HR_CATEGORICAL[0] },
+                        strong: true,
+                      },
+                      {
+                        label: t("chart.hrPreview.rank", "Rang"),
+                        value: `${rankByLabel.get(d.label) ?? "—"} / ${data.length}`,
+                        muted: true,
+                      },
+                    ]}
+                    share={{ pct: shareOfTotal(d.value, total) }}
+                    clickHint={!!onBarClick}
+                  />
+                </FloatingPreview>
+              );
+            }}
+          />
+          <Bar
+            dataKey="value"
+            fill={HR_CATEGORICAL[0]}
+            radius={[3, 3, 0, 0]}
+            onClick={(d) => {
+              const label = (d as { label?: string })?.label;
+              if (label) onBarClick?.(label);
+            }}
+            cursor={onBarClick ? "pointer" : undefined}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartHoverArea>
   );
 }

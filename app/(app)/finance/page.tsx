@@ -29,6 +29,7 @@ import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter } from "@/lib/filterUtils";
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/leversLogic";
+import { pnlLeverContributionsByAccount } from "@/lib/financePreview";
 
 /**
  * Module Finance — le compte de résultat configuré (baseline P&L éditable, reforecast, waterfall)
@@ -336,6 +337,7 @@ export default function FinancePage() {
   const pnlData = useMemo(
     () =>
       pnlDetailedData.map((d) => ({
+        id: d.accountId,
         account: d.accountName,
         plan: d.plan,
         reforecast: d.reforecast,
@@ -343,6 +345,27 @@ export default function FinancePage() {
       })),
     [pnlDetailedData]
   );
+  // Aperçu au survol du P&L : contributions levier par levier (même moteur, même période, même
+  // arborescence que les barres — `pnlLeverContributionsByAccount`).
+  const pnlContributions = useMemo(
+    () =>
+      pnlLeverContributionsByAccount(
+        pnlFilteredData,
+        pnlPeriodFilter,
+        hierarchyNodes,
+        hierarchyLevels
+      ),
+    [pnlFilteredData, pnlPeriodFilter, hierarchyNodes, hierarchyLevels]
+  );
+  // Sous-titre de l'aperçu : période filtrée + base de calcul, comme `PeriodBasisNote`.
+  const pnlPreviewSubtitle = [
+    [pnlYear, pnlQuarter, pnlMonth].filter(Boolean).join(" · "),
+    engine.isSubAnnualPeriod(pnlPeriodFilter)
+      ? t("pnl.periodBasis.period", "Effet sur la période")
+      : t("pnl.periodBasis.annual", "Base annuelle (effet année pleine)"),
+  ]
+    .filter(Boolean)
+    .join(" — ");
 
   // Bucket "Gains non attribués" (engine.UNALLOCATED_ACCOUNT_ID) — n'existe pas dans
   // `data.pnlAccounts` (référentiel de comptes), donc n'apparaît jamais via la boucle qui itère
@@ -489,6 +512,8 @@ export default function FinancePage() {
             labelPlan={t("chart.pnl.plan")}
             labelRealized={t("chart.pnl.realized")}
             labelReforecast={t("chart.pnl.reforecast", "Réactualisé")}
+            previewSubtitle={pnlPreviewSubtitle}
+            contributors={(point) => (point.id ? (pnlContributions.get(point.id) ?? []) : [])}
           />
         </CardBody>
       </Card>

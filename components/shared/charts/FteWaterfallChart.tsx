@@ -12,10 +12,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { FteBridgeBucket } from "@/lib/hrEngine";
+import { fteEffect, type FteBridgeBucket } from "@/lib/hrEngine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { intlTag } from "@/lib/format";
 import { onActivateKey } from "@/lib/a11y";
+import { departmentContributors, shareOfTotal, sumAbs } from "@/lib/hrChartPreview";
+import type { WorkforceMovement } from "@/types";
+import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
+import { HrChartPreview } from "./HrChartPreview";
 
 // Polarité validée (dataviz) : réductions en corail, ajouts en bleu — ΔE CVD 81.6.
 const COLOR_DOWN = "#FF3C47";
@@ -30,6 +34,9 @@ type WaterfallDatum = {
   height: number;
   delta: number;
   cumulative: number;
+  /** Niveau en début de bucket (avant son delta) — aperçu au survol. */
+  start: number;
+  movements?: WorkforceMovement[];
 };
 
 /**
@@ -46,8 +53,10 @@ export function FteWaterfallChart({
   decimals = 0,
   targetLabel,
   onBarClick,
+  contributorValue = fteEffect,
 }: {
-  buckets: Pick<FteBridgeBucket, "label" | "delta">[];
+  /** `movements` (optionnel) alimente les principaux départements de l'aperçu au survol. */
+  buckets: (Pick<FteBridgeBucket, "label" | "delta"> & { movements?: WorkforceMovement[] })[];
   baseline: number;
   target: number;
   height?: number;
@@ -56,6 +65,9 @@ export function FteWaterfallChart({
   decimals?: number;
   targetLabel?: string;
   onBarClick?: (label: string) => void;
+  /** Valeur d'un mouvement dans l'unité du graphique, pour classer les départements contributeurs
+   *  de l'aperçu (défaut : effet ETP `fteEffect` ; waterfall masse salariale : `salaryImpact` €M). */
+  contributorValue?: (movement: WorkforceMovement) => number;
 }) {
   const { t } = useTranslation();
   const resolvedUnit = unit ?? t("etp.column.fte", "ETP");
@@ -85,6 +97,8 @@ export function FteWaterfallChart({
       height: Math.abs(b.delta),
       delta: b.delta,
       cumulative: running,
+      start,
+      movements: b.movements,
     };
   });
 
@@ -112,6 +126,12 @@ export function FteWaterfallChart({
   const offset = Math.min(...values) - pad;
   const domainMax = Math.max(...values) + pad - offset;
   const data: WaterfallDatum[] = raw.map((d) => ({ ...d, base: d.base - offset }));
+  const totalAbsDelta = sumAbs(raw.map((d) => d.delta));
+  const signed = (v: number) => {
+    const text = fmt(Math.abs(v));
+    return /[1-9]/.test(text) ? `${v > 0 ? "+" : v < 0 ? "−" : ""}${text}` : text;
+  };
+  const colorOf = (v: number) => (v < 0 ? COLOR_DOWN : v > 0 ? COLOR_UP : "rgba(0,0,0,0.12)");
 
   // Bulle de valeur affichée au-dessus de chaque barre (round 4 RH dashboard clarity) : la
   // valeur du delta n'était visible qu'au survol (Tooltip), pas assez lisible en un coup d'œil.
@@ -165,98 +185,141 @@ export function FteWaterfallChart({
   };
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={data} margin={{ top: 22, right: 8, left: 4, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-        <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-        <YAxis
-          domain={[0, domainMax]}
-          tick={{ fontSize: 11 }}
-          axisLine={false}
-          tickLine={false}
-          width={56}
-          tickFormatter={(v) => fmt(Number(v) + offset)}
-        />
-        <Tooltip
-          cursor={false}
-          content={({ active, payload }) => {
-            const d = payload?.[1]?.payload as WaterfallDatum | undefined;
-            if (!active || !d) return null;
-            return (
-              <div className="rounded-md border border-border bg-white px-3 py-2 text-xs shadow-sm">
-                <div className="font-semibold text-primary">{d.label}</div>
-                <div className="font-semibold text-primary">
-                  {d.delta > 0 ? "+" : ""}
-                  {fmt(d.delta)} {resolvedUnit}
-                </div>
-                <div className="text-tertiary">
-                  {t("shared.fteWaterfallChart.endOfPeriod", "Fin de période")} :{" "}
-                  {fmt(d.cumulative)} {resolvedUnit}
-                </div>
-                {onBarClick && (
-                  <div className="mt-1 text-[10px] text-tertiary">
-                    {t(
-                      "shared.fteWaterfallChart.clickForDetail",
-                      "Cliquer pour le détail par levier"
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          }}
-        />
-        {/* pied invisible de la barre flottante */}
-        <Bar dataKey="base" stackId="wf" fill="transparent" isAnimationActive={false} />
-        <Bar
-          dataKey="height"
-          stackId="wf"
-          radius={[3, 3, 3, 3]}
-          onClick={(d) => {
-            const label = (d as { label?: string })?.label;
-            if (label) onBarClick?.(label);
-          }}
-          cursor={onBarClick ? "pointer" : undefined}
-          // Le highlight par défaut de Recharts (cursor du Tooltip désactivé ci-dessus + cette
-          // forme active) pouvait couvrir toute la hauteur du plot (0→domainMax) au lieu de la
-          // seule barre survolée/cliquée — incohérence visuelle "parfois tout le graphe, parfois
-          // juste un bout" selon où le pointeur atterrissait (y compris sur la barre `base`
-          // invisible). On désactive la forme active par défaut : la couleur par `<Cell>`, le
-          // curseur pointer et la bulle de valeur au-dessus de la barre suffisent comme affordance.
-          activeBar={false}
-        >
-          {data.map((d) => (
-            <Cell
-              key={d.label}
-              fill={d.delta < 0 ? COLOR_DOWN : d.delta > 0 ? COLOR_UP : "rgba(0,0,0,0.12)"}
-            />
-          ))}
-          <LabelList dataKey="height" content={renderDeltaBubble} />
-        </Bar>
-        <ReferenceLine
-          y={baseline - offset}
-          stroke="rgba(0,0,0,0.35)"
-          strokeWidth={1}
-          label={{
-            value: `${t("shared.fteWaterfallChart.opening", "Ouverture de la période")} ${fmt(baseline)}`,
-            fontSize: 10,
-            position: "insideTopLeft",
-            fill: "#806659",
-          }}
-        />
-        <ReferenceLine
-          y={target - offset}
-          stroke={COLOR_TARGET}
-          strokeDasharray="5 4"
-          strokeWidth={1.5}
-          label={{
-            value: `${resolvedTargetLabel} ${fmt(target)}`,
-            fontSize: 10,
-            position: "insideBottomLeft",
-            fill: COLOR_TARGET,
-          }}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <ChartHoverArea>
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart data={data} margin={{ top: 22, right: 8, left: 4, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis
+            domain={[0, domainMax]}
+            tick={{ fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            width={56}
+            tickFormatter={(v) => fmt(Number(v) + offset)}
+          />
+          {/* Aperçu au survol (retour PO) : variation, début / fin de période, cible, écart, part
+            des mouvements et principaux départements — puis clic = détail par levier. */}
+          <Tooltip
+            cursor={false}
+            wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+            content={({ active, payload }) => {
+              const d = payload?.[1]?.payload as WaterfallDatum | undefined;
+              if (!active || !d) return null;
+              const contributors = d.movements
+                ? departmentContributors(d.movements, contributorValue)
+                : [];
+              return (
+                <FloatingPreview>
+                  <HrChartPreview
+                    title={d.label}
+                    rows={[
+                      {
+                        label: t("chart.hrPreview.periodChange", "Variation de la période"),
+                        value: `${signed(d.delta)} ${resolvedUnit}`,
+                        marker: { color: colorOf(d.delta) },
+                        strong: true,
+                      },
+                      {
+                        label: t("chart.hrPreview.periodStart", "Début de période"),
+                        value: `${fmt(d.start)} ${resolvedUnit}`,
+                      },
+                      {
+                        label: t("shared.fteWaterfallChart.endOfPeriod", "Fin de période"),
+                        value: `${fmt(d.cumulative)} ${resolvedUnit}`,
+                      },
+                      {
+                        label: resolvedTargetLabel,
+                        value: `${fmt(target)} ${resolvedUnit}`,
+                        marker: { color: COLOR_TARGET, shape: "dashed" },
+                      },
+                    ]}
+                    gap={{
+                      label: t("chart.hrPreview.gapToTarget", "Écart fin de période − cible"),
+                      value: `${signed(d.cumulative - target)} ${resolvedUnit}`,
+                      unfavourable: false,
+                    }}
+                    share={{
+                      label: t(
+                        "chart.hrPreview.shareOfMovements",
+                        "Part des mouvements de la plage"
+                      ),
+                      pct: shareOfTotal(d.delta, totalAbsDelta),
+                    }}
+                    list={{
+                      title: t("chart.hrPreview.topDepartments", "Principaux départements"),
+                      items: contributors.map((c) => ({
+                        key: c.key,
+                        label: c.label,
+                        value: `${signed(c.value)} ${resolvedUnit}`,
+                      })),
+                    }}
+                    clickHint={
+                      onBarClick
+                        ? `${t(
+                            "shared.fteWaterfallChart.clickForDetail",
+                            "Cliquer pour le détail par levier"
+                          )} →`
+                        : undefined
+                    }
+                  />
+                </FloatingPreview>
+              );
+            }}
+          />
+          {/* pied invisible de la barre flottante */}
+          <Bar dataKey="base" stackId="wf" fill="transparent" isAnimationActive={false} />
+          <Bar
+            dataKey="height"
+            stackId="wf"
+            radius={[3, 3, 3, 3]}
+            onClick={(d) => {
+              const label = (d as { label?: string })?.label;
+              if (label) onBarClick?.(label);
+            }}
+            cursor={onBarClick ? "pointer" : undefined}
+            // Le highlight par défaut de Recharts (cursor du Tooltip désactivé ci-dessus + cette
+            // forme active) pouvait couvrir toute la hauteur du plot (0→domainMax) au lieu de la
+            // seule barre survolée/cliquée — incohérence visuelle "parfois tout le graphe, parfois
+            // juste un bout" selon où le pointeur atterrissait (y compris sur la barre `base`
+            // invisible). On désactive la forme active par défaut : la couleur par `<Cell>`, le
+            // curseur pointer et la bulle de valeur au-dessus de la barre suffisent comme affordance.
+            activeBar={false}
+          >
+            {data.map((d) => (
+              <Cell
+                key={d.label}
+                fill={d.delta < 0 ? COLOR_DOWN : d.delta > 0 ? COLOR_UP : "rgba(0,0,0,0.12)"}
+              />
+            ))}
+            <LabelList dataKey="height" content={renderDeltaBubble} />
+          </Bar>
+          <ReferenceLine
+            y={baseline - offset}
+            stroke="rgba(0,0,0,0.35)"
+            strokeWidth={1}
+            label={{
+              value: `${t("shared.fteWaterfallChart.opening", "Ouverture de la période")} ${fmt(baseline)}`,
+              fontSize: 10,
+              position: "insideTopLeft",
+              fill: "#806659",
+            }}
+          />
+          <ReferenceLine
+            y={target - offset}
+            stroke={COLOR_TARGET}
+            strokeDasharray="5 4"
+            strokeWidth={1.5}
+            label={{
+              value: `${resolvedTargetLabel} ${fmt(target)}`,
+              fontSize: 10,
+              position: "insideBottomLeft",
+              fill: COLOR_TARGET,
+            }}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </ChartHoverArea>
   );
 }
 

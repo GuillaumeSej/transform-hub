@@ -14,6 +14,15 @@ import type { MovementExecutionStatus, MovementProgressRow } from "@/lib/hrExecu
 import { MOVEMENT_PROGRESS_STATUS_ORDER } from "@/lib/hrExecution";
 import { STATUS_COLORS as EXECUTION_STATUS_COLORS } from "@/components/shared/charts/HrExecutionCharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import {
+  departmentContributors,
+  executionMovementFte as movementFte,
+  shareOfTotal,
+} from "@/lib/hrChartPreview";
+import { isActiveMovement } from "@/lib/workforceLogic";
+import { formatFte, formatMillions, formatPct } from "@/lib/format";
+import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
+import { HrChartPreview } from "./HrChartPreview";
 
 /**
  * Widget "Avancement des mouvements par {dimension} (proposition)" — barres horizontales
@@ -91,6 +100,8 @@ export function MovementProgressByDimensionChart({
   const chartData = data.map((row) => ({ label: row.label, ...row.counts, meta: row }));
   const rowByLabel = new Map(data.map((row) => [row.label, row]));
   const clickable = Boolean(onSegmentClick);
+  const grandTotal = data.reduce((sum, row) => sum + row.total, 0);
+  const etp = t("etp.column.fte", "ETP");
 
   const renderTick = (props: {
     x?: number | string;
@@ -134,93 +145,142 @@ export function MovementProgressByDimensionChart({
 
   return (
     <div>
-      <ResponsiveContainer width="100%" height={Math.max(height, data.length * 36 + 40)}>
-        <BarChart
-          data={chartData}
-          layout="vertical"
-          margin={{ top: 4, right: 16, left: 4, bottom: 4 }}
-          barCategoryGap="22%"
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" horizontal={false} />
-          <XAxis
-            type="number"
-            allowDecimals={false}
-            tick={{ fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <YAxis
-            type="category"
-            dataKey="label"
-            width={LABEL_WIDTH}
-            axisLine={false}
-            tickLine={false}
-            interval={0}
-            tick={renderTick}
-          />
-          <Tooltip
-            cursor={{ fill: "rgba(0,0,0,0.04)" }}
-            content={({ active, payload, label }) => {
-              if (!active || !payload?.length) return null;
-              const row = payload[0]?.payload?.meta as MovementProgressRow | undefined;
-              if (!row) return null;
-              return (
-                <div className="rounded-md border border-border bg-white px-3 py-2 text-xs shadow-sm">
-                  <div className="mb-1 font-semibold text-primary">
-                    {label} · {row.total}
-                  </div>
-                  {MOVEMENT_PROGRESS_STATUS_ORDER.map((status) => (
-                    <div key={status} className="flex items-center justify-between gap-5 py-0.5">
-                      <span className="flex items-center gap-1.5 text-secondary">
-                        <span
-                          aria-hidden
-                          className="inline-block h-2 w-2 rounded-[2px]"
-                          style={{ backgroundColor: MOVEMENT_PROGRESS_COLORS[status] }}
-                        />
-                        {movementProgressStatusLabel(t, status)}
-                      </span>
-                      <span className="font-semibold tabular-nums text-primary">
-                        {row.counts[status]}
-                      </span>
-                    </div>
-                  ))}
-                  {clickable && (
-                    <div className="mt-1 text-[10.5px] text-tertiary">
-                      {t(
-                        "hr.movementProgress.clickHint",
-                        "Cliquer sur un segment pour voir le détail des mouvements"
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            }}
-          />
-          {MOVEMENT_PROGRESS_STATUS_ORDER.map((status) => (
-            <Bar
-              key={status}
-              dataKey={status}
-              name={movementProgressStatusLabel(t, status)}
-              stackId="progress"
-              fill={MOVEMENT_PROGRESS_COLORS[status]}
-              isAnimationActive={false}
-              cursor={clickable ? "pointer" : undefined}
-              onClick={(entry) => {
-                const row = (entry as { meta?: MovementProgressRow } | undefined)?.meta;
-                if (row && row.counts[status] > 0) onSegmentClick?.(row, status);
+      <ChartHoverArea>
+        <ResponsiveContainer width="100%" height={Math.max(height, data.length * 36 + 40)}>
+          <BarChart
+            data={chartData}
+            layout="vertical"
+            margin={{ top: 4, right: 16, left: 4, bottom: 4 }}
+            barCategoryGap="22%"
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" horizontal={false} />
+            <XAxis
+              type="number"
+              allowDecimals={false}
+              tick={{ fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="label"
+              width={LABEL_WIDTH}
+              axisLine={false}
+              tickLine={false}
+              interval={0}
+              tick={renderTick}
+            />
+            {/* Aperçu au survol (retour PO) : mouvements par statut, total, ETP et impact masse
+              salariale, taux de réalisation, part du total et principaux départements. */}
+            <Tooltip
+              cursor={{ fill: "rgba(0,0,0,0.04)" }}
+              wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const row = payload[0]?.payload?.meta as MovementProgressRow | undefined;
+                if (!row) return null;
+                const activeMovements = MOVEMENT_PROGRESS_STATUS_ORDER.flatMap(
+                  (status) => row.movementsByStatus[status]
+                ).filter(isActiveMovement);
+                const fte = activeMovements.reduce((sum, m) => sum + movementFte(m), 0);
+                const salary = activeMovements.reduce((sum, m) => sum + (m.salaryImpact || 0), 0);
+                const realizedPct = shareOfTotal(
+                  row.counts.realized,
+                  row.total - row.counts.abandoned
+                );
+                // Groupe survolé exclu : en vue Département la liste est vide (pas redondante).
+                const contributors = departmentContributors(activeMovements, movementFte, {
+                  exclude: [row.label],
+                });
+                return (
+                  <FloatingPreview>
+                    <HrChartPreview
+                      title={row.label}
+                      rows={[
+                        ...MOVEMENT_PROGRESS_STATUS_ORDER.filter(
+                          (status) => row.counts[status] > 0
+                        ).map((status) => ({
+                          label: movementProgressStatusLabel(t, status),
+                          value: String(row.counts[status]),
+                          marker: { color: MOVEMENT_PROGRESS_COLORS[status] },
+                        })),
+                        {
+                          label: t("chart.hrPreview.total", "Total"),
+                          value: String(row.total),
+                          strong: true,
+                        },
+                        {
+                          label: t("chart.hrPreview.fteExclAbandoned", "ETP (hors abandons)"),
+                          value: formatFte(fte, { unit: etp }),
+                        },
+                        {
+                          label: t("chart.hrPreview.salaryImpact", "Impact masse salariale"),
+                          value: formatMillions(salary / 1_000_000),
+                        },
+                        ...(realizedPct !== null
+                          ? [
+                              {
+                                label: t(
+                                  "chart.hrPreview.realizedRate",
+                                  "Réalisé / prévu (hors abandons)"
+                                ),
+                                value: formatPct(realizedPct),
+                                muted: true,
+                              },
+                            ]
+                          : []),
+                      ]}
+                      share={{
+                        label: t("chart.hrPreview.shareOfMovementCount", "Part des mouvements"),
+                        pct: shareOfTotal(row.total, grandTotal),
+                      }}
+                      list={{
+                        title: t("chart.hrPreview.topDepartments", "Principaux départements"),
+                        items: contributors.map((c) => ({
+                          key: c.key,
+                          label: c.label,
+                          value: formatFte(c.value, { unit: etp }),
+                        })),
+                      }}
+                      clickHint={
+                        clickable
+                          ? t(
+                              "hr.movementProgress.clickHint",
+                              "Cliquer sur un segment pour voir le détail des mouvements"
+                            )
+                          : undefined
+                      }
+                    />
+                  </FloatingPreview>
+                );
               }}
-            >
-              <LabelList
+            />
+            {MOVEMENT_PROGRESS_STATUS_ORDER.map((status) => (
+              <Bar
+                key={status}
                 dataKey={status}
-                position="center"
-                fontSize={10}
-                fill={SEGMENT_LABEL_COLORS[status]}
-                formatter={(value: unknown) => (Number(value) > 0 ? String(value) : "")}
-              />
-            </Bar>
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
+                name={movementProgressStatusLabel(t, status)}
+                stackId="progress"
+                fill={MOVEMENT_PROGRESS_COLORS[status]}
+                isAnimationActive={false}
+                cursor={clickable ? "pointer" : undefined}
+                onClick={(entry) => {
+                  const row = (entry as { meta?: MovementProgressRow } | undefined)?.meta;
+                  if (row && row.counts[status] > 0) onSegmentClick?.(row, status);
+                }}
+              >
+                <LabelList
+                  dataKey={status}
+                  position="center"
+                  fontSize={10}
+                  fill={SEGMENT_LABEL_COLORS[status]}
+                  formatter={(value: unknown) => (Number(value) > 0 ? String(value) : "")}
+                />
+              </Bar>
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartHoverArea>
       {/* Légende en bas, centrée — même position/taille que la `<Legend>` Recharts du widget
           "vue combinée" (DepartmentMovementsChart). */}
       <ul className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-secondary">

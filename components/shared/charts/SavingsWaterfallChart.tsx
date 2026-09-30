@@ -16,7 +16,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { HoverDetailsHint } from "./SCurveChart";
+import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
+import { topContributors, waterfallStepSummary, type PreviewContributor } from "@/lib/chartPreview";
 import type { SavingsWaterfall } from "@/lib/engine";
 import { limitSegments, waterfallBars, type WaterfallBar } from "@/lib/dashboardSavings";
 import {
@@ -147,6 +148,25 @@ export function SavingsWaterfallChart({
       }),
     [bars]
   );
+
+  // Aperçu au survol : principaux leviers de chaque étape, MÊMES entrées que le détail au clic
+  // (`buildDrilldownEntries`, SavingsStepDrilldownModal), calculées à la demande et mises en cache.
+  const stepContributors = useMemo(() => {
+    const cache = new Map<DrilldownStepKey, PreviewContributor[]>();
+    return (step: DrilldownStepKey) => {
+      const hit = cache.get(step);
+      if (hit) return hit;
+      const list = topContributors(
+        buildDrilldownEntries(step, levers).map((e) => ({
+          id: e.leverId,
+          name: e.name,
+          value: e.value,
+        }))
+      );
+      cache.set(step, list);
+      return list;
+    };
+  }, [levers]);
 
   if (bars.length === 0) {
     return (
@@ -322,7 +342,7 @@ export function SavingsWaterfallChart({
           {t("chart.waterfall.step.opexRec", "− OPEX récurrent annuel")}
         </span>
       </div>
-      <HoverDetailsHint enabled={clickable}>
+      <ChartHoverArea>
         <ResponsiveContainer width="100%" height={height}>
           <BarChart
             data={data}
@@ -344,8 +364,29 @@ export function SavingsWaterfallChart({
               tickLine={false}
               tickFormatter={(v) => formatMillions(Number(v))}
             />
-            {/* Tooltip vide : pas d'infobulle au survol, mais fournit l'index actif pour le clic. */}
-            <Tooltip content={() => null} cursor={false} />
+            {/* Aperçu au survol (retour PO) : montant, part, cumul avant → après et principaux
+                leviers de l'étape ; fournit aussi l'index actif pour le clic (détail). */}
+            <Tooltip
+              cursor={false}
+              wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+              content={({ active, payload }) => {
+                const key = (payload?.[0]?.payload as WaterfallBar | undefined)?.key;
+                const bar = key ? bars.find((b) => b.key === key) : undefined;
+                if (!active || !bar || bar.key === "gap") return null;
+                const step = drillStepOf(bar.key);
+                return (
+                  <FloatingPreview>
+                    <WaterfallStepPreview
+                      label={bar.label.replace(/^[=±−+]\s*/, "")}
+                      stepKey={bar.key}
+                      waterfall={waterfall}
+                      contributors={clickable && step ? stepContributors(step) : []}
+                      clickable={clickable && !!step}
+                    />
+                  </FloatingPreview>
+                );
+              }}
+            />
             <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
             <ReferenceLine x=" " stroke="rgba(0,0,0,0.25)" strokeDasharray="4 4" />
             <Bar dataKey="up" stackId="w" isAnimationActive={false} {...outline}>
@@ -397,7 +438,7 @@ export function SavingsWaterfallChart({
             <Customized component={Connectors} />
           </BarChart>
         </ResponsiveContainer>
-      </HoverDetailsHint>
+      </ChartHoverArea>
       {oneOffGains > 0 && (
         <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-tertiary">
           <span>
@@ -418,6 +459,141 @@ export function SavingsWaterfallChart({
           natureLabels={natureLabels}
           opexColors={OPEX_SEGMENT_COLORS}
         />
+      )}
+    </div>
+  );
+}
+
+const signedM = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt(Math.abs(v))}`;
+
+/** Aperçu au survol d'une étape de la cascade (même carte que `SCurvePreview`) : montant, part du
+ *  total de référence du groupe, cumul avant → après (étapes de variation) ou réalisé / reste à
+ *  faire (cible), mini-comparaison et principaux leviers de l'étape. Le clic ouvre le détail. */
+function WaterfallStepPreview({
+  label,
+  stepKey,
+  waterfall,
+  contributors,
+  clickable,
+}: {
+  label: string;
+  stepKey: string;
+  waterfall: SavingsWaterfall;
+  contributors: PreviewContributor[];
+  clickable: boolean;
+}) {
+  const { t } = useTranslation();
+  const s = waterfallStepSummary(waterfall, stepKey);
+  if (!s) return null;
+  const isTarget = stepKey === "target" || stepKey === "net";
+  const valueClass = (v: number) =>
+    v < 0 ? "font-semibold tabular-nums text-bp-coral" : "font-semibold tabular-nums text-primary";
+  const row = (swatch: string, text: string, value: string, cls = valueClass(0)) => (
+    <div className="flex items-center justify-between gap-4">
+      <span className="flex items-center gap-1.5 text-secondary">
+        <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: swatch }} />
+        {text}
+      </span>
+      <span className={cls}>{value}</span>
+    </div>
+  );
+  const pct = (v: number) => `${v < 0 ? "−" : ""}${Math.round(Math.abs(v) * 1000) / 10} %`;
+  const max = Math.max(Math.abs(s.before ?? 0), Math.abs(s.after), 1e-9);
+  const width = (v: number, m = max) => `${Math.max(2, Math.min(100, (Math.abs(v) / m) * 100))}%`;
+  return (
+    <div className="w-[260px] border border-border bg-white p-3 text-[11.5px] shadow-lg">
+      <div className="mb-2 text-[12.5px] font-bold text-primary">{label}</div>
+      <div className="space-y-1">
+        {row(
+          s.kind === "total"
+            ? WATERFALL_COLORS.total
+            : s.value < 0
+              ? WATERFALL_COLORS.down
+              : WATERFALL_COLORS.up,
+          s.kind === "total"
+            ? t("chart.waterfallPreview.amount", "Montant")
+            : t("chart.waterfallPreview.variation", "Variation"),
+          s.kind === "total" ? fmt(s.value) : signedM(s.value),
+          s.kind === "total" ? valueClass(0) : valueClass(s.value)
+        )}
+        {s.share !== null && (
+          <div className="flex items-center justify-between gap-4 text-secondary">
+            <span>
+              {s.shareBase === "gross"
+                ? t("chart.waterfallPreview.shareGross", "Part du gain brut")
+                : t("chart.waterfallPreview.shareInitial", "Part du planifié initial")}
+            </span>
+            <span className="tabular-nums">{pct(s.share)}</span>
+          </div>
+        )}
+      </div>
+      {s.before !== null ? (
+        <div className="mt-2.5 border-t border-border pt-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-semibold text-primary">
+              {t("chart.waterfallPreview.cumulative", "Cumul avant → après")}
+            </span>
+            <span className="font-semibold tabular-nums text-primary">
+              {fmt(s.before)} → {fmt(s.after)}
+            </span>
+          </div>
+          <div className="mt-1.5 space-y-1">
+            <div className="h-1.5 bg-neutral-100">
+              <div className="h-full bg-bp-warm-brown/60" style={{ width: width(s.before) }} />
+            </div>
+            <div className="h-1.5 bg-neutral-100">
+              <div
+                className={s.value < 0 ? "h-full bg-bp-coral" : "h-full bg-bp-deep-red/70"}
+                style={{ width: width(s.after) }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : isTarget && waterfall.target > 0 ? (
+        <div className="mt-2.5 space-y-1 border-t border-border pt-2">
+          {row(
+            WATERFALL_COLORS.realized,
+            t("chart.waterfall.realized", "Réalisé"),
+            fmt(waterfall.realized)
+          )}
+          {row(
+            WATERFALL_COLORS.remaining,
+            t("chart.waterfall.remaining", "Reste à faire"),
+            fmt(waterfall.remaining)
+          )}
+          <div className="h-1.5 bg-neutral-100">
+            <div
+              className="h-full bg-bp-coral"
+              style={{ width: width(waterfall.realized, Math.abs(waterfall.target)) }}
+            />
+          </div>
+        </div>
+      ) : null}
+      {contributors.length > 0 && (
+        <div className="mt-2 border-t border-border pt-2">
+          <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+            {t("chart.waterfallPreview.topLevers", "Principaux leviers")}
+          </div>
+          <div className="space-y-0.5">
+            {contributors.map((c) => (
+              <div key={c.id} className="flex justify-between gap-3">
+                <span className="truncate text-secondary">{c.name}</span>
+                <span
+                  className={
+                    c.value < 0 ? "tabular-nums text-bp-coral" : "tabular-nums text-primary"
+                  }
+                >
+                  {s.kind === "total" ? fmt(c.value) : signedM(c.value)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {clickable && (
+        <div className="mt-2 text-[10.5px] font-medium text-tertiary">
+          {t("chart.scurvePreview.click", "Cliquer pour le détail →")}
+        </div>
       )}
     </div>
   );

@@ -1852,6 +1852,43 @@ export type Marimekko2DColumn = {
   segments: Marimekko2DSegment[];
 };
 
+/** Clés primaire / secondaire d'un levier pour un couple Marimekko historique — SEULE règle de
+ *  regroupement de `marimekko2D`, réutilisée par `marimekko2DLevers` (aperçu au survol). */
+export function marimekkoPairAccessors(
+  data: BeTrackData,
+  pairKey: MarimekkoPairKey,
+  programs: Program[] = []
+): { primaryOf: (l: Lever) => string; secondaryOf: (l: Lever) => string } {
+  const primaryOf = (l: Lever): string =>
+    pairKey === "function-country"
+      ? l.function
+      : (data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws);
+  const secondaryOf = (l: Lever): string => {
+    if (pairKey === "function-country") return l.country || "—";
+    if (pairKey === "workstream-lever") return l.name;
+    // fallback legacy workstream-project
+    return programs.find((p) => p.id === l.programId)?.name ?? "Non assigné";
+  };
+  return { primaryOf, secondaryOf };
+}
+
+/** Leviers actifs d'une colonne (`secondaryKey` absent) ou d'un segment de `marimekko2D`. */
+export function marimekko2DLevers(
+  data: BeTrackData,
+  pairKey: MarimekkoPairKey,
+  primaryKey: string,
+  secondaryKey?: string,
+  programs: Program[] = []
+): Lever[] {
+  const { primaryOf, secondaryOf } = marimekkoPairAccessors(data, pairKey, programs);
+  return data.levers.filter(
+    (l) =>
+      l.status !== "cancelled" &&
+      primaryOf(l) === primaryKey &&
+      (secondaryKey === undefined || secondaryOf(l) === secondaryKey)
+  );
+}
+
 /** Répartition Marimekko à deux dimensions : la largeur des colonnes reflète le poids de la
  * dimension primaire (fonction ou workstream) dans le programme, chaque colonne se décompose
  * ensuite en segments empilés selon la dimension secondaire (pays ou projet). Remplace l'ancienne
@@ -1867,16 +1904,7 @@ export function marimekko2D(
   const net = (l: Lever) => displayedReforecastNet(l).value;
   const totalWeight = active.reduce((s, l) => s + Math.abs(net(l)), 0) || 1;
 
-  const primaryOf = (l: Lever): string =>
-    pairKey === "function-country"
-      ? l.function
-      : (data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws);
-  const secondaryOf = (l: Lever): string => {
-    if (pairKey === "function-country") return l.country || "—";
-    if (pairKey === "workstream-lever") return l.name;
-    // fallback legacy workstream-project
-    return programs.find((p) => p.id === l.programId)?.name ?? "Non assigné";
-  };
+  const { primaryOf, secondaryOf } = marimekkoPairAccessors(data, pairKey, programs);
 
   const byPrimary = new Map<string, Lever[]>();
   active.forEach((l) => {

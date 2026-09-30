@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -8,6 +8,7 @@ import {
   Customized,
   Legend,
   ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
   usePlotArea,
@@ -15,6 +16,8 @@ import {
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatMillions } from "@/lib/format";
+import { leverGapContributors } from "@/lib/chartPreview";
+import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
 
 export type WorkstreamBarPoint = {
   label: string;
@@ -284,7 +287,7 @@ function TotalTags({
  *
  *  Valeurs affichées directement sur les barres (réalisé à l'intérieur du segment coral, écart à
  *  l'intérieur du segment gris quand il est assez haut pour rester lisible, cible au sommet de la
- *  pile). Pas de tooltip au survol : les totaux sont des tags à droite de chaque barre.
+ *  pile). Au survol : aperçu flottant (`WorkstreamBarPreview`, portail toujours visible).
  * Clic sur un segment : callback `onSegmentClick`
  *  pour ouvrir un détail par levier (popup côté appelant). */
 export function WorkstreamBarChart({
@@ -339,125 +342,149 @@ export function WorkstreamBarChart({
 
   return (
     <div className="relative" ref={wrapRef}>
-      <ResponsiveContainer width="100%" height={320}>
-        <BarChart
-          data={chartData}
-          // top: assez pour empiler jusqu'à 3 tags (planifié initial / écart-retard / cible
-          // réactualisée) avec TAG_GAP entre chacun sans les rogner en haut du graphique.
-          margin={{ top: 76, right: CHART_MARGIN_RIGHT, left: -16, bottom: 4 }}
-          barCategoryGap={`${CATEGORY_GAP * 100}%`}
-          barSize={barW}
-          // Les tags de totaux (planifié / cible / réalisé) sont dessinés au-dessus de la zone de
-          // tracé via `<Customized>` : sans `overflow: visible` sur le <svg> racine, ils pouvaient
-          // être rognés par le viewport SVG quand une barre est proche du haut du graphique.
-          style={{ overflow: "visible" }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-          <XAxis
-            dataKey="label"
-            axisLine={false}
-            tickLine={false}
-            tick={CategoryTick}
-            height={48}
-            // `interval={0}` : force l'affichage de TOUS les ticks. Sans lui, Recharts estime
-            // automatiquement quels libellés se chevauchent (sur la largeur du texte à 1 ligne,
-            // pas sur le rendu réel à 2 lignes de `CategoryTick`) et en masque certains — ce calcul
-            // dépend du nombre de barres, donc un ou plusieurs titres de colonne disparaissaient au
-            // hasard selon le filtre actif.
-            interval={0}
-          />
-          {/* Second axe X masqué (mêmes catégories) : la barre "Planifié initial" se superpose
-              exactement aux barres empilées au lieu de s'y juxtaposer. */}
-          <XAxis xAxisId="planned" dataKey="label" hide />
-          <YAxis
-            tick={{ fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={(v) => formatMillions(Number(v))}
-            domain={[0, Math.ceil(maxValue * 1.05)]}
-          />
-          <Legend
-            wrapperStyle={{ fontSize: 11 }}
-            content={() => (
-              <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-[11px] font-medium text-primary">
-                <li className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#FF3C47]" />
-                  {resolvedLabelRealized}
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-bp-warm-brown/35" />
-                  {resolvedLabelTarget}
-                </li>
-                {hasPlanned && (
-                  <li className="flex items-center gap-1.5">
-                    <svg width="18" height="6" aria-hidden="true">
-                      <line
-                        x1="0"
-                        y1="3"
-                        x2="18"
-                        y2="3"
-                        stroke="#320300"
-                        strokeWidth="1.5"
-                        strokeDasharray="4 3"
-                      />
-                    </svg>
-                    {resolvedLabelPlanned}
-                  </li>
-                )}
-              </ul>
-            )}
-          />
-          {/* Barre réalisé (bas de la pile) — coral */}
-          <Bar
-            dataKey="realized"
-            name={resolvedLabelRealized}
-            stackId="a"
-            fill="#FF3C47"
-            radius={[0, 0, 0, 0]}
-            cursor={onSegmentClick ? "pointer" : undefined}
-            onClick={
-              onSegmentClick
-                ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  (entry: any) => {
-                    const point = entry?.payload as WorkstreamBarPoint | undefined;
-                    if (point) onSegmentClick(point, "realized");
-                  }
-                : undefined
-            }
-          ></Bar>
-          {/* Barre remaining (haut de la pile) — gris transparent, complète jusqu'à la cible */}
-          <Bar
-            dataKey="remaining"
-            name={resolvedLabelTarget}
-            stackId="a"
-            fill="rgba(128,102,89,0.35)"
-            radius={[4, 4, 0, 0]}
-            cursor={onSegmentClick ? "pointer" : undefined}
-            onClick={
-              onSegmentClick
-                ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  (entry: any) => {
-                    const point = entry?.payload as WorkstreamBarPoint | undefined;
-                    if (point) onSegmentClick(point, "target");
-                  }
-                : undefined
-            }
-          ></Bar>
-          {/* Planifié initial : contour pointillé sans remplissage */}
-          {hasPlanned && (
-            <Bar
-              dataKey="planned"
-              name={resolvedLabelPlanned}
-              xAxisId="planned"
-              fill="none"
-              stroke="#320300"
-              strokeWidth={2}
-              strokeDasharray="4 3"
-              isAnimationActive={false}
-              legendType="plainline"
+      <ChartHoverArea>
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart
+            data={chartData}
+            // top: assez pour empiler jusqu'à 3 tags (planifié initial / écart-retard / cible
+            // réactualisée) avec TAG_GAP entre chacun sans les rogner en haut du graphique.
+            margin={{ top: 76, right: CHART_MARGIN_RIGHT, left: -16, bottom: 4 }}
+            barCategoryGap={`${CATEGORY_GAP * 100}%`}
+            barSize={barW}
+            // Les tags de totaux (planifié / cible / réalisé) sont dessinés au-dessus de la zone de
+            // tracé via `<Customized>` : sans `overflow: visible` sur le <svg> racine, ils pouvaient
+            // être rognés par le viewport SVG quand une barre est proche du haut du graphique.
+            style={{ overflow: "visible" }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
+            <XAxis
+              dataKey="label"
+              axisLine={false}
+              tickLine={false}
+              tick={CategoryTick}
+              height={48}
+              // `interval={0}` : force l'affichage de TOUS les ticks. Sans lui, Recharts estime
+              // automatiquement quels libellés se chevauchent (sur la largeur du texte à 1 ligne,
+              // pas sur le rendu réel à 2 lignes de `CategoryTick`) et en masque certains — ce calcul
+              // dépend du nombre de barres, donc un ou plusieurs titres de colonne disparaissaient au
+              // hasard selon le filtre actif.
+              interval={0}
             />
-          )}
-          {/* Tags de montant : leur position dans ce JSX n'a AUCUN effet sur l'ordre de peinture
+            {/* Second axe X masqué (mêmes catégories) : la barre "Planifié initial" se superpose
+              exactement aux barres empilées au lieu de s'y juxtaposer. */}
+            <XAxis xAxisId="planned" dataKey="label" hide />
+            <YAxis
+              tick={{ fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => formatMillions(Number(v))}
+              domain={[0, Math.ceil(maxValue * 1.05)]}
+            />
+            <Legend
+              wrapperStyle={{ fontSize: 11 }}
+              content={() => (
+                <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-[11px] font-medium text-primary">
+                  <li className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#FF3C47]" />
+                    {resolvedLabelRealized}
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-bp-warm-brown/35" />
+                    {resolvedLabelTarget}
+                  </li>
+                  {hasPlanned && (
+                    <li className="flex items-center gap-1.5">
+                      <svg width="18" height="6" aria-hidden="true">
+                        <line
+                          x1="0"
+                          y1="3"
+                          x2="18"
+                          y2="3"
+                          stroke="#320300"
+                          strokeWidth="1.5"
+                          strokeDasharray="4 3"
+                        />
+                      </svg>
+                      {resolvedLabelPlanned}
+                    </li>
+                  )}
+                </ul>
+              )}
+            />
+            {/* Aperçu au survol (retour PO) : réalisé / réactualisé / planifié initial du groupe,
+              taux de réalisation, écart au plan et principaux leviers ; le clic ouvre le détail. */}
+            <Tooltip
+              cursor={{ fill: "rgba(128,102,89,0.06)" }}
+              wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+              content={({ active, payload }) => {
+                const point = payload?.[0]?.payload as ChartDatum | undefined;
+                if (!active || !point) return null;
+                return (
+                  <FloatingPreview>
+                    <WorkstreamBarPreview
+                      point={point}
+                      clickable={!!onSegmentClick}
+                      labels={{
+                        realized: resolvedLabelRealized,
+                        target: resolvedLabelTarget,
+                        planned: resolvedLabelPlanned,
+                      }}
+                    />
+                  </FloatingPreview>
+                );
+              }}
+            />
+            {/* Barre réalisé (bas de la pile) — coral */}
+            <Bar
+              dataKey="realized"
+              name={resolvedLabelRealized}
+              stackId="a"
+              fill="#FF3C47"
+              radius={[0, 0, 0, 0]}
+              cursor={onSegmentClick ? "pointer" : undefined}
+              onClick={
+                onSegmentClick
+                  ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (entry: any) => {
+                      const point = entry?.payload as WorkstreamBarPoint | undefined;
+                      if (point) onSegmentClick(point, "realized");
+                    }
+                  : undefined
+              }
+            ></Bar>
+            {/* Barre remaining (haut de la pile) — gris transparent, complète jusqu'à la cible */}
+            <Bar
+              dataKey="remaining"
+              name={resolvedLabelTarget}
+              stackId="a"
+              fill="rgba(128,102,89,0.35)"
+              radius={[4, 4, 0, 0]}
+              cursor={onSegmentClick ? "pointer" : undefined}
+              onClick={
+                onSegmentClick
+                  ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (entry: any) => {
+                      const point = entry?.payload as WorkstreamBarPoint | undefined;
+                      if (point) onSegmentClick(point, "target");
+                    }
+                  : undefined
+              }
+            ></Bar>
+            {/* Planifié initial : contour pointillé sans remplissage */}
+            {hasPlanned && (
+              <Bar
+                dataKey="planned"
+                name={resolvedLabelPlanned}
+                xAxisId="planned"
+                fill="none"
+                stroke="#320300"
+                strokeWidth={2}
+                strokeDasharray="4 3"
+                isAnimationActive={false}
+                legendType="plainline"
+              />
+            )}
+            {/* Tags de montant : leur position dans ce JSX n'a AUCUN effet sur l'ordre de peinture
               réel — Recharts range `<Customized>` sur une couche de z-index fixe
               (`recharts-customized-wrapper`), systématiquement rendue AVANT celle des `<Bar>`
               (`recharts-zIndex-layer_1xx` et au-delà), quel que soit l'ordre déclaré ici. C'est
@@ -468,11 +495,130 @@ export function WorkstreamBarChart({
               les libellés déjà donnés par la `<Legend>` ci-dessus, a été retiré — sa position fixe
               en marge droite pouvait chevaucher le tag de montant de cette même dernière barre,
               donnant l'impression d'un montant "coupé"/sans détail au bout du graphe.) */}
-          <Customized
-            component={() => <TotalTags data={chartData} hasPlanned={hasPlanned} fmt={fmt} />}
-          />
-        </BarChart>
-      </ResponsiveContainer>
+            <Customized
+              component={() => <TotalTags data={chartData} hasPlanned={hasPlanned} fmt={fmt} />}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartHoverArea>
+    </div>
+  );
+}
+
+const signedM = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${formatMillions(Math.abs(v))}`;
+
+/** Aperçu au survol d'une barre (même carte que `SCurvePreview`) : réalisé / réactualisé /
+ *  planifié initial, mini-comparaison, taux de réalisation, écart réalisé − planifié initial et
+ *  principaux écarts par levier (réalisé − réactualisé, détail `leverBreakdown`). */
+function WorkstreamBarPreview({
+  point,
+  clickable,
+  labels,
+}: {
+  point: WorkstreamBarPoint;
+  clickable: boolean;
+  labels: { realized: string; target: string; planned: string };
+}) {
+  const { t } = useTranslation();
+  const fmt = (v: number) => formatMillions(v);
+  const { realized, target, planned } = point;
+  const max = Math.max(Math.abs(realized), Math.abs(target), Math.abs(planned ?? 0), 1e-9);
+  const width = (v: number) => `${Math.max(2, (Math.abs(v) / max) * 100)}%`;
+  const rate = target > 0 ? Math.round((realized / target) * 100) : null;
+  const gap = planned !== undefined ? Math.round((realized - planned) * 10) / 10 : null;
+  const top = leverGapContributors(point.leverBreakdown).slice(0, 3);
+  const row = (swatch: ReactNode, label: string, value: number) => (
+    <div className="flex items-center justify-between gap-4">
+      <span className="flex items-center gap-1.5 text-secondary">
+        {swatch}
+        {label}
+      </span>
+      <span className="font-semibold tabular-nums text-primary">{fmt(value)}</span>
+    </div>
+  );
+  const square = (cls: string) => <span className={`inline-block h-2.5 w-2.5 rounded-sm ${cls}`} />;
+  return (
+    <div className="w-[260px] border border-border bg-white p-3 text-[11.5px] shadow-lg">
+      <div className="mb-2 text-[12.5px] font-bold text-primary">{point.label}</div>
+      <div className="space-y-1">
+        {row(square("bg-bp-coral"), labels.realized, realized)}
+        {target > 0 && row(square("bg-bp-warm-brown/35"), labels.target, target)}
+        {planned !== undefined &&
+          row(
+            <span className="inline-block h-0 w-3 border-t-2 border-dashed border-[#320300]" />,
+            labels.planned,
+            planned
+          )}
+      </div>
+      <div className="mt-2.5 space-y-1">
+        {planned !== undefined && (
+          <div className="h-1.5 bg-neutral-100">
+            <div className="h-full bg-bp-deep-red/70" style={{ width: width(planned) }} />
+          </div>
+        )}
+        {target > 0 && (
+          <div className="h-1.5 bg-neutral-100">
+            <div className="h-full bg-bp-warm-brown/60" style={{ width: width(target) }} />
+          </div>
+        )}
+        <div className="h-1.5 bg-neutral-100">
+          <div className="h-full bg-bp-coral" style={{ width: width(realized) }} />
+        </div>
+      </div>
+      {(rate !== null || gap !== null) && (
+        <div className="mt-2.5 space-y-0.5 border-t border-border pt-2">
+          {rate !== null && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-secondary">
+                {t("chart.barPreview.rate", "Taux de réalisation")}
+              </span>
+              <span className="font-semibold tabular-nums text-primary">{rate} %</span>
+            </div>
+          )}
+          {gap !== null && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-semibold text-primary">
+                {t("chart.barPreview.gap", "Écart réalisé − planifié initial")}
+              </span>
+              <span
+                className={
+                  gap < 0
+                    ? "font-bold tabular-nums text-bp-coral"
+                    : "font-bold tabular-nums text-primary"
+                }
+              >
+                {gap === 0 ? fmt(0) : signedM(gap)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+      {top.length > 0 && (
+        <div className="mt-2 border-t border-border pt-2">
+          <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+            {t("chart.barPreview.topLevers", "Principaux écarts au réactualisé")}
+          </div>
+          <div className="space-y-0.5">
+            {top.map((c) => (
+              <div key={c.id} className="flex justify-between gap-3">
+                <span className="truncate text-secondary">{c.name}</span>
+                <span
+                  className={
+                    c.value < 0 ? "tabular-nums text-bp-coral" : "tabular-nums text-primary"
+                  }
+                >
+                  {signedM(c.value)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {clickable && (
+        <div className="mt-2 text-[10.5px] font-medium text-tertiary">
+          {t("chart.scurvePreview.click", "Cliquer pour le détail →")}
+        </div>
+      )}
     </div>
   );
 }

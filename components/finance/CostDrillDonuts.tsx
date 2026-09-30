@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
-import { BudgetDonutChart } from "@/components/shared/charts/BudgetDonutChart";
+import {
+  BudgetDonutChart,
+  type BudgetDonutPreviewSlice,
+} from "@/components/shared/charts/BudgetDonutChart";
+import { CostSlicePreview, type PreviewListItem } from "@/components/finance/FinancePreviews";
+import { topContributors } from "@/lib/chartPreview";
+import { costCommitmentSplit, leverAmounts } from "@/lib/financePreview";
 import { CostDrilldownModal } from "@/components/finance/CostDrilldownModal";
 import { FinanceDrillBreadcrumb } from "@/components/finance/FinanceDrillBreadcrumb";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -41,6 +47,9 @@ const fmt = (v: number) => engine.fmtCurr(v);
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
 }
+
+/** Seuil des « principaux » contributeurs des aperçus (M€) : 5 k€, les coûts sont souvent petits. */
+const TOP_MIN = 0.005;
 
 type Segment = "engaged" | "upcoming";
 
@@ -136,6 +145,89 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
             value: l.amount,
           }));
 
+  // Aperçu au survol d'une part (retour PO) : engagé vs à venir de l'élément survolé (tous segments
+  // confondus pour un chantier / un levier) et ses 3 principaux contributeurs du niveau suivant.
+  const previewContext = useMemo(() => {
+    const sumBy = (rows: { lever: Lever; amount: number }[], match: (l: Lever) => boolean) =>
+      round2(rows.reduce((s, r) => (match(r.lever) ? s + r.amount : s), 0));
+    const out = new Map<
+      string,
+      {
+        split: { engaged: number; upcoming: number };
+        top?: { title: string; items: PreviewListItem[] };
+      }
+    >();
+    for (const slice of slices) {
+      if (path.length === 0) {
+        out.set(slice.id, {
+          split: { engaged: split.engaged, upcoming: split.upcoming },
+          top: {
+            title: t("finance.preview.topWorkstreams", "Principaux chantiers"),
+            items: topContributors(
+              groupsFor(slice.id).map((g) => ({ id: g.wsId, name: g.wsName, value: g.amount })),
+              3,
+              TOP_MIN
+            ),
+          },
+        });
+      } else if (path.length === 1) {
+        const match = (l: Lever) => l.ws === slice.id;
+        out.set(slice.id, {
+          split: {
+            engaged: sumBy(split.engagedRows, match),
+            upcoming: sumBy(split.upcomingRows, match),
+          },
+          top: {
+            title: t("finance.preview.topLevers", "Principaux leviers"),
+            items: topContributors(
+              (groups.find((g) => g.wsId === slice.id)?.levers ?? []).map((l) => ({
+                id: l.leverId,
+                code: l.leverCode,
+                name: l.leverName,
+                value: l.amount,
+              })),
+              3,
+              TOP_MIN
+            ),
+          },
+        });
+      } else {
+        const match = (l: Lever) => l.id === slice.id;
+        out.set(slice.id, {
+          split: {
+            engaged: sumBy(split.engagedRows, match),
+            upcoming: sumBy(split.upcomingRows, match),
+          },
+        });
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, split, groups, wsGroup, t]);
+  const previewSubtitle = [levels[info.levelNumber - 1], ...path.map((s) => s.label)].join(" › ");
+  const renderPreview = (p: BudgetDonutPreviewSlice) => {
+    const slice = slices.find((s) => s.name === p.name);
+    if (!slice) return null;
+    const ctx = previewContext.get(slice.id);
+    return (
+      <CostSlicePreview
+        name={p.name}
+        subtitle={previewSubtitle}
+        value={p.value}
+        share={p.share}
+        color={p.color}
+        split={ctx?.split}
+        top={ctx?.top}
+        clickHint={
+          info.isLastLevel
+            ? t("finance.preview.clickLeaf", "Cliquer pour ouvrir le détail →")
+            : t("finance.preview.clickNext", "Cliquer pour détailler →")
+        }
+        format={fmt}
+      />
+    );
+  };
+
   const handleSliceClick = (name: string) => {
     const slice = slices.find((s) => s.name === name);
     if (!slice) return;
@@ -195,11 +287,7 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
                 formatValue={fmt}
                 centerLabel={levels[info.levelNumber - 1]}
                 onSliceClick={handleSliceClick}
-                clickHint={
-                  info.isLastLevel
-                    ? t("finance.drill.tooltipLeaf", "Cliquez pour ouvrir le détail")
-                    : t("finance.drill.tooltipNext", "Cliquez pour détailler")
-                }
+                renderPreview={renderPreview}
               />
             )}
           </>
@@ -278,6 +366,45 @@ export function CostByHierarchyChart({
     if (!leafSlice) return [];
     return groupCostsByWorkstream(leafSlice.rows, data.workstreams);
   }, [leafSlice, data.workstreams]);
+
+  // Aperçu au survol d'une part (retour PO) : engagé / à venir / OPEX récurrent de la part (règle
+  // `isCostEngaged`), puis ses 3 principaux centres du niveau suivant (part avec enfants) ou ses 3
+  // principaux leviers (maille la plus fine / part « (direct) »).
+  const nextLevel = levels[path.length + 1];
+  const previewContext = useMemo(() => {
+    const today = new Date();
+    return new Map(
+      slices.map((s) => {
+        const top =
+          s.hasChildren && nextLevel
+            ? {
+                title: t("finance.preview.topNodes", "Principaux — {level}").replace(
+                  "{level}",
+                  nextLevel.label
+                ),
+                items: topContributors(
+                  costsByHierarchyNode(data, hierarchyNodes, nextLevel.key, s.node.id).map((c) => ({
+                    id: c.node.id,
+                    name: c.isDirect
+                      ? t("finance.drill.directSlice", "{name} (direct)").replace(
+                          "{name}",
+                          c.node.label
+                        )
+                      : c.node.label,
+                    value: c.amount,
+                  })),
+                  3,
+                  TOP_MIN
+                ),
+              }
+            : {
+                title: t("finance.preview.topLevers", "Principaux leviers"),
+                items: topContributors(leverAmounts(s.rows), 3, TOP_MIN),
+              };
+        return [s.displayLabel, { split: costCommitmentSplit(s.rows, today), top }] as const;
+      })
+    );
+  }, [slices, nextLevel, data, hierarchyNodes, t]);
 
   const title = t(
     "finance.chart.hierarchyTitleAllCosts",
@@ -368,11 +495,31 @@ export function CostByHierarchyChart({
             data={slices.map((s) => ({ name: s.displayLabel, value: s.amount }))}
             formatValue={fmt}
             centerLabel={levels[info.levelNumber - 1]?.label}
-            clickHint={
-              info.isLastLevel || slices.every((s) => !s.hasChildren)
-                ? t("finance.drill.tooltipLeaf", "Cliquez pour ouvrir le détail")
-                : t("finance.drill.tooltipNext", "Cliquez pour détailler")
-            }
+            renderPreview={(p) => {
+              const slice = slices.find((s) => s.displayLabel === p.name);
+              const ctx = previewContext.get(p.name);
+              const drills =
+                !!slice && shouldDrillDown(path.length, levels.length, slice.hasChildren);
+              return (
+                <CostSlicePreview
+                  name={p.name}
+                  subtitle={[levels[info.levelNumber - 1]?.label, ...path.map((s) => s.label)]
+                    .filter(Boolean)
+                    .join(" › ")}
+                  value={p.value}
+                  share={p.share}
+                  color={p.color}
+                  split={ctx?.split}
+                  top={ctx?.top}
+                  clickHint={
+                    drills
+                      ? t("finance.preview.clickNext", "Cliquer pour détailler →")
+                      : t("finance.preview.clickLeaf", "Cliquer pour ouvrir le détail →")
+                  }
+                  format={fmt}
+                />
+              );
+            }}
             onSliceClick={(name) => {
               const slice = slices.find((s) => s.displayLabel === name);
               if (!slice) return;

@@ -40,6 +40,15 @@ import {
   netBalanceColor,
 } from "@/components/shared/MovementNetBalanceSummary";
 import { formatMillions, intlTag } from "@/lib/format";
+import { targetMovementFteImpact } from "@/lib/hrProgramSummary";
+import {
+  departmentContributors,
+  isUnfavourableGap,
+  shareOfTotal,
+  sumAbs,
+} from "@/lib/hrChartPreview";
+import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
+import { HrChartPreview, type HrPreviewGap } from "./HrChartPreview";
 
 /** Palette 5-types alignée sur les tokens dataviz BeTrack / BearingPoint : famille rouge,
  *  taupes et violet de secours. Vert et orange sont volontairement exclus par la charte. */
@@ -70,6 +79,31 @@ const fmtEtp = (v: number) => v.toLocaleString(intlTag());
 
 /** Écart signé en M€ (« +0.3 M€ » / « −0.2 M€ »). */
 const fmtSignedMEur = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtMEur(Math.abs(v))}`;
+
+/** Écart période + écart cumulé d'une série €M (réalisé + prévision vs plan initial) pour
+ *  l'aperçu au survol — `higherIsBetter` : économies (true) vs coûts ENR (false). */
+function periodAndCumulGaps(
+  b: { actual: number; plan: number; cumulActual: number; cumulPlan: number },
+  labels: { gap: string; cumulGap: string },
+  higherIsBetter: boolean
+): { gap: HrPreviewGap; extraGaps: HrPreviewGap[] } {
+  const gap = b.actual - b.plan;
+  const cumulGap = b.cumulActual - b.cumulPlan;
+  return {
+    gap: {
+      label: labels.gap,
+      value: fmtSignedMEur(gap),
+      unfavourable: isUnfavourableGap(gap, higherIsBetter),
+    },
+    extraGaps: [
+      {
+        label: labels.cumulGap,
+        value: fmtSignedMEur(cumulGap),
+        unfavourable: isUnfavourableGap(cumulGap, higherIsBetter),
+      },
+    ],
+  };
+}
 
 type SavingsSeriesGroup = "actual" | "plan";
 
@@ -125,6 +159,8 @@ export function SavingsPeriodCumulChart({
   const labelPeriod = t("shared.hrGooduelleCharts.axisPeriod", "Par période");
   const labelCumul = t("shared.hrGooduelleCharts.axisCumul", "Cumul");
   const labelGap = t("shared.hrGooduelleCharts.gapVsPlan", "Écart vs plan");
+  const labelCumulGap = t("chart.hrPreview.cumulGapVsPlan", "Écart cumulé vs plan");
+  const totalSavings = sumAbs(buckets.map((b) => b.actualPlusForecast));
 
   const groups: { key: SavingsSeriesGroup; label: string; color: string; dashed?: boolean }[] = [
     { key: "actual", label: labelActual, color: COLOR_SAVINGS },
@@ -191,120 +227,185 @@ export function SavingsPeriodCumulChart({
         <span>← {labelPeriod} (M€)</span>
         <span>{labelCumul} (M€) →</span>
       </div>
-      <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart
-          data={buckets}
-          margin={{ top: 8, right: 8, left: 0, bottom: 20 }}
-          onClick={onChartClick}
-          style={{ cursor: "pointer" }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-          <XAxis
-            dataKey="label"
-            tick={{ fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            angle={-25}
-            textAnchor="end"
-            height={40}
-          />
-          <YAxis
-            yAxisId="period"
-            tick={{ fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={fmtMEur}
-          />
-          <YAxis
-            yAxisId="cumul"
-            orientation="right"
-            tick={{ fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={fmtMEur}
-          />
-          <Tooltip
-            formatter={(value, name) => [fmtMEur(Number(value)), String(name)]}
-            labelStyle={{ fontSize: 11, fontWeight: 600 }}
-            contentStyle={{ fontSize: 11 }}
-          />
-          {selected && (
-            <ReferenceLine
-              yAxisId="period"
-              x={selected.label}
-              stroke="rgba(0,0,0,0.35)"
-              strokeDasharray="3 3"
+      <ChartHoverArea>
+        <ResponsiveContainer width="100%" height={height}>
+          <ComposedChart
+            data={buckets}
+            margin={{ top: 8, right: 8, left: 0, bottom: 20 }}
+            onClick={onChartClick}
+            style={{ cursor: "pointer" }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              angle={-25}
+              textAnchor="end"
+              height={40}
             />
-          )}
-          {/* Réalisé (mouvements au statut « Réalisé ») + prévision (non réalisés, jamais avant
-              aujourd'hui) empilés : la barre totale reste « Réalisé + prévision » (M9). */}
-          <Bar
-            yAxisId="period"
-            dataKey="realized"
-            stackId="actualForecast"
-            name={`${labelRealized} — ${labelPeriod.toLowerCase()}`}
-            fill={COLOR_SAVINGS}
-            hide={hidden.actual}
-            cursor="pointer"
-          >
-            {buckets.map((b) => (
-              <Cell key={b.key} fill={COLOR_SAVINGS} fillOpacity={cellOpacity(b)} />
-            ))}
-          </Bar>
-          <Bar
-            yAxisId="period"
-            dataKey="forecast"
-            stackId="actualForecast"
-            name={`${labelForecast} — ${labelPeriod.toLowerCase()}`}
-            fill={COLOR_SAVINGS}
-            hide={hidden.actual}
-            cursor="pointer"
-          >
-            {buckets.map((b) => (
-              <Cell
-                key={b.key}
-                fill={COLOR_SAVINGS}
-                fillOpacity={0.4 * cellOpacity(b)}
-                stroke={COLOR_SAVINGS}
-                strokeDasharray="3 2"
+            <YAxis
+              yAxisId="period"
+              tick={{ fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={fmtMEur}
+            />
+            <YAxis
+              yAxisId="cumul"
+              orientation="right"
+              tick={{ fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={fmtMEur}
+            />
+            {/* Aperçu au survol (retour PO) : réalisé / prévision / plan, cumuls, écarts période et
+              cumulé, part des économies de la plage — puis clic = épingler le détail. */}
+            <Tooltip
+              wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+              content={({ active, payload }) => {
+                const b = payload?.[0]?.payload as SalarySavingsBucket | undefined;
+                if (!active || !b) return null;
+                return (
+                  <FloatingPreview>
+                    <HrChartPreview
+                      title={b.label}
+                      badge={statusBadge(b)}
+                      rows={[
+                        {
+                          label: labelRealized,
+                          value: fmtMEur(b.realized),
+                          marker: { color: COLOR_SAVINGS },
+                        },
+                        {
+                          label: labelForecast,
+                          value: fmtMEur(b.forecast),
+                          marker: { color: "rgba(66,23,153,0.4)" },
+                        },
+                        {
+                          label: labelActual,
+                          value: fmtMEur(b.actualPlusForecast),
+                          strong: true,
+                        },
+                        { label: labelPlan, value: fmtMEur(b.plan), marker: { color: COLOR_PLAN } },
+                        {
+                          label: `${labelCumul} ${labelActual.toLowerCase()}`,
+                          value: fmtMEur(b.cumulActualForecast),
+                          marker: { color: COLOR_SAVINGS, shape: "line" },
+                          muted: true,
+                        },
+                        {
+                          label: `${labelCumul} ${labelPlan.toLowerCase()}`,
+                          value: fmtMEur(b.cumulPlan),
+                          marker: { color: COLOR_PLAN_LINE, shape: "dashed" },
+                          muted: true,
+                        },
+                      ]}
+                      {...periodAndCumulGaps(
+                        {
+                          actual: b.actualPlusForecast,
+                          plan: b.plan,
+                          cumulActual: b.cumulActualForecast,
+                          cumulPlan: b.cumulPlan,
+                        },
+                        { gap: labelGap, cumulGap: labelCumulGap },
+                        true
+                      )}
+                      share={{
+                        label: t(
+                          "chart.hrPreview.shareOfSavings",
+                          "Part des économies de la plage"
+                        ),
+                        pct: shareOfTotal(b.actualPlusForecast, totalSavings),
+                      }}
+                      clickHint={t(
+                        "shared.hrGooduelleCharts.clickPeriodHint",
+                        "Cliquez sur une période pour épingler son détail."
+                      )}
+                    />
+                  </FloatingPreview>
+                );
+              }}
+            />
+            {selected && (
+              <ReferenceLine
+                yAxisId="period"
+                x={selected.label}
+                stroke="rgba(0,0,0,0.35)"
+                strokeDasharray="3 3"
               />
-            ))}
-          </Bar>
-          <Bar
-            yAxisId="period"
-            dataKey="plan"
-            name={`${labelPlan} — ${labelPeriod.toLowerCase()}`}
-            fill={COLOR_PLAN}
-            hide={hidden.plan}
-            cursor="pointer"
-          >
-            {buckets.map((b) => (
-              <Cell key={b.key} fill={COLOR_PLAN} fillOpacity={cellOpacity(b)} />
-            ))}
-          </Bar>
-          <Line
-            yAxisId="cumul"
-            type="monotone"
-            dataKey="cumulActualForecast"
-            name={`${labelCumul} ${labelActual.toLowerCase()}`}
-            stroke={COLOR_SAVINGS}
-            strokeWidth={2}
-            dot={{ r: 3 }}
-            hide={hidden.actual}
-          />
-          <Line
-            yAxisId="cumul"
-            type="monotone"
-            dataKey="cumulPlan"
-            name={`${labelCumul} ${labelPlan.toLowerCase()}`}
-            stroke={COLOR_PLAN_LINE}
-            strokeWidth={1.5}
-            strokeDasharray="5 4"
-            dot={false}
-            hide={hidden.plan}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
+            )}
+            {/* Réalisé (mouvements au statut « Réalisé ») + prévision (non réalisés, jamais avant
+              aujourd'hui) empilés : la barre totale reste « Réalisé + prévision » (M9). */}
+            <Bar
+              yAxisId="period"
+              dataKey="realized"
+              stackId="actualForecast"
+              name={`${labelRealized} — ${labelPeriod.toLowerCase()}`}
+              fill={COLOR_SAVINGS}
+              hide={hidden.actual}
+              cursor="pointer"
+            >
+              {buckets.map((b) => (
+                <Cell key={b.key} fill={COLOR_SAVINGS} fillOpacity={cellOpacity(b)} />
+              ))}
+            </Bar>
+            <Bar
+              yAxisId="period"
+              dataKey="forecast"
+              stackId="actualForecast"
+              name={`${labelForecast} — ${labelPeriod.toLowerCase()}`}
+              fill={COLOR_SAVINGS}
+              hide={hidden.actual}
+              cursor="pointer"
+            >
+              {buckets.map((b) => (
+                <Cell
+                  key={b.key}
+                  fill={COLOR_SAVINGS}
+                  fillOpacity={0.4 * cellOpacity(b)}
+                  stroke={COLOR_SAVINGS}
+                  strokeDasharray="3 2"
+                />
+              ))}
+            </Bar>
+            <Bar
+              yAxisId="period"
+              dataKey="plan"
+              name={`${labelPlan} — ${labelPeriod.toLowerCase()}`}
+              fill={COLOR_PLAN}
+              hide={hidden.plan}
+              cursor="pointer"
+            >
+              {buckets.map((b) => (
+                <Cell key={b.key} fill={COLOR_PLAN} fillOpacity={cellOpacity(b)} />
+              ))}
+            </Bar>
+            <Line
+              yAxisId="cumul"
+              type="monotone"
+              dataKey="cumulActualForecast"
+              name={`${labelCumul} ${labelActual.toLowerCase()}`}
+              stroke={COLOR_SAVINGS}
+              strokeWidth={2}
+              dot={{ r: 3 }}
+              hide={hidden.actual}
+            />
+            <Line
+              yAxisId="cumul"
+              type="monotone"
+              dataKey="cumulPlan"
+              name={`${labelCumul} ${labelPlan.toLowerCase()}`}
+              stroke={COLOR_PLAN_LINE}
+              strokeWidth={1.5}
+              strokeDasharray="5 4"
+              dot={false}
+              hide={hidden.plan}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </ChartHoverArea>
       {/* Détail épinglé de la période cliquée. */}
       {selected ? (
         <div className="mt-1 border border-border bg-neutral-50 px-3 py-2 text-xs">
@@ -405,78 +506,126 @@ export function EnrPeriodCumulChart({
     );
   }
 
+  const labelActual = t(
+    "shared.hrGooduelleCharts.enrActualForecastPeriod",
+    "ENR réalisé + prévision — période"
+  );
+  const labelPlan = t("shared.hrGooduelleCharts.enrPlanPeriod", "ENR plan initial — période");
+  const labelCumulActual = t(
+    "shared.hrGooduelleCharts.enrCumulActualForecast",
+    "Cumul ENR réalisé + prévision"
+  );
+  const labelCumulPlan = t("shared.hrGooduelleCharts.enrCumulPlan", "Cumul ENR plan initial");
+  const total = sumAbs(buckets.map((b) => b.actualForecast));
+
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={buckets} margin={{ top: 8, right: 8, left: 0, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-        <XAxis
-          dataKey="label"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          angle={-25}
-          textAnchor="end"
-          height={40}
-        />
-        <YAxis
-          yAxisId="period"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={fmtMEur}
-        />
-        <YAxis
-          yAxisId="cumul"
-          orientation="right"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={fmtMEur}
-        />
-        <Tooltip
-          formatter={(value, name) => [fmtMEur(Number(value)), String(name)]}
-          labelStyle={{ fontSize: 11, fontWeight: 600 }}
-        />
-        <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
-        <Bar
-          yAxisId="period"
-          dataKey="actualForecast"
-          name={t(
-            "shared.hrGooduelleCharts.enrActualForecastPeriod",
-            "ENR réalisé + prévision — période"
-          )}
-          fill={COLOR_ENR}
-        />
-        <Bar
-          yAxisId="period"
-          dataKey="plan"
-          name={t("shared.hrGooduelleCharts.enrPlanPeriod", "ENR plan initial — période")}
-          fill={COLOR_PLAN}
-        />
-        <Line
-          yAxisId="cumul"
-          type="monotone"
-          dataKey="cumulActualForecast"
-          name={t(
-            "shared.hrGooduelleCharts.enrCumulActualForecast",
-            "Cumul ENR réalisé + prévision"
-          )}
-          stroke={COLOR_ENR_CUMUL}
-          strokeWidth={2}
-          dot={{ r: 3 }}
-        />
-        <Line
-          yAxisId="cumul"
-          type="monotone"
-          dataKey="cumulPlan"
-          name={t("shared.hrGooduelleCharts.enrCumulPlan", "Cumul ENR plan initial")}
-          stroke={COLOR_PLAN}
-          strokeWidth={1.5}
-          strokeDasharray="5 4"
-          dot={false}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <ChartHoverArea>
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart data={buckets} margin={{ top: 8, right: 8, left: 0, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            angle={-25}
+            textAnchor="end"
+            height={40}
+          />
+          <YAxis
+            yAxisId="period"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={fmtMEur}
+          />
+          <YAxis
+            yAxisId="cumul"
+            orientation="right"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={fmtMEur}
+          />
+          {/* Aperçu au survol (retour PO) : ENR réalisé + prévision vs plan, cumuls et écarts (un
+            dépassement du plan est défavorable, donc en corail), part des ENR de la plage. */}
+          <Tooltip
+            wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+            content={({ active, payload }) => {
+              const b = payload?.[0]?.payload as SocialCostBucket | undefined;
+              if (!active || !b) return null;
+              return (
+                <FloatingPreview>
+                  <HrChartPreview
+                    title={b.label}
+                    rows={[
+                      {
+                        label: labelActual,
+                        value: fmtMEur(b.actualForecast),
+                        marker: { color: COLOR_ENR },
+                        strong: true,
+                      },
+                      { label: labelPlan, value: fmtMEur(b.plan), marker: { color: COLOR_PLAN } },
+                      {
+                        label: labelCumulActual,
+                        value: fmtMEur(b.cumulActualForecast),
+                        marker: { color: COLOR_ENR_CUMUL, shape: "line" },
+                        muted: true,
+                      },
+                      {
+                        label: labelCumulPlan,
+                        value: fmtMEur(b.cumulPlan),
+                        marker: { color: COLOR_PLAN, shape: "dashed" },
+                        muted: true,
+                      },
+                    ]}
+                    {...periodAndCumulGaps(
+                      {
+                        actual: b.actualForecast,
+                        plan: b.plan,
+                        cumulActual: b.cumulActualForecast,
+                        cumulPlan: b.cumulPlan,
+                      },
+                      {
+                        gap: t("shared.hrGooduelleCharts.gapVsPlan", "Écart vs plan"),
+                        cumulGap: t("chart.hrPreview.cumulGapVsPlan", "Écart cumulé vs plan"),
+                      },
+                      false
+                    )}
+                    share={{
+                      label: t("chart.hrPreview.shareOfEnr", "Part des ENR de la plage"),
+                      pct: shareOfTotal(b.actualForecast, total),
+                    }}
+                  />
+                </FloatingPreview>
+              );
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
+          <Bar yAxisId="period" dataKey="actualForecast" name={labelActual} fill={COLOR_ENR} />
+          <Bar yAxisId="period" dataKey="plan" name={labelPlan} fill={COLOR_PLAN} />
+          <Line
+            yAxisId="cumul"
+            type="monotone"
+            dataKey="cumulActualForecast"
+            name={labelCumulActual}
+            stroke={COLOR_ENR_CUMUL}
+            strokeWidth={2}
+            dot={{ r: 3 }}
+          />
+          <Line
+            yAxisId="cumul"
+            type="monotone"
+            dataKey="cumulPlan"
+            name={labelCumulPlan}
+            stroke={COLOR_PLAN}
+            strokeWidth={1.5}
+            strokeDasharray="5 4"
+            dot={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </ChartHoverArea>
   );
 }
 
@@ -501,66 +650,127 @@ export function NetEconomyChart({
     );
   }
 
+  const labelActual = t(
+    "shared.hrGooduelleCharts.netEconomyActualForecast",
+    "Économie nette réalisé + prévision"
+  );
+  const labelCumulActual = t(
+    "shared.hrGooduelleCharts.netCumulActualForecast",
+    "Cumul net réalisé + prévision"
+  );
+  const labelPlan = t("shared.hrGooduelleCharts.legendPlan", "Plan initial");
+  const total = sumAbs(buckets.map((b) => b.actualForecast));
+
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={buckets} margin={{ top: 8, right: 8, left: 0, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-        <XAxis
-          dataKey="label"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          angle={-25}
-          textAnchor="end"
-          height={40}
-        />
-        <YAxis
-          yAxisId="period"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={fmtMEur}
-        />
-        <YAxis
-          yAxisId="cumul"
-          orientation="right"
-          tick={{ fontSize: 10 }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={fmtMEur}
-        />
-        <Tooltip
-          formatter={(value, name) => [fmtMEur(Number(value)), String(name)]}
-          labelStyle={{ fontSize: 11, fontWeight: 600 }}
-        />
-        <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
-        <ReferenceLine yAxisId="period" y={0} stroke="rgba(0,0,0,0.35)" />
-        <Bar
-          yAxisId="period"
-          dataKey="actualForecast"
-          name={t(
-            "shared.hrGooduelleCharts.netEconomyActualForecast",
-            "Économie nette réalisé + prévision"
-          )}
-        >
-          {buckets.map((b, i) => (
-            <Cell key={i} fill={b.actualForecast >= 0 ? COLOR_NET_POS : COLOR_NET_NEG} />
-          ))}
-        </Bar>
-        <Line
-          yAxisId="cumul"
-          type="monotone"
-          dataKey="cumulActualForecast"
-          name={t(
-            "shared.hrGooduelleCharts.netCumulActualForecast",
-            "Cumul net réalisé + prévision"
-          )}
-          stroke={COLOR_NET_CUMUL}
-          strokeWidth={2}
-          dot={{ r: 3 }}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <ChartHoverArea>
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart data={buckets} margin={{ top: 8, right: 8, left: 0, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            angle={-25}
+            textAnchor="end"
+            height={40}
+          />
+          <YAxis
+            yAxisId="period"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={fmtMEur}
+          />
+          <YAxis
+            yAxisId="cumul"
+            orientation="right"
+            tick={{ fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={fmtMEur}
+          />
+          {/* Aperçu au survol (retour PO) : économie nette réalisé + prévision vs plan initial
+            (période et cumul), écarts et part de l'économie nette de la plage. */}
+          <Tooltip
+            wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+            content={({ active, payload }) => {
+              const b = payload?.[0]?.payload as NetEconomyBucket | undefined;
+              if (!active || !b) return null;
+              return (
+                <FloatingPreview>
+                  <HrChartPreview
+                    title={b.label}
+                    rows={[
+                      {
+                        label: labelActual,
+                        value: fmtSignedMEur(b.actualForecast),
+                        marker: {
+                          color: b.actualForecast >= 0 ? COLOR_NET_POS : COLOR_NET_NEG,
+                        },
+                        strong: true,
+                      },
+                      {
+                        label: labelPlan,
+                        value: fmtSignedMEur(b.plan),
+                        marker: { color: COLOR_PLAN },
+                      },
+                      {
+                        label: labelCumulActual,
+                        value: fmtSignedMEur(b.cumulActualForecast),
+                        marker: { color: COLOR_NET_CUMUL, shape: "line" },
+                        muted: true,
+                      },
+                      {
+                        label: t("chart.hrPreview.cumulPlan", "Cumul plan initial"),
+                        value: fmtSignedMEur(b.cumulPlan),
+                        muted: true,
+                      },
+                    ]}
+                    {...periodAndCumulGaps(
+                      {
+                        actual: b.actualForecast,
+                        plan: b.plan,
+                        cumulActual: b.cumulActualForecast,
+                        cumulPlan: b.cumulPlan,
+                      },
+                      {
+                        gap: t("shared.hrGooduelleCharts.gapVsPlan", "Écart vs plan"),
+                        cumulGap: t("chart.hrPreview.cumulGapVsPlan", "Écart cumulé vs plan"),
+                      },
+                      true
+                    )}
+                    share={{
+                      label: t(
+                        "chart.hrPreview.shareOfNet",
+                        "Part de l'économie nette de la plage"
+                      ),
+                      pct: shareOfTotal(b.actualForecast, total),
+                    }}
+                  />
+                </FloatingPreview>
+              );
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
+          <ReferenceLine yAxisId="period" y={0} stroke="rgba(0,0,0,0.35)" />
+          <Bar yAxisId="period" dataKey="actualForecast" name={labelActual}>
+            {buckets.map((b, i) => (
+              <Cell key={i} fill={b.actualForecast >= 0 ? COLOR_NET_POS : COLOR_NET_NEG} />
+            ))}
+          </Bar>
+          <Line
+            yAxisId="cumul"
+            type="monotone"
+            dataKey="cumulActualForecast"
+            name={labelCumulActual}
+            stroke={COLOR_NET_CUMUL}
+            strokeWidth={2}
+            dot={{ r: 3 }}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </ChartHoverArea>
   );
 }
 
@@ -607,7 +817,10 @@ export function MovementRhythmChart({
     net: b.net,
     cumulNet: b.cumulNet,
     movements: b.movements,
+    /** Volume brut ETP de la période (somme absolue des 5 types) — part du total de l'aperçu. */
+    gross: sumAbs(Object.values(b.byType)),
   }));
+  const totalGross = sumAbs(data.map((d) => d.gross));
   const axisDomains = movementRhythmAxisDomains(buckets);
   const handleBarClick = (payload: unknown) => {
     const row = payload as { label?: string; movements?: WorkforceMovement[] } | undefined;
@@ -645,140 +858,143 @@ export function MovementRhythmChart({
           {t("shared.hrGooduelleCharts.axisCumulNetFte", "Cumul net")} ({etp}) →
         </span>
       </div>
-      <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart
-          data={data}
-          stackOffset="sign"
-          margin={{ top: 8, right: 8, left: 0, bottom: 20 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-          <XAxis
-            dataKey="label"
-            tick={{ fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            angle={-25}
-            textAnchor="end"
-            height={40}
-          />
-          <YAxis
-            yAxisId="period"
-            domain={axisDomains.period}
-            allowDataOverflow
-            allowDecimals={false}
-            tick={{ fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={fmtEtp}
-          />
-          <YAxis
-            yAxisId="cumul"
-            domain={axisDomains.cumulative}
-            allowDataOverflow
-            orientation="right"
-            tick={{ fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={fmtEtp}
-          />
-          <Tooltip
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const row = payload[0]?.payload as (typeof data)[number] | undefined;
-              if (!row) return null;
-              return (
-                <div className="max-w-[320px] rounded-md border border-border bg-white px-3 py-2 text-xs shadow-sm">
-                  <div className="mb-1 font-semibold text-primary">{row.label}</div>
-                  <div className="space-y-0.5">
-                    {typeSeries
-                      .filter((s) => row[s.key] !== 0)
-                      .map((s) => (
-                        <div key={s.key} className="flex items-center justify-between gap-3">
-                          <span className="inline-flex items-center gap-1.5 text-secondary">
-                            <span
-                              aria-hidden
-                              className="inline-block h-2 w-2 rounded-[2px]"
-                              style={{ backgroundColor: TYPE_COLORS[s.key] }}
-                            />
-                            {s.label}
-                          </span>
-                          <span className="tabular-nums text-secondary">
-                            {formatSignedFr(row[s.key], locale)} {etp}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                  <div className="mt-1.5 border-t border-border pt-1.5">
-                    <MovementNetBalanceSummary
-                      balance={movementNetBalance(row.movements)}
-                      compact
-                      netFooter={
-                        <div className="mt-0.5 text-tertiary">
-                          {t(
-                            "shared.hrGooduelleCharts.cumulNetSinceStart",
-                            "Cumul net depuis le début de la plage : {v} ETP"
-                          ).replace("{v}", formatSignedFr(row.cumulNet, locale))}
-                        </div>
-                      }
-                    />
-                  </div>
-                  {onBarClick && row.movements.length > 0 && (
-                    <div className="mt-1 text-[10.5px] italic text-tertiary">
-                      {t(
-                        "shared.hrGooduelleCharts.clickForDetail",
-                        "Cliquez sur la barre pour voir le détail des mouvements."
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            }}
-          />
-          <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
-          <ReferenceLine yAxisId="period" y={0} stroke="rgba(0,0,0,0.35)" />
-          {typeSeries.map((s) => (
-            <Bar
-              key={s.key}
-              dataKey={s.key}
-              yAxisId="period"
-              stackId="mouv"
-              fill={TYPE_COLORS[s.key]}
-              name={s.label}
-              onClick={handleBarClick}
-              cursor={onBarClick ? "pointer" : undefined}
+      <ChartHoverArea>
+        <ResponsiveContainer width="100%" height={height}>
+          <ComposedChart
+            data={data}
+            stackOffset="sign"
+            margin={{ top: 8, right: 8, left: 0, bottom: 20 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              angle={-25}
+              textAnchor="end"
+              height={40}
             />
-          ))}
-          {/* Une seule courbe : le cumul net ETP (échelle de droite), petits points pleins, valeur
-           *  affichée uniquement au dernier point. Le net de chaque période n'est plus tracé (ancien
-           *  « rond blanc ») : il figure dans l'infobulle et la modale sous « Bilan net ». */}
-          <Line
-            yAxisId="cumul"
-            type="monotone"
-            dataKey="cumulNet"
-            name={labelCumulLine}
-            stroke={COLOR_INK}
-            strokeWidth={2}
-            dot={{ r: 2.5, fill: COLOR_INK, strokeWidth: 0 }}
-            activeDot={{ r: 4, fill: COLOR_INK, strokeWidth: 0 }}
-            label={(props: LastPointLabelProps) =>
-              props.index === lastIndex ? (
-                <text
-                  x={Number(props.x)}
-                  y={Number(props.y) - 8}
-                  textAnchor="end"
-                  fontSize={10.5}
-                  fontWeight={700}
-                  fill={netBalanceColor(Number(props.value)) ?? COLOR_INK}
-                >
-                  {formatSignedFr(Number(props.value), locale)} {etp}
-                </text>
-              ) : (
-                <g />
-              )
-            }
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
+            <YAxis
+              yAxisId="period"
+              domain={axisDomains.period}
+              allowDataOverflow
+              allowDecimals={false}
+              tick={{ fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={fmtEtp}
+            />
+            <YAxis
+              yAxisId="cumul"
+              domain={axisDomains.cumulative}
+              allowDataOverflow
+              orientation="right"
+              tick={{ fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={fmtEtp}
+            />
+            {/* Aperçu au survol (retour PO) : ETP par type, part du volume de la plage, bilan net
+              + cumul, principaux départements — puis clic = détail des mouvements. */}
+            <Tooltip
+              wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const row = payload[0]?.payload as (typeof data)[number] | undefined;
+                if (!row) return null;
+                const contributors = departmentContributors(row.movements, targetMovementFteImpact);
+                return (
+                  <FloatingPreview>
+                    <HrChartPreview
+                      title={row.label}
+                      rows={typeSeries
+                        .filter((s) => row[s.key] !== 0)
+                        .map((s) => ({
+                          label: s.label,
+                          value: `${formatSignedFr(row[s.key], locale)} ${etp}`,
+                          marker: { color: TYPE_COLORS[s.key] },
+                        }))}
+                      share={{
+                        label: t("chart.hrPreview.shareOfVolume", "Part du volume total (ETP)"),
+                        pct: shareOfTotal(row.gross, totalGross),
+                      }}
+                      list={{
+                        title: t(
+                          "chart.hrPreview.topDepartmentsNet",
+                          "Principaux départements (net)"
+                        ),
+                        items: contributors.map((c) => ({
+                          key: c.key,
+                          label: c.label,
+                          value: `${formatSignedFr(c.value, locale)} ${etp}`,
+                        })),
+                      }}
+                      clickHint={onBarClick && row.movements.length > 0}
+                    >
+                      <MovementNetBalanceSummary
+                        balance={movementNetBalance(row.movements)}
+                        compact
+                        netFooter={
+                          <div className="mt-0.5 text-tertiary">
+                            {t(
+                              "shared.hrGooduelleCharts.cumulNetSinceStart",
+                              "Cumul net depuis le début de la plage : {v} ETP"
+                            ).replace("{v}", formatSignedFr(row.cumulNet, locale))}
+                          </div>
+                        }
+                      />
+                    </HrChartPreview>
+                  </FloatingPreview>
+                );
+              }}
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="top" align="right" />
+            <ReferenceLine yAxisId="period" y={0} stroke="rgba(0,0,0,0.35)" />
+            {typeSeries.map((s) => (
+              <Bar
+                key={s.key}
+                dataKey={s.key}
+                yAxisId="period"
+                stackId="mouv"
+                fill={TYPE_COLORS[s.key]}
+                name={s.label}
+                onClick={handleBarClick}
+                cursor={onBarClick ? "pointer" : undefined}
+              />
+            ))}
+            {/* Une seule courbe : le cumul net ETP (échelle de droite), petits points pleins, valeur
+             *  affichée uniquement au dernier point. Le net de chaque période n'est plus tracé (ancien
+             *  « rond blanc ») : il figure dans l'infobulle et la modale sous « Bilan net ». */}
+            <Line
+              yAxisId="cumul"
+              type="monotone"
+              dataKey="cumulNet"
+              name={labelCumulLine}
+              stroke={COLOR_INK}
+              strokeWidth={2}
+              dot={{ r: 2.5, fill: COLOR_INK, strokeWidth: 0 }}
+              activeDot={{ r: 4, fill: COLOR_INK, strokeWidth: 0 }}
+              label={(props: LastPointLabelProps) =>
+                props.index === lastIndex ? (
+                  <text
+                    x={Number(props.x)}
+                    y={Number(props.y) - 8}
+                    textAnchor="end"
+                    fontSize={10.5}
+                    fontWeight={700}
+                    fill={netBalanceColor(Number(props.value)) ?? COLOR_INK}
+                  >
+                    {formatSignedFr(Number(props.value), locale)} {etp}
+                  </text>
+                ) : (
+                  <g />
+                )
+              }
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </ChartHoverArea>
       <p className="mt-1 text-[11px] text-tertiary">
         {t(
           "shared.hrGooduelleCharts.movementRhythmCaption",

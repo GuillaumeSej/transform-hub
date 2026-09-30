@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -15,6 +14,7 @@ import {
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatMillions } from "@/lib/format";
+import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
 
 export type SCurvePoint = {
   month: string;
@@ -78,43 +78,6 @@ export function currentGapMarks(
         }}
       />
     </>
-  );
-}
-
-/** Enveloppe d'un graphe cliquable : au survol, un petit badge « Cliquer pour plus de détails »
- *  suit le curseur (décalé, sans intercepter la souris) au lieu d'un texte fixe sous le graphe. */
-export function HoverDetailsHint({
-  enabled = true,
-  children,
-}: {
-  enabled?: boolean;
-  children: ReactNode;
-}) {
-  const { t } = useTranslation();
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  return (
-    <div
-      className="relative"
-      onMouseMove={
-        enabled
-          ? (e) => {
-              const r = e.currentTarget.getBoundingClientRect();
-              setPos({ x: e.clientX - r.left, y: e.clientY - r.top });
-            }
-          : undefined
-      }
-      onMouseLeave={enabled ? () => setPos(null) : undefined}
-    >
-      {children}
-      {enabled && pos && (
-        <span
-          className="pointer-events-none absolute z-10 whitespace-nowrap rounded bg-[rgba(50,3,0,0.82)] px-1.5 py-0.5 text-[10.5px] font-medium text-white shadow-sm"
-          style={{ left: pos.x + 14, top: pos.y + 16 }}
-        >
-          {t("chart.clickForDetails", "Cliquer pour plus de détails")}
-        </span>
-      )}
-    </div>
   );
 }
 
@@ -282,7 +245,7 @@ export function SCurveChart({
   const curIdx = currentPointIndex(data);
   const cur = curIdx >= 0 ? data[curIdx] : null;
   return (
-    <div className="relative">
+    <ChartHoverArea>
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart
           data={data}
@@ -310,22 +273,25 @@ export function SCurveChart({
           {/* Aperçu au survol (retour PO) : plan / réalisé / écart de la période, puis clic = détail. */}
           <Tooltip
             cursor={{ stroke: "#A99E9A", strokeDasharray: "3 3" }}
-            wrapperStyle={{ outline: "none", zIndex: 20 }}
-            allowEscapeViewBox={{ x: false, y: true }}
+            wrapperStyle={HIDDEN_TOOLTIP_WRAPPER}
             content={({ active, payload }) => {
               const point = payload?.[0]?.payload as SCurvePoint | undefined;
               if (!active || !point) return null;
               return (
-                <SCurvePreview
-                  point={point}
-                  contributors={point.actual !== null ? gapContributors?.(point.month) : undefined}
-                  clickable={!!onPointClick}
-                  labels={{
-                    actual: resolvedLabelActual,
-                    planned: resolvedLabelPlanned,
-                    reforecast: resolvedLabelReforecast,
-                  }}
-                />
+                <FloatingPreview>
+                  <SCurvePreview
+                    point={point}
+                    contributors={
+                      point.actual !== null ? gapContributors?.(point.month) : undefined
+                    }
+                    clickable={!!onPointClick}
+                    labels={{
+                      actual: resolvedLabelActual,
+                      planned: resolvedLabelPlanned,
+                      reforecast: resolvedLabelReforecast,
+                    }}
+                  />
+                </FloatingPreview>
               );
             }}
           />
@@ -361,6 +327,6 @@ export function SCurveChart({
           />
         </ComposedChart>
       </ResponsiveContainer>
-    </div>
+    </ChartHoverArea>
   );
 }

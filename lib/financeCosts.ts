@@ -621,8 +621,9 @@ export type HierarchyCostSlice = {
   node: HierarchyNode;
   amount: number;
   /** Lignes de coût (avec levier) qui contribuent à cette part — utilisé pour le drill-down par
-   *  workstream au clic sur la maille la plus fine. */
-  rows: { lever: Lever; amount: number }[];
+   *  workstream au clic sur la maille la plus fine. `impact` = la ligne d'impact d'origine (aperçu
+   *  au survol : répartition engagé / à venir / OPEX récurrent, `financePreview.costCommitmentSplit`). */
+  rows: { lever: Lever; amount: number; impact: ActionImpact }[];
   /** `true` s'il existe des `HierarchyNode` enfants (niveau suivant, `parentId === node.id`) — le
    *  composant descend d'un niveau au clic si `true`, sinon ouvre directement la décomposition par
    *  workstream. Toujours `false` pour une part « (direct) ». */
@@ -689,6 +690,7 @@ export function costsByHierarchyNode(
   );
   const rows = flattenCostImpacts(data).map(({ lever, impact }) => ({
     lever,
+    impact,
     amount: impact.amount,
     leafId: impact.hierarchyLeafId ?? lever.hierarchyLeafId,
   }));
@@ -702,7 +704,7 @@ export function costsByHierarchyNode(
         if (!leafId) return false;
         return resolveAncestorAtLevel(leafId, levelKey, byId)?.id === node.id;
       })
-      .map(({ lever, amount }) => ({ lever, amount }));
+      .map(({ lever, amount, impact }) => ({ lever, amount, impact }));
     const amount = round2(nodeRows.reduce((sum, r) => sum + r.amount, 0));
     return { node, amount, rows: nodeRows, hasChildren: childrenParentIds.has(node.id) };
   });
@@ -716,7 +718,7 @@ export function costsByHierarchyNode(
           chainContains(leafId, parent.id, byId) &&
           !resolveAncestorAtLevel(leafId, levelKey, byId)
       )
-      .map(({ lever, amount }) => ({ lever, amount }));
+      .map(({ lever, amount, impact }) => ({ lever, amount, impact }));
     const amount = round2(directRows.reduce((sum, r) => sum + r.amount, 0));
     if (amount > 0) {
       slices.push({ node: parent, amount, rows: directRows, hasChildren: false, isDirect: true });

@@ -4,6 +4,20 @@ import { toggleInSelection } from "@/lib/filterUtils";
 import { useState } from "react";
 import type { LeverHealthGroup, LeverHealthStatus } from "@/lib/leverHealth";
 import { groupBlockWidth, useAdaptiveGroupColumns } from "@/lib/hooks/useAdaptiveGroupColumns";
+import type { LeverCellPreview } from "@/lib/chartHoverPreview";
+import type { Lever, LeverStatus, RiskLevel } from "@/types";
+import { STATUS_LEVEL } from "@/lib/status-config";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import { leverRiskReasonText, riskLevelLabel } from "@/lib/leverRiskText";
+import { alertTitle } from "@/lib/alertText";
+import { ChartHoverArea, FloatingPreview } from "./HoverPreview";
+import {
+  PreviewBar,
+  PreviewCard,
+  PreviewRealizedBlock,
+  PreviewRow,
+  PreviewSection,
+} from "./LeverGroupPreview";
 
 const HEALTH_STYLE: Record<LeverHealthStatus, string> = {
   onTrack: "bg-rag-green",
@@ -21,6 +35,98 @@ const HEALTH_CELL_STYLE: Record<LeverHealthStatus, string> = {
   critical: "border-l-rag-red bg-rag-red/10",
   cancelled: "border-l-neutral-400 bg-neutral-400/10",
 };
+
+/** Couleurs charte du niveau de risque dans l'aperçu (jamais de vert). */
+const RISK_COLOR: Record<RiskLevel, string> = {
+  critical: "#991D1F",
+  high: "#FF3C47",
+  medium: "#FF797B",
+  low: "#A99E9A",
+};
+
+/** Aperçu au survol d'un levier (retour PO, même carte que la Trajectoire des économies) : code +
+ *  nom, maturité (étape du cycle de vie), risque + motif, réalisé / réactualisé, avancement du plan
+ *  d'action et alerte principale. */
+function LeverCellPreviewCard({
+  lever,
+  preview,
+  stageLabel,
+  healthLabel,
+}: {
+  lever: Lever;
+  preview: LeverCellPreview;
+  stageLabel?: (status: LeverStatus) => string;
+  healthLabel: string;
+}) {
+  const { t } = useTranslation();
+  const { risk, mainAlert } = preview;
+  const stage = stageLabel?.(lever.status);
+  return (
+    <PreviewCard
+      title={
+        <>
+          {lever.code} <span className="font-semibold text-secondary">· {lever.name}</span>
+        </>
+      }
+      subtitle={healthLabel}
+      clickHint={t("chart.groupPreview.clickLever", "Cliquer pour ouvrir le levier →")}
+    >
+      <div className="space-y-1">
+        <PreviewRow
+          label={t("chart.groupPreview.maturity", "Maturité")}
+          value={
+            lever.status === "cancelled"
+              ? (stage ?? lever.status)
+              : `${STATUS_LEVEL[lever.status]}${stage ? ` · ${stage}` : ""}`
+          }
+        />
+        <PreviewRow
+          color={RISK_COLOR[risk.level]}
+          label={t("chart.groupPreview.risk", "Risque")}
+          value={riskLevelLabel(t, risk.level)}
+        />
+      </div>
+      <div className="mt-1 text-[10.5px] leading-snug text-tertiary">
+        {leverRiskReasonText(t, risk)}
+      </div>
+      <PreviewSection>
+        <PreviewRealizedBlock summary={{ ...preview, planned: 0 }} />
+      </PreviewSection>
+      <PreviewSection>
+        <PreviewRow
+          label={t("chart.groupPreview.actionProgress", "Avancement du plan d'action")}
+          value={preview.actionCount > 0 ? `${preview.actionProgress} %` : "—"}
+        />
+        {preview.actionCount > 0 && (
+          <div className="mt-1.5">
+            <PreviewBar pct={preview.actionProgress} className="bg-bp-deep-red/70" />
+          </div>
+        )}
+      </PreviewSection>
+      {mainAlert && (
+        <PreviewSection>
+          <div className="mb-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-tertiary">
+            {t("chart.groupPreview.mainAlert", "Alerte principale")}
+          </div>
+          <div className="flex items-start gap-1.5 text-secondary">
+            <span
+              className="mt-1 inline-block h-2 w-2 shrink-0"
+              style={{
+                backgroundColor:
+                  mainAlert.type === "red"
+                    ? "#991D1F"
+                    : mainAlert.type === "amber"
+                      ? "#FF797B"
+                      : "#A99E9A",
+              }}
+            />
+            <span className="line-clamp-2">{alertTitle(t, mainAlert)}</span>
+          </div>
+        </PreviewSection>
+      )}
+    </PreviewCard>
+  );
+}
 
 const HEALTH_ORDER: LeverHealthStatus[] = ["critical", "watch", "onTrack", "cancelled"];
 
@@ -42,6 +148,8 @@ export function InitiativeHealthMatrix({
   groups,
   labels,
   onLeverClick,
+  details,
+  stageLabel,
 }: {
   groups: LeverHealthGroup[];
   labels: Record<LeverHealthStatus, string> & {
@@ -50,10 +158,15 @@ export function InitiativeHealthMatrix({
     filterHint: string;
   };
   onLeverClick: (leverId: string) => void;
+  /** Données de l'aperçu au survol d'un levier (voir `leverCellPreview`) ; absent = pas d'aperçu. */
+  details?: (lever: Lever) => LeverCellPreview;
+  /** Libellé (personnalisé) de l'étape du cycle de vie, pour la ligne « Maturité ». */
+  stageLabel?: (status: LeverStatus) => string;
 }) {
   // Filtre de statut géré localement au composant, piloté par la légende sous la matrice
   // (chaque entrée est un bouton bascule) : tableau vide = aucun filtre actif (multi-sélection).
   const [statusFilter, setStatusFilter] = useState<LeverHealthStatus[]>([]);
+  const [hovered, setHovered] = useState<{ lever: Lever; health: LeverHealthStatus } | null>(null);
   // Colonnes calculées sur les groupes non filtrés : la disposition reste stable quand on
   // bascule un statut dans la légende.
   const maxCells = groups.reduce((max, group) => Math.max(max, group.cells.length), 0);
@@ -72,7 +185,7 @@ export function InitiativeHealthMatrix({
   }));
 
   return (
-    <div className="space-y-3">
+    <ChartHoverArea className="space-y-3">
       <div ref={ref} className="overflow-x-auto pb-1">
         <div className="flex min-w-max items-start justify-center gap-3">
           {filteredGroups.map((group, index) => {
@@ -100,13 +213,14 @@ export function InitiativeHealthMatrix({
                   className="mt-1.5 grid gap-1 rounded-sm border border-info-blue/40 bg-info-blue-light p-1.5"
                   style={{ gridTemplateColumns: `repeat(${groupCols}, minmax(0, 1fr))` }}
                 >
-                  {cells.map(({ lever, health, computedRisk, activeAlertCount }) => (
+                  {cells.map(({ lever, health }) => (
                     <button
                       key={lever.id}
                       type="button"
                       onClick={() => onLeverClick(lever.id)}
+                      onMouseEnter={() => setHovered({ lever, health })}
+                      onMouseLeave={() => setHovered(null)}
                       className={`flex flex-col items-start justify-center rounded-[2px] border-l-4 px-1.5 py-1 text-left leading-tight transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-black ${HEALTH_CELL_STYLE[health]}`}
-                      title={`${lever.code} · ${lever.name}\n${labels[health]} · Risque ${computedRisk}\n${lever.owner} · ${activeAlertCount} alerte(s) active(s)`}
                       aria-label={`${lever.code} ${lever.name} ${labels[health]}`}
                     >
                       <span className="w-full truncate text-[11px] font-semibold text-primary">
@@ -171,6 +285,16 @@ export function InitiativeHealthMatrix({
           {labels.showAll}
         </button>
       </div>
-    </div>
+      {hovered && details && (
+        <FloatingPreview>
+          <LeverCellPreviewCard
+            lever={hovered.lever}
+            preview={details(hovered.lever)}
+            stageLabel={stageLabel}
+            healthLabel={labels[hovered.health]}
+          />
+        </FloatingPreview>
+      )}
+    </ChartHoverArea>
   );
 }

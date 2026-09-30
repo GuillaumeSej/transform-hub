@@ -1,8 +1,9 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Cell, Pie, PieChart, Sector, Tooltip, type PieProps } from "recharts";
 import { useLatestCallback, useStableValue } from "@/lib/hooks/useStableChartData";
+import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
 
 /** Même palette que `GeoDonutChart` — catégorielle, tons de marque, déjà validée sur fond clair.
  *  Round 12 : pas de nouvelle couleur saturée introduite, réutilisation à l'identique. Round 13 :
@@ -19,6 +20,17 @@ const CONSUMED_COLOR = "#1a1a1a";
 const REMAINING_COLOR = "#F0F0F0";
 
 export type BudgetDonutSlice = { name: string; value: number; consumed?: number };
+
+/** Part survolée transmise à `renderPreview` (aperçu au survol personnalisé par l'appelant). */
+export type BudgetDonutPreviewSlice = {
+  name: string;
+  value: number;
+  index: number;
+  /** Part en % de la somme des parts affichées (`null` si total nul). */
+  share: number | null;
+  /** Couleur de la part dans l'anneau (marqueur de l'aperçu). */
+  color: string;
+};
 
 /** Ratio consommé/alloué d'une part (0 si rien d'alloué ou `consumed` absent). */
 function consumedRatio(slice: { value?: number; consumed?: number }): number {
@@ -117,6 +129,8 @@ function renderTooltip(
     allocatedLabel?: string;
     remainingLabel?: string;
     overrunLabel?: string;
+    renderPreview?: (slice: BudgetDonutPreviewSlice) => ReactNode;
+    data?: BudgetDonutSlice[];
   }
 ): JSX.Element | null {
   const {
@@ -138,37 +152,54 @@ function renderTooltip(
   const entry = payload[0];
   const value = Number(entry.value ?? 0);
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+  // Aperçu au survol fourni par l'appelant (retour PO, même carte que la Trajectoire des
+  // économies) — rendu en portail (`FloatingPreview`), jamais rogné par la carte.
+  if (props.renderPreview) {
+    const index = Math.max(0, props.data?.findIndex((d) => d.name === entry.name) ?? 0);
+    const preview = props.renderPreview({
+      name: entry.name ?? "",
+      value,
+      index,
+      share: total > 0 ? (value / total) * 100 : null,
+      color: COLORS[index % COLORS.length],
+    });
+    return preview ? <FloatingPreview>{preview}</FloatingPreview> : null;
+  }
   const consumed = entry.payload?.consumed;
   const sliceOverBudget = consumed !== undefined && consumed > value;
   const consumedPct =
     consumed !== undefined && value > 0 ? Math.round((consumed / value) * 100) : 0;
   return (
-    <div className="rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
-      <p className="text-[12px] font-semibold text-primary">{entry.name}</p>
-      <p className="mt-0.5 text-[12px] text-secondary">
-        {allocatedLabel ? `${allocatedLabel} : ` : ""}
-        {formatValue(value)} <span className="text-tertiary">· {pct}%</span>
-      </p>
-      {consumed !== undefined && (
-        <>
-          <p className={`mt-0.5 text-[12px] ${sliceOverBudget ? "text-rag-red" : "text-tertiary"}`}>
-            {formatValue(consumed)} {consumedLabel ?? ""} <span>({consumedPct}%)</span>
-          </p>
-          {sliceOverBudget
-            ? overrunLabel && (
-                <p className="mt-0.5 text-[12px] font-semibold text-rag-red">
-                  {overrunLabel} : {formatValue(consumed - value)}
-                </p>
-              )
-            : remainingLabel && (
-                <p className="mt-0.5 text-[12px] text-tertiary">
-                  {remainingLabel} : {formatValue(value - consumed)}
-                </p>
-              )}
-        </>
-      )}
-      {clickHint && <p className="mt-1 text-[10.5px] italic text-tertiary">{clickHint}</p>}
-    </div>
+    <FloatingPreview>
+      <div className="rounded-lg border border-border bg-white px-3 py-2 shadow-sm">
+        <p className="text-[12px] font-semibold text-primary">{entry.name}</p>
+        <p className="mt-0.5 text-[12px] text-secondary">
+          {allocatedLabel ? `${allocatedLabel} : ` : ""}
+          {formatValue(value)} <span className="text-tertiary">· {pct}%</span>
+        </p>
+        {consumed !== undefined && (
+          <>
+            <p
+              className={`mt-0.5 text-[12px] ${sliceOverBudget ? "text-rag-red" : "text-tertiary"}`}
+            >
+              {formatValue(consumed)} {consumedLabel ?? ""} <span>({consumedPct}%)</span>
+            </p>
+            {sliceOverBudget
+              ? overrunLabel && (
+                  <p className="mt-0.5 text-[12px] font-semibold text-rag-red">
+                    {overrunLabel} : {formatValue(consumed - value)}
+                  </p>
+                )
+              : remainingLabel && (
+                  <p className="mt-0.5 text-[12px] text-tertiary">
+                    {remainingLabel} : {formatValue(value - consumed)}
+                  </p>
+                )}
+          </>
+        )}
+        {clickHint && <p className="mt-1 text-[10.5px] italic text-tertiary">{clickHint}</p>}
+      </div>
+    </FloatingPreview>
   );
 }
 
@@ -288,7 +319,9 @@ const DonutPlot = memo(function DonutPlot({
           shape={renderConsumedSector as PieProps["shape"]}
         />
       )}
-      <Tooltip content={tooltipContent} />
+      {/* Tooltip rendu en portail (`FloatingPreview`, voir `renderTooltip`) : toujours entièrement
+          visible, jamais rogné par la carte ni recouvert par le widget voisin. */}
+      <Tooltip wrapperStyle={HIDDEN_TOOLTIP_WRAPPER} content={tooltipContent} />
     </PieChart>
   );
 });
@@ -355,6 +388,7 @@ export function BudgetDonutChart({
   remainingLabel,
   overrunLabel,
   consumedRingHint,
+  renderPreview,
 }: {
   data: BudgetDonutSlice[];
   formatValue: (value: number) => string;
@@ -406,6 +440,10 @@ export function BudgetDonutChart({
   /** Mode `showConsumedRing` : courte clé de lecture affichée sous le donut (ex. "Anneau noir
    *  extérieur = budget consommé de chaque élément"). Omise si non fournie. */
   consumedRingHint?: string;
+  /** Aperçu au survol personnalisé d'une part (carte `PreviewCard`, voir `CostDrillDonuts`) : remplace
+   *  le tooltip par défaut. Rendu en portail flottant, toujours entièrement visible. Omis : tooltip
+   *  par défaut (nom, montant, %, consommé…), lui aussi flottant. */
+  renderPreview?: (slice: BudgetDonutPreviewSlice) => ReactNode;
 }): JSX.Element {
   const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
   const maxSize = size === "lg" ? 300 : 220;
@@ -437,6 +475,8 @@ export function BudgetDonutChart({
   const clickable = !!onSliceClick;
   const handleSliceClick = useLatestCallback(onSliceClick);
   const latestFormatValue = useLatestCallback(formatValue);
+  const latestRenderPreview = useLatestCallback(renderPreview);
+  const hasPreview = !!renderPreview;
   const tooltipContent = useCallback(
     (props: { active?: boolean; payload?: unknown }) =>
       renderTooltip({
@@ -448,8 +488,15 @@ export function BudgetDonutChart({
         allocatedLabel,
         remainingLabel,
         overrunLabel,
+        renderPreview: hasPreview
+          ? (slice: BudgetDonutPreviewSlice) => latestRenderPreview(slice) ?? null
+          : undefined,
+        data: stableData,
       }),
     [
+      hasPreview,
+      latestRenderPreview,
+      stableData,
       sliceTotal,
       latestFormatValue,
       consumedLabel,
@@ -489,15 +536,17 @@ export function BudgetDonutChart({
           style={{ height: plotSize ?? maxSize }}
         >
           {plotSize !== null && (
-            <DonutPlot
-              size={plotSize}
-              data={stableData}
-              showConsumedRing={!!showConsumedRing}
-              clickable={clickable}
-              onSliceClick={handleSliceClick}
-              onActiveIndexChange={setActiveIndex}
-              tooltipContent={tooltipContent}
-            />
+            <ChartHoverArea>
+              <DonutPlot
+                size={plotSize}
+                data={stableData}
+                showConsumedRing={!!showConsumedRing}
+                clickable={clickable}
+                onSliceClick={handleSliceClick}
+                onActiveIndexChange={setActiveIndex}
+                tooltipContent={tooltipContent}
+              />
+            </ChartHoverArea>
           )}
           {/* Texte central — contenu dans le carré inscrit du trou (`geometry.textBox`, calculé
             depuis `innerRadius`) : il ne peut pas chevaucher un anneau, à aucune largeur de carte.

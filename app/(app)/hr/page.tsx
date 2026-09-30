@@ -1333,7 +1333,13 @@ export default function HrDashboardPage() {
             <CardBody>
               {baselineNoteBlock}
               <FteWaterfallChart
-                buckets={salary}
+                // Mouvements du bucket ETP de même clé (salaryBridge dérive de fteBridge, mêmes
+                // buckets) → principaux départements de l'aperçu au survol, en €M.
+                buckets={salary.map((b) => ({
+                  ...b,
+                  movements: bridge.find((f) => f.key === b.key)?.movements,
+                }))}
+                contributorValue={(m) => (m.salaryImpact || 0) / 1_000_000}
                 baseline={salaryOpening}
                 target={salaryOpening + salary.reduce((s, b) => s + b.delta, 0)}
                 unit="€M"
