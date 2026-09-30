@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   GripVertical,
+  Info,
   LayoutGrid,
   Lock,
   Maximize2,
@@ -35,7 +36,11 @@ import { etpMovementDeepLink, etpMovementFilterLink } from "@/lib/hrMovementLink
 import { fmtCurr, leverTargetFte } from "@/lib/engine";
 import { fteCoverage } from "@/lib/fteCoverage";
 import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/leversLogic";
-import { HrFteCard } from "@/components/shared/HrFteCard";
+import { HrFteCard, type HrFteDetailTab } from "@/components/shared/HrFteCard";
+import { HrKpiDetailModal } from "@/components/shared/HrKpiDetailModal";
+import { Tooltip } from "@/components/shared/Tooltip";
+import { hrKpiDetail, leverCoverageRows } from "@/lib/hrKpiDetail";
+import type { HrKpiKey } from "@/lib/hrKpiDetailTypes";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { HrKPICard } from "@/components/shared/HrKPICard";
 import { ProgressBar } from "@/components/shared/ProgressBar";
@@ -222,6 +227,9 @@ export default function HrDashboardPage() {
   // Synthèse des alertes mouvements (components/shared/MovementAlertsSummaryModal.tsx) — ouverte
   // AVANT toute navigation depuis le bandeau d'alertes. `null` = fermée ; `kind: null` = toutes.
   const [alertsModal, setAlertsModal] = useState<{ kind: MovementAlertKind | null } | null>(null);
+  // Fiche détaillée d'un KPI du bandeau haut (components/shared/HrKpiDetailModal.tsx) — `tab` :
+  // onglet ouvert depuis la légende de la carte ETP.
+  const [kpiDetail, setKpiDetail] = useState<{ kpi: HrKpiKey; tab?: HrFteDetailTab } | null>(null);
 
   // ─── Programme = programme actif GLOBAL (Topbar) ─────────────────────────────────────────
   // Décision PO (audit fix #1) : plus de sélection locale (ni l'ancien défaut « programme le plus
@@ -704,6 +712,16 @@ export default function HrDashboardPage() {
   const coverage = useMemo(
     () => fteCoverage(leverTargetFte(coverageLevers), summary.fte.target),
     [coverageLevers, summary.fte.target]
+  );
+  // Fiche KPI : mêmes mouvements (filtrés) que les cartes, mêmes leviers que la couverture.
+  const kpiDetailData = useMemo(
+    () => (kpiDetail ? hrKpiDetail(kpiDetail.kpi, filteredMovements, data.levers) : null),
+    [kpiDetail, filteredMovements, data.levers]
+  );
+  const kpiCoverageRows = useMemo(
+    () =>
+      kpiDetail?.kpi === "fte" ? leverCoverageRows(coverageLevers, filteredMovements) : undefined,
+    [kpiDetail, coverageLevers, filteredMovements]
   );
   const coverageNote = useMemo(() => {
     const leverOnlyLabels = Object.keys(activeFilters)
@@ -2151,6 +2169,7 @@ export default function HrDashboardPage() {
           ═══════════════════════════════════════════════════════════════════════════════════════ */}
       <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <HrFteCard
+          onOpen={(tab) => setKpiDetail({ kpi: "fte", tab })}
           className="sm:col-span-2"
           realized={summary.fte.realized}
           planned={summary.fte.target}
@@ -2173,6 +2192,7 @@ export default function HrDashboardPage() {
           )}`}
         />
         <HrKPICard
+          onClick={() => setKpiDetail({ kpi: "salarySavings" })}
           label={t("hr.kpi.netSalarySavings", "Économies nettes de masse salariale")}
           value={fmtCurr(summary.salarySavings.realized / 1_000_000)}
           {...kpiProgress(summary.salarySavings, (n) => fmtCurr(n / 1_000_000))}
@@ -2183,12 +2203,14 @@ export default function HrDashboardPage() {
           )}
         />
         <HrKPICard
+          onClick={() => setKpiDetail({ kpi: "socialCost" })}
           label={t("hr.kpi.socialCostsConsumed", "Coûts sociaux consommés")}
           value={fmtCurr(summary.socialCost.realized / 1_000_000)}
           {...kpiProgress(summary.socialCost, (n) => fmtCurr(n / 1_000_000))}
           accent="red"
         />
         <HrKPICard
+          onClick={() => setKpiDetail({ kpi: "netEconomy" })}
           label={t("hr.kpi.netSavings", "Économies nettes")}
           value={fmtCurr(summary.netEconomy.realized / 1_000_000)}
           {...kpiProgress(summary.netEconomy, (n) => fmtCurr(n / 1_000_000))}
@@ -2232,6 +2254,18 @@ export default function HrDashboardPage() {
               }}
             />
           </div>
+          <Tooltip
+            text={t(
+              "hr.movementsBand.help",
+              "Mouvement = une action RH sur une personne nommée (départ, recrutement, mobilité). « Réalisés » compte des actions, pas des ETP : un recrutement annule un départ, une mobilité interne vaut 0, un temps partiel 0,5 — d'où l'Impact ETP différent. « En alerte » = mouvements à traiter (désynchronisé du levier, en retard, échéance sous 7 jours, à valider), réalisés ou non."
+            )}
+            position="bottom"
+          >
+            <span className="flex items-center gap-1 text-[11px] text-tertiary">
+              <Info size={11} />
+              {t("hr.movementsBand.helpLabel", "Mouvements, ETP, alertes : quelle différence ?")}
+            </span>
+          </Tooltip>
         </div>
         {alerts.length > 0 && (
           <span aria-hidden className="hidden h-8 w-px bg-neutral-200 lg:block" />
@@ -2622,6 +2656,17 @@ export default function HrDashboardPage() {
         title={progressDrilldown?.title ?? ""}
         movements={progressDrilldown?.movements ?? []}
         programLabels={Object.fromEntries(programs.map((program) => [program.id, program.name]))}
+      />
+
+      {/* Fiche détaillée d'un KPI du bandeau haut — voir `kpiDetail` ci-dessus. */}
+      <HrKpiDetailModal
+        key={kpiDetail ? `${kpiDetail.kpi}-${kpiDetail.tab ?? ""}` : "closed"}
+        open={kpiDetail !== null}
+        onOpenChange={(open) => !open && setKpiDetail(null)}
+        detail={kpiDetailData}
+        coverageRows={kpiCoverageRows}
+        coverageTotal={coverage}
+        initialTab={kpiDetail?.tab}
       />
 
       {/* Synthèse des alertes mouvements — voir `alertsModal` ci-dessus. */}

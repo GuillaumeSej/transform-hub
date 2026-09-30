@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
@@ -27,6 +28,7 @@ export function HrKPICard({
   accent = "default",
   className,
   infoTooltip,
+  onClick,
 }: {
   label: string;
   value: string;
@@ -48,6 +50,8 @@ export function HrKPICard({
   /** Texte optionnel affiché dans un tooltip au survol d'une icône ⓘ à côté du label — même
    *  pattern que `KPICard.infoTooltip` (voir son doc-comment). */
   infoTooltip?: string;
+  /** Carte cliquable : ouvre la fiche détaillée du KPI (`HrKpiDetailModal`). */
+  onClick?: () => void;
 }) {
   const { t } = useTranslation();
   const accentClass: Record<string, string> = {
@@ -70,8 +74,22 @@ export function HrKPICard({
       className={cn(
         "relative flex flex-col overflow-hidden border-l-[3px] bg-white p-4 tabular-nums",
         accentClass[accent],
+        onClick &&
+          "cursor-pointer text-left transition hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-black",
         className
       )}
+      {...(onClick && {
+        role: "button",
+        tabIndex: 0,
+        title: t("hr.kpi.openDetail", "Voir le détail"),
+        onClick,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        },
+      })}
     >
       <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-tertiary">
         {label}

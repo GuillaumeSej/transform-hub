@@ -7,6 +7,9 @@ import { Tooltip } from "@/components/shared/Tooltip";
 import { formatFteValue, formatHeadcount, type HeadcountFigure } from "@/lib/hrEngine";
 import type { FteCoverage } from "@/lib/fteCoverage";
 
+/** Onglets de la fiche ETP ouvrables depuis la carte. */
+export type HrFteDetailTab = "lever" | "movements" | "coverage";
+
 /** Trajectoire d'effectif absolue du périmètre (null si la baseline n'est pas scopable). */
 export type HrFteHeadcount = {
   start: HeadcountFigure;
@@ -23,7 +26,8 @@ export type HrFteHeadcount = {
  *   - gros chiffre = Impact ETP réalisé, badge = réalisé / planifié ;
  *   - UNE barre à trois niveaux, sur l'échelle de l'ambition des leviers : réalisé (plein),
  *     planifié par les mouvements (clair), visé par les leviers (fond) ;
- *   - légende = planifié · visé · reste à couvrir (le réalisé est déjà le gros chiffre) ;
+ *   - légende cliquable = réalisé · planifié · visé · reste à couvrir (chaque élément ouvre l'onglet
+ *     correspondant de la fiche `HrKpiDetailModal` via `onOpen`) ;
  *   - ligne d'effectif absolu (démarrage → actuel → cible) en contexte, personnes en infobulle.
  * Calcul de couverture : `lib/fteCoverage.ts`.
  */
@@ -38,6 +42,7 @@ export function HrFteCard({
   baselineNote,
   infoTooltip,
   className,
+  onOpen,
 }: {
   /** Impact ETP des mouvements réalisés (signé). */
   realized: number;
@@ -54,6 +59,8 @@ export function HrFteCard({
   baselineNote?: string;
   infoTooltip?: string;
   className?: string;
+  /** Ouvre la fiche détaillée sur l'onglet voulu (carte entière → « Par levier »). */
+  onOpen?: (tab: HrFteDetailTab) => void;
 }) {
   const { t, locale } = useTranslation();
   const fmt = (n: number) => formatFteValue(n, locale);
@@ -81,9 +88,12 @@ export function HrFteCard({
     <div
       className={cn(
         "flex flex-col border-l-[3px] border-black bg-white p-4 tabular-nums",
+        onOpen && "cursor-pointer transition hover:shadow-md",
         className
       )}
       data-testid="hr-fte-card"
+      onClick={onOpen ? () => onOpen("lever") : undefined}
+      title={onOpen ? t("hr.kpi.openDetail", "Voir le détail") : undefined}
     >
       <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-tertiary">
         {t("hr.kpi.fteImpact", "Impact ETP")}
@@ -122,34 +132,42 @@ export function HrFteCard({
         )}
       </div>
 
+      {/* Légende cliquable — chaque entrée ouvre l'onglet correspondant de la fiche. */}
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-secondary">
-        <span
-          className="flex items-center gap-1"
+        <LegendItem
+          swatch="bg-bp-coral"
+          label={t("hr.fteCard.realized", "Réalisé")}
+          value={signed(realized)}
+          onClick={onOpen && (() => onOpen("movements"))}
+        />
+        <LegendItem
+          swatch="bg-bp-coral/30"
+          label={t("hr.fteCard.planned", "Planifié (mouvements)")}
+          value={signed(planned)}
           title={
             reforecastDiffers
               ? t("hr.kpi.reforecastLabel", "Réactualisé {v}").replace("{v}", fmt(reforecast))
               : t("hr.kpi.reforecastSameAsTarget", "Réactualisé identique à la cible")
           }
-        >
-          <span aria-hidden className="h-2 w-2 bg-bp-coral/30" />
-          {t("hr.fteCard.planned", "Planifié (mouvements)")}{" "}
-          <strong className="text-primary">{signed(planned)}</strong>
-        </span>
+          onClick={onOpen && (() => onOpen("lever"))}
+        />
         {hasLevers && (
           <>
-            <span className="flex items-center gap-1">
-              <span aria-hidden className="h-2 w-2 bg-neutral-200" />
-              {t("hr.fteCard.levers", "Visé (leviers)")}{" "}
-              <strong className="text-primary">{signed(coverage.leverFte)}</strong>
-            </span>
-            <span
+            <LegendItem
+              swatch="bg-neutral-200"
+              label={t("hr.fteCard.levers", "Visé (leviers)")}
+              value={signed(coverage.leverFte)}
+              onClick={onOpen && (() => onOpen("coverage"))}
+            />
+            <LegendItem
+              label={gap.label}
+              value={gap.value}
               title={t(
                 "hr.fteCard.coveragePct",
                 "{pct} % de l'ambition des leviers couverte"
               ).replace("{pct}", String(Math.round(coverage.coveragePct)))}
-            >
-              {gap.label} <strong className="text-primary">{gap.value}</strong>
-            </span>
+              onClick={onOpen && (() => onOpen("coverage"))}
+            />
           </>
         )}
       </div>
@@ -209,5 +227,48 @@ export function HrFteCard({
         {note && <div className="mt-0.5">{note}</div>}
       </div>
     </div>
+  );
+}
+
+/** Entrée de légende : pastille + libellé + valeur ; bouton quand `onClick` est fourni (le clic ne
+ *  remonte pas à la carte, qui ouvrirait un autre onglet). */
+function LegendItem({
+  swatch,
+  label,
+  value,
+  title,
+  onClick,
+}: {
+  swatch?: string;
+  label: string;
+  value: string;
+  title?: string;
+  onClick?: () => void;
+}) {
+  const content = (
+    <>
+      {swatch && <span aria-hidden className={`h-2 w-2 shrink-0 ${swatch}`} />}
+      {label} <strong className="text-primary">{value}</strong>
+    </>
+  );
+  if (!onClick) {
+    return (
+      <span className="flex items-center gap-1" title={title}>
+        {content}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="flex items-center gap-1 hover:text-primary hover:underline"
+    >
+      {content}
+    </button>
   );
 }
