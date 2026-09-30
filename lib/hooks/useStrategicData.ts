@@ -36,7 +36,8 @@ import {
   type StrategicOwnershipScope,
   withAxisDisplayColors,
 } from "@/lib/axisLogic";
-import { isLeverVisibleForClearance, resolveConfidentialityClearance } from "@/lib/leversLogic";
+import { resolveConfidentialityClearance } from "@/lib/leversLogic";
+import { filterStrategicByClearance } from "@/lib/strategicConfidentiality";
 import { isAnyAdmin } from "@/lib/roleProfiles";
 import { todayISO } from "@/lib/dateUtils";
 import { normalizePeriod } from "@/lib/indicatorPeriod";
@@ -467,37 +468,51 @@ export function useStrategicData(
   // StrategicDashboardView, …) — les actions/mesures qui en dérivent plus bas héritent donc
   // automatiquement des deux filtres sans logique dupliquée par écran. Une entité doit passer LES
   // DEUX filtres pour être visible (composition, pas substitution).
+  // Masquage de confidentialité HÉRITÉE (lib/strategicConfidentiality.ts) : un chantier sous un
+  // axe non accessible est masqué même sans niveau propre ; projets, indicateurs et lignes ETP
+  // suivent leur chantier/axe. Admins et appelants non migrés : aucun filtre (inchangé).
+  const programScopedIndicators = useMemo(
+    () => allIndicators.filter((i) => i.programId === programId),
+    [allIndicators, programId]
+  );
+  const programScopedStaffing = useMemo(
+    () => allStaffing.filter((s) => s.programId === programId),
+    [allStaffing, programId]
+  );
+  const clearanceFiltered = useMemo(() => {
+    const input = {
+      axes: programScopedAxes,
+      chantiers: programScopedChantiers,
+      indicators: programScopedIndicators,
+      staffing: programScopedStaffing,
+    };
+    if (!filterActive || isAdmin) return input;
+    return filterStrategicByClearance(input, clearance);
+  }, [
+    programScopedAxes,
+    programScopedChantiers,
+    programScopedIndicators,
+    programScopedStaffing,
+    filterActive,
+    isAdmin,
+    clearance,
+  ]);
   const axes = useMemo(() => {
-    let visible = programScopedAxes;
-    if (filterActive && !isAdmin) {
-      visible = visible.filter((a) =>
-        isLeverVisibleForClearance(a.confidentialityLevel, clearance)
-      );
-    }
+    let visible = clearanceFiltered.axes;
     if (ownershipScope.mode === "scoped") {
       visible = visible.filter((a) => ownershipScope.axisIds.has(a.id));
     }
     return visible;
-  }, [programScopedAxes, filterActive, isAdmin, clearance, ownershipScope]);
+  }, [clearanceFiltered, ownershipScope]);
   const chantiers = useMemo(() => {
-    let visible = programScopedChantiers;
-    if (filterActive && !isAdmin) {
-      visible = visible.filter((c) =>
-        isLeverVisibleForClearance(c.confidentialityLevel, clearance)
-      );
-    }
+    let visible = clearanceFiltered.chantiers;
     if (ownershipScope.mode === "scoped") {
       visible = visible.filter((c) => ownershipScope.chantierIds.has(c.id));
     }
     return visible;
-  }, [programScopedChantiers, filterActive, isAdmin, clearance, ownershipScope]);
+  }, [clearanceFiltered, ownershipScope]);
   const indicators = useMemo(() => {
-    let visible = allIndicators.filter((i) => i.programId === programId);
-    if (filterActive && !isAdmin) {
-      visible = visible.filter((i) =>
-        isLeverVisibleForClearance(i.confidentialityLevel, clearance)
-      );
-    }
+    let visible = clearanceFiltered.indicators;
     if (ownershipScope.mode === "scoped") {
       // Indicateur chantier-scopé : visible si SON chantier l'est. Indicateur macro (pas de
       // `chantierId`, porté directement par l'axe) : visible si SON axe l'est — vrai pour
@@ -511,7 +526,7 @@ export function useStrategicData(
       );
     }
     return visible;
-  }, [allIndicators, programId, filterActive, isAdmin, clearance, ownershipScope]);
+  }, [clearanceFiltered, ownershipScope]);
   // Actions et mesures ne portent pas de `programId` (elles le tiennent de leur parent) : on les
   // rattache via l'ensemble des chantiers/indicateurs du programme, déjà scopés (confidentialité +
   // ownership) ci-dessus — aucun filtre supplémentaire nécessaire ici.
@@ -530,15 +545,15 @@ export function useStrategicData(
   // reste ainsi visible dans les agrégats plutôt que de disparaître silencieusement. Round 25 :
   // ownership scoping ajouté (sinon `axis_sponsor`/`chantier_owner`/`chantier_contributor`
   // verraient les ETP de TOUT le programme sur la page Effectifs, malgré des `axes`/`chantiers`
-  // déjà correctement bornés) — PAS de masquage de confidentialité ici, `ChantierStaffing` n'en
-  // porte pas (comme avant ce round).
+  // déjà correctement bornés). Confidentialité : `ChantierStaffing` ne porte pas de niveau propre,
+  // mais une ligne d'un chantier masqué (niveau propre ou hérité de l'axe) l'est aussi.
   const staffing = useMemo(() => {
-    let visible = allStaffing.filter((s) => s.programId === programId);
+    let visible = clearanceFiltered.staffing;
     if (ownershipScope.mode === "scoped") {
       visible = visible.filter((s) => ownershipScope.chantierIds.has(s.chantierId));
     }
     return visible;
-  }, [allStaffing, programId, ownershipScope]);
+  }, [clearanceFiltered, ownershipScope]);
 
   // Refs toujours à jour : les mutations doivent lire l'état le plus récent sans être recréées à
   // chaque rendu (même motivation que les refs de `useBeTrackData`).

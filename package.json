@@ -20,7 +20,8 @@
     "migrate-lever-meta-tenant-split": "node scripts/migrate-lever-meta-tenant-split.js",
     "migrate-chantier-axisids": "node scripts/migrate-chantier-axisids.js",
     "fix-realized-exceeds-reforecast": "node scripts/fix-realized-exceeds-reforecast.js",
-    "seed-acme-partial-progress": "node scripts/seed-acme-partial-progress.js"
+    "seed-acme-partial-progress": "node scripts/seed-acme-partial-progress.js",
+    "prepare-demo-strat-video": "node scripts/prepare-demo-strat-video.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.18",

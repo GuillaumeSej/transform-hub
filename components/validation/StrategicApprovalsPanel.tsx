@@ -250,7 +250,7 @@ export function StrategicApprovalsPanel({
                 <Card key={a.id}>
                   <CardBody>
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
+                      <div className="min-w-0 break-words">
                         <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
                           {kindLabel(a.kind)}
                         </div>
@@ -330,32 +330,37 @@ export function StrategicApprovalsPanel({
                     {steps.length > 0 && <ChainStepper steps={steps} levelLabel={levelLabel} />}
 
                     {diff.length > 0 ? (
-                      <table className="mt-3 w-full rounded-md bg-neutral-50 text-left text-xs">
-                        <thead>
-                          <tr className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
-                            <th className="px-3 py-1.5">{t("validation.sa.field", "Champ")}</th>
-                            <th className="px-3 py-1.5">{t("validation.sa.before", "Avant")}</th>
-                            <th className="px-3 py-1.5" aria-hidden="true" />
-                            <th className="px-3 py-1.5">{t("validation.sa.after", "Après")}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {diff.map((row) => (
-                            <tr key={row.field} className="border-t border-border">
-                              <td className="px-3 py-1.5 text-tertiary">
-                                {t(row.labelKey, row.labelFallback)}
-                              </td>
-                              <td className="px-3 py-1.5 text-secondary">{row.before}</td>
-                              <td className="px-1 py-1.5" aria-hidden="true">
-                                →
-                              </td>
-                              <td className="px-3 py-1.5 font-semibold text-primary">
-                                {row.after}
-                              </td>
+                      // Mobile : le tableau garde une largeur lisible (`min-w`) et défile dans son
+                      // propre conteneur — la page elle-même ne défile jamais horizontalement.
+                      // Desktop : la carte est plus large que ce minimum, rendu inchangé.
+                      <div className="mt-3 overflow-x-auto rounded-md bg-neutral-50">
+                        <table className="w-full min-w-[440px] text-left text-xs">
+                          <thead>
+                            <tr className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
+                              <th className="px-3 py-1.5">{t("validation.sa.field", "Champ")}</th>
+                              <th className="px-3 py-1.5">{t("validation.sa.before", "Avant")}</th>
+                              <th className="px-3 py-1.5" aria-hidden="true" />
+                              <th className="px-3 py-1.5">{t("validation.sa.after", "Après")}</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {diff.map((row) => (
+                              <tr key={row.field} className="border-t border-border">
+                                <td className="px-3 py-1.5 text-tertiary">
+                                  {t(row.labelKey, row.labelFallback)}
+                                </td>
+                                <td className="px-3 py-1.5 text-secondary">{row.before}</td>
+                                <td className="px-1 py-1.5" aria-hidden="true">
+                                  →
+                                </td>
+                                <td className="px-3 py-1.5 font-semibold text-primary">
+                                  {row.after}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     ) : (
                       <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-neutral-50 px-3 py-2 text-xs">
                         <span className="text-tertiary">{t("validation.sa.before", "Avant")}</span>

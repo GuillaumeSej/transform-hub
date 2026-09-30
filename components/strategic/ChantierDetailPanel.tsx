@@ -76,6 +76,12 @@ import {
   sumProjetBudgets,
   type ProgressBucket,
 } from "@/lib/axisLogic";
+import {
+  chantierDependencyOverview,
+  type DependencyOverviewRow,
+} from "@/lib/chantierDependencyOverview";
+import { DependencyTypeBadge } from "@/components/shared/DependencyTypeBadge";
+import { chantierHref, projetHref } from "@/lib/strategicLinks";
 import { EMPTY_BUDGET, rollupBudgets } from "@/lib/budgetRollup";
 import { aggregateLinkedKpis, readKpi } from "@/lib/chantierKpis";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
@@ -2095,6 +2101,19 @@ export function ChantierDetailPanel({
     [chantier, data.chantiers, data.chantierActions]
   );
 
+  // Carte "Dépendances" de la Vue d'ensemble : dépendances du chantier ET de ses projets
+  // (prédécesseurs/successeurs), statut dérivé des règles existantes — voir
+  // `lib/chantierDependencyOverview.ts`. Même résolveur d'avancement que les cartes projet.
+  const dependencyRows = useMemo(
+    () =>
+      chantier
+        ? chantierDependencyOverview(chantier, data.chantiers, data.chantierActions, {
+            progressOf: data.projetProgress,
+          })
+        : [],
+    [chantier, data.chantiers, data.chantierActions, data.projetProgress]
+  );
+
   // Bloc "critères de succès" — texte libre, sauvegardé au blur (pas de bouton dédié : cohérent
   // avec le reste de la fiche, où chaque bloc round 4 s'auto-sauvegarde à la modification). Resync
   // depuis la donnée distante si elle change sous nos pieds (autre onglet, autre utilisateur).
@@ -2283,6 +2302,99 @@ export function ChantierDetailPanel({
     setActiveTab("leviers");
     setClickedFocusActionId(actionId);
     openLevier(actionId);
+  };
+
+  // ── Carte "Dépendances" (Vue d'ensemble) — navigation : un projet de CE chantier s'ouvre dans
+  // l'onglet Projets (même effet qu'un clic sur la Timeline) ; un autre chantier/projet via ses
+  // liens profonds habituels (`lib/strategicLinks.ts`). Un prérequis externe n'est pas cliquable.
+  const openDependencyEnd = (kind: "chantier" | "projet", id: string, chantierOfId: string) => {
+    if (kind === "projet" && chantierOfId === chantierId) {
+      focusLevierFromProgression(id);
+      return;
+    }
+    if (kind === "chantier" && id === chantierId) return;
+    navigateAway(kind === "projet" ? projetHref(chantierOfId, id) : chantierHref(id));
+  };
+
+  const DEPENDENCY_STATUS_CLASS: Record<DependencyOverviewRow["status"], string> = {
+    late: "bg-rag-red-light text-rag-red",
+    pending: "bg-rag-amber-light text-rag-amber",
+    ok: "bg-rag-green-light text-rag-green",
+  };
+
+  const renderDependencyRow = (row: DependencyOverviewRow) => {
+    const otherClickable = row.otherKind !== "external" && !!row.otherId && !!row.otherChantierId;
+    return (
+      <li key={row.key} className="flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+              row.direction === "predecessor"
+                ? "bg-neutral-100 text-secondary"
+                : "bg-bp-purple/10 text-bp-purple"
+            )}
+          >
+            {row.direction === "predecessor"
+              ? t("strategicChantierDetail.dependencies.predecessor", "Prédécesseur")
+              : t("strategicChantierDetail.dependencies.successor", "Successeur")}
+          </span>
+          {row.type ? (
+            <DependencyTypeBadge type={row.type} />
+          ) : (
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-secondary">
+              {t("strategicChantierDetail.dependencies.external", "Externe")}
+            </span>
+          )}
+          {otherClickable ? (
+            <button
+              type="button"
+              onClick={() =>
+                openDependencyEnd(
+                  row.otherKind as "chantier" | "projet",
+                  row.otherId!,
+                  row.otherChantierId!
+                )
+              }
+              className="min-w-0 break-words text-left text-[12.5px] font-semibold text-primary hover:underline"
+            >
+              {row.otherName}
+            </button>
+          ) : (
+            <span className="min-w-0 break-words text-[12.5px] font-semibold text-primary">
+              {row.otherName}
+            </span>
+          )}
+          <span
+            className={cn(
+              "ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold",
+              DEPENDENCY_STATUS_CLASS[row.status]
+            )}
+          >
+            {row.status !== "ok" && <Lock size={10} />}
+            {t(`strategicChantierDetail.dependencies.status.${row.status}`)}
+            {row.delayDays !== undefined &&
+              ` · ${row.delayDays} ${t("strategicDashboard.delayDays")}`}
+          </span>
+        </div>
+        <div className="text-[11px] text-tertiary">
+          {row.scope === "chantier" ? (
+            t("strategicChantierDetail.dependencies.chantierScope", "Chantier")
+          ) : (
+            <button
+              type="button"
+              onClick={() => focusLevierFromProgression(row.localId)}
+              className="text-left hover:text-primary hover:underline"
+            >
+              {fillTemplate(
+                t("strategicChantierDetail.dependencies.projetScope", "Projet : {name}"),
+                { name: row.localName }
+              )}
+            </button>
+          )}
+        </div>
+      </li>
+    );
   };
 
   // Même déclencheur que l'effet de défilement ci-dessous (`focusActionId`) : si le panneau reste
@@ -3142,6 +3254,37 @@ export function ChantierDetailPanel({
               }
               readOnly={!cRights.canEdit || chantierFieldPending("successKpis")}
             />
+          </CardBody>
+        </Card>
+
+        {/* ── Dépendances du chantier et de ses projets (prédécesseurs / successeurs) ──────────
+            Lecture seule : l'édition reste sur la carte "Dépendances / Prérequis" de chaque projet
+            (onglet Projets). Statut via `chantierDependencyOverview` (alertes existantes). */}
+        <Card
+          className={
+            dependencyRows.some((r) => r.status === "late") ? "border-bp-coral/60" : undefined
+          }
+        >
+          <CardHeader
+            title={t("strategicChantierDetail.dependencies.title", "Dépendances")}
+            actions={
+              dependencyRows.length > 0 ? (
+                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10.5px] font-bold text-secondary">
+                  {dependencyRows.length}
+                </span>
+              ) : undefined
+            }
+          />
+          <CardBody>
+            {dependencyRows.length === 0 ? (
+              <p className="text-[12px] text-tertiary">
+                {t("strategicChantierDetail.dependencies.empty", "Aucune dépendance")}
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {dependencyRows.map((row) => renderDependencyRow(row))}
+              </ul>
+            )}
           </CardBody>
         </Card>
 
