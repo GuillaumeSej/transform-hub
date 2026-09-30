@@ -39,8 +39,11 @@ function roundedPercents(counts: number[], total: number): number[] {
 export function MovementAlertsBreakdown({
   alerts,
   onOpen,
+  bare = false,
 }: {
   alerts: MovementAlert[];
+  /** Sans cadre ni marge : intégré dans la bande « Mouvements » du Dashboard RH. */
+  bare?: boolean;
   /** `null` = toutes les alertes ; sinon la catégorie principale cliquée. */
   onOpen: (kind: MovementAlertKind | null) => void;
 }) {
@@ -65,7 +68,13 @@ export function MovementAlertsBreakdown({
       .replace("{pct}", String(pct));
 
   return (
-    <div className="mb-4 rounded-lg border border-rag-amber-light bg-rag-amber-light/30 px-3 py-2">
+    <div
+      className={
+        bare
+          ? "min-w-0 flex-1"
+          : "mb-4 rounded-lg border border-rag-amber-light bg-rag-amber-light/30 px-3 py-2"
+      }
+    >
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
         <div className="flex shrink-0 items-center gap-1">
           <button

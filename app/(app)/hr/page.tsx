@@ -35,7 +35,7 @@ import { etpMovementDeepLink, etpMovementFilterLink } from "@/lib/hrMovementLink
 import { fmtCurr, leverTargetFte } from "@/lib/engine";
 import { fteCoverage } from "@/lib/fteCoverage";
 import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/leversLogic";
-import { FteCoveragePanel } from "@/components/shared/FteCoveragePanel";
+import { HrFteCard } from "@/components/shared/HrFteCard";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
 import { HrKPICard } from "@/components/shared/HrKPICard";
 import { ProgressBar } from "@/components/shared/ProgressBar";
@@ -917,8 +917,6 @@ export default function HrDashboardPage() {
   // Chiffres absolus du périmètre (baseline scopée + TOUS les mouvements du périmètre, quelle que
   // soit la plage) : "Effectif cible" = `hr.targetFTE`, définition unique partagée avec la Base
   // ETP (m3). Masqués si la baseline n'est pas scopable (M3, voir `absoluteAvailable`).
-  const baselineFte = scopedWf.totalFTE;
-  const current = hr.currentFTE(scopedWf);
   const target = hr.targetFTE(scopedWf);
   const landing = hr.plannedFTE(scopedWf);
   // Écart atterrissage − cible arrondi au dixième (sans « -0 » dû aux flottants).
@@ -937,9 +935,6 @@ export default function HrDashboardPage() {
   const headcountWf = { ...scopedWf, employees: scopedEmployees };
   const startHeadcount = hr.headcountAtStart(headcountWf);
   const nowHeadcount = hr.currentHeadcount(headcountWf);
-  const reductionGoal = baselineFte - target;
-  const reductionDone = baselineFte - current;
-  const goalPct = reductionGoal > 0 ? Math.round((reductionDone / reductionGoal) * 100) : 100;
   // Cible de la waterfall de la PÉRIODE : ouverture + impact cible des mouvements de la plage.
   const waterfallTarget = targetFteFromBaseline(bridgeOpening, summary.fte.target);
 
@@ -2150,120 +2145,32 @@ export default function HrDashboardPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════════════════════
-          BARRE D'AVANCEMENT ETP — pleine largeur, pas de cadre blanc isolé : lecture immédiate
-          du ratio mouvements réalisés / total et de la trajectoire baseline → cible.
+          KPI — une carte ETP unique (réalisé → planifié par les mouvements → visé par les leviers,
+          effectif absolu en contexte : remplace l'ancienne barre d'effectif, la carte Impact ETP
+          et le bandeau Couverture, qui affichaient les mêmes chiffres) + 3 KPI € (hrProgramSummary).
           ═══════════════════════════════════════════════════════════════════════════════════════ */}
-      <div className="mb-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          {/* Cliquable : ouvre le détail "qui a fait quoi" des mouvements du périmètre (statut,
-              dates, levier…) via la même modale que "Avancement des mouvements par {dimension}". */}
-          <button
-            type="button"
-            onClick={() =>
-              setProgressDrilldown({
-                title: t("hr.movementsRealizedDetailTitle", "Mouvements réalisés — {a}/{b}")
-                  .replace("{a}", String(realizedMovements))
-                  .replace("{b}", String(filteredMovements.length)),
-                movements: filteredMovements,
-              })
-            }
-            title={t("hr.movementsRealizedDetailHint", "Voir le détail des mouvements")}
-            className="group flex items-baseline gap-2 text-left"
-          >
-            <span className="text-[28px] font-bold leading-none tracking-tight text-primary">
-              {realizedMovements}
-              <span className="text-[18px] font-semibold text-tertiary">
-                /{filteredMovements.length}
-              </span>
-            </span>
-            <span className="text-[13px] text-secondary group-hover:underline">
-              {t("hr.movementsRealizedLabel", "mouvements réalisés")}
-            </span>
-            <span className="text-[12px] font-medium text-bp-coral opacity-0 transition group-hover:opacity-100">
-              {t("hr.seeDetail", "Voir le détail →")}
-            </span>
-          </button>
-          {absoluteAvailable ? (
-            // Trajectoire d'effectif sur une seule ligne : démarrage → actuel → cible (ETP), les
-            // personnes en infobulle. L'atterrissage n'apparaît que s'il s'écarte de la cible
-            // (sinon il répèterait le même chiffre) — l'infobulle de la cible le rappelle.
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] tabular-nums text-secondary">
-              <span
-                title={t(
-                  "hr.startHeadcountLine",
-                  "Effectif au démarrage du programme : {n}"
-                ).replace("{n}", hr.formatHeadcount(startHeadcount, t))}
-              >
-                {t("hr.headcountStartShort", "Démarrage")}{" "}
-                <strong className="text-primary">{hr.formatFteValue(startHeadcount.fte)}</strong>
-              </span>
-              <span className="text-tertiary">→</span>
-              <span
-                title={`${t("hr.currentHeadcountLabel", "Effectif actuel :")} ${hr.formatHeadcount(nowHeadcount, t)}`}
-              >
-                {t("hr.headcountNowShort", "Actuel")}{" "}
-                <strong className="text-primary">{hr.formatFteValue(nowHeadcount.fte)}</strong>
-              </span>
-              <span className="text-tertiary">→</span>
-              <span
-                title={
-                  landingGap === 0
-                    ? t("hr.landingOnTarget", "Atterrissage conforme à la cible ({n} ETP)").replace(
-                        "{n}",
-                        hr.formatFteValue(landing)
-                      )
-                    : undefined
-                }
-              >
-                {t("hr.headcountTargetShort", "Cible")}{" "}
-                <strong className="text-primary">
-                  {hr.formatHeadcount({ fte: target, persons: null }, t)}
-                </strong>
-              </span>
-              {landingGap !== 0 && (
-                <span className="text-tertiary">
-                  ({t("hr.landingPrefix", "Atterrissage")} {hr.formatFteValue(landing)},{" "}
-                  {landingGap > 0 ? "+" : ""}
-                  {hr.formatFteValue(landingGap)} {t("hr.vsTarget", "vs cible")})
-                </span>
-              )}
-              <span
-                className="rounded-sm bg-neutral-100 px-1.5 py-0.5 text-[11px] font-bold text-primary"
-                title={t("hr.goalPctHint", "Part de la réduction d'effectif visée déjà réalisée")}
-              >
-                {goalPct}%
-              </span>
-            </div>
-          ) : (
-            <span className="max-w-[560px] text-[11.5px] text-tertiary">{baselineNote}</span>
-          )}
-        </div>
-        {/* Barre double : fond = total, remplissage = réalisé. Pas de rounded — charte BP. */}
-        <div className="mt-2 h-2 w-full overflow-hidden bg-neutral-200">
-          <div
-            className="h-full bg-bp-coral transition-all duration-500"
-            style={{
-              width: `${filteredMovements.length > 0 ? Math.round((realizedMovements / filteredMovements.length) * 100) : 0}%`,
-            }}
-          />
-        </div>
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════════════════════════
-          4 KPI Gooduelle — Impact ETP / Économies salariales annuelles / Coûts sociaux consommés
-          / Économies nettes — chacun affiche réalisé + cible + reforecast + barre de progression.
-          Alimenté par `hrProgramSummary` (source unique — voir lib/hrProgramSummary.ts).
-          ═══════════════════════════════════════════════════════════════════════════════════════ */}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <HrKPICard
-          label={t("hr.kpi.fteImpact", "Impact ETP")}
-          value={summary.fte.realized.toLocaleString(intlTag())}
-          {...kpiProgress(summary.fte, (n) => n.toLocaleString(intlTag()))}
-          accent="default"
-          infoTooltip={t(
+      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <HrFteCard
+          className="sm:col-span-2"
+          realized={summary.fte.realized}
+          planned={summary.fte.target}
+          reforecast={summary.fte.reforecast}
+          pct={summary.fte.progressPct}
+          coverage={coverage}
+          note={coverageNote}
+          headcount={
+            absoluteAvailable
+              ? { start: startHeadcount, now: nowHeadcount, target, landing, landingGap }
+              : null
+          }
+          baselineNote={baselineNote}
+          infoTooltip={`${t(
             "hr.kpi.fteImpactTooltip",
             "Suivi réel des mouvements RH (recrutements, départs, mobilité), à comparer à titre indicatif à l'ETP planifié au niveau des leviers (voir Pilotage global)."
-          )}
+          )} ${t(
+            "hr.fteCoverage.tooltip",
+            "Leviers : ambition ETP déclarée sur les leviers du programme (même chiffre que le Pilotage global). Mouvements : mouvements RH nominatifs (par personne) planifiés ou réalisés. Reste à couvrir : réductions visées par les leviers qui ne sont pas encore affectées à une personne."
+          )}`}
         />
         <HrKPICard
           label={t("hr.kpi.netSalarySavings", "Économies nettes de masse salariale")}
@@ -2289,16 +2196,48 @@ export default function HrDashboardPage() {
         />
       </div>
 
-      {/* Couverture des ETP visés par les leviers : réconcilie le KPI du dashboard Performance
-          (ETP visés par les leviers) et l'Impact ETP ci-dessus (mouvements RH). */}
-      <FteCoveragePanel className="mb-4" coverage={coverage} note={coverageNote} />
-
       {/* ═══════════════════════════════════════════════════════════════════════════════════════
-          ALERTES MOUVEMENTS — sous les KPI, pas au-dessus.
+          BANDE MOUVEMENTS — avancement (réalisés / total, clic = détail) et alertes sur une ligne.
           ═══════════════════════════════════════════════════════════════════════════════════════ */}
-      {/* Un seul chiffre (mouvements distincts) + barre 100 % par catégorie principale : la somme
-          des segments = le titre ; clic titre/segment → synthèse (toutes / filtrée). */}
-      <MovementAlertsBreakdown alerts={alerts} onOpen={(kind) => setAlertsModal({ kind })} />
+      <div className="mb-4 flex flex-col gap-2 border-l-[3px] border-black bg-white px-4 py-2.5 lg:flex-row lg:items-center lg:gap-5">
+        <div className="flex shrink-0 flex-col gap-1.5 lg:w-[250px]">
+          <button
+            type="button"
+            onClick={() =>
+              setProgressDrilldown({
+                title: t("hr.movementsRealizedDetailTitle", "Mouvements réalisés — {a}/{b}")
+                  .replace("{a}", String(realizedMovements))
+                  .replace("{b}", String(filteredMovements.length)),
+                movements: filteredMovements,
+              })
+            }
+            title={t("hr.movementsRealizedDetailHint", "Voir le détail des mouvements")}
+            className="group flex items-baseline gap-2 text-left"
+          >
+            <span className="text-[20px] font-bold leading-none tracking-tight text-primary">
+              {realizedMovements}
+              <span className="text-[14px] font-semibold text-tertiary">
+                /{filteredMovements.length}
+              </span>
+            </span>
+            <span className="whitespace-nowrap text-[13px] text-secondary group-hover:underline">
+              {t("hr.movementsRealizedLabel", "mouvements réalisés")}
+            </span>
+          </button>
+          <div className="h-1 w-full overflow-hidden bg-neutral-100">
+            <div
+              className="h-full bg-bp-coral transition-all duration-500"
+              style={{
+                width: `${filteredMovements.length > 0 ? Math.round((realizedMovements / filteredMovements.length) * 100) : 0}%`,
+              }}
+            />
+          </div>
+        </div>
+        {alerts.length > 0 && (
+          <span aria-hidden className="hidden h-8 w-px bg-neutral-200 lg:block" />
+        )}
+        <MovementAlertsBreakdown bare alerts={alerts} onOpen={(kind) => setAlertsModal({ kind })} />
+      </div>
 
       {editMode && (
         <div className="mb-4 rounded-lg border-2 border-bp-coral/30 bg-bp-coral/[0.04]">
