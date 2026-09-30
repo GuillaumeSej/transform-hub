@@ -6,12 +6,22 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { Tooltip } from "@/components/shared/Tooltip";
 
 /** KPI RH — miroir de `KPICard` du dashboard exécutif, adapté aux valeurs numériques du module
- *  RH (ETP entiers, montants en €M/€K). Affiche `value` en gros chiffre, avec `sub` (cible +
- *  reforecast + %) et une barre de progression. */
+ *  RH (ETP entiers, montants en €M/€K).
+ *
+ *  Layout (charte BP, barres carrées) :
+ *  - label (uppercase) + ⓘ optionnel ;
+ *  - `value` en gros chiffre, avec à droite un badge `pct` (Réalisé / Cible) ;
+ *  - barre de progression `barPct`, avec un marqueur `barMarkerPct` (reforecast) uniquement
+ *    quand `reforecastDiffers` — sinon il serait collé à 100 % et ne serait que du bruit ;
+ *  - une ligne discrète « Cible X » + « · Réactualisé Y » seulement si le réactualisé diffère.
+ *    Quand il est identique, l'info est conservée dans un `title` sur cette ligne. */
 export function HrKPICard({
   label,
   value,
-  sub,
+  target,
+  reforecast,
+  reforecastDiffers = false,
+  pct,
   barPct,
   barMarkerPct,
   accent = "default",
@@ -20,10 +30,18 @@ export function HrKPICard({
 }: {
   label: string;
   value: string;
-  sub?: string;
-  /** Progression Réalisé / Cible (0-100). */
+  /** Cible, déjà formatée (ex. « 648 k € »). */
+  target: string;
+  /** Réactualisé, déjà formaté — affiché seulement si `reforecastDiffers`. */
+  reforecast?: string;
+  /** Vrai quand le réactualisé diffère de la cible. */
+  reforecastDiffers?: boolean;
+  /** Progression Réalisé / Cible, entier (affiché dans le badge). */
+  pct: number;
+  /** Progression Réalisé / Cible (0-100) pour la barre. */
   barPct?: number;
-  /** Marqueur sur la barre — position du reforecast en % de la cible. */
+  /** Marqueur sur la barre — position du reforecast en % de la cible. Rendu seulement si
+   *  `reforecastDiffers`. */
   barMarkerPct?: number;
   accent?: "default" | "green" | "amber" | "red" | "brown";
   className?: string;
@@ -40,10 +58,17 @@ export function HrKPICard({
     brown: "border-bp-warm-taupe",
   };
 
+  const clamp = (n: number) => Math.min(100, Math.max(0, n));
+  const targetText = t("hr.kpi.targetLabel", "Cible {v}").replace("{v}", target);
+  const showReforecast = reforecastDiffers && reforecast !== undefined;
+  const reforecastText = showReforecast
+    ? t("hr.kpi.reforecastLabel", "Réactualisé {v}").replace("{v}", reforecast)
+    : null;
+
   return (
     <div
       className={cn(
-        "relative flex flex-col overflow-hidden border-l-[3px] bg-white p-4",
+        "relative flex flex-col overflow-hidden border-l-[3px] bg-white p-4 tabular-nums",
         accentClass[accent],
         className
       )}
@@ -58,25 +83,37 @@ export function HrKPICard({
           </Tooltip>
         )}
       </div>
-      <div className="mt-1 text-[26px] font-bold leading-none tracking-tight text-primary">
-        {value}
+      <div className="mt-1 flex items-baseline justify-between gap-2">
+        <span className="text-[24px] font-bold leading-none tracking-tight text-primary">
+          {value}
+        </span>
+        <span className="shrink-0 rounded-sm bg-neutral-100 px-1.5 py-0.5 text-[11px] font-bold text-primary">
+          {pct} %
+        </span>
       </div>
-      {sub && <div className="mt-1 text-[11px] text-secondary">{sub}</div>}
       {barPct !== undefined && (
-        <div className="relative mt-3 h-1.5 overflow-visible rounded-full bg-neutral-100">
-          <div
-            className="h-full rounded-full bg-bp-coral"
-            style={{ width: `${Math.min(100, Math.max(0, barPct))}%` }}
-          />
-          {barMarkerPct !== undefined && (
+        <div className="relative mt-2 h-1 overflow-visible bg-neutral-100">
+          <div className="h-full bg-bp-coral" style={{ width: `${clamp(barPct)}%` }} />
+          {reforecastDiffers && barMarkerPct !== undefined && (
             <div
-              className="absolute -top-0.5 h-2.5 w-[2px] bg-neutral-700"
-              style={{ left: `${Math.min(100, Math.max(0, barMarkerPct))}%` }}
-              title={t("dashboard.kpi.reforecast", "Reforecast")}
+              className="absolute -top-0.5 h-2 w-[2px] bg-neutral-700"
+              style={{ left: `${clamp(barMarkerPct)}%` }}
+              title={reforecastText ?? t("dashboard.kpi.reforecast", "Reforecast")}
             />
           )}
         </div>
       )}
+      <div
+        className="mt-1.5 text-[11px] text-secondary"
+        title={
+          reforecastDiffers
+            ? undefined
+            : t("hr.kpi.reforecastSameAsTarget", "Réactualisé identique à la cible")
+        }
+      >
+        {targetText}
+        {reforecastText && ` · ${reforecastText}`}
+      </div>
     </div>
   );
 }

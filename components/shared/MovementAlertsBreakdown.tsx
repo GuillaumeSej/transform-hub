@@ -1,9 +1,10 @@
 "use client";
 
-import { TriangleAlert } from "lucide-react";
+import { Info, TriangleAlert } from "lucide-react";
 import type { MovementAlert, MovementAlertKind } from "@/lib/hrEngine";
 import { alertPrimaryBreakdown } from "@/lib/hrEngine";
 import { useTranslation } from "@/lib/i18n/useTranslation";
+import { Tooltip } from "@/components/shared/Tooltip";
 
 /** Couleur de segment par gravité (tokens RAG / neutres de la charte). */
 const KIND_FILL: Record<MovementAlertKind, string> = {
@@ -64,66 +65,70 @@ export function MovementAlertsBreakdown({
       .replace("{pct}", String(pct));
 
   return (
-    <div className="mb-4 rounded-lg border border-rag-amber-light bg-rag-amber-light/30 p-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <button
-          type="button"
-          onClick={() => onOpen(null)}
-          title={t(
-            "hr.alertsBreakdown.openAll",
-            "Voir la synthèse de tous les mouvements en alerte"
-          )}
-          className="flex items-center gap-1.5 text-[13px] font-bold text-primary hover:underline"
-        >
-          <TriangleAlert size={14} className="text-rag-amber" />
-          {t("hr.alertedMovementsCount", "{n} mouvement(s) en alerte").replace(
-            "{n}",
-            String(total)
-          )}
-        </button>
-        <span className="text-[11px] text-tertiary">
-          {t(
-            "hr.alertsBreakdown.note",
-            "Chaque mouvement est compté une fois, dans sa catégorie la plus grave."
-          )}
-        </span>
-      </div>
-
-      <div
-        className="mt-2 flex h-3 w-full gap-px overflow-hidden bg-white"
-        role="group"
-        aria-label={t("hr.alertsBreakdown.aria", "Répartition des mouvements en alerte")}
-      >
-        {parts.map((p, i) => (
+    <div className="mb-4 rounded-lg border border-rag-amber-light bg-rag-amber-light/30 px-3 py-2">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-4">
+        <div className="flex shrink-0 items-center gap-1">
           <button
-            key={p.kind}
             type="button"
-            onClick={() => onOpen(p.kind)}
-            title={tip(p.kind, p.count, pcts[i])}
-            aria-label={tip(p.kind, p.count, pcts[i])}
-            style={{ flexGrow: p.count, flexBasis: 0 }}
-            className={`min-w-[4px] transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-black ${KIND_FILL[p.kind]}`}
-          />
-        ))}
-      </div>
+            onClick={() => onOpen(null)}
+            title={t(
+              "hr.alertsBreakdown.openAll",
+              "Voir la synthèse de tous les mouvements en alerte"
+            )}
+            className="flex items-center gap-1.5 text-[13px] font-bold tabular-nums text-primary hover:underline"
+          >
+            <TriangleAlert size={14} className="text-rag-amber" />
+            {t("hr.alertedMovementsCount", "{n} mouvement(s) en alerte").replace(
+              "{n}",
+              String(total)
+            )}
+          </button>
+          <Tooltip
+            text={t(
+              "hr.alertsBreakdown.note",
+              "Chaque mouvement est compté une fois, dans sa catégorie la plus grave."
+            )}
+            position="bottom"
+          >
+            <Info size={11} className="shrink-0 text-tertiary" />
+          </Tooltip>
+        </div>
 
-      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        {parts.map((p, i) => (
-          <li key={p.kind}>
+        <div
+          className="flex h-2 w-full gap-px overflow-hidden bg-white lg:w-auto lg:min-w-[120px] lg:flex-1"
+          role="group"
+          aria-label={t("hr.alertsBreakdown.aria", "Répartition des mouvements en alerte")}
+        >
+          {parts.map((p, i) => (
             <button
+              key={p.kind}
               type="button"
               onClick={() => onOpen(p.kind)}
               title={tip(p.kind, p.count, pcts[i])}
-              className="flex items-center gap-1.5 text-[12px] text-secondary hover:text-primary hover:underline"
-            >
-              <span aria-hidden className={`h-2.5 w-2.5 shrink-0 ${KIND_FILL[p.kind]}`} />
-              <span>{label[p.kind]}</span>
-              <span className="font-semibold tabular-nums text-primary">{p.count}</span>
-              <span className="tabular-nums text-tertiary">· {pcts[i]} %</span>
-            </button>
-          </li>
-        ))}
-      </ul>
+              aria-label={tip(p.kind, p.count, pcts[i])}
+              style={{ flexGrow: p.count, flexBasis: 0 }}
+              className={`min-w-[4px] transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-black ${KIND_FILL[p.kind]}`}
+            />
+          ))}
+        </div>
+
+        <ul className="flex shrink-0 flex-wrap gap-x-3 gap-y-1">
+          {parts.map((p, i) => (
+            <li key={p.kind}>
+              <button
+                type="button"
+                onClick={() => onOpen(p.kind)}
+                title={tip(p.kind, p.count, pcts[i])}
+                className="flex items-center gap-1.5 text-[12px] text-secondary hover:text-primary hover:underline"
+              >
+                <span aria-hidden className={`h-2 w-2 shrink-0 ${KIND_FILL[p.kind]}`} />
+                <span>{label[p.kind]}</span>
+                <span className="font-semibold tabular-nums text-primary">{p.count}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

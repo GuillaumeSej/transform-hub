@@ -30,7 +30,7 @@ import {
   salarySavingsSeries,
   socialCostSeries,
 } from "@/lib/hrTimeSeries";
-import { hrProgramSummary, targetFteFromBaseline } from "@/lib/hrProgramSummary";
+import { hrProgramSummary, targetFteFromBaseline, type HrKpi } from "@/lib/hrProgramSummary";
 import { etpMovementDeepLink, etpMovementFilterLink } from "@/lib/hrMovementLink";
 import { fmtCurr, leverTargetFte } from "@/lib/engine";
 import { fteCoverage } from "@/lib/fteCoverage";
@@ -163,6 +163,25 @@ function describeHrCustomView(
  * salariale, suivi PSE, table des départements et synthèse des mouvements. La donnée détaillée vit
  * dans la Base ETP (/hr/etp).
  */
+/** Props de progression d'une `HrKPICard` : le réactualisé n'est affiché que s'il diffère de la
+ *  cible une fois formaté (sinon il répèterait le même chiffre). Marqueur = réactualisé en % de
+ *  la cible (valeurs absolues : l'ETP et les économies nettes peuvent être négatifs). */
+function kpiProgress(kpi: HrKpi, fmt: (n: number) => string) {
+  const target = fmt(kpi.target);
+  const reforecast = fmt(kpi.reforecast);
+  return {
+    target,
+    reforecast,
+    reforecastDiffers: reforecast !== target,
+    pct: kpi.progressPct,
+    barPct: kpi.progressPct,
+    barMarkerPct:
+      kpi.target !== 0
+        ? Math.round((Math.abs(kpi.reforecast) / Math.abs(kpi.target)) * 100)
+        : undefined,
+  };
+}
+
 export default function HrDashboardPage() {
   const { t, locale } = useTranslation();
   // Locale Intl active — libellés de période (mois via Intl, "T1"/"Q1") des séries RH (m15).
@@ -902,6 +921,8 @@ export default function HrDashboardPage() {
   const current = hr.currentFTE(scopedWf);
   const target = hr.targetFTE(scopedWf);
   const landing = hr.plannedFTE(scopedWf);
+  // Écart atterrissage − cible arrondi au dixième (sans « -0 » dû aux flottants).
+  const landingGap = Math.round((landing - target) * 10) / 10 || 0;
   // Effectifs libellés (définitions uniques, lib/hrEngine.ts) : ETP + personnes en complément,
   // les personnes étant comptées sur les fiches employé du MÊME périmètre (null si non scopable).
   const scopedEmployees = useMemo(
@@ -2058,26 +2079,16 @@ export default function HrDashboardPage() {
               {t("hr.confidential", "Confidentiel")}
             </span>
           </div>
-          <div className="mt-2.5 text-[13px] text-secondary">
-            {(absoluteAvailable
-              ? t(
-                  "hr.subtitleHeadcount",
-                  "Effectif au démarrage du programme : {from} ETP → cible : {to} ETP · {count} mouvements · {realized} réalisés"
-                )
-              : t("hr.subtitleNoBaseline", "{count} mouvements · {realized} réalisés")
-            )
-              .replace("{from}", hr.formatFteValue(baselineFte))
-              .replace("{to}", hr.formatFteValue(target))
-              .replace("{count}", String(filteredMovements.length))
-              .replace("{realized}", String(realizedMovements))}
-            {hasActiveFilters && (
-              <span className="ml-1 text-bp-coral">
-                {t("hr.filteredSuffix", "(filtré · {a}/{b})")
-                  .replace("{a}", String(filteredMovements.length))
-                  .replace("{b}", String(wf.movements.length))}
-              </span>
-            )}
-          </div>
+          {/* Plus de sous-titre chiffré : effectif démarrage → cible et mouvements réalisés/total
+              sont lus dans la barre d'avancement juste en dessous (évite la répétition). Seul le
+              rappel de filtrage reste ici. */}
+          {hasActiveFilters && (
+            <div className="mt-2.5 text-[13px] text-bp-coral">
+              {t("hr.filteredSuffix", "(filtré · {a}/{b})")
+                .replace("{a}", String(filteredMovements.length))
+                .replace("{b}", String(wf.movements.length))}
+            </div>
+          )}
         </div>
         <div className="hidden items-center gap-2 lg:flex">
           <FilterToggleButton
@@ -2173,19 +2184,53 @@ export default function HrDashboardPage() {
             </span>
           </button>
           {absoluteAvailable ? (
-            <div className="flex items-center gap-3 text-[12px] tabular-nums text-secondary">
-              <span>
-                {t("hr.currentHeadcountLabel", "Effectif actuel :")}{" "}
-                <strong className="text-primary">{hr.formatHeadcount(nowHeadcount, t)}</strong>
+            // Trajectoire d'effectif sur une seule ligne : démarrage → actuel → cible (ETP), les
+            // personnes en infobulle. L'atterrissage n'apparaît que s'il s'écarte de la cible
+            // (sinon il répèterait le même chiffre) — l'infobulle de la cible le rappelle.
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] tabular-nums text-secondary">
+              <span
+                title={t(
+                  "hr.startHeadcountLine",
+                  "Effectif au démarrage du programme : {n}"
+                ).replace("{n}", hr.formatHeadcount(startHeadcount, t))}
+              >
+                {t("hr.headcountStartShort", "Démarrage")}{" "}
+                <strong className="text-primary">{hr.formatFteValue(startHeadcount.fte)}</strong>
               </span>
               <span className="text-tertiary">→</span>
-              <span>
-                {t("hr.targetHeadcountLabel", "Cible :")}{" "}
+              <span
+                title={`${t("hr.currentHeadcountLabel", "Effectif actuel :")} ${hr.formatHeadcount(nowHeadcount, t)}`}
+              >
+                {t("hr.headcountNowShort", "Actuel")}{" "}
+                <strong className="text-primary">{hr.formatFteValue(nowHeadcount.fte)}</strong>
+              </span>
+              <span className="text-tertiary">→</span>
+              <span
+                title={
+                  landingGap === 0
+                    ? t("hr.landingOnTarget", "Atterrissage conforme à la cible ({n} ETP)").replace(
+                        "{n}",
+                        hr.formatFteValue(landing)
+                      )
+                    : undefined
+                }
+              >
+                {t("hr.headcountTargetShort", "Cible")}{" "}
                 <strong className="text-primary">
                   {hr.formatHeadcount({ fte: target, persons: null }, t)}
                 </strong>
               </span>
-              <span className="rounded-sm bg-neutral-100 px-1.5 py-0.5 text-[11px] font-bold text-primary">
+              {landingGap !== 0 && (
+                <span className="text-tertiary">
+                  ({t("hr.landingPrefix", "Atterrissage")} {hr.formatFteValue(landing)},{" "}
+                  {landingGap > 0 ? "+" : ""}
+                  {hr.formatFteValue(landingGap)} {t("hr.vsTarget", "vs cible")})
+                </span>
+              )}
+              <span
+                className="rounded-sm bg-neutral-100 px-1.5 py-0.5 text-[11px] font-bold text-primary"
+                title={t("hr.goalPctHint", "Part de la réduction d'effectif visée déjà réalisée")}
+              >
                 {goalPct}%
               </span>
             </div>
@@ -2202,23 +2247,6 @@ export default function HrDashboardPage() {
             }}
           />
         </div>
-        {absoluteAvailable && (
-          <div className="mt-1 flex justify-between text-[10px] text-tertiary">
-            <span>
-              {t("hr.startHeadcountLine", "Effectif au démarrage du programme : {n}").replace(
-                "{n}",
-                hr.formatHeadcount(startHeadcount, t)
-              )}
-            </span>
-            <span>
-              {t("hr.landingPrefix", "Atterrissage")} {hr.formatFteValue(landing)}{" "}
-              {t("etp.column.fte", "ETP")} (
-              {/* Arrondi au dixième, sans « -0 » dû aux flottants quand l'atterrissage = la cible. */}
-              {Math.round((landing - target) * 10) / 10 > 0 ? "+" : ""}
-              {hr.formatFteValue(landing - target)} {t("hr.vsTarget", "vs cible")})
-            </span>
-          </div>
-        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════════════════════
@@ -2230,16 +2258,7 @@ export default function HrDashboardPage() {
         <HrKPICard
           label={t("hr.kpi.fteImpact", "Impact ETP")}
           value={summary.fte.realized.toLocaleString(intlTag())}
-          sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
-            .replace("{target}", summary.fte.target.toLocaleString(intlTag()))
-            .replace("{reforecast}", summary.fte.reforecast.toLocaleString(intlTag()))
-            .replace("{pct}", String(summary.fte.progressPct))}
-          barPct={summary.fte.progressPct}
-          barMarkerPct={
-            summary.fte.target !== 0
-              ? Math.round((Math.abs(summary.fte.reforecast) / Math.abs(summary.fte.target)) * 100)
-              : undefined
-          }
+          {...kpiProgress(summary.fte, (n) => n.toLocaleString(intlTag()))}
           accent="default"
           infoTooltip={t(
             "hr.kpi.fteImpactTooltip",
@@ -2249,16 +2268,7 @@ export default function HrDashboardPage() {
         <HrKPICard
           label={t("hr.kpi.netSalarySavings", "Économies nettes de masse salariale")}
           value={fmtCurr(summary.salarySavings.realized / 1_000_000)}
-          sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
-            .replace("{target}", fmtCurr(summary.salarySavings.target / 1_000_000))
-            .replace("{reforecast}", fmtCurr(summary.salarySavings.reforecast / 1_000_000))
-            .replace("{pct}", String(summary.salarySavings.progressPct))}
-          barPct={summary.salarySavings.progressPct}
-          barMarkerPct={
-            summary.salarySavings.target > 0
-              ? Math.round((summary.salarySavings.reforecast / summary.salarySavings.target) * 100)
-              : undefined
-          }
+          {...kpiProgress(summary.salarySavings, (n) => fmtCurr(n / 1_000_000))}
           accent="green"
           infoTooltip={t(
             "hr.kpi.netSalarySavingsTooltip",
@@ -2268,34 +2278,13 @@ export default function HrDashboardPage() {
         <HrKPICard
           label={t("hr.kpi.socialCostsConsumed", "Coûts sociaux consommés")}
           value={fmtCurr(summary.socialCost.realized / 1_000_000)}
-          sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
-            .replace("{target}", fmtCurr(summary.socialCost.target / 1_000_000))
-            .replace("{reforecast}", fmtCurr(summary.socialCost.reforecast / 1_000_000))
-            .replace("{pct}", String(summary.socialCost.progressPct))}
-          barPct={summary.socialCost.progressPct}
-          barMarkerPct={
-            summary.socialCost.target > 0
-              ? Math.round((summary.socialCost.reforecast / summary.socialCost.target) * 100)
-              : undefined
-          }
+          {...kpiProgress(summary.socialCost, (n) => fmtCurr(n / 1_000_000))}
           accent="red"
         />
         <HrKPICard
           label={t("hr.kpi.netSavings", "Économies nettes")}
           value={fmtCurr(summary.netEconomy.realized / 1_000_000)}
-          sub={t("hr.kpi.subPattern", "Cible {target} · Réactualisé {reforecast} · {pct}%")
-            .replace("{target}", fmtCurr(summary.netEconomy.target / 1_000_000))
-            .replace("{reforecast}", fmtCurr(summary.netEconomy.reforecast / 1_000_000))
-            .replace("{pct}", String(summary.netEconomy.progressPct))}
-          barPct={summary.netEconomy.progressPct}
-          barMarkerPct={
-            summary.netEconomy.target !== 0
-              ? Math.round(
-                  (Math.abs(summary.netEconomy.reforecast) / Math.abs(summary.netEconomy.target)) *
-                    100
-                )
-              : undefined
-          }
+          {...kpiProgress(summary.netEconomy, (n) => fmtCurr(n / 1_000_000))}
           accent="brown"
         />
       </div>
