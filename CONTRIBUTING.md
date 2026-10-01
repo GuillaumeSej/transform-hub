@@ -73,14 +73,22 @@ programme « Excellence Opérationnelle 2026-2028 » (`p-strat-demo-2026`) d'Acm
 `firebase login` sur son poste (le script réutilise cette session comme identifiants, voir
 `scripts/lib/firebaseCliAdc.js`) ; `.env.local` doit contenir `NEXT_PUBLIC_FIREBASE_PROJECT_ID`.
 
+**Tournage à 3 connexions seulement** : `test.cto` (pilote du plan), `--sponsor` (défaut
+`thomas.petit`, sponsor du chantier « Optimisation Supply Chain ») et `--restricted-user` (défaut
+`comex.test`, membre du COMEX qui voit tout le plan, sans habilitation « Confidentiel »). Deux comptes EXISTANTS jamais connectés
+servent de figurants : `--project-owner` (défaut `pierre.lefevre`, responsable projet) et
+`--contributor` (défaut `nadia.klein`, contributeur projet). Un figurant inexistant, filmé,
+pilote/admin, sponsor de l'axe du chantier ou impliqué dans « Talents & Organisation » est
+remplacé automatiquement (voir les notes du dry run).
+
 ```bash
 # 1. Dry run (défaut) : lit Firestore, affiche le plan, n'écrit rien
 npm run prepare-demo-strat-video
-# option : date de référence du tournage
-node scripts/prepare-demo-strat-video.js --now 2026-10-05T09:00:00Z
+# options : date de référence du tournage, distribution
+node scripts/prepare-demo-strat-video.js --now 2026-10-05T09:00:00Z   --sponsor thomas.petit --restricted-user comex.test   --project-owner pierre.lefevre --contributor nadia.klein
 
-# 2. Application
-CONFIRM_PROD_MIGRATION=yes node scripts/prepare-demo-strat-video.js --apply
+# 2. Application (mêmes options que le dry run validé)
+CONFIRM_PROD_MIGRATION=yes node scripts/prepare-demo-strat-video.js --now 2026-10-05T09:00:00Z --apply
 
 # 3. Après le tournage : nettoyage (dry run, puis réel)
 node scripts/prepare-demo-strat-video.js --cleanup
@@ -89,22 +97,32 @@ CONFIRM_PROD_MIGRATION=yes node scripts/prepare-demo-strat-video.js --cleanup --
 
 **Ce que le script modifie** (idempotent : une relance le même jour n'écrit rien) :
 
-- KPI « NPS » : responsable de saisie (`additionalAuthorizedUserIds`) = responsable projet du
-  chantier Supply Chain (à défaut le sponsor de chantier, jamais le pilote/CTO). Mesures intactes.
-- Chantier « Optimisation Supply Chain » : 2 projets `demo-video-*` appartenant au sponsor de
-  chantier (un en retard, un à échéance sous 3 semaines, avec 2 livrables datés et un prérequis FS
-  vers le premier) → Chronologie, carte Dépendances et Mon espace du sponsor alimentés.
-- `strategicApprovals` : une demande d'un contributeur projet validée au palier 1 par le
-  responsable projet et en attente au palier 2/2 chez le sponsor de chantier, une demande
-  d'échéance en attente chez le sponsor, et 2-3 demandes décidées (approuvées/refusée).
+- Figurants (`adminUsers`) : `profiles` ← un seul profil stratégique sur `p-strat-demo-2026`
+  (`chantier_contributor` pour le responsable projet, `projet_contributor` pour le contributeur ;
+  un profil stratégique existant sur ce programme est remplacé le temps du tournage, règle
+  « un profil par piste et par programme »).
+- Chantier « Optimisation Supply Chain » : `pilote` ← `--sponsor` s'il diffère ; 3 projets
+  `demo-video-*` : 2 au sponsor (un en retard, un à échéance sous 3 semaines avec 2 livrables
+  datés et un prérequis FS vers le premier → Chronologie, Dépendances, Mon espace du sponsor) et 1
+  au responsable projet figurant avec le contributeur figurant (porte les demandes). Les projets
+  réels (« Refonte réseau logistique EU », « Mise en place S&OP ») ne sont pas touchés.
+- KPI « NPS » (axe Expérience Client) : responsable de saisie (`additionalAuthorizedUserIds`) =
+  `[--sponsor]` (au lieu de `["test.cto"]`) → une valeur saisie par le sponsor affiche « Sera
+  validée par Sponsor d'axe puis Pilote du plan stratégique ». Mesures intactes.
+- `strategicApprovals` : demande budget du contributeur validée au palier 1 par le responsable
+  projet et en attente au palier 2/2 chez le sponsor ; demande d'échéance du responsable projet en
+  attente chez le sponsor (scène téléphone) ; historique du sponsor : échéance approuvée, budget
+  approuvé (2 paliers), budget refusé par lui au palier 2, et dans « Mes demandes » une hausse
+  d'enveloppe du chantier approuvée par le sponsor d'axe puis le pilote.
 - `chantierStaffing` : 2 lignes `demo-video-*` datées qui portent une équipe de la base ETP à
   ~135 % de son disponible sur les 2 prochains mois.
 - Confidentialité : ajoute « Confidentiel » à `Company.confidentialityLevels` si absent et
-  l'applique à l'axe « Talents & Organisation ».
-- Si besoin : désignations manquantes (sponsor de chantier, responsable projet, contributeur).
+  l'applique à l'axe « Talents & Organisation » ; `--restricted-user` reçoit une surcharge
+  individuelle (`confidentialityClearance`, celle de « Surcharges individuelles ») au niveau
+  juste sous « Confidentiel » ; `test.cto` en reçoit une à « Confidentiel » seulement s'il ne voit
+  pas déjà ce niveau via son rôle.
 
 Chaque valeur écrasée est sauvegardée dans `demoData/demo-video-backup` ; `--cleanup` supprime
-les documents `demo-video-*`, restaure ces valeurs puis supprime la sauvegarde. Le script ne crée
-**aucun** compte : il liste les comptes de démo manquants (pilote, sponsor d'axe, sponsor de
-chantier, responsable projet, contributeur projet, utilisateur sans habilitation « Confidentiel »,
-admin d'entreprise) et les utilisateurs sans habilitation, à régler dans Admin › Utilisateurs.
+les documents `demo-video-*`, restaure ces valeurs (profils et habilitations compris) puis
+supprime la sauvegarde. Le script ne crée **aucun** compte : il vérifie seulement que les 3
+comptes filmés et les 2 figurants existent (et sont actifs) et l'affiche (OK / KO).

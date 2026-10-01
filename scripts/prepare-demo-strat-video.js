@@ -6,8 +6,12 @@
  * lib/__tests__/demoStratVideoPlan.test.ts) ; ce script ne fait que lire l'état Firestore, afficher
  * le plan et, sur demande explicite, l'écrire.
  *
- * Ne crée JAMAIS de compte Firebase Auth ni de mot de passe : les comptes de démo manquants sont
- * seulement listés (à créer dans Admin › Utilisateurs).
+ * Tournage à 3 connexions : test.cto, --sponsor, --restricted-user. Deux comptes EXISTANTS non
+ * filmés (--project-owner, --contributor) reçoivent réversiblement les profils et positions
+ * nécessaires à la chaîne responsable projet → sponsor de chantier.
+ *
+ * Ne crée JAMAIS de compte Firebase Auth ni de mot de passe : il vérifie seulement que les 3 comptes
+ * filmés et les 2 figurants existent.
  *
  * Identifiants : session `firebase login` de l'opérateur (scripts/lib/firebaseCliAdc.js), à défaut
  * les ADC standard. Projet = NEXT_PUBLIC_FIREBASE_PROJECT_ID (.env.local).
@@ -17,7 +21,8 @@
  *   CONFIRM_PROD_MIGRATION=yes node scripts/prepare-demo-strat-video.js --apply
  *   node scripts/prepare-demo-strat-video.js --cleanup                         # DRY RUN du nettoyage
  *   CONFIRM_PROD_MIGRATION=yes node scripts/prepare-demo-strat-video.js --cleanup --apply
- *   Option : --now 2026-10-05T09:00:00Z (date de référence du tournage, défaut : maintenant).
+ *   Options : --now 2026-10-05T09:00:00Z (date de référence du tournage, défaut : maintenant),
+ *             --sponsor, --restricted-user, --project-owner, --contributor (voir --help).
  */
 const fs = require("fs");
 const path = require("path");
@@ -26,13 +31,16 @@ const {
   COMPANY_ID,
   BACKUP_PATH,
   DELETE_FIELD,
+  DEFAULT_CAST,
+  PROJECT_OWNER_ROLE,
+  CONTRIBUTOR_ROLE,
   planDemoStratVideo,
   planDemoStratVideoCleanup,
 } = require("./lib/demoStratVideoPlan");
 
 const HELP = `Prépare les données de la vidéo Plan Stratégique (${PROGRAM_ID}, entreprise ${COMPANY_ID}).
 
-  node scripts/prepare-demo-strat-video.js [--apply] [--cleanup] [--now <ISO>]
+  node scripts/prepare-demo-strat-video.js [--apply] [--cleanup] [--now <ISO>] [distribution]
 
   (sans option)  DRY RUN : lit Firestore et affiche les écritures prévues, n'écrit rien.
   --apply        écrit réellement (exige CONFIRM_PROD_MIGRATION=yes hors émulateur).
@@ -41,8 +49,20 @@ const HELP = `Prépare les données de la vidéo Plan Stratégique (${PROGRAM_ID
   --now <ISO>    date de référence (retards / échéances / mois de sur-staffing), défaut : maintenant.
   --help         cette aide.
 
+Distribution — 3 connexions filmées : ${DEFAULT_CAST.cto}, --sponsor, --restricted-user :
+  --sponsor <id>          sponsor du chantier « Optimisation Supply Chain »
+                          (défaut ${DEFAULT_CAST.sponsor})
+  --restricted-user <id>  compte filmé sans habilitation « Confidentiel »
+                          (défaut ${DEFAULT_CAST.restrictedUser})
+  --project-owner <id>    figurant NON filmé : responsable projet, profil ${PROJECT_OWNER_ROLE}
+                          (défaut ${DEFAULT_CAST.projectOwner})
+  --contributor <id>      figurant NON filmé : contributeur projet, profil ${CONTRIBUTOR_ROLE}
+                          (défaut ${DEFAULT_CAST.contributor})
+  Un figurant inexistant, filmé, pilote, admin, sponsor de l'axe Supply Chain ou impliqué dans
+  « Talents & Organisation » est remplacé automatiquement (voir les notes du dry run).
+
 Prérequis : une personne ayant les droits IAM sur le projet Firebase exécute \`firebase login\`.
-Aucun compte Firebase Auth n'est créé : les comptes manquants sont listés.`;
+Aucun compte Firebase Auth n'est créé : le script vérifie que les 5 comptes existent.`;
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -126,8 +146,23 @@ async function main() {
   }
   const apply = args.includes("--apply");
   const cleanup = args.includes("--cleanup");
-  const nowIdx = args.indexOf("--now");
-  const now = nowIdx >= 0 ? args[nowIdx + 1] : new Date().toISOString();
+  const option = (name) => {
+    const idx = args.indexOf(name);
+    if (idx < 0) return undefined;
+    const value = args[idx + 1];
+    if (!value || value.startsWith("--")) {
+      console.error(`${name} attend une valeur.`);
+      process.exit(1);
+    }
+    return value;
+  };
+  const now = option("--now") ?? new Date().toISOString();
+  const cast = {
+    sponsor: option("--sponsor"),
+    restrictedUser: option("--restricted-user"),
+    projectOwner: option("--project-owner"),
+    contributor: option("--contributor"),
+  };
   if (Number.isNaN(Date.parse(now))) {
     console.error(`--now invalide : ${now}`);
     process.exit(1);
@@ -176,7 +211,7 @@ async function main() {
 
   const { writes, report } = cleanup
     ? planDemoStratVideoCleanup(snapshot)
-    : planDemoStratVideo(snapshot, { now });
+    : planDemoStratVideo(snapshot, { now, ...cast });
 
   if (report.cast) {
     console.log("Distribution :");
@@ -195,9 +230,18 @@ async function main() {
         (report.usersWithoutClearance.join(", ") || "aucun")
     );
   }
-  if (report.missingAccounts?.length) {
-    console.log("\nComptes de démo à créer par un admin (Admin › Utilisateurs) :");
-    report.missingAccounts.forEach((m) => console.log(`  - ${m.label} : ${m.action}`));
+  if (report.accounts?.length) {
+    console.log("\nComptes (aucun n'est créé ; seuls les 3 comptes filmés se connectent) :");
+    for (const a of report.accounts) {
+      const replaced = a.requested ? ` (au lieu de ${a.requested})` : "";
+      console.log(
+        `  ${a.status === "ok" ? "OK" : "KO"}  ${a.label} : ${a.username ?? "—"}${replaced} — ${a.status}`
+      );
+    }
+    if (report.missingAccounts?.length) {
+      console.log("\nÀ régler avant le tournage :");
+      report.missingAccounts.forEach((m) => console.log(`  - ${m.label} : ${m.action}`));
+    } else console.log("  → les 5 comptes existent, aucune connexion supplémentaire requise.");
   }
 
   if (!apply) {
