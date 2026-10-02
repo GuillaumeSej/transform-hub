@@ -572,12 +572,15 @@ describe("savingsWaterfall & financeByHierarchyLevel", () => {
     expect(financeTotals(rounded).reforecast).toBe(0.3); // l'ancien calcul, faux
     const rows = engine.financeByHierarchyLevel(ds, company, 1, nodes, { unrounded: true });
     const totals = financeTotals(rows);
-    expect(totals.reforecast).toBe(w.target);
+    // La cascade n'arrondit plus en amont (audit lot 4, point 9) : mêmes chiffres AFFICHÉS (0,1).
+    const shown = (n: number) => Math.round(n * 10) / 10;
+    expect(w.target).toBeCloseTo(0.42, 9);
+    expect(totals.reforecast).toBe(shown(w.target));
     expect(totals.reforecast).toBe(0.4);
-    expect(totals.planned).toBe(w.initial);
+    expect(totals.planned).toBe(shown(w.initial));
     expect(totals.planned).toBe(0.6);
-    expect(totals.cancelled).toBe(w.cancelled);
-    expect(totals.realized).toBe(w.realized);
+    expect(totals.cancelled).toBe(shown(w.cancelled));
+    expect(totals.realized).toBe(shown(w.realized));
     expect(totals.planned).toBe(savingsTriple(small).planned);
     expect(totals.reforecast).toBe(savingsTriple(small).reforecast);
   });

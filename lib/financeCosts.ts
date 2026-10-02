@@ -15,7 +15,7 @@ import {
   leverOpexRecOf,
 } from "@/lib/engine";
 import { fiscalYearLabel } from "@/lib/fiscalYear";
-import { impactDatesOf, isFteHire } from "@/lib/impactKinds";
+import { impactDatesOf, isFteHire, isWorkingCapitalImpact } from "@/lib/impactKinds";
 import { parseLocalDate } from "@/lib/impactStatus";
 
 /**
@@ -65,7 +65,12 @@ export function flattenSavingImpacts(data: BeTrackData): SavingImpactRow[] {
     .filter((lever) => lever.status !== "cancelled")
     .flatMap((lever) =>
       leverImpactsOf(lever)
-        .filter((impact) => impact.type === "saving" && impact.gainRecurrence !== "oneoff")
+        .filter(
+          (impact) =>
+            impact.type === "saving" &&
+            impact.gainRecurrence !== "oneoff" &&
+            !isWorkingCapitalImpact(impact)
+        )
         .map((impact) => ({ impact, lever }))
     );
 }
@@ -76,7 +81,12 @@ export function flattenOneOffGainImpacts(data: BeTrackData): SavingImpactRow[] {
     .filter((lever) => lever.status !== "cancelled")
     .flatMap((lever) =>
       leverImpactsOf(lever)
-        .filter((impact) => impact.type === "saving" && impact.gainRecurrence === "oneoff")
+        .filter(
+          (impact) =>
+            impact.type === "saving" &&
+            impact.gainRecurrence === "oneoff" &&
+            !isWorkingCapitalImpact(impact)
+        )
         .map((impact) => ({ impact, lever }))
     );
 }
@@ -496,6 +506,8 @@ function recurringFlows(data: BeTrackData): RecurringFlow[] {
     if (lever.status === "cancelled") continue;
     for (const imp of leverImpactsOf(lever)) {
       let kind: RecurringFlow["kind"] | null = null;
+      // Impact BFR (trésorerie) : hors économies.
+      if (isWorkingCapitalImpact(imp)) continue;
       if (imp.type === "saving") kind = imp.gainRecurrence === "oneoff" ? null : "gain";
       else if (imp.type === "fte") kind = isFteHire(imp) ? "opexRec" : "gain";
       else if (imp.nature === "opex_rec") kind = "opexRec";

@@ -234,6 +234,62 @@ export function convertExcelDateCells<W extends WorkbookLike>(
   return wb;
 }
 
+/** Format numérique Excel « pourcentage » (`0%`, `0.0%`, `#,##0.00 %`…), hors texte littéral. */
+export function isPercentFormat(fmt: unknown): boolean {
+  if (typeof fmt !== "string") return false;
+  // Les `"…"` et `\x` sont du texte littéral, pas un format pourcentage.
+  return /%/.test(fmt.replace(/"[^"]*"/g, "").replace(/\\./g, ""));
+}
+
+/** "AB12" → { col: "AB", row: 12 } (adresse A1 simple). */
+function splitA1(addr: string): { col: string; row: number } | undefined {
+  const m = /^([A-Z]+)(\d+)$/.exec(addr);
+  return m ? { col: m[1], row: Number(m[2]) } : undefined;
+}
+
+/**
+ * Cellules au FORMAT POURCENTAGE (audit lot 4, point 6) : Excel stocke « 40 % » comme 0,4 ; lue
+ * brute, la valeur devenait 0,4 %. Dans les colonnes dont l'en-tête (1re ligne de l'onglet) passe
+ * `isPercentColumn` — par défaut, un en-tête contenant « % » —, chaque cellule numérique au format
+ * pourcentage est remplacée par son texte affiché (`"40%"`), que `parseCellNumber` lit 40. Les
+ * autres colonnes sont inchangées (un montant au format % reste lu tel que stocké). À appeler sur
+ * un classeur lu par `readXlsxWorkbook` (formats conservés, `cellNF`). Opt-in : utilisé par
+ * l'import des leviers, sans effet sur les autres imports.
+ */
+export function convertExcelPercentCells<W extends WorkbookLike>(
+  wb: W,
+  isPercentColumn: (header: string) => boolean = (h) => h.includes("%")
+): W {
+  for (const ws of Object.values(wb.Sheets)) {
+    const ref = typeof ws["!ref"] === "string" ? (ws["!ref"] as string).split(":")[0] : "A1";
+    const headerRow = splitA1(ref)?.row ?? 1;
+    const percentColumns = new Set<string>();
+    for (const [addr, raw] of Object.entries(ws)) {
+      const a = addr.startsWith("!") ? undefined : splitA1(addr);
+      const cell = raw as SheetCell;
+      if (a && a.row === headerRow && typeof cell?.v === "string" && isPercentColumn(cell.v)) {
+        percentColumns.add(a.col);
+      }
+    }
+    if (percentColumns.size === 0) continue;
+    for (const [addr, raw] of Object.entries(ws)) {
+      const a = addr.startsWith("!") ? undefined : splitA1(addr);
+      if (!a || a.row <= headerRow || !percentColumns.has(a.col)) continue;
+      const cell = raw as SheetCell & { w?: unknown };
+      if (!cell || cell.t !== "n" || typeof cell.v !== "number" || !isPercentFormat(cell.z)) {
+        continue;
+      }
+      // Valeur affichée, sans bruit flottant ni notation exponentielle (0,4 → "40%").
+      const pct = Math.round(cell.v * 100 * 1e9) / 1e9;
+      const text = `${pct.toFixed(9).replace(/\.?0+$/, "")}%`;
+      cell.t = "s";
+      cell.v = text;
+      cell.w = text;
+    }
+  }
+  return wb;
+}
+
 /** Module `xlsx` réduit à ce qu'utilise `readXlsxWorkbook` (le module est chargé à la demande). */
 type XlsxModuleLike<W> = {
   read: (data: ArrayBuffer | Uint8Array, opts: typeof XLSX_READ_OPTIONS) => W;

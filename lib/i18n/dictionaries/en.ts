@@ -1318,7 +1318,6 @@ const en: Record<string, string> = {
   "shared.leverImportButton.templateDownloadedBody":
     "3 sheets: Levers (Code = key), Actions (Lever Code = FK), Impacts (Lever Code + Action Name = FK). Delete the example row before filling it in.",
   "shared.leverImportButton.workstreamsCreatedNote": "{n} work package(s) created",
-  "shared.leverImportButton.ignoredRowsNote": "{n} row(s) ignored",
   "shared.leverImportButton.importDoneBody": "{created} lever(s) created · {updated} updated",
   "shared.leverImportButton.createCountLabel": "lever(s) to create",
   "shared.leverImportButton.updateCountLabel": "lever(s) to update",
@@ -1341,6 +1340,12 @@ const en: Record<string, string> = {
   "shared.leverImportButton.impactsRemovedTitle": "{n} existing impact line(s) will be deleted",
   "shared.leverImportButton.impactsRemovedBody":
     "because they are missing from the file's Impacts tab: {list}.",
+  "shared.leverImportButton.emptyCellRule":
+    'Empty cell = current value kept; "-" = field cleared. "Progression (%)" and the amounts of an initiative with impacts are calculated: changes to them are ignored.',
+  "shared.leverImportButton.fixErrorsFirst":
+    "Import is not possible while the file contains errors: fix the rows below, then reload the file.",
+  "shared.leverImportButton.confirmLargeValues":
+    "I have checked the unusually high values flagged (unit €M / FTE) and confirm the import.",
   "shared.leverImportButton.warningsTitle": "Warnings (import not blocked)",
   "shared.exportButton.truncatedTitle": "Descriptions truncated",
   "shared.exportButton.truncatedBody":
@@ -1402,6 +1407,18 @@ const en: Record<string, string> = {
     'Unknown impact nature "{value}": value ignored (expected: {expected})',
   "shared.leverImport.msg.unknownPopulation":
     'Impacted population "{value}" not found among work packages: value ignored',
+  "shared.leverImport.msg.duplicateActionId":
+    'Duplicate action ID "{id}" for initiative "{code}" (already used on row {row})',
+  "shared.leverImport.msg.negativeNotAllowed": '"{field}" cannot be negative (value read: {value})',
+  "shared.leverImport.msg.computedFromActions":
+    '"{field}": value calculated from the action plan ({computed}) — change ignored (file: {value})',
+  "shared.leverImport.msg.computedFromImpacts":
+    '"{field}": value calculated from the initiative\'s impacts ({computed}) — change ignored (file: {value})',
+  "shared.leverImport.msg.computedFromPlan":
+    '"{field}": value calculated from the locked plan / reforecast ({computed}) — change ignored (file: {value})',
+  "shared.leverImport.msg.valueClamped": '"{field}": {value} out of range, capped at {bound}',
+  "shared.leverImport.msg.largeValue":
+    '"{field}" = {value} {unit}: unusually high value (above {threshold}) — check the unit before confirming',
   "shared.leverImport.msg.formulaNoValue":
     "Cell {cell}: formula without a calculated value (workbook not recalculated) — open and save the file in Excel before importing.",
 
@@ -1548,6 +1565,8 @@ const en: Record<string, string> = {
 
   // ─── shared.leverForm/actionForm/movementForm/manualAlertForm/dependencyEditor (i18n remediation) ─
   "shared.actionForm.actionName": "Action name",
+  "shared.actionForm.duplicateName":
+    "Another action of this initiative already has this name: choose a different name.",
   "shared.actionForm.actionNamePlaceholder": "E.g.: Launch the RFP",
   "shared.actionForm.owner": "Owner",
   "shared.actionForm.startDate": "Start date",
@@ -3038,6 +3057,9 @@ const en: Record<string, string> = {
   "impactsEditor.label": "Label",
   "impactsEditor.amount": "Amount (€M)",
   "impactsEditor.oneOff": "One-off",
+  "impactsEditor.workingCapitalBadge": "Working capital — cash, excluded from savings",
+  "impactsEditor.workingCapitalHint":
+    "Working capital impact (cash): not counted in savings (gross, net, realized, curve, P&L).",
   "impactsEditor.untitled": "Untitled impact",
   "impactsEditor.statusPlanned": "Planned",
   "impactsEditor.statusDone": "Done",
@@ -3183,6 +3205,8 @@ const en: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "One-off OPEX",
   "leverDetail.trajectory.detailOpexRec": "Recurring OPEX",
   "leverDetail.trajectory.detailEmpty": "No impact in this period.",
+  "leverDetail.workingCapitalNote":
+    "Working capital impact (cash, excluded from savings): {amount}",
   "leverDetail.oneOff": "One-off OPEX",
   "chart.waterfall.realized": "Actual",
   "chart.waterfall.remaining": "Remaining",

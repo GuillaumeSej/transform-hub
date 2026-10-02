@@ -3,7 +3,7 @@
 import { DateInput } from "@/components/shared/DateInput";
 import { useState } from "react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
-import { applyActionProgress, applyActionStatus } from "@/lib/leversLogic";
+import { applyActionProgress, applyActionStatus, isActionNameTaken } from "@/lib/leversLogic";
 import type { ActionStatus, BeTrackData, LeverAction } from "@/types";
 
 const inputClass =
@@ -31,6 +31,7 @@ export type ActionFormValues = Omit<LeverAction, "id">;
  *  synchronisés (voir `applyActionProgress`/`applyActionStatus`). */
 export function ActionForm({
   initialValues,
+  existingActions = [],
   submitLabel,
   onSubmit,
   onCancel,
@@ -40,6 +41,9 @@ export function ActionForm({
   data?: BeTrackData;
   companyId?: string | null;
   initialValues?: Partial<LeverAction>;
+  /** Actions du levier : un nom déjà porté par une AUTRE action est refusé (audit lot 4, point 3 —
+   *  deux actions de même nom ne survivaient pas à un aller-retour Excel). */
+  existingActions?: Pick<LeverAction, "id" | "name">[];
   submitLabel?: string;
   onSubmit: (values: ActionFormValues) => void;
   onCancel?: () => void;
@@ -72,6 +76,7 @@ export function ActionForm({
     });
 
   const endBeforeStart = !!start && !!end && end < start;
+  const duplicateName = isActionNameTaken(existingActions, name, initialValues?.id);
 
   const handleSubmit = () => {
     onSubmit({
@@ -106,9 +111,18 @@ export function ActionForm({
           <input
             className={inputClass}
             value={name}
+            aria-invalid={duplicateName}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("shared.actionForm.actionNamePlaceholder", "Ex: Lancer le RFP")}
           />
+          {duplicateName && (
+            <span className="mt-0.5 block text-[10.5px] text-bp-coral">
+              {t(
+                "shared.actionForm.duplicateName",
+                "Une autre action de ce levier porte déjà ce nom : choisissez un nom distinct."
+              )}
+            </span>
+          )}
         </div>
         <div className="col-span-2">
           <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-secondary">
@@ -233,7 +247,7 @@ export function ActionForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!name.trim() || !start || !end || endBeforeStart}
+          disabled={!name.trim() || !start || !end || endBeforeStart || duplicateName}
           className="rounded-md bg-bp-coral px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-bp-red-brick disabled:opacity-40"
         >
           {resolvedSubmitLabel}

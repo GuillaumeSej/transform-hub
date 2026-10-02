@@ -4,9 +4,11 @@ import {
   ACTION_STATUS_LABEL,
   IMPACT_IMPORT_HEADERS,
   SAVING_TYPE_LABEL,
+  WORKING_CAPITAL_EXPORT_HEADER,
 } from "@/lib/leverExcelImport";
 import { DEFAULT_LIFECYCLE_STAGES, resolveStatusLabel } from "@/lib/status-config";
 import { isFteHire } from "@/lib/impactKinds";
+import { riskLevelLabel } from "@/lib/leverRiskText";
 import type { Alert, BeTrackData, Lever, LifecycleStage, RiskLevel } from "@/types";
 
 /**
@@ -26,6 +28,12 @@ export function truncateForExcel(text: string): { value: string; truncated: bool
     ? { value: text.slice(0, EXCEL_CELL_MAX_LENGTH), truncated: true }
     : { value: text, truncated: false };
 }
+
+/** Libellé FRANÇAIS d'un niveau de risque (« Critique », « Élevé »…), comme à l'écran en fr — le
+ *  classeur exporté est en français (en-têtes, statuts) ; avant, la colonne « Risque » contenait
+ *  les codes internes anglais (`high`, `low`…). */
+const frenchRiskLabel = (level: RiskLevel) =>
+  riskLevelLabel((_key, fallback) => fallback ?? "", level);
 
 export function leverToExcelRow(
   lever: Lever,
@@ -73,8 +81,9 @@ export function leverToExcelRow(
     "Date de départ": lever.start,
     "Date de fin estimée": lever.end,
     Statut: resolveStatusLabel(lever.status, lifecycleStages),
+    // Colonne calculée (plan d'action) : ignorée au ré-import (lib/leverExcelImport.ts).
     "Progression (%)": engine.leverProgressPct(lever),
-    Risque: engine.computeLeverRisk(lever.id, alerts, riskThresholds).level,
+    Risque: frenchRiskLabel(engine.computeLeverRisk(lever.id, alerts, riskThresholds).level),
     "Impact estimé brut (€M)": refo.grossSavings,
     // Même valeur que la colonne « Réactualisé (net) » du tableau des leviers
     // (`displayedReforecastNet` : net des impacts si le levier en porte, sinon réactualisation,
@@ -89,6 +98,8 @@ export function leverToExcelRow(
     "Impact estimé (ETP)": lever.fteImpact,
     "Réalisé à date (ETP)": engine.realizedFte(lever),
     "Gains one-off (€M)": engine.leverImpactTotals(lever).oneOffGains,
+    // Impact BFR : trésorerie, jamais dans les économies (`isWorkingCapitalImpact`) — informatif.
+    [WORKING_CAPITAL_EXPORT_HEADER]: engine.leverImpactTotals(lever).workingCapital,
     "Population impactée": typeof lever.popImpacted === "number" ? lever.popImpacted : "",
     "CAPEX (€M)": refo.capex,
     "OPEX one-off (€M)": refo.opexOneOff,
@@ -159,6 +170,8 @@ export function leverActionsToExcelRows(lever: Lever): Record<string, string>[] 
       "Date début": a.start,
       "Date fin": a.end,
       Statut: ACTION_STATUS_LABEL[a.status],
+      // Colonne technique : clé de rapprochement prioritaire au ré-import (renommage conservé).
+      "ID action": a.id,
     };
     return row;
   });

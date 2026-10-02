@@ -1327,7 +1327,6 @@ const de: Record<string, string> = {
   "shared.leverImportButton.templateDownloadedBody":
     "3 Arbeitsblätter: Hebel (Code = Schlüssel), Maßnahmen (Hebel-Code = FK), Auswirkungen (Hebel-Code + Maßnahmenname = FK). Löschen Sie die Beispielzeile, bevor Sie die Datei ausfüllen.",
   "shared.leverImportButton.workstreamsCreatedNote": "{n} Arbeitspaket(e) erstellt",
-  "shared.leverImportButton.ignoredRowsNote": "{n} Zeile(n) ignoriert",
   "shared.leverImportButton.importDoneBody": "{created} Hebel erstellt · {updated} aktualisiert",
   "shared.leverImportButton.createCountLabel": "Hebel zu erstellen",
   "shared.leverImportButton.updateCountLabel": "Hebel zu aktualisieren",
@@ -1350,6 +1349,12 @@ const de: Record<string, string> = {
   "shared.leverImportButton.impactsRemovedTitle": "{n} bestehende Impact-Zeile(n) werden gelöscht",
   "shared.leverImportButton.impactsRemovedBody":
     "da sie in der Registerkarte Impacts der Datei fehlen: {list}.",
+  "shared.leverImportButton.emptyCellRule":
+    "Leere Zelle = aktueller Wert bleibt erhalten; „-“ = Feld wird geleert. „Progression (%)“ und die Beträge eines Hebels mit Impacts werden berechnet: Änderungen daran werden ignoriert.",
+  "shared.leverImportButton.fixErrorsFirst":
+    "Import nicht möglich, solange die Datei Fehler enthält: Korrigieren Sie die Zeilen unten und laden Sie die Datei erneut.",
+  "shared.leverImportButton.confirmLargeValues":
+    "Ich habe die gemeldeten ungewöhnlich hohen Werte (Einheit Mio. € / VZÄ) geprüft und bestätige den Import.",
   "shared.leverImportButton.warningsTitle": "Warnungen (Import nicht blockiert)",
   "shared.exportButton.truncatedTitle": "Beschreibungen gekürzt",
   "shared.exportButton.truncatedBody":
@@ -1415,6 +1420,20 @@ const de: Record<string, string> = {
     "Unbekannte Impact-Art „{value}“: Wert ignoriert (erwartet: {expected})",
   "shared.leverImport.msg.unknownPopulation":
     "Betroffene Population „{value}“ unter den Arbeitspaketen nicht gefunden: Wert ignoriert",
+  "shared.leverImport.msg.duplicateActionId":
+    'Doppelte Maßnahmen-ID "{id}" für Hebel "{code}" (bereits in Zeile {row} verwendet)',
+  "shared.leverImport.msg.negativeNotAllowed":
+    '"{field}" darf nicht negativ sein (gelesener Wert: {value})',
+  "shared.leverImport.msg.computedFromActions":
+    '"{field}": aus dem Maßnahmenplan berechneter Wert ({computed}) — Änderung ignoriert (Datei: {value})',
+  "shared.leverImport.msg.computedFromImpacts":
+    '"{field}": aus den Impacts des Hebels berechneter Wert ({computed}) — Änderung ignoriert (Datei: {value})',
+  "shared.leverImport.msg.computedFromPlan":
+    '"{field}": aus dem eingefrorenen Plan / der Neuprognose berechneter Wert ({computed}) — Änderung ignoriert (Datei: {value})',
+  "shared.leverImport.msg.valueClamped":
+    '"{field}": {value} außerhalb des Bereichs, auf {bound} begrenzt',
+  "shared.leverImport.msg.largeValue":
+    '"{field}" = {value} {unit}: ungewöhnlich hoher Wert (über {threshold}) — prüfen Sie die Einheit vor dem Bestätigen',
   "shared.leverImport.msg.formulaNoValue":
     "Zelle {cell}: Formel ohne berechneten Wert (Arbeitsmappe nicht neu berechnet) — öffnen und speichern Sie die Datei vor dem Import in Excel.",
 
@@ -1569,6 +1588,8 @@ const de: Record<string, string> = {
 
   // ─── shared.leverForm/actionForm/movementForm/manualAlertForm/dependencyEditor (i18n-Nacharbeit) ─
   "shared.actionForm.actionName": "Name der Maßnahme",
+  "shared.actionForm.duplicateName":
+    "Eine andere Maßnahme dieses Hebels trägt bereits diesen Namen: Wählen Sie einen anderen Namen.",
   "shared.actionForm.actionNamePlaceholder": "Bsp.: RFP starten",
   "shared.actionForm.owner": "Verantwortlicher",
   "shared.actionForm.startDate": "Startdatum",
@@ -2996,6 +3017,9 @@ const de: Record<string, string> = {
   "impactsEditor.label": "Bezeichnung",
   "impactsEditor.amount": "Betrag (€M)",
   "impactsEditor.oneOff": "Einmalig",
+  "impactsEditor.workingCapitalBadge": "Working Capital — Liquidität, nicht in den Einsparungen",
+  "impactsEditor.workingCapitalHint":
+    "Working-Capital-Effekt (Liquidität): nicht in den Einsparungen gezählt (brutto, netto, realisiert, Kurve, GuV).",
   "impactsEditor.untitled": "Impact ohne Titel",
   "impactsEditor.statusPlanned": "Geplant",
   "impactsEditor.statusDone": "Realisiert",
@@ -3144,6 +3168,8 @@ const de: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "Einmalige OPEX",
   "leverDetail.trajectory.detailOpexRec": "Wiederkehrende OPEX",
   "leverDetail.trajectory.detailEmpty": "Keine Auswirkung in dieser Periode.",
+  "leverDetail.workingCapitalNote":
+    "Working-Capital-Effekt (Liquidität, nicht in den Einsparungen): {amount}",
   "leverDetail.oneOff": "Einmaliges OPEX",
   "chart.waterfall.realized": "Ist",
   "chart.waterfall.remaining": "Verbleibend",

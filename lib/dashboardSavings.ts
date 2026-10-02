@@ -7,6 +7,7 @@ import {
   realizationPct,
   realizedSavings,
 } from "@/lib/engine";
+import { isWorkingCapitalImpact } from "@/lib/impactKinds";
 
 /**
  * Sélecteurs purs partagés par le dashboard exécutif (graphique "Réalisation des économies",
@@ -135,6 +136,10 @@ export function limitSegments<T extends { key: string; label: string; value: num
   return [...head, { key: "__others__", label: otherLabel, value: r2(rest) }];
 }
 
+/** Retire le bruit flottant (1e-6 M€ = 1 €) sans arrondir les montants affichés : l'arrondi est
+ *  fait à l'affichage (audit lot 4, point 9 — un réalisé de 0,55 M€ s'affichait 0,6). */
+const clean = (n: number) => Math.round(n * 1e6) / 1e6;
+
 /** Transforme `engine.savingsWaterfall` en barres Recharts (technique "base invisible").
  *  Groupe A : planifié initial → ± réactualisé → − annulé → cible (réalisé + reste à faire =
  *  savingsTriple). Séparateur. Groupe B : brut → OPEX récurrent (flottant, segmenté par nature,
@@ -160,8 +165,8 @@ export function waterfallBars(
         ...common,
         base: 0,
         ...empty,
-        realized: r1(realized),
-        remaining: r1(Math.max(0, step.value - realized)),
+        realized: clean(realized),
+        remaining: clean(Math.max(0, step.value - realized)),
       });
     } else if (step.key === "opexRec") {
       const total = Math.abs(step.value);
@@ -174,7 +179,7 @@ export function waterfallBars(
       }
       bars.push({
         ...common,
-        base: r1(Math.max(0, step.cumulative)),
+        base: clean(Math.max(0, step.cumulative)),
         ...empty,
         seg: segs,
       });
@@ -182,7 +187,7 @@ export function waterfallBars(
       const before = step.cumulative - step.value;
       bars.push({
         ...common,
-        base: r1(Math.max(0, Math.min(before, step.cumulative))),
+        base: clean(Math.max(0, Math.min(before, step.cumulative))),
         ...empty,
         up: step.value > 0 ? step.value : 0,
         down: step.value < 0 ? Math.abs(step.value) : 0,
@@ -203,7 +208,10 @@ export function oneOffGainsTotal(data: BeTrackData): number {
         (s, l) =>
           s +
           leverImpactsOf(l)
-            .filter((i) => i.type === "saving" && i.gainRecurrence === "oneoff")
+            .filter(
+              (i) =>
+                i.type === "saving" && i.gainRecurrence === "oneoff" && !isWorkingCapitalImpact(i)
+            )
             .reduce((a, i) => a + i.amount, 0),
         0
       )

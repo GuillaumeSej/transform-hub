@@ -15,6 +15,7 @@ import {
   impactKindPatch,
   impactTypeOf,
   impactTypePatch,
+  isWorkingCapitalImpact,
   missingImpactFields,
   type ImpactTypeKey,
 } from "@/lib/impactKinds";
@@ -636,6 +637,20 @@ export function ImpactsEditor({
                       placeholder={t("impactsEditor.untitled", "Impact sans libellé")}
                       onChange={(e) => update(imp.id, { label: e.target.value })}
                     />
+                    {isWorkingCapitalImpact(imp) && (
+                      <span
+                        className="mt-0.5 block truncate text-[10.5px] italic text-tertiary"
+                        title={t(
+                          "impactsEditor.workingCapitalHint",
+                          "Impact BFR (trésorerie) : non compté dans les économies (brut, net, réalisé, courbe, P&L)."
+                        )}
+                      >
+                        {t(
+                          "impactsEditor.workingCapitalBadge",
+                          "Impact BFR — trésorerie, hors économies"
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td className="px-1 py-1">
                     {isFte ? (

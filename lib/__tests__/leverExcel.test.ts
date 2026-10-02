@@ -375,6 +375,11 @@ describe("leverExcel — full export -> re-import round trip", () => {
     );
 
     expect(preview.errors).toEqual([]);
-    expect(preview.toUpsert[0].programId).toBe("p1");
+    // Ré-import sans modification : levier inchangé (programme compris). Avant (audit lot 4,
+    // point 1), l'avancement stocké (50) était écrasé par l'avancement calculé exporté (0) et le
+    // levier comptait « mis à jour ».
+    expect(preview.updateCount).toBe(0);
+    expect(preview.unchangedCount).toBe(1);
+    expect(preview.toUpsert).toEqual([]);
   });
 });
