@@ -103,7 +103,9 @@ export function StrategicApprovalsPanel({
         ? t("validation.sa.status.approved", "Validée")
         : s === "rejected"
           ? t("validation.sa.status.rejected", "Refusée")
-          : t("validation.sa.status.pending", "En attente");
+          : s === "cancelled"
+            ? t("validation.sa.status.cancelled", "Annulée")
+            : t("validation.sa.status.pending", "En attente");
 
   /** Audit fix #3 : lien vers l'objet visé (axe, chantier, projet, indicateur) — seulement s'il
    *  existe dans le programme (`approvalTargetHref`) ET que l'utilisateur peut ouvrir la page
@@ -263,7 +265,9 @@ export function StrategicApprovalsPanel({
                             ? "bg-rag-green-light text-rag-green-dark"
                             : a.status === "rejected"
                               ? "bg-rag-red-light text-rag-red"
-                              : "bg-rag-amber-light text-rag-amber"
+                              : a.status === "cancelled"
+                                ? "bg-neutral-100 text-tertiary"
+                                : "bg-rag-amber-light text-rag-amber"
                         }`}
                       >
                         {statusLabel(a.status, a.direct)}

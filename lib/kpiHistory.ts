@@ -4,7 +4,7 @@ import {
   compareMeasurements,
   resolveIndicatorTargetForPeriod,
 } from "@/lib/axisLogic";
-import { samePeriod } from "@/lib/indicatorPeriod";
+import { indicatorPeriodRange, samePeriod } from "@/lib/indicatorPeriod";
 import type { AuthUser, Indicator, IndicatorFrequency, IndicatorMeasurement, Role } from "@/types";
 
 /**
@@ -268,6 +268,66 @@ export function currentPeriod(frequency: IndicatorFrequency, now: Date = new Dat
     case "annual":
       return String(year);
   }
+}
+
+// ─── Période future (lot 3 intégrité) ────────────────────────────────────────────────────────
+
+/**
+ * La période `period` est-elle POSTÉRIEURE à la période en cours selon la fréquence de
+ * l'indicateur (elle commence après le dernier mois de `currentPeriod(frequency, now)`) ? Une
+ * mesure future devenait la « dernière valeur » partout (avancement à 9 690 %, année 2027 par
+ * défaut, rappel Mon espace disparu) : elle est refusée à la saisie, à la correction et à la
+ * validation. La période en cours elle-même reste acceptée. Période non reconnue (texte libre
+ * historique) : `false` (rien à comparer — l'appelant valide déjà le format).
+ */
+export function isFuturePeriod(
+  period: string,
+  frequency: IndicatorFrequency,
+  now: Date = new Date()
+): boolean {
+  const target = indicatorPeriodRange(period);
+  const current = indicatorPeriodRange(currentPeriod(frequency, now));
+  if (!target || !current) return false;
+  return target.start > current.end;
+}
+
+/** Erreur levée quand une mesure porte sur une période postérieure à la période en cours
+ *  (`isFuturePeriod`). `current` = période en cours, pour le message. */
+export class FutureMeasurementPeriodError extends Error {
+  constructor(
+    public readonly period: string,
+    public readonly current: string
+  ) {
+    super(
+      `La période ${period} n'a pas encore commencé : une valeur ne peut être saisie que jusqu'à la période en cours (${current})`
+    );
+    this.name = "FutureMeasurementPeriodError";
+  }
+}
+
+/** Lève `FutureMeasurementPeriodError` si `period` est future pour cette fréquence. */
+export function assertMeasurementPeriodNotFuture(
+  period: string,
+  frequency: IndicatorFrequency | undefined,
+  now: Date = new Date()
+): void {
+  if (!frequency) return;
+  if (isFuturePeriod(period, frequency, now)) {
+    throw new FutureMeasurementPeriodError(period.trim(), currentPeriod(frequency, now));
+  }
+}
+
+/** Message traduit d'une `FutureMeasurementPeriodError` (clé `kpi.periodFuture`). */
+export function futurePeriodMessage(
+  t: (key: string, fallback?: string) => string,
+  err: Pick<FutureMeasurementPeriodError, "period" | "current">
+): string {
+  return t(
+    "kpi.periodFuture",
+    "La période {period} n'a pas encore commencé : une valeur ne peut être saisie que jusqu'à la période en cours ({current})."
+  )
+    .replace("{period}", err.period)
+    .replace("{current}", err.current);
 }
 
 /** Saisie numérique tolérante à la virgule. `null` = invalide, `undefined` = vide. */

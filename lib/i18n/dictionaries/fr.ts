@@ -158,6 +158,7 @@ const fr: Record<string, string> = {
   "validation.sa.status.pending": "En attente",
   "validation.sa.status.approved": "Validée",
   "validation.sa.status.rejected": "Refusée",
+  "validation.sa.status.cancelled": "Annulée",
   "validation.sa.status.direct": "Appliquée (information)",
   "validation.sa.adjustValue": "Valeur à appliquer (modifiable avant d'accepter)",
   "validation.sa.tab.todo": "À valider",
@@ -1737,6 +1738,7 @@ const fr: Record<string, string> = {
   // sur la fiche détail d'axe.
   "strategicAxes.noIndicatorsShort": "Aucun indicateur",
   "strategicAxes.unassigned": "Non assigné",
+  "strategicAxes.unassignedAxis": "Sans axe",
   "strategicAxes.tree.chantiersN": "{n} chantiers",
   "strategicAxes.tree.chantiersNOne": "{n} chantier",
   "strategicAxes.tree.projetsN": "{n} projets",
@@ -3421,6 +3423,8 @@ const fr: Record<string, string> = {
   "strategicApprovals.alert.rejectedTitle": "Demande refusée · {label}",
   "strategicApprovals.alert.approvedDesc": "{decider} a validé {phrase}{comment}.",
   "strategicApprovals.alert.rejectedDesc": "{decider} a refusé {phrase}{comment}.",
+  "strategicApprovals.alert.cancelledTitle": "Demande annulée · {label}",
+  "strategicApprovals.alert.cancelledDesc": "Votre demande de {phrase} a été annulée{comment}.",
   "strategicApprovals.alert.decidedApprovedTitle": "Validation enregistrée · {label}",
   "strategicApprovals.alert.decidedRejectedTitle": "Refus enregistré · {label}",
   "strategicApprovals.alert.decidedApprovedDesc":
@@ -3619,6 +3623,8 @@ const fr: Record<string, string> = {
   "projetWeights.overTotalWarning":
     "Le total déclaré dépasse 100 % : les poids sont normalisés au calcul, et les projets non pondérés reçoivent le poids moyen déclaré.",
   "kpi.periodInvalid": "Période invalide — format attendu : {format}",
+  "kpi.periodFuture":
+    "La période {period} n'a pas encore commencé : une valeur ne peut être saisie que jusqu'à la période en cours ({current}).",
   "kpi.measurement.periodTakenNoRight":
     "Une valeur existe déjà pour la période {period} et vous n'êtes pas habilité à la remplacer.",
   "kpi.measurement.replaceConfirm": "Remplacer la valeur",

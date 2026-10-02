@@ -1471,6 +1471,7 @@ export function StrategicDashboardView() {
                 axes={axes}
                 chantiers={roadmapChantiers}
                 allChantiers={chantiers}
+                programAxisIds={strategic.programAxisIds}
                 actions={roadmapActions}
                 allActions={chantierActions}
                 progressOf={projetProgress}

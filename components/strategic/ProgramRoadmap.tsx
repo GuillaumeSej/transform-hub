@@ -15,6 +15,7 @@ import {
   type ProjetProgressLookup,
 } from "@/lib/axisLogic";
 import { Tooltip } from "@/components/shared/Tooltip";
+import { isUnassignedAxis, withUnassignedAxisGroup } from "@/lib/strategicIntegrity";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { isSingular } from "@/lib/i18n/plural";
 import {
@@ -172,9 +173,10 @@ function groupRowsByAxisAndChantier(rows: ProgramRoadmapRow[]): AxisGroup[] {
 }
 
 export function ProgramRoadmap({
-  axes,
-  chantiers,
-  allChantiers,
+  axes: rawAxes,
+  chantiers: rawChantiers,
+  allChantiers: rawAllChantiers,
+  programAxisIds,
   actions,
   onProjetClick,
   onChantierClick,
@@ -194,6 +196,10 @@ export function ProgramRoadmap({
    *  de la feuille de route (chantier, responsable…) ne décale jamais la couleur d'un chantier par
    *  rapport à l'onglet "Avancement" de la page Axes. */
   allChantiers?: Chantier[];
+  /** Ids de TOUS les axes du programme (`useStrategicData().programAxisIds`) — fournis, les
+   *  chantiers rattachés à aucun axe existant (axe supprimé) sont regroupés sous « Sans axe » en
+   *  dernier au lieu de disparaître de la feuille de route (lot 3, `withUnassignedAxisGroup`). */
+  programAxisIds?: readonly string[];
   /** Tous les leviers du programme actif (toutes les actions, pas filtrées par axe/chantier — voir
    *  `axisLogic.programRoadmap`). */
   actions: ChantierAction[];
@@ -253,6 +259,24 @@ export function ProgramRoadmap({
   // une vue "globale" par défaut (l'utilisateur affine vers Trimestre s'il pilote une échéance
   // précise, ou vers Année pour l'aperçu le plus large).
   const [scale, setScale] = useState<TimelineScale>("semester");
+
+  // Lot 3 : groupe synthétique « Sans axe » pour les chantiers dont l'axe n'existe plus.
+  const unassignedLabel = t("strategicAxes.unassignedAxis", "Sans axe");
+  const { axes, chantiers } = useMemo(
+    () =>
+      programAxisIds
+        ? withUnassignedAxisGroup(rawAxes, rawChantiers, programAxisIds, unassignedLabel)
+        : { axes: rawAxes, chantiers: rawChantiers },
+    [rawAxes, rawChantiers, programAxisIds, unassignedLabel]
+  );
+  const allChantiers = useMemo(
+    () =>
+      rawAllChantiers && programAxisIds
+        ? withUnassignedAxisGroup(rawAxes, rawAllChantiers, programAxisIds, unassignedLabel)
+            .chantiers
+        : rawAllChantiers,
+    [rawAxes, rawAllChantiers, programAxisIds, unassignedLabel]
+  );
 
   const effectiveProgressOf = useMemo(
     () => progressOf ?? projetProgressResolver(allChantiers ?? chantiers, allActions ?? actions),
@@ -342,7 +366,9 @@ export function ProgramRoadmap({
                       englobant ci-dessus (`axisColor` en wash + bordure gauche 4px), plus seulement
                       d'un liséré sur cette seule ligne d'en-tête — pastille + trait de séparation
                       conservés pour que l'en-tête reste identifiable même sans `renderAxisHeader`. */}
-                  {renderAxisHeader ? (
+                  {/* « Sans axe » (synthétique) : toujours l'en-tête par défaut — l'en-tête riche
+                      de l'appelant suppose un axe réel (sponsor, budget, indicateurs). */}
+                  {renderAxisHeader && !isUnassignedAxis(axisGroup.axis) ? (
                     renderAxisHeader(axisGroup.axis)
                   ) : (
                     <div className="flex items-center gap-1.5 border-b border-border-strong px-2.5 py-2">

@@ -31,6 +31,9 @@ import {
   currentPeriod,
   defaultYearForMeasurements,
   findPeriodCollision,
+  FutureMeasurementPeriodError,
+  futurePeriodMessage,
+  isFuturePeriod,
   MeasurementPeriodCollisionError,
   parseNumber,
 } from "@/lib/kpiHistory";
@@ -309,6 +312,18 @@ function IndicatorCard({
       );
       return;
     }
+    // Période postérieure à la période en cours : refusée (elle deviendrait la dernière valeur).
+    if (isFuturePeriod(trimmedPeriod, indicator.frequency)) {
+      showToast(
+        futurePeriodMessage(t, {
+          period: trimmedPeriod,
+          current: currentPeriod(indicator.frequency),
+        }),
+        indicator.name,
+        "error"
+      );
+      return;
+    }
     const parsedValue = quantitative ? parseNumber(value) : undefined;
     if (parsedValue === null) {
       showToast(t("kpi.valueInvalid"), "", "error");
@@ -386,7 +401,9 @@ function IndicatorCard({
               "kpi.measurement.periodCollision",
               "Une mesure existe déjà pour la période {period}."
             ).replace("{period}", err.period)
-          : t("kpi.saveError"),
+          : err instanceof FutureMeasurementPeriodError
+            ? futurePeriodMessage(t, err)
+            : t("kpi.saveError"),
         indicator.name,
         "error"
       );

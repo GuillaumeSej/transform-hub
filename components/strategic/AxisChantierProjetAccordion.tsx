@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import {
@@ -21,6 +21,7 @@ import {
   useDeliverableStateText,
 } from "@/components/strategic/deliverableMarker";
 import { deliverableLateDays, deliverableState, effectiveDueDate } from "@/lib/deliverableState";
+import { isUnassignedAxis, withUnassignedAxisGroup } from "@/lib/strategicIntegrity";
 import type { AuthUser, Chantier, ChantierAction, StrategicAxis } from "@/types";
 
 /**
@@ -154,8 +155,9 @@ function mostFrequentOwner(projets: { owner?: string }[]): string | undefined {
 }
 
 export function AxisChantierProjetAccordion({
-  axes,
-  chantiers,
+  axes: rawAxes,
+  chantiers: rawChantiers,
+  programAxisIds,
   chantierActions,
   onProjetClick,
   onDeliverableClick,
@@ -170,6 +172,10 @@ export function AxisChantierProjetAccordion({
   /** Ordre d'apparition = numérotation "Axe {n}" (position 1-based, jamais retriée). */
   axes: StrategicAxis[];
   chantiers: Chantier[];
+  /** Ids de TOUS les axes du programme (`useStrategicData().programAxisIds`) — fournis, les
+   *  chantiers rattachés à aucun axe existant (axe supprimé) apparaissent dans un groupe « Sans
+   *  axe » en dernier, au lieu de disparaître (lot 3, `withUnassignedAxisGroup`). */
+  programAxisIds?: readonly string[];
   chantierActions: ChantierAction[];
   /** Clic sur un projet (ou, sans `focusActionId`, sur un chantier) — ouvre le panneau chantier. */
   onProjetClick: (chantierId: string, focusActionId?: string) => void;
@@ -187,6 +193,14 @@ export function AxisChantierProjetAccordion({
 }) {
   const { t } = useTranslation();
   const { tooltip: deliverableTooltip } = useDeliverableStateText();
+  const unassignedLabel = t("strategicAxes.unassignedAxis", "Sans axe");
+  const { axes, chantiers } = useMemo(
+    () =>
+      programAxisIds
+        ? withUnassignedAxisGroup(rawAxes, rawChantiers, programAxisIds, unassignedLabel)
+        : { axes: rawAxes, chantiers: rawChantiers },
+    [rawAxes, rawChantiers, programAxisIds, unassignedLabel]
+  );
   const [expandedAxisIds, setExpandedAxisIds] = useState<Set<string>>(new Set());
   /** Clé composite `${axisId}:${chantierId}` — voir le doc-comment de tête de ce fichier. */
   const [expandedChantierKeys, setExpandedChantierKeys] = useState<Set<string>>(new Set());
@@ -233,13 +247,15 @@ export function AxisChantierProjetAccordion({
         // Gantt (`chantierShadesForAxis`, lib/axisLogic.ts) : un chantier a la même couleur partout.
         const chantierShades = chantierShadesForAxis(axisDisplayColor(axis, axes), axisChantiers);
         const axisOpen = expandedAxisIds.has(axis.id);
+        // Groupe synthétique « Sans axe » : ni numéro, ni fiche d'axe à ouvrir.
+        const unassigned = isUnassignedAxis(axis);
         return (
           <div key={axis.id} className="overflow-hidden rounded-lg border border-border bg-white">
             <TreeRow
               level="axis"
               open={axisOpen}
               onToggle={() => toggleAxis(axis.id)}
-              onOpen={onAxisClick ? () => onAxisClick(axis.id) : undefined}
+              onOpen={onAxisClick && !unassigned ? () => onAxisClick(axis.id) : undefined}
               indentClass="pl-5"
               openLabel={openLabel}
               dot={
@@ -249,9 +265,13 @@ export function AxisChantierProjetAccordion({
                   style={{ backgroundColor: axisDisplayColor(axis, axes) }}
                 />
               }
-              name={t("strategicAxes.axisNumberPrefix", "Axe {n} : {name}")
-                .replace("{n}", String(axisIndex + 1))
-                .replace("{name}", axis.name)}
+              name={
+                unassigned
+                  ? axis.name
+                  : t("strategicAxes.axisNumberPrefix", "Axe {n} : {name}")
+                      .replace("{n}", String(axisIndex + 1))
+                      .replace("{name}", axis.name)
+              }
               owner={resolveUserFullName(axis.owner, users) ?? noOwner}
               count={tPlural(
                 t,
@@ -320,7 +340,12 @@ export function AxisChantierProjetAccordion({
                               projets.map((action) => {
                                 const projetClickable =
                                   clickableActionIds === "all" || clickableActionIds.has(action.id);
-                                const { passed, total } = projetMilestoneCounts(action);
+                                // Avancement COMPLET passé : un projet terminé (J4 complet) compte
+                                // J4 comme franchi (5/5 et non 4/5).
+                                const { passed, total } = projetMilestoneCounts(
+                                  action,
+                                  progressOf(action)
+                                );
                                 return (
                                   <div
                                     key={action.id}

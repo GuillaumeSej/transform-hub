@@ -1743,14 +1743,10 @@ export function ChantierDetailPanel({
         "chantier",
         { id: chantier.id, name: chantier.name },
         reason,
-        async () => {
-          // Les actions du chantier sont retirées d'abord : elles ne portent pas de `programId`
-          // et ne seraient plus rattachables à rien une fois le chantier parti.
-          for (const action of chantierActions) {
-            await data.removeChantierAction(action.id);
-          }
-          await data.removeChantier(chantier.id);
-        }
+        // Lot 3 : `removeChantier` supprime EN CASCADE et en un seul batch ses projets (y compris
+        // ceux invisibles pour l'utilisateur), lignes ETP, indicateurs + mesures, dépendances et
+        // demandes en attente — plus de boucle projet par projet (non atomique).
+        () => data.removeChantier(chantier.id)
       );
       setDeleteTarget(null);
       if (outcome === "pending") {

@@ -15,7 +15,11 @@ import { generateAlerts } from "@/lib/alertEngine";
 import { targetAlerts } from "@/lib/notifications";
 import { alertPrimaryBreakdown, movementAlerts } from "@/lib/hrEngine";
 import { axisProgressPct, chantierDeclaredProgress, programProgressPct } from "@/lib/axisLogic";
-import type { StrategicApproval } from "@/lib/strategicApprovals";
+import {
+  bucketApprovals,
+  buildApprovalAlerts,
+  type StrategicApproval,
+} from "@/lib/strategicApprovals";
 import type {
   Alert,
   AuthUser,
@@ -560,6 +564,65 @@ describe("buildMyWorkspace — contributeurs projet, pilote stratégique", () =>
   });
 });
 
+describe("buildMyWorkspace — compteur « à valider » aligné sur le badge Validation et la cloche (lot 3)", () => {
+  // Trois demandes en attente chez pat (approbateur nommé) : un admin peut les décider (repli
+  // admin de `canDecide`) sans être nommé. Avant : badge 3, cloche 3, Mon espace 0.
+  const approval = (id: string): StrategicApproval => ({
+    id,
+    companyId: "c1",
+    programId: "p2",
+    kind: "projet_delete",
+    targetType: "projet",
+    targetId: `X-${id}`,
+    targetName: `Projet ${id}`,
+    payload: {},
+    requestedBy: "alice",
+    requestedAt: "2026-09-22T09:00:00Z",
+    approverRole: "chantier_owner",
+    approverUsername: "pat",
+    approverUsernames: ["pat"],
+    status: "pending",
+  });
+  const approvals = [approval("S1"), approval("S2"), approval("S3")];
+  const admin = makeUser("ada", [], { isCompanyAdmin: true });
+  const strategic = makeStrategic({ approvals });
+
+  it("admin non nommé : les trois écrans comptent 3", () => {
+    const data = { ...strategic, users: [admin] };
+    const badge = bucketApprovals(approvals, admin, data).pending.length;
+    const bell = buildApprovalAlerts(approvals, admin, data).filter((a) =>
+      a.id.endsWith("-todo")
+    ).length;
+    const ws = buildMyWorkspace(
+      { user: admin, strategic, programs, users: [admin], today: TODAY },
+      t
+    );
+    const me = ws.todo.filter((i) => i.source === "strategicApproval").length;
+    expect(badge).toBe(3);
+    expect(bell).toBe(3);
+    expect(me).toBe(3);
+    // Plus de doublon « bloqué chez pat » pour une demande qu'il peut traiter lui-même.
+    expect(ws.blocked.filter((i) => i.plan === "strategic")).toEqual([]);
+  });
+
+  it("profil de pilotage NON décideur : rien « à valider », toujours « bloqué chez » après 7 j", () => {
+    const cto = makeUser("carl", [{ role: "cto", programId: "p2" }]);
+    const old = { ...approval("S9"), requestedAt: "2026-09-05T09:00:00Z" };
+    const ws = buildMyWorkspace(
+      {
+        user: cto,
+        strategic: makeStrategic({ approvals: [old] }),
+        programs,
+        users: [cto],
+        today: TODAY,
+      },
+      t
+    );
+    expect(ws.todo.filter((i) => i.source === "strategicApproval")).toEqual([]);
+    expect(ws.blocked.map((i) => i.id)).toEqual(["blockedValidation:strategic:S9"]);
+  });
+});
+
 describe("buildMyWorkspace — avancement = même définition que le reste de l'app (audit fix #2)", () => {
   // Deux chantiers sur AX1 ; CH1 a des poids déclarés 80/20 (pondéré = 80, moyenne simple = 50).
   const actions = [
@@ -667,7 +730,7 @@ describe("buildMyWorkspace — leviers : avancement et santé = mêmes fonctions
   });
 
   it("ligne programme : avancement pondéré par la valeur, comme workstreamProgressPct", () => {
-    const cto = makeUser("carl", [{ role: "cto", programId: "p1" }]);
+    const cto = makeUser("carl", [{ role: "cto", programId: "p2" }]);
     const ws = buildMyWorkspace(
       { user: cto, performance: data, programs, users: [cto], today: TODAY },
       t
@@ -706,6 +769,17 @@ describe("missingMeasurementPeriod", () => {
     expect(missingMeasurementPeriod({ ...indicator, frequency: "quarterly" }, [], TODAY)).toBe(
       "2026-Q2"
     );
+  });
+
+  it("une mesure FUTURE (2027-03) ne couvre pas la période attendue : le rappel reste (lot 3)", () => {
+    // Avant correctif : 2027-03 ≥ 2026-08 → « couvert », rappel Mon espace disparu.
+    expect(
+      missingMeasurementPeriod(indicator, [{ indicatorId: "I1", period: "2027-03" }], TODAY)
+    ).toBe("2026-08");
+    // La période EN COURS couvre toujours (inchangé).
+    expect(
+      missingMeasurementPeriod(indicator, [{ indicatorId: "I1", period: "2026-09" }], TODAY)
+    ).toBeUndefined();
   });
 });
 

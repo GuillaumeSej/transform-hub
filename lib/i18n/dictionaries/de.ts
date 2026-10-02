@@ -130,6 +130,7 @@ const de: Record<string, string> = {
   "validation.sa.status.pending": "Ausstehend",
   "validation.sa.status.approved": "Genehmigt",
   "validation.sa.status.rejected": "Abgelehnt",
+  "validation.sa.status.cancelled": "Storniert",
   "validation.sa.status.direct": "Angewendet (zur Information)",
   "validation.sa.adjustValue": "Anzuwendender Wert (vor dem Annehmen änderbar)",
   "validation.sa.tab.todo": "Zu prüfen",
@@ -1687,6 +1688,7 @@ const de: Record<string, string> = {
   "strategicAxes.budgetByChantierModalTitle": "Budgetverteilung nach Baustelle",
   "strategicAxes.noIndicatorsShort": "Kein Indikator",
   "strategicAxes.unassigned": "Nicht zugewiesen",
+  "strategicAxes.unassignedAxis": "Ohne Achse",
   "strategicAxes.tree.chantiersN": "{n} Arbeitspakete",
   "strategicAxes.tree.chantiersNOne": "{n} Arbeitspaket",
   "strategicAxes.tree.projetsN": "{n} Projekte",
@@ -3337,6 +3339,8 @@ const de: Record<string, string> = {
   "strategicApprovals.alert.rejectedTitle": "Anfrage abgelehnt · {label}",
   "strategicApprovals.alert.approvedDesc": "{decider} hat {phrase} genehmigt{comment}.",
   "strategicApprovals.alert.rejectedDesc": "{decider} hat {phrase} abgelehnt{comment}.",
+  "strategicApprovals.alert.cancelledTitle": "Anfrage storniert · {label}",
+  "strategicApprovals.alert.cancelledDesc": "Ihre Anfrage für {phrase} wurde storniert{comment}.",
   "strategicApprovals.alert.decidedApprovedTitle": "Genehmigung erfasst · {label}",
   "strategicApprovals.alert.decidedRejectedTitle": "Ablehnung erfasst · {label}",
   "strategicApprovals.alert.decidedApprovedDesc":
@@ -3538,6 +3542,8 @@ const de: Record<string, string> = {
   "projetWeights.overTotalWarning":
     "Die deklarierten Gewichte überschreiten 100 %: Sie werden bei der Berechnung normalisiert, und nicht gewichtete Projekte erhalten das durchschnittliche deklarierte Gewicht.",
   "kpi.periodInvalid": "Ungültiger Zeitraum — erwartetes Format: {format}",
+  "kpi.periodFuture":
+    "Der Zeitraum {period} hat noch nicht begonnen: Werte können nur bis zum laufenden Zeitraum ({current}) erfasst werden.",
   "kpi.measurement.periodTakenNoRight":
     "Für den Zeitraum {period} existiert bereits ein Wert, und Sie sind nicht berechtigt, ihn zu ersetzen.",
   "kpi.measurement.replaceConfirm": "Wert ersetzen",
