@@ -6,7 +6,7 @@ import {
   validateLeverImportRows,
 } from "@/lib/leverExcelImport";
 import { leverImpactsToExcelRows, leverToExcelRow } from "@/lib/leverExcel";
-import { XLSX_READ_OPTIONS } from "@/lib/excelParse";
+import { readXlsxWorkbook } from "@/lib/excelParse";
 import { bulkUpsertLeversByCode, upsertLeverByCode } from "@/lib/leversLogic";
 import type { AuthUser, BeTrackData, Lever, LeverImpact } from "@/types";
 
@@ -79,7 +79,7 @@ function impact(overrides: Partial<LeverImpact> = {}): LeverImpact {
   };
 }
 
-/** Aller-retour réel par un classeur .xlsx (écriture puis lecture avec XLSX_READ_OPTIONS). */
+/** Aller-retour réel par un classeur .xlsx (écriture puis lecture comme l'appli, `readXlsxWorkbook`). */
 function roundTripSheets(
   sheets: Record<string, unknown[][]>
 ): Record<string, Record<string, unknown>[]> {
@@ -88,7 +88,7 @@ function roundTripSheets(
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa, { cellDates: true }), name);
   }
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-  const read = XLSX.read(buf, XLSX_READ_OPTIONS);
+  const read = readXlsxWorkbook(XLSX, buf);
   const out: Record<string, Record<string, unknown>[]> = {};
   for (const name of read.SheetNames) {
     out[name] = XLSX.utils.sheet_to_json(read.Sheets[name], { defval: "" });

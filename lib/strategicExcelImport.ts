@@ -409,7 +409,12 @@ export type StrategicImportOptions = {
 
 function str(v: unknown): string {
   if (v === undefined || v === null) return "";
-  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "" : v.toISOString();
+  // Cellule date dans une colonne texte : date locale "AAAA-MM-JJ" (jamais `toISOString`, qui
+  // renvoyait la veille à 22:00Z pour une date saisie en Europe/Paris).
+  if (v instanceof Date) {
+    const d = parseCellDate(v);
+    return d?.ok ? d.value : "";
+  }
   return String(v).trim();
 }
 

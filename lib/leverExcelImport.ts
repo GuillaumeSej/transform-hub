@@ -1,3 +1,4 @@
+import { todayISO } from "@/lib/dateUtils";
 import {
   DEFAULT_LIFECYCLE_STAGES,
   gateCrossedBy,
@@ -549,8 +550,9 @@ function isRowEmpty(row: Record<string, unknown>): boolean {
   return Object.values(row).every((v) => isBlankCell(v));
 }
 
+/** Date métier du jour : LOCALE (`todayISO`), jamais `toISOString()` (UTC, veille avant 2h à Paris). */
 function nowDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 /** Ids générés uniquement pour la durée de l'import. */

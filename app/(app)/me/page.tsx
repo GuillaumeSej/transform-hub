@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { formatDate } from "@/lib/format";
+import { todayISO } from "@/lib/dateUtils";
 import {
   categoryLabel,
   effectiveCategory,
@@ -112,10 +113,7 @@ export default function MyWorkspacePage() {
             <span aria-hidden className="mx-1.5 text-neutral-300">
               ·
             </span>
-            <time
-              dateTime={today.toISOString().slice(0, 10)}
-              className="normal-case tracking-normal"
-            >
+            <time dateTime={todayISO(today)} className="normal-case tracking-normal">
               {todayLabel}
             </time>
           </p>

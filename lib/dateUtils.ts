@@ -21,6 +21,15 @@ export function todayISO(now: Date = new Date()): string {
   return toISODate(now);
 }
 
+/** Jour LOCAL "YYYY-MM-DD" d'un horodatage ISO complet (instant UTC, ex. `decidedAt`) — et non ses
+ *  10 premiers caractères, qui donnent le jour UTC (une décision prise à 00:30 à Paris était datée
+ *  de la veille). Une date seule "YYYY-MM-DD" est rendue telle quelle (jamais relue en UTC). */
+export function localDateOfInstant(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : toISODate(d);
+}
+
 export function daysBetween(a: string, b: string): number {
   return Math.round((parseISO(b) - parseISO(a)) / 86_400_000);
 }

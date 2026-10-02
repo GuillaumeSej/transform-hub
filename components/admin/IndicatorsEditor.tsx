@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import type {
@@ -319,7 +320,7 @@ export function IndicatorsEditor({
             frequency: form.frequency,
             objective: form.objective.trim(),
             responsibleRoles: [...form.responsibleRoles],
-            lastUpdate: new Date().toISOString().slice(0, 10),
+            lastUpdate: todayISO(),
             ...optional,
           };
           // Même recalcul que `useStrategicData.updateIndicator` : changer l'objectif ou le sens

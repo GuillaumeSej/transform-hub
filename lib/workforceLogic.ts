@@ -1,3 +1,4 @@
+import { todayISO } from "@/lib/dateUtils";
 import type {
   AuditEntry,
   Employee,
@@ -19,8 +20,9 @@ function nowTs(): string {
   return new Date().toISOString().slice(0, 16).replace("T", " ");
 }
 
+/** Date métier du jour : LOCALE (`todayISO`), jamais `toISOString()` (UTC, veille avant 2h à Paris). */
 function nowDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 /** Patch métier d'un changement de statut depuis les tableaux RH.

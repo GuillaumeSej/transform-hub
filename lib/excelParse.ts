@@ -8,7 +8,8 @@
  * - Nombres : format français ou anglais toléré (espaces, espaces insécables U+00A0/U+202F,
  *   virgule décimale, "%" et "€" retirés, parenthèses comptables = négatif). Une valeur présente
  *   mais illisible renvoie `{ ok: false }` — jamais une valeur par défaut silencieuse.
- * - Dates : numéro de série Excel (nombre ou texte purement numérique), objet Date (cellDates),
+ * - Dates : numéro de série Excel (nombre ou texte purement numérique), objet Date (cellule date
+ *   convertie par `convertExcelDateCells` — jamais par `cellDates` de SheetJS, faux en Europe/Paris),
  *   ISO "AAAA-MM-JJ" (avec ou sans heure), "JJ/MM/AAAA" ou "JJ-MM-AAAA" ou "JJ.MM.AAAA".
  *   Toujours validées par aller-retour (pas de 31/02) et construites en composantes locales —
  *   jamais via `toISOString()` (décalage UTC).
@@ -87,7 +88,7 @@ export function parseCellDate(v: unknown): ParseResult<string> | undefined {
   if (isBlankCell(v)) return undefined;
   if (v instanceof Date) {
     if (Number.isNaN(v.getTime())) return { ok: false, raw: String(v) };
-    // SheetJS (cellDates) crée des dates à minuit LOCAL : composantes locales.
+    // `convertExcelDateCells` crée des dates à minuit LOCAL exact : composantes locales.
     const iso = isoFromParts(v.getFullYear(), v.getMonth() + 1, v.getDate());
     return iso ? { ok: true, value: iso } : { ok: false, raw: String(v) };
   }
@@ -153,10 +154,96 @@ export function excelRowNumber(row: Record<string, unknown>, fallbackIndex: numb
   return typeof n === "number" ? n + 1 : fallbackIndex + 2;
 }
 
-/** Options `XLSX.read` pour un classeur BINAIRE (.xlsx/.xls) lu depuis un ArrayBuffer : dates en
- *  objets Date (`cellDates`) et texte brut (`raw: true`). Un CSV ne doit JAMAIS être lu avec ces
- *  options directement — SheetJS décoderait les octets en Latin-1 (accents et "€" perdus) : tout
- *  fichier importé passe par `lib/excelFileRead.ts::readSpreadsheetFile`, seul point d'entrée,
- *  qui décode le CSV (UTF-8 / Windows-1252) avant de le lire en mode texte avec ces mêmes
- *  `raw`/`cellDates` pour que "0,5" et "01/03/2026" ne soient pas réinterprétés à l'américaine. */
-export const XLSX_READ_OPTIONS = { type: "array" as const, raw: true, cellDates: true };
+/** Options `XLSX.read` pour un classeur BINAIRE (.xlsx/.xls) lu depuis un ArrayBuffer : texte brut
+ *  (`raw: true`), formats numériques conservés (`cellNF`) et SURTOUT pas de `cellDates` — la
+ *  conversion de date de SheetJS 0.18.5 est fausse dans les fuseaux dont l'heure de 1899 n'était
+ *  pas un nombre entier de minutes (Europe/Paris : LMT +0:09:21) : une date saisie 31/03/2026
+ *  revenait à 30/03/2026 23:59:39, donc importée la veille. Les cellules date sont converties par
+ *  `convertExcelDateCells` (numéro de série → Date locale exacte) : passer par `readXlsxWorkbook`.
+ *  Un CSV ne doit JAMAIS être lu avec ces options directement — SheetJS décoderait les octets en
+ *  Latin-1 (accents et "€" perdus) : tout fichier importé passe par
+ *  `lib/excelFileRead.ts::readSpreadsheetFile`, seul point d'entrée, qui décode le CSV (UTF-8 /
+ *  Windows-1252) avant de le lire en mode texte avec ce même `raw` pour que "0,5" et "01/03/2026"
+ *  ne soient pas réinterprétés à l'américaine. */
+export const XLSX_READ_OPTIONS = {
+  type: "array" as const,
+  raw: true,
+  cellDates: false,
+  cellNF: true,
+};
+
+/**
+ * Numéro de série Excel → `Date` aux composantes LOCALES exactes (minuit local pour une date pure,
+ * heure conservée à la seconde près). Calcul en UTC pur puis recomposition locale : aucun fuseau,
+ * aucune heure d'été ni décalage historique (LMT) ne peut faire glisser le jour.
+ * `date1904` : classeurs Mac historiques (série 0 = 01/01/1904).
+ */
+export function localDateFromExcelSerial(serial: number, date1904 = false): Date | undefined {
+  if (!Number.isFinite(serial)) return undefined;
+  let days = Math.floor(serial);
+  let secs = Math.round((serial - days) * 86400);
+  if (secs >= 86400) {
+    days += 1;
+    secs -= 86400;
+  }
+  if (date1904) days += 1462;
+  // Série 60 = 29/02/1900 fictif (bogue Lotus repris par Excel) : avant le 01/03/1900, un jour
+  // de décalage. Sans effet pour les dates métier (≥ 1900 validées par `isoFromParts`).
+  const base = days < 61 ? Date.UTC(1899, 11, 31) : Date.UTC(1899, 11, 30);
+  const utc = new Date(base + days * 86400000);
+  return new Date(
+    utc.getUTCFullYear(),
+    utc.getUTCMonth(),
+    utc.getUTCDate(),
+    Math.floor(secs / 3600),
+    Math.floor(secs / 60) % 60,
+    secs % 60
+  );
+}
+
+/** Cellule SheetJS minimale (évite d'importer le module `xlsx`, chargé à la demande). */
+type SheetCell = { t?: string; v?: unknown; z?: unknown };
+type WorkbookLike = {
+  Sheets: Record<string, Record<string, unknown>>;
+  Workbook?: { WBProps?: { date1904?: boolean } };
+};
+
+/**
+ * Remplace, dans un classeur lu avec `XLSX_READ_OPTIONS` (sans `cellDates`), chaque cellule
+ * numérique au format date (`isDateFormat`, en pratique `XLSX.SSF.is_date`) par un objet `Date`
+ * construit par `localDateFromExcelSerial` — même forme qu'avec `cellDates` (type "d", `Date` en
+ * valeur), mais sans l'erreur de fuseau de SheetJS. Le texte formaté (`w`) est conservé.
+ */
+export function convertExcelDateCells<W extends WorkbookLike>(
+  wb: W,
+  isDateFormat: (fmt: string) => boolean
+): W {
+  const date1904 = Boolean(wb.Workbook?.WBProps?.date1904);
+  for (const ws of Object.values(wb.Sheets)) {
+    for (const [addr, raw] of Object.entries(ws)) {
+      if (addr.startsWith("!")) continue;
+      const cell = raw as SheetCell;
+      if (!cell || cell.t !== "n" || typeof cell.v !== "number") continue;
+      if (typeof cell.z !== "string" || !isDateFormat(cell.z)) continue;
+      const d = localDateFromExcelSerial(cell.v, date1904);
+      if (!d) continue;
+      cell.t = "d";
+      cell.v = d;
+    }
+  }
+  return wb;
+}
+
+/** Module `xlsx` réduit à ce qu'utilise `readXlsxWorkbook` (le module est chargé à la demande). */
+type XlsxModuleLike<W> = {
+  read: (data: ArrayBuffer | Uint8Array, opts: typeof XLSX_READ_OPTIONS) => W;
+  SSF: { is_date: (fmt: string) => boolean };
+};
+
+/** Lecture d'un classeur BINAIRE comme l'appli (options + conversion exacte des dates). */
+export function readXlsxWorkbook<W extends WorkbookLike>(
+  XLSX: XlsxModuleLike<W>,
+  data: ArrayBuffer | Uint8Array
+): W {
+  return convertExcelDateCells(XLSX.read(data, XLSX_READ_OPTIONS), (z) => XLSX.SSF.is_date(z));
+}

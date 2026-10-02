@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { DateInput } from "@/components/shared/DateInput";
@@ -115,8 +116,8 @@ function emptyValues(data: BeTrackData): LeverFormValues {
     function: data.functions[0] ?? "",
     costCenter: "",
     pnlMap: defaultPnl?.id ?? "",
-    start: new Date().toISOString().slice(0, 10),
-    end: new Date().toISOString().slice(0, 10),
+    start: todayISO(),
+    end: todayISO(),
     status: "idea",
     progress: 0,
     risk: "low",

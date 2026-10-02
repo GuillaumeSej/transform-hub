@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Pencil, Plus, TriangleAlert } from "lucide-react";
@@ -338,8 +339,8 @@ export function AxisDetailClient() {
     id: newChantierId(),
     companyId: user?.companyId ?? "",
     programId: activeProgramId ?? "",
-    createdAt: new Date().toISOString().slice(0, 10),
-    lastUpdate: new Date().toISOString().slice(0, 10),
+    createdAt: todayISO(),
+    lastUpdate: todayISO(),
   });
   const chantierCreatePreview = (values: ChantierFormValues) => {
     if (!sa || values.axisIds.length === 0) return [];

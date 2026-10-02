@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -89,7 +90,7 @@ export default function AdminCompaniesPage() {
         }
       } else {
         const id = `c${Date.now()}`;
-        await saveCompany({ id, ...common, createdAt: new Date().toISOString().slice(0, 10) });
+        await saveCompany({ id, ...common, createdAt: todayISO() });
         // `onboarding=strategic` : propose aussitôt d'importer le plan stratégique depuis Excel
         // (voir `StrategicPlanOnboarding`, rendu par la page de détail).
         router.push(`/admin/companies/detail?id=${id}&onboarding=strategic`);

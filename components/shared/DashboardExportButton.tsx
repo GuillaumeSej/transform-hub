@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/shared/Button";
@@ -215,7 +216,7 @@ export function DashboardExportButton({
       }
 
       await pptx.writeFile({
-        fileName: `${fileNamePrefix}_${new Date().toISOString().slice(0, 10)}.pptx`,
+        fileName: `${fileNamePrefix}_${todayISO()}.pptx`,
       });
 
       if (failures > 0) {

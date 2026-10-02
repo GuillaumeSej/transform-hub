@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Download } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/shared/Card";
@@ -157,7 +158,7 @@ export function FinanceHierarchyTable({
     rows.push(toRow(t("finance.hierarchyTable.total", "Total"), totals));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Finance");
-    XLSX.writeFile(wb, `finance_${level.key}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `finance_${level.key}_${todayISO()}.xlsx`);
   };
 
   const numCell = "px-3 py-2 text-right tabular-nums";

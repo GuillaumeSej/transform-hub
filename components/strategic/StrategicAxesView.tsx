@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Plus } from "lucide-react";
@@ -411,7 +412,7 @@ export function StrategicAxesView() {
           onSubmit={async (values: AxisFormValues) => {
             try {
               // `createAxisFlow` : pilote/admin → direct ; tout autre acteur → refus (bouton masqué).
-              const today = new Date().toISOString().slice(0, 10);
+              const today = todayISO();
               const axis: StrategicAxis = {
                 ...values,
                 id: newAxisId(),

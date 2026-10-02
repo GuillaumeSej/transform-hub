@@ -1,5 +1,6 @@
 "use client";
 
+import { localDateOfInstant, todayISO } from "@/lib/dateUtils";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useRole } from "@/lib/hooks/useRole";
@@ -148,7 +149,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     const reachable = (...hrefs: (string | undefined)[]) =>
       hrefs.find((href) => !!href && canOpenRoute(user, href, "strategic"));
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     const companyId = user?.companyId ?? null;
     // Round 24 : un chantier peut appartenir à plusieurs axes — l'axe PRIMAIRE (`axisIds[0]`) est
     // utilisé ici pour router la notification vers une seule page d'axe, comportement voulu pour ce
@@ -192,8 +193,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       alerts.push({
         id,
         type: "red",
-        ts: latest?.reportedAt?.slice(0, 10) ?? today,
-        createdAt: latest?.reportedAt?.slice(0, 10) ?? today,
+        // Jour LOCAL de la saisie (`reportedAt` est un instant UTC complet).
+        ts: latest?.reportedAt ? localDateOfInstant(latest.reportedAt) : today,
+        createdAt: latest?.reportedAt ? localDateOfInstant(latest.reportedAt) : today,
         scope: indicator.id,
         scopeLabel: indicator.name,
         title: t("shared.appShell.strategicIndicatorTitle", "Indicateur à risque · {name}").replace(
@@ -295,8 +297,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       alerts.push({
         id: notice.id,
         type: notice.status === "approved" ? "green" : "red",
-        ts: notice.decidedAt.slice(0, 10),
-        createdAt: notice.decidedAt.slice(0, 10),
+        ts: localDateOfInstant(notice.decidedAt),
+        createdAt: localDateOfInstant(notice.decidedAt),
         scope: notice.targetId,
         scopeLabel: notice.targetName,
         title: (notice.status === "approved"
