@@ -4,11 +4,10 @@ import { useRef, useState } from "react";
 import type { WorkBook } from "xlsx";
 import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import {
-  STAFFING_IMPORT_HEADERS,
   STAFFING_IMPORT_ISSUES,
   STAFFING_IMPORT_SHEET_NAME,
-  buildStaffingTemplateRows,
-  staffingToExcelRows,
+  buildStaffingExportWorkbook,
+  buildStaffingTemplateWorkbook,
   validateStaffingImportRows,
   type StaffingImportError,
   type StaffingImportPreview,
@@ -94,14 +93,9 @@ export function StaffingImportButton({
   // SheetJS chargé au clic seulement (`await import("xlsx")`) : hors du JS initial de /effectifs.
   const downloadTemplate = async () => {
     const XLSX = await import("xlsx");
-    const wb = XLSX.utils.book_new();
     // Exemples construits avec un chantier/une équipe RÉELS mais commentés ("#") : ignorés à
     // l'import tant que l'utilisateur ne les active pas (voir buildStaffingTemplateRows).
-    const sheet = XLSX.utils.aoa_to_sheet([
-      [...STAFFING_IMPORT_HEADERS],
-      ...buildStaffingTemplateRows(chantiers, chantierActions, knownDepartments),
-    ]);
-    XLSX.utils.book_append_sheet(wb, sheet, STAFFING_IMPORT_SHEET_NAME);
+    const wb = buildStaffingTemplateWorkbook(XLSX, chantiers, chantierActions, knownDepartments);
     XLSX.writeFile(wb, "modele_effectifs.xlsx");
     showToast(
       t("staffingImport.templateDownloadedTitle"),
@@ -110,16 +104,11 @@ export function StaffingImportButton({
     );
   };
 
-  /** Export au format d'import (aller-retour : ré-importer le fichier inchangé ne crée rien). */
+  /** Export au format d'import (aller-retour : ré-importer le fichier inchangé ne change rien) —
+   *  dates en vraies cellules date Excel, colonne technique "ID ligne" pour le rapprochement. */
   const exportStaffing = async () => {
     const XLSX = await import("xlsx");
-    const rows = staffingToExcelRows(staffing, chantiers, chantierActions);
-    const wb = XLSX.utils.book_new();
-    const sheet =
-      rows.length > 0
-        ? XLSX.utils.json_to_sheet(rows, { header: [...STAFFING_IMPORT_HEADERS] })
-        : XLSX.utils.aoa_to_sheet([[...STAFFING_IMPORT_HEADERS]]);
-    XLSX.utils.book_append_sheet(wb, sheet, STAFFING_IMPORT_SHEET_NAME);
+    const wb = buildStaffingExportWorkbook(XLSX, staffing, chantiers, chantierActions);
     const d = new Date();
     const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     XLSX.writeFile(wb, `effectifs_${stamp}.xlsx`);
@@ -127,7 +116,7 @@ export function StaffingImportButton({
       t("shared.excelIO.exportSuccessTitle", "Export Excel généré"),
       t("staffingImport.exportDoneBody", "{n} ligne(s) de staffing exportée(s)").replace(
         "{n}",
-        String(rows.length)
+        String(staffing.length)
       ),
       "success"
     );
@@ -244,6 +233,10 @@ export function StaffingImportButton({
           <span>
             <strong className="text-rag-amber">{updateCount(preview)}</strong>{" "}
             {t("staffingImport.toUpdateLabel")}
+          </span>
+          <span>
+            <strong className="text-secondary">{preview?.unchanged ?? 0}</strong>{" "}
+            {t("staffingImport.unchangedLabel", "ligne(s) inchangée(s)")}
           </span>
           <span>
             <strong className="text-rag-red">{preview?.errors.length ?? 0}</strong>{" "}

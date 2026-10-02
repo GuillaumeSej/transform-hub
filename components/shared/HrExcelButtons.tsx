@@ -15,9 +15,8 @@ import {
   HR_IMPORT_ISSUES,
   HR_MOVEMENT_HEADERS,
   HR_MOVEMENT_SHEET,
+  buildHrExportWorkbook,
   buildHrImportPlan,
-  employeeToExcelRow,
-  movementToExcelRow,
   type HrImportPlan,
   type ProgramRef,
 } from "@/lib/hrExcel";
@@ -65,26 +64,8 @@ export function HrExcelButtons({
     const XLSX = await import("xlsx");
     const empList = employees ?? data.workforce.employees;
     const movList = movements ?? data.workforce.movements;
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      wb,
-      empList.length > 0
-        ? XLSX.utils.json_to_sheet(empList.map(employeeToExcelRow), {
-            header: [...HR_EMPLOYEE_HEADERS],
-          })
-        : XLSX.utils.aoa_to_sheet([[...HR_EMPLOYEE_HEADERS]]),
-      HR_EMPLOYEE_SHEET
-    );
-    XLSX.utils.book_append_sheet(
-      wb,
-      movList.length > 0
-        ? XLSX.utils.json_to_sheet(
-            movList.map((m) => movementToExcelRow(m, data, programs)),
-            { header: [...HR_MOVEMENT_HEADERS] }
-          )
-        : XLSX.utils.aoa_to_sheet([[...HR_MOVEMENT_HEADERS]]),
-      HR_MOVEMENT_SHEET
-    );
+    // Dates en vraies cellules date Excel (JJ/MM/AAAA), ré-importables à l'identique.
+    const wb = buildHrExportWorkbook(XLSX, empList, movList, data, programs);
     XLSX.writeFile(wb, `base_etp_${filtered ? "filtre_" : ""}${localDateStamp()}.xlsx`);
     showToast(
       t("shared.excelIO.exportSuccessTitle", "Export Excel généré"),
@@ -114,7 +95,7 @@ export function HrExcelButtons({
       t("shared.excelIO.templateDownloadedTitle", "Modèle téléchargé"),
       t(
         "shared.hrExcelButtons.templateDownloadedBody",
-        "Remplissez les colonnes puis importez le fichier"
+        "Remplissez les colonnes puis importez le fichier. En mise à jour, une cellule vide conserve la valeur existante ; un tiret « - » l'efface."
       ),
       "success"
     );

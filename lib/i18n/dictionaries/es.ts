@@ -1314,7 +1314,8 @@ const es: Record<string, string> = {
   "shared.hrExcelButtons.exportButton": "Exportar Excel",
   "shared.hrExcelButtons.importButton": "Importar Excel",
   "shared.hrExcelButtons.exportSuccessBody": "{emp} empleados · {mov} movimientos",
-  "shared.hrExcelButtons.templateDownloadedBody": "Rellene las columnas y luego importe el archivo",
+  "shared.hrExcelButtons.templateDownloadedBody":
+    "Rellene las columnas y luego importe el archivo. En una actualización, una celda vacía conserva el valor existente; un guion «-» lo borra.",
   "shared.hrExcelButtons.importDoneBody":
     "{emp} empleado(s) · {created} movimiento(s) creado(s), {updated} actualizado(s)",
   "shared.hrExcelButtons.employeesUnit": "empleado(s)",
@@ -2123,6 +2124,23 @@ const es: Record<string, string> = {
     "«{name}» no corresponde a ninguna cuenta: se conserva como texto, sin efecto en la visibilidad ni en las validaciones ({count} referencia(s))",
   "strategicImport.msg.personAmbiguous":
     "«{name}» corresponde a varias cuentas ({usernames}): no vinculado — indique el identificador exacto",
+  "strategicImport.msg.staffingFteTooHigh":
+    "«{column}» ({value}) supera el límite de {max} ETC por línea — reparta la necesidad en varias líneas",
+  "strategicImport.msg.staffingUnknownTeam":
+    "Equipo «{value}» ausente de la base de FTE (esperado: {expected})",
+  "strategicImport.msg.staffingNoTeams": "ningún equipo en la base de FTE",
+  "strategicImport.msg.staffingTeamLeftBase":
+    "Equipo «{value}» ausente de la base de FTE — línea existente actualizada igualmente",
+  "strategicImport.msg.staffingDatesMissing":
+    "Línea de FTE existente sin fecha de inicio o de fin — fechas por completar",
+  "strategicImport.msg.staffingOutsideProject":
+    "Fechas fuera del periodo del proyecto «{code}» ({start} → {end})",
+  "strategicImport.msg.staffingUnknownLineId":
+    "ID de línea «{id}» desconocido en este programa — línea vinculada sin identificador",
+  "strategicImport.msg.staffingDuplicateLineId":
+    "ID de línea «{id}» presente varias veces en la hoja (filas {rows}) — vacíe la celda «ID ligne» de las filas copiadas",
+  "strategicImport.msg.staffingDuplicateRow":
+    "Línea de FTE duplicada (mismo frente, proyecto, equipo y fechas que la fila {line})",
   "strategicImport.accountStatusOrphan":
     "cuenta de acceso creada pero perfil no guardado — complételo en Admin > Usuarios",
   "strategicImport.readErrorTitle": "Archivo ilegible",
@@ -2384,8 +2402,7 @@ const es: Record<string, string> = {
   "staffing.saveEdit": "Guardar",
   "staffing.validation.teamRequired": "Seleccione un equipo.",
   "staffing.validation.fteRequired": "Indique el número de ETC.",
-  "staffing.validation.fteInvalid":
-    "El número de ETC debe ser estrictamente positivo (p. ej. 0,5).",
+  "staffing.validation.fteInvalid": "El número de ETC debe ser un número (p. ej. 0,5).",
   "staffing.validation.startRequired": "La fecha de inicio es obligatoria.",
   "staffing.validation.startInvalid": "Fecha de inicio no válida.",
   "staffing.validation.endRequired": "La fecha de fin es obligatoria.",
@@ -2394,6 +2411,11 @@ const es: Record<string, string> = {
     "La fecha de fin debe ser igual o posterior a la fecha de inicio.",
   "staffing.validation.outsideProject":
     "Atención: estas fechas quedan fuera del periodo del proyecto.",
+  "staffing.validation.fteNotPositive": "El número de ETC debe ser estrictamente positivo.",
+  "staffing.validation.fteTooHigh":
+    "Como máximo {max} ETC por línea: reparta una necesidad mayor en varias líneas.",
+  "staffing.validation.teamUnknown": "Este equipo no existe en la base de FTE.",
+  "staffing.validation.teamLeftBase": "Atención: este equipo ya no figura en la base de FTE.",
 
   // ─── Página Personal movilizado (/effectifs, Plan Estratégico) ────────────
   "effectifs.title": "Presupuesto y personal movilizado",
@@ -2553,11 +2575,12 @@ const es: Record<string, string> = {
   "staffingImport.confirmButton": "Confirmar la importación",
   "staffingImport.toCreateLabel": "línea(s) a crear",
   "staffingImport.toUpdateLabel": "línea(s) a actualizar",
+  "staffingImport.unchangedLabel": "línea(s) sin cambios",
   "staffingImport.errorRow": "línea(s) con error",
   "staffingImport.lineLabel": "Línea",
   "staffingImport.templateDownloadedTitle": "Plantilla descargada",
   "staffingImport.templateDownloadedBody":
-    "Columnas: Proyecto (nombre exacto), Función, ETC, Fecha inicio, Fecha fin, Palanca (opcional, nombre exacto), Nota (opcional). Una línea que coincida con una entrada existente (mismo proyecto + función + fechas + palanca) se actualiza en lugar de duplicarse.",
+    "Columnas: Proyecto (nombre exacto), Función (equipo de la base de FTE), ETC (como máximo 5 por línea), Fecha inicio y Fecha fin (obligatorias), Palanca (opcional, nombre exacto), Nota (opcional), ID de línea (rellenado por la exportación, déjelo vacío para una línea nueva). Una línea existente se encuentra por su ID de línea (si no, proyecto + función + fechas + palanca) y se actualiza en lugar de duplicarse. Celda vacía = valor conservado; un guion «-» en Nota la borra.",
   "staffingImport.successMessage": "Importación completada",
   "staffingImport.importDoneBody":
     "{created} línea(s) creada(s) · {updated} línea(s) actualizada(s)",
@@ -3444,6 +3467,20 @@ const es: Record<string, string> = {
   "hrImport.issue.unknownSocialScheme": "Dispositivo social «{value}» desconocido — se usa «Autre»",
   "hrImport.issue.hrValidatedNotRealised": "«Validé RH» = Sí mientras el estado es «{status}»",
   "hrImport.issue.actualDateNotRealised": "Fecha real informada mientras el estado es «{status}»",
+  "hrImport.issue.fteOutOfRangeKept":
+    "{column} = {value} fuera de rango (0 a {max} ETC por persona; 80 % se escribe 0,8) — se conserva el valor existente",
+  "hrImport.issue.fteOutOfRangeDefault":
+    "{column} = {value} fuera de rango (0 a {max} ETC por persona; 80 % se escribe 0,8) — se usa {fallback}",
+  "hrImport.issue.negativeKept":
+    "{column} = {value}: no se aceptan valores negativos — se conserva el valor existente",
+  "hrImport.issue.negativeDefault":
+    "{column} = {value}: no se aceptan valores negativos — se usa {fallback}",
+  "hrImport.issue.amountHigh":
+    "{column} = {value}: importe inusualmente alto (más de {max}) — verifíquelo",
+  "hrImport.issue.movementFteHigh":
+    "{column} = {value}: más de {max} ETC para un solo movimiento — verifíquelo (un movimiento = una persona o un puesto)",
+  "hrImport.issue.clearNotAllowed":
+    "{column}: el guion «-» no puede borrar un valor obligatorio — se conserva el valor existente",
   "hrImport.rowPrefix": "{sheet} · fila {row}:",
   "hrImport.filePrefix": "{sheet}:",
   "hrImport.createdUnit": "creado(s)",
@@ -3463,8 +3500,7 @@ const es: Record<string, string> = {
   "staffingImport.issue.unknownFunction": "Equipo «{value}» desconocido (esperado: {expected})",
   "staffingImport.issue.functionLeftBase":
     "El equipo «{value}» ya no está en la base de FTE — línea existente actualizada de todos modos",
-  "staffingImport.issue.invalidFte":
-    "«ETP» debe ser un número mayor que 0 y como máximo {max} (leído: «{value}»)",
+  "staffingImport.issue.invalidFte": "«ETP» debe ser un número, p. ej. 0,5 (leído: «{value}»)",
   "staffingImport.issue.invalidDate":
     "{column} «{value}» ilegible o imposible (esperado DD/MM/AAAA o AAAA-MM-DD)",
   "staffingImport.issue.startAfterEnd":
@@ -3474,6 +3510,20 @@ const es: Record<string, string> = {
   "staffingImport.issue.duplicateRow":
     "Fila duplicada (mismo proyecto, equipo, fechas y palanca que la fila {other})",
   "staffingImport.issue.noDepartments": "ningún equipo en la base de FTE",
+  "staffingImport.issue.missingFunction": "«Fonction» es obligatorio (equipo de la base de FTE)",
+  "staffingImport.issue.missingFte": "«ETP» es obligatorio",
+  "staffingImport.issue.fteNotPositive": "«ETP» debe ser estrictamente positivo (leído: {value})",
+  "staffingImport.issue.fteTooHigh":
+    "«ETP» ({value}) supera el límite de {max} ETC por línea — reparta la necesidad en varias líneas",
+  "staffingImport.issue.missingDate": "«{column}» es obligatoria (fecha DD/MM/AAAA)",
+  "staffingImport.issue.datesMissing":
+    "Línea existente sin fecha de inicio o de fin — fechas por completar",
+  "staffingImport.issue.outsideProject":
+    "Fechas fuera del periodo de la palanca «{project}» ({start} → {end})",
+  "staffingImport.issue.unknownLineId":
+    "ID de línea «{id}» desconocido en este programa — línea vinculada sin identificador",
+  "staffingImport.issue.duplicateLineId":
+    "ID de línea «{id}» presente varias veces en el archivo (filas {rows}) — vacíe la celda «ID ligne» de las filas copiadas",
   "staffingImport.exportButton": "Exportar",
   "staffingImport.exportDoneBody": "{n} línea(s) de staffing exportada(s)",
   "adminHierarchy.issue.missingColumns": "Faltan columnas obligatorias: {columns}",

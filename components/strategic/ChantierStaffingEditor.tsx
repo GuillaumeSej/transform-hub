@@ -252,10 +252,14 @@ export function ChantierStaffingEditor({
   const chainJoiner = t("strategicFiche.chain.then", "puis");
 
   const selectedAction = actionDraft ? actionById.get(actionDraft) : undefined;
-  const validation = validateStaffingLine(
-    form,
-    selectedAction ? { start: selectedAction.start, end: selectedAction.end } : null
-  );
+  // Règle partagée avec les imports Excel (lib/staffingLineValidation.ts) : équipe de la base ETP
+  // (celle d'une ligne existante sortie de la base reste acceptée, avec avertissement), plafond
+  // d'ETP par ligne, dates obligatoires.
+  const validation = validateStaffingLine(form, {
+    projectRange: selectedAction ? { start: selectedAction.start, end: selectedAction.end } : null,
+    knownTeams: departmentNames.length > 0 ? departmentNames : undefined,
+    currentTeam: editing?.function,
+  });
 
   const resetForm = () => {
     setForm(EMPTY_STAFFING_LINE);

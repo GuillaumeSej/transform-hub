@@ -99,8 +99,8 @@ describe("import Excel du plan stratégique — fichier pré-rempli réel", () =
       ["AX1", "KPI", "Quantitatif", "Annuelle", "Atteindre 99,5", "99,5", "strategic_lead"],
     ]);
     add("ETP", [
-      ["Code Chantier", "Fonction (équipe, base ETP)", "Nombre d'ETP", "Date début"],
-      ["CH1", "Finance", "1,5", 46023],
+      ["Code Chantier", "Fonction (équipe, base ETP)", "Nombre d'ETP", "Date début", "Date fin"],
+      ["CH1", "Finance", "1,5", 46023, 46387],
     ]);
 
     const { toCreate, errors } = validateStrategicImportRows(

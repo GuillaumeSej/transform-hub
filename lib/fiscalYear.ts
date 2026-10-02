@@ -38,6 +38,15 @@ function isCalendarFy(fyStart: string): boolean {
   return m === 1 && d === 1;
 }
 
+/** Date de début de l'exercice qui commence en `year`, au jour `day` du mois `month` (1-12) —
+ *  BORNÉE au dernier jour du mois : un exercice qui démarre le 29/02 (année bissextile) commence
+ *  le 28/02 les autres années (auparavant « 2025-02-29 », date inexistante). */
+export function fiscalYearStartISO(year: number, month: number, day: number): string {
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const d = Math.min(day, lastDay);
+  return `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 /** Génère les FY successifs qui couvrent au moins la plage `[from, to]`. */
 export function generateFiscalYears(
   program: Pick<Program, "fyStart" | "fyEnd"> | null | undefined,
@@ -45,7 +54,9 @@ export function generateFiscalYears(
   toISO: string
 ): FiscalYearPeriod[] {
   if (!program?.fyStart || !program?.fyEnd) return [];
-  const startMonthDay = program.fyStart.slice(5); // "MM-DD"
+  const startMonth = Number(program.fyStart.slice(5, 7));
+  const startDay = Number(program.fyStart.slice(8, 10));
+  if (!(startMonth >= 1 && startMonth <= 12 && startDay >= 1 && startDay <= 31)) return [];
   const calendarFy = isCalendarFy(program.fyStart);
 
   const fromYear = Number(fromISO.slice(0, 4));
@@ -55,10 +66,10 @@ export function generateFiscalYears(
   const result: FiscalYearPeriod[] = [];
   // Étend légèrement pour couvrir les cas où la plage démarre avant le début de FY.
   for (let y = fromYear - 1; y <= toYear + 1; y++) {
-    const fyStartISO = `${y}-${startMonthDay}`;
+    const fyStartISO = fiscalYearStartISO(y, startMonth, startDay);
     // Fin du FY = veille du prochain démarrage — calcul UTC-safe pour ne pas dépendre du
     // fuseau horaire local qui pourrait reculer d'un jour.
-    const nextStart = new Date(`${y + 1}-${startMonthDay}T00:00:00Z`);
+    const nextStart = new Date(`${fiscalYearStartISO(y + 1, startMonth, startDay)}T00:00:00Z`);
     nextStart.setUTCDate(nextStart.getUTCDate() - 1);
     const fyEndISO = nextStart.toISOString().slice(0, 10);
     // Skippe les FY entièrement hors plage.

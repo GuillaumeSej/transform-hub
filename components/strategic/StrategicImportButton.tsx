@@ -25,6 +25,7 @@ import { isFirebaseErrorCode, usernameToSyntheticEmail } from "@/lib/auth";
 import { withSecondaryAuth } from "@/lib/firebase";
 import { saveUser } from "@/lib/firestore/admin";
 import { StrategicImportWriteError } from "@/lib/firestore/strategicImportWrite";
+import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useCompanyUsers } from "@/lib/hooks/useCompanyUsers";
 import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
@@ -173,6 +174,7 @@ export function StrategicImportButton({
   const { t } = useTranslation();
   const { user, isGlobalAdmin, isCompanyAdmin } = useRole();
   const companyUsers = useCompanyUsers(companyId ?? null);
+  const { departmentNames, loading: departmentsLoading } = useCompanyDepartments(companyId);
   const canCreateAccounts = isGlobalAdmin || isCompanyAdmin;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<StrategicImportPreview | null>(null);
@@ -286,7 +288,12 @@ export function StrategicImportButton({
         programId,
         maturityStages,
         user?.username,
-        { users: companyUsers.map((u) => ({ username: u.username, name: u.name })) }
+        {
+          users: companyUsers.map((u) => ({ username: u.username, name: u.name })),
+          // Feuille ETP : équipes de la base ETP (même règle que l'écran) — non contrôlées tant
+          // que la base n'est pas chargée.
+          knownDepartments: departmentsLoading ? undefined : departmentNames,
+        }
       );
     } catch (err) {
       showToast(
