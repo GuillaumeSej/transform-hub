@@ -9,6 +9,7 @@ import { Popover } from "@/components/shared/Popover";
 import { subscribeHierarchyNodes } from "@/lib/firestore/admin";
 import { getImpactNatures } from "@/lib/impactConfig";
 import {
+  fteDirectionOf,
   impactDatesOf,
   impactDatesPatch,
   impactKindPatch,
@@ -598,7 +599,7 @@ export function ImpactsEditor({
                       {isFte && (
                         <Segmented
                           disabled={!rowEditable}
-                          value={imp.fteDirection ?? "hire"}
+                          value={fteDirectionOf(imp)}
                           options={[
                             {
                               value: "hire",

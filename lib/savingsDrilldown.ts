@@ -7,6 +7,7 @@ import {
   reforecastSnapshotOf,
 } from "@/lib/engine";
 import { resolveHierarchyNodeChain } from "@/lib/hierarchyLogic";
+import { isFteHire } from "@/lib/impactKinds";
 
 /**
  * Logique pure du détail (pop-up) de chaque étape de la cascade des économies. Mêmes fonctions de
@@ -73,7 +74,7 @@ export function leverOpexRecSegments(
       if (imp.natureId) add(`n:${imp.natureId}`, natureLabel(imp.natureId), imp.amount);
       else if (tech) add(`t:${tech.toLowerCase()}`, tech, imp.amount);
       else add("other", labels.other, imp.amount);
-    } else if (imp.type === "fte" && imp.fteDirection === "hire") {
+    } else if (isFteHire(imp)) {
       add("fte", labels.fte, imp.amount);
     }
   }

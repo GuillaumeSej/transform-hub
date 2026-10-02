@@ -1,5 +1,6 @@
 import type { AuthUser, Lever, LeverImpact, LeverStatus } from "@/types";
 import { isAnyAdmin } from "@/lib/roleProfiles";
+import { isFteDeparture } from "@/lib/impactKinds";
 
 export type ImpactStatus = NonNullable<LeverImpact["status"]>;
 
@@ -12,7 +13,8 @@ export function isRecurringImpact(imp: LeverImpact): boolean {
 
 /** Date de début propre à l'impact (sans repli sur le levier). */
 export function impactStartDateOf(imp: LeverImpact): string | undefined {
-  const isGain = imp.type === "saving" || (imp.type === "fte" && imp.fteDirection === "departure");
+  // Départ ETP : sens absent = départ (`fteDirectionOf`), daté comme un gain.
+  const isGain = imp.type === "saving" || isFteDeparture(imp);
   return isGain ? imp.gainDate : (imp.capexStartDate ?? imp.capexDeploymentDate);
 }
 
@@ -88,7 +90,7 @@ export function isLeverLaunched(status: LeverStatus): boolean {
 
 /** Impact de GAIN (économie, ou départ ETP) — par opposition aux coûts et aux recrutements. */
 export function isGainImpact(imp: LeverImpact): boolean {
-  return imp.type === "saving" || (imp.type === "fte" && imp.fteDirection !== "hire");
+  return imp.type === "saving" || isFteDeparture(imp);
 }
 
 /**

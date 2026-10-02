@@ -710,24 +710,30 @@ describe("engine — byGeo / byFunction / pnlImpact", () => {
 });
 
 describe("engine — sCurve3 granularity", () => {
+  // Date du jour FIGÉE (le test échouait depuis le 01/10/2026 : trimestre en cours = T4, dont le
+  // point prenait le mois courant pour toutes les courbes). Octobre = trimestre en cours.
+  const today = new Date(2026, 9, 2);
+
   it("returns 12 monthly points by default", () => {
     const data = makeData({ levers: [baseLever] });
-    expect(sCurve3(data)).toHaveLength(12);
+    expect(sCurve3(data, "month", undefined, today)).toHaveLength(12);
   });
 
   it("returns 4 quarterly points when granularity is quarter", () => {
     const data = makeData({ levers: [baseLever] });
-    const points = sCurve3(data, "quarter");
+    const points = sCurve3(data, "quarter", undefined, today);
     expect(points).toHaveLength(4);
     expect(points.map((p) => p.month)).toEqual(["Q1 2026", "Q2 2026", "Q3 2026", "Q4 2026"]);
   });
 
   it("quarterly points match the monthly end-of-quarter values", () => {
     const data = makeData({ levers: [baseLever] });
-    const monthly = sCurve3(data, "month");
-    const quarterly = sCurve3(data, "quarter");
+    const monthly = sCurve3(data, "month", undefined, today);
+    const quarterly = sCurve3(data, "quarter", undefined, today);
     expect(quarterly[0].planned).toBe(monthly[2].planned);
+    // Trimestre EN COURS : plan / réactualisé à la fin du trimestre (pas au mois courant).
     expect(quarterly[3].planned).toBe(monthly[11].planned);
+    expect(quarterly[3].reforecast).toBe(monthly[11].reforecast);
   });
 });
 

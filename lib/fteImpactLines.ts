@@ -1,4 +1,5 @@
 import type { LeverImpact } from "@/types";
+import { isFteHire } from "@/lib/impactKinds";
 
 /** Contribution ETP signée d'UNE ligne d'impact — même règle que `engine.leverImpactTotals`
  *  (`fteNet`) : ligne ETP = +effectif si recrutement, −effectif sinon ; ligne financière (gain ou
@@ -6,7 +7,7 @@ import type { LeverImpact } from "@/types";
 export function impactFteContribution(imp: LeverImpact): number {
   if (imp.type === "fte") {
     const count = imp.fteCount ?? 0;
-    return imp.fteDirection === "hire" ? count : -count;
+    return isFteHire(imp) ? count : -count;
   }
   return imp.fteCount ?? 0;
 }

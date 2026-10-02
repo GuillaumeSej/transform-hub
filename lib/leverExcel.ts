@@ -6,6 +6,7 @@ import {
   SAVING_TYPE_LABEL,
 } from "@/lib/leverExcelImport";
 import { DEFAULT_LIFECYCLE_STAGES, resolveStatusLabel } from "@/lib/status-config";
+import { isFteHire } from "@/lib/impactKinds";
 import type { Alert, BeTrackData, Lever, LifecycleStage, RiskLevel } from "@/types";
 
 /**
@@ -136,7 +137,7 @@ export function leverImpactsToExcelRows(lever: Lever): Record<string, string | n
         : "",
     "Nature de l'impact": imp.natureId ?? "",
     Technologie: imp.technology ?? "",
-    Sens: imp.type === "fte" ? (imp.fteDirection === "hire" ? "Recrutement" : "Départ") : "",
+    Sens: imp.type === "fte" ? (isFteHire(imp) ? "Recrutement" : "Départ") : "",
     "Statut impact": imp.status
       ? { planned: "Planifié", done: "Réalisé", ongoing: "En cours" }[imp.status]
       : "",

@@ -459,13 +459,16 @@ describe("P&L and finance table give identical totals for the same period filter
           nature: "opex_rec",
           amount: 0.6,
           capexDeploymentDate: "2025-12-01",
-          endDate: "2026-05-31",
+          // Fin en février (et non mai) : avec le bloc macro de L2 désormais récurrent sans fin,
+          // T4 (jan–mar 2026) valait 0,65 pile — égalité au dixième sensible au flottant.
+          endDate: "2026-02-28",
           hierarchyLeafId: "B",
         }),
         imp("c", { type: "cost", nature: "capex", amount: 4, capexDeploymentDate: "2025-10-01" }),
       ],
     }),
-    // Levier sans ligne nette : bloc unique proratisé sur sa période [début, fin].
+    // Levier sans ligne nette : bloc unique, récurrent sans fin depuis son début (sa fin n'arrête
+    // pas le run-rate, comme un gain détaillé sans date de fin).
     lever({
       id: "L2",
       pnlMap: "P2",

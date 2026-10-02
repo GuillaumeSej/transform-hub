@@ -2,6 +2,24 @@ import type { LeverImpact } from "@/types";
 
 export type ImpactKind = "opex" | "capex" | "gain" | "fte";
 
+/** Sens EFFECTIF d'un impact ETP — SEULE lecture de `fteDirection` (totaux, net signé, statut,
+ *  dates, plages P&L). Convention : champ absent = DÉPART (cf. import Excel, qui n'écrit pas le
+ *  défaut « departure ») ; avant, les totaux le traitaient en départ mais le statut/les dates
+ *  testaient `=== "departure"` → un départ sans sens n'était jamais réalisé et mal daté. */
+export function fteDirectionOf(imp: Pick<LeverImpact, "fteDirection">): "hire" | "departure" {
+  return imp.fteDirection === "hire" ? "hire" : "departure";
+}
+
+/** Impact ETP de type DÉPART (sens absent compris, voir `fteDirectionOf`). */
+export function isFteDeparture(imp: Pick<LeverImpact, "type" | "fteDirection">): boolean {
+  return imp.type === "fte" && fteDirectionOf(imp) === "departure";
+}
+
+/** Impact ETP de type RECRUTEMENT. */
+export function isFteHire(imp: Pick<LeverImpact, "type" | "fteDirection">): boolean {
+  return imp.type === "fte" && fteDirectionOf(imp) === "hire";
+}
+
 export function impactKindOf(imp: LeverImpact): ImpactKind {
   if (imp.type === "fte") return "fte";
   if (imp.type === "saving") return "gain";
@@ -52,8 +70,7 @@ export function impactTypeOf(imp: LeverImpact): ImpactTypeKey {
 export function impactDatesOf(imp: LeverImpact): { start?: string; end?: string } {
   const key = impactTypeOf(imp);
   if (key === "gain_rec" || key === "gain_oneoff") return { start: imp.gainDate, end: imp.endDate };
-  if (key === "fte" && imp.fteDirection === "departure")
-    return { start: imp.gainDate, end: imp.endDate };
+  if (isFteDeparture(imp)) return { start: imp.gainDate, end: imp.endDate };
   if (key === "capex" && imp.capexAllocationMode === "smoothed")
     return { start: imp.capexStartDate, end: imp.capexDeploymentDate };
   return { start: imp.capexDeploymentDate ?? imp.capexStartDate, end: imp.endDate };
@@ -68,11 +85,7 @@ export function impactDatesPatch(
   const patch: Partial<LeverImpact> = {};
   const has = (v: string | null | undefined) => v !== undefined;
   const val = (v: string | null | undefined) => v || undefined;
-  if (
-    key === "gain_rec" ||
-    key === "gain_oneoff" ||
-    (key === "fte" && imp.fteDirection === "departure")
-  ) {
+  if (key === "gain_rec" || key === "gain_oneoff" || isFteDeparture(imp)) {
     if (has(dates.start)) patch.gainDate = val(dates.start);
     if (has(dates.end)) patch.endDate = val(dates.end);
   } else if (key === "capex" && imp.capexAllocationMode === "smoothed") {

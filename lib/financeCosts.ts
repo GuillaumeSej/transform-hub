@@ -7,7 +7,7 @@ import type {
   Workstream,
 } from "@/types";
 import { MONTH_LABELS, isInvestCostEngaged, leverImpactsOf, leverOpexRecOf } from "@/lib/engine";
-import { impactDatesOf } from "@/lib/impactKinds";
+import { impactDatesOf, isFteHire } from "@/lib/impactKinds";
 import { parseLocalDate } from "@/lib/impactStatus";
 
 /**
@@ -203,7 +203,7 @@ export function recurringOpexReconciliation(data: BeTrackData): {
   let fteHires = 0;
   for (const lever of active) {
     for (const imp of leverImpactsOf(lever)) {
-      if (imp.type === "fte" && imp.fteDirection === "hire") fteHires += imp.amount;
+      if (isFteHire(imp)) fteHires += imp.amount;
     }
   }
   const dashboard = round2(active.reduce((s, l) => s + leverOpexRecOf(l), 0));
@@ -392,7 +392,7 @@ function recurringFlows(data: BeTrackData): RecurringFlow[] {
     for (const imp of leverImpactsOf(lever)) {
       let kind: RecurringFlow["kind"] | null = null;
       if (imp.type === "saving") kind = imp.gainRecurrence === "oneoff" ? null : "gain";
-      else if (imp.type === "fte") kind = imp.fteDirection === "hire" ? "opexRec" : "gain";
+      else if (imp.type === "fte") kind = isFteHire(imp) ? "opexRec" : "gain";
       else if (imp.nature === "opex_rec") kind = "opexRec";
       if (!kind || !imp.amount) continue;
       const { start, end } = impactDatesOf(imp);
