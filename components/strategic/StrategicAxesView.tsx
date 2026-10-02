@@ -42,6 +42,7 @@ import { canCreateAxis, hierarchyContextFor } from "@/lib/strategicApprovals";
 import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
 import { canDesignateAxisSponsor } from "@/lib/strategicFiche";
 import type { StrategicImportWrites } from "@/lib/strategicExcelImport";
+import { chantiersWithoutAxis } from "@/lib/strategicIntegrity";
 import type { Chantier, MilestoneId, StrategicAxis } from "@/types";
 
 /**
@@ -568,6 +569,7 @@ export function StrategicAxesView() {
             <AxisChantierProjetAccordion
               axes={data.axes}
               chantiers={data.chantiers}
+              programAxisIds={data.programAxisIds}
               chantierActions={data.chantierActions}
               onProjetClick={openChantierPanel}
               onDeliverableClick={openChantierPanelOnDeliverable}
@@ -590,10 +592,15 @@ export function StrategicAxesView() {
       >
         <div className="divide-y divide-border">
           {data.chantiers.map((c) => {
-            const axisNames = data.axes
-              .filter((a) => c.axisIds.includes(a.id))
-              .map((a) => a.name)
-              .join(", ");
+            // Lot 3 : chantier dont aucun axe n'existe plus (axe supprimé) → « Sans axe » plutôt
+            // qu'un tiret (même groupe que l'accordéon et la feuille de route).
+            const axisNames =
+              chantiersWithoutAxis([c], data.programAxisIds).length > 0
+                ? t("strategicAxes.unassignedAxis", "Sans axe")
+                : data.axes
+                    .filter((a) => c.axisIds.includes(a.id))
+                    .map((a) => a.name)
+                    .join(", ");
             return (
               <button
                 key={c.id}

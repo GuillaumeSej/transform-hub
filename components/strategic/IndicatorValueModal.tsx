@@ -7,6 +7,9 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
   currentPeriod,
+  futurePeriodMessage,
+  FutureMeasurementPeriodError,
+  isFuturePeriod,
   findPeriodCollision,
   isBaseline,
   MeasurementPeriodCollisionError,
@@ -165,7 +168,9 @@ export function IndicatorValueModal({
       showToast(
         err instanceof MeasurementPeriodCollisionError
           ? collisionMessage(err.period)
-          : t("kpi.saveError"),
+          : err instanceof FutureMeasurementPeriodError
+            ? futurePeriodMessage(t, err)
+            : t("kpi.saveError"),
         indicator.name,
         "error"
       );
@@ -189,6 +194,15 @@ export function IndicatorValueModal({
           periodFormatHint(indicator.frequency)
         ),
         "",
+        "error"
+      );
+    }
+    // Période postérieure à la période en cours : refusée (saisie comme correction) — une mesure
+    // future deviendrait la « dernière valeur » de l'indicateur.
+    if (isFuturePeriod(p, indicator.frequency)) {
+      return showToast(
+        futurePeriodMessage(t, { period: p, current: currentPeriod(indicator.frequency) }),
+        indicator.name,
         "error"
       );
     }
@@ -256,7 +270,9 @@ export function IndicatorValueModal({
       showToast(
         err instanceof MeasurementPeriodCollisionError
           ? collisionMessage(err.period)
-          : t("kpi.saveError"),
+          : err instanceof FutureMeasurementPeriodError
+            ? futurePeriodMessage(t, err)
+            : t("kpi.saveError"),
         indicator.name,
         "error"
       );

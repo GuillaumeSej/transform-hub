@@ -131,6 +131,7 @@ const es: Record<string, string> = {
   "validation.sa.status.pending": "Pendiente",
   "validation.sa.status.approved": "Validada",
   "validation.sa.status.rejected": "Rechazada",
+  "validation.sa.status.cancelled": "Cancelada",
   "validation.sa.status.direct": "Aplicada (información)",
   "validation.sa.adjustValue": "Valor a aplicar (modificable antes de aceptar)",
   "validation.sa.tab.todo": "Por validar",
@@ -1684,6 +1685,7 @@ const es: Record<string, string> = {
   "strategicAxes.budgetByChantierModalTitle": "Reparto del presupuesto por obra",
   "strategicAxes.noIndicatorsShort": "Ningún indicador",
   "strategicAxes.unassigned": "Sin asignar",
+  "strategicAxes.unassignedAxis": "Sin eje",
   "strategicAxes.tree.chantiersN": "{n} proyectos",
   "strategicAxes.tree.chantiersNOne": "{n} proyecto",
   "strategicAxes.tree.projetsN": "{n} iniciativas",
@@ -3329,6 +3331,8 @@ const es: Record<string, string> = {
   "strategicApprovals.alert.rejectedTitle": "Solicitud rechazada · {label}",
   "strategicApprovals.alert.approvedDesc": "{decider} ha validado {phrase}{comment}.",
   "strategicApprovals.alert.rejectedDesc": "{decider} ha rechazado {phrase}{comment}.",
+  "strategicApprovals.alert.cancelledTitle": "Solicitud cancelada · {label}",
+  "strategicApprovals.alert.cancelledDesc": "Su solicitud de {phrase} ha sido cancelada{comment}.",
   "strategicApprovals.alert.decidedApprovedTitle": "Validación registrada · {label}",
   "strategicApprovals.alert.decidedRejectedTitle": "Rechazo registrado · {label}",
   "strategicApprovals.alert.decidedApprovedDesc":
@@ -3526,6 +3530,8 @@ const es: Record<string, string> = {
   "projetWeights.overTotalWarning":
     "Los pesos declarados superan el 100 %: se normalizan en el cálculo y los proyectos sin ponderar reciben el peso medio declarado.",
   "kpi.periodInvalid": "Período no válido — formato esperado: {format}",
+  "kpi.periodFuture":
+    "El período {period} aún no ha comenzado: solo se pueden introducir valores hasta el período en curso ({current}).",
   "kpi.measurement.periodTakenNoRight":
     "Ya existe un valor para el período {period} y no está autorizado a reemplazarlo.",
   "kpi.measurement.replaceConfirm": "Reemplazar el valor",

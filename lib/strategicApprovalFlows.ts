@@ -29,6 +29,7 @@
  */
 import { advanceMilestone, milestonePassageTarget } from "@/lib/axisLogic";
 import {
+  assertMeasurementPeriodNotFuture,
   findPeriodCollision,
   MeasurementPeriodCollisionError,
   submitIndicatorValue,
@@ -220,14 +221,17 @@ export function approverLabel(
 /** Saisie d'une valeur KPI (KPI et KPI marché) : publiée directement, ou soumise à validation.
  *  `existing` (mesures connues de l'indicateur) : une période DÉJÀ renseignée lève
  *  `MeasurementPeriodCollisionError` AVANT toute écriture/demande — l'appelant propose alors de
- *  remplacer la mesure existante (correction routée, `editKpiValueFlow`) ou refuse. */
+ *  remplacer la mesure existante (correction routée, `editKpiValueFlow`) ou refuse. Une période
+ *  POSTÉRIEURE à la période en cours (fréquence de l'indicateur, si fournie) lève
+ *  `FutureMeasurementPeriodError` avant toute écriture/demande. */
 export async function submitKpiValueFlow<M>(
   gate: ApprovalGate | null | undefined,
-  indicator: Pick<Indicator, "id" | "name">,
+  indicator: Pick<Indicator, "id" | "name"> & Partial<Pick<Indicator, "frequency">>,
   input: IndicatorValueInput,
   addMeasurement: (input: IndicatorValueInput) => Promise<M>,
   existing?: Pick<IndicatorMeasurement, "id" | "indicatorId" | "period">[]
 ): Promise<FlowOutcome> {
+  assertMeasurementPeriodNotFuture(input.period, indicator.frequency);
   if (existing && findPeriodCollision(existing, indicator.id, input.period)) {
     throw new MeasurementPeriodCollisionError(input.period.trim());
   }
@@ -263,11 +267,12 @@ function assertKpiRoute(route: KpiCorrectionRoute, verb: "corriger" | "supprimer
  * `lib/kpiCorrectionRouting.ts`) : `"direct"` ⇒ correction appliquée (pilote/admin) ; `"request"`
  * ⇒ demande `"kpi_value"` portant `measurementId` (le doc est réécrit à l'approbation, voir
  * `applyApprovedPayload`) ; `"forbidden"`/`"retry"` ⇒ lève. Sans `route` : même porte
- * `"kpi_value"` que la saisie. Sans porte : lève.
+ * `"kpi_value"` que la saisie. Sans porte : lève. Période corrigée postérieure à la période en
+ * cours : `FutureMeasurementPeriodError` (même règle que la saisie).
  */
 export async function editKpiValueFlow(
   gate: ApprovalGate | null | undefined,
-  indicator: Pick<Indicator, "id" | "name">,
+  indicator: Pick<Indicator, "id" | "name"> & Partial<Pick<Indicator, "frequency">>,
   measurement: Pick<IndicatorMeasurement, "id" | "period" | "value" | "note">,
   patch: MeasurementEditPatch,
   updateMeasurement: (id: string, patch: MeasurementEditPatch) => Promise<unknown>,
@@ -280,6 +285,7 @@ export async function editKpiValueFlow(
     name: indicator.name,
   };
   const period = patch.period !== undefined ? patch.period.trim() : measurement.period;
+  assertMeasurementPeriodNotFuture(period, indicator.frequency);
   const value = patch.value === undefined ? measurement.value : (patch.value ?? undefined);
   const note = (patch.note === undefined ? measurement.note : (patch.note ?? undefined))?.trim();
   const payload: KpiValueApprovalPayload = {

@@ -66,15 +66,8 @@ import {
   saveStrategicApproval,
   decideStrategicApproval,
 } from "@/lib/firestore/strategicApprovals";
-import { saveChantierAction, deleteChantierAction } from "@/lib/firestore/chantierActions";
-import { deleteChantier, saveChantier } from "@/lib/firestore/chantiers";
-import { deleteChantierStaffing, saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
-import { saveStrategicAxis } from "@/lib/firestore/strategicAxes";
-import { saveIndicator } from "@/lib/firestore/indicators";
-import {
-  deleteIndicatorMeasurement,
-  saveIndicatorMeasurement,
-} from "@/lib/firestore/indicatorMeasurements";
+import { saveChantierAction } from "@/lib/firestore/chantierActions";
+import { commitApprovalEffects } from "@/lib/firestore/strategicCascade";
 import { appendAuditEntries } from "@/lib/firestore/levers";
 import {
   kpiCorrectionDecisionInformees,
@@ -120,17 +113,22 @@ type ApprovalUser = Pick<
   "username" | "name" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin"
 >;
 
-async function runEffects(effects: ApprovalEffects): Promise<void> {
-  for (const a of effects.saveActions) await saveChantierAction(a);
-  for (const id of effects.deleteActionIds) await deleteChantierAction(id);
-  for (const id of effects.deleteChantierIds) await deleteChantier(id);
-  for (const m of effects.saveMeasurements) await saveIndicatorMeasurement(m);
-  for (const id of effects.deleteMeasurementIds) await deleteIndicatorMeasurement(id);
-  for (const i of effects.saveIndicators) await saveIndicator(i);
-  for (const s of effects.saveStaffing) await saveChantierStaffing(s);
-  for (const c of effects.saveChantiers) await saveChantier(c);
-  for (const ax of effects.saveAxes) await saveStrategicAxis(ax);
-  for (const id of effects.deleteStaffingIds) await deleteChantierStaffing(id);
+/** Écrit les effets d'une décision en UN SEUL `writeBatch` (lot 3) — une suppression approuvée
+ *  emporte toute sa cascade (lignes ETP, indicateurs + mesures, dépendances, demandes en attente
+ *  annulées), voir `commitApprovalEffects` (lib/firestore/strategicCascade.ts). `approvalId` = la
+ *  demande en cours de décision, jamais annulée par sa propre cascade. */
+async function runEffects(
+  effects: ApprovalEffects,
+  companyId: string | null | undefined,
+  actor: Pick<AuthUser, "username" | "name">,
+  approvalId?: string
+): Promise<void> {
+  if (!companyId) throw new Error("Session ou programme indisponible");
+  await commitApprovalEffects(effects, {
+    companyId,
+    actor: { username: actor.username, name: actor.name },
+    approvalId,
+  });
 }
 
 export type UseStrategicApprovalsArgs = {
@@ -252,7 +250,7 @@ export function useStrategicApprovals({
         data: dataRef.current,
       });
       await saveStrategicApproval(approval);
-      await runEffects(applyRequestSideEffects(approval, dataRef.current));
+      await runEffects(applyRequestSideEffects(approval, dataRef.current), companyId, user);
       logAudit(approval, "requested");
       return approval;
     },
@@ -367,7 +365,10 @@ export function useStrategicApprovals({
         await runEffects(
           status === "approved"
             ? applyApprovedPayload(decided, dataRef.current)
-            : applyRejectedPayload(decided, dataRef.current)
+            : applyRejectedPayload(decided, dataRef.current),
+          companyId,
+          user,
+          approval.id
         );
       }
       const saved = await decideStrategicApproval(
@@ -413,13 +414,16 @@ export function useStrategicApprovals({
               applyApprovedPayload(
                 { ...saved, payload: { ...payload, stage: "axis" as const } },
                 dataRef.current
-              )
+              ),
+              companyId,
+              user,
+              saved.id
             );
           }
         }
       }
     },
-    [user, logAudit]
+    [user, companyId, logAudit]
   );
 
   const approve = useCallback(

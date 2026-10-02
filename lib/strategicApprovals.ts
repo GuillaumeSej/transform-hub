@@ -10,6 +10,7 @@ import {
   resolveStrategicRoleForProgram,
 } from "@/lib/axisLogic";
 import { samePeriod } from "@/lib/indicatorPeriod";
+import { assertMeasurementPeriodNotFuture } from "@/lib/kpiHistory";
 import { localDateOfInstant } from "@/lib/dateUtils";
 import {
   adminUsernames,
@@ -200,7 +201,10 @@ export type ValidationCategory = "pilotage" | "planning" | "designation" | "free
 export type GatedCategory = Exclude<ValidationCategory, "free">;
 
 export type StrategicApprovalTargetType = "axe" | "chantier" | "projet" | "indicateur";
-export type StrategicApprovalStatus = "pending" | "approved" | "rejected";
+/** `"cancelled"` (lot 3) : demande close SANS décision parce que sa cible a été supprimée
+ *  (`planDeletionCascade`, lib/strategicIntegrity.ts) — `decidedBy` = auteur de la suppression,
+ *  `decisionComment` = « Cible supprimée ». Ni validée ni refusée. */
+export type StrategicApprovalStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export type StrategicApprovalTarget = {
   type: StrategicApprovalTargetType;
@@ -1556,8 +1560,11 @@ export type ApprovalEffects = {
   saveChantiers: Chantier[];
   /** Axes à écrire — `"axe_create"` / `"axe_update"` approuvés. */
   saveAxes: StrategicAxis[];
-  /** Lignes ETP à supprimer — `"staffing_update"` op "delete" approuvé. */
+  /** Lignes ETP à supprimer — `"staffing_update"` op "delete" approuvé, et (lot 3) lignes d'un
+   *  projet/chantier supprimé. */
   deleteStaffingIds: string[];
+  /** Indicateurs à supprimer (lot 3) — ceux d'un chantier supprimé (`"chantier_delete"`). */
+  deleteIndicatorIds: string[];
 };
 
 function emptyEffects(): ApprovalEffects {
@@ -1572,6 +1579,7 @@ function emptyEffects(): ApprovalEffects {
     saveChantiers: [],
     saveAxes: [],
     deleteStaffingIds: [],
+    deleteIndicatorIds: [],
   };
 }
 
@@ -1652,6 +1660,11 @@ export function applyApprovedPayload(
       const p = approval.payload as KpiValueApprovalPayload;
       const decidedAt = approval.decidedAt ?? new Date().toISOString();
       const all = data.measurements ?? [];
+      // Période postérieure à la période en cours (à la date de DÉCISION) : refusée, comme à la
+      // saisie — la demande reste en attente, l'approbateur la refuse avec ce motif.
+      if (!p.remove) {
+        assertMeasurementPeriodNotFuture(p.period, indicator.frequency, new Date(decidedAt));
+      }
       if (p.measurementId) {
         // Correction / suppression d'une mesure déjà publiée.
         const existing = all.find((m) => m.id === p.measurementId);
@@ -1761,13 +1774,34 @@ export function applyApprovedPayload(
     }
     case "projet_delete": {
       effects.deleteActionIds.push(approval.targetId);
+      // Lot 3 : ses lignes ETP partent avec lui (elles restaient comptées dans le taux de
+      // staffing). La cascade COMPLÈTE (prérequis qui le citent, demandes en attente qui le visent)
+      // est recalculée sur la base fraîche à l'écriture (`commitApprovalEffects`).
+      for (const s of data.staffing ?? []) {
+        if (s.actionId === approval.targetId) effects.deleteStaffingIds.push(s.id);
+      }
       return effects;
     }
     case "chantier_delete": {
       effects.deleteChantierIds.push(approval.targetId);
-      // Pas d'orphelins : les projets du chantier partent avec lui.
+      // Pas d'orphelins : les projets du chantier partent avec lui…
       for (const a of data.chantierActions) {
         if (a.chantierId === approval.targetId) effects.deleteActionIds.push(a.id);
+      }
+      // … ainsi que (lot 3) ses lignes ETP (niveau chantier ET projet), ses indicateurs et leurs
+      // mesures — complétés par la cascade relue en base à l'écriture (`commitApprovalEffects`).
+      const actionIds = new Set(effects.deleteActionIds);
+      for (const s of data.staffing ?? []) {
+        if (s.chantierId === approval.targetId || (s.actionId && actionIds.has(s.actionId))) {
+          effects.deleteStaffingIds.push(s.id);
+        }
+      }
+      for (const i of data.indicators) {
+        if (i.chantierId === approval.targetId) effects.deleteIndicatorIds.push(i.id);
+      }
+      const indicatorIds = new Set(effects.deleteIndicatorIds);
+      for (const m of data.measurements ?? []) {
+        if (indicatorIds.has(m.indicatorId)) effects.deleteMeasurementIds.push(m.id);
       }
       return effects;
     }
@@ -2564,6 +2598,29 @@ export function buildApprovalAlerts(
     }
     const decidedAt = a.decidedAt ?? a.requestedAt;
     if (new Date(decidedAt).getTime() < cutoff) continue;
+    if (a.status === "cancelled") {
+      // Annulée par la suppression de sa cible : le demandeur est informé (ni « validée » ni
+      // « refusée ») ; rien pour l'auteur de la suppression.
+      if (a.requestedBy === user.username && a.decidedBy !== user.username) {
+        const comment = a.decisionComment ? ` — ${a.decisionComment}` : "";
+        alerts.push({
+          ...common,
+          id: `strategic-approval-${a.id}-cancelled`,
+          type: "blue",
+          ts: localDateOfInstant(decidedAt),
+          createdAt: decidedAt,
+          title: `Demande annulée · ${label}`,
+          desc: `Votre demande de ${verbPhrase(a, false)} a été annulée${comment}.`,
+          i18n: {
+            titleKey: "strategicApprovals.alert.cancelledTitle",
+            descKey: "strategicApprovals.alert.cancelledDesc",
+            vars: { label, comment },
+            nested: { phrase },
+          },
+        });
+      }
+      continue;
+    }
     const approved = a.status === "approved";
     const comment = a.decisionComment ? ` — ${a.decisionComment}` : "";
     if (a.requestedBy === user.username) {

@@ -1825,13 +1825,30 @@ export function programProgressPct(
   return Math.round(total / withChantiers.length);
 }
 
-/** Nombre de jalons franchis d'un projet, et total de jalons (E0→E4). */
-export function projetMilestoneCounts(action: Pick<ChantierAction, "milestones">): {
+/**
+ * Nombre de jalons franchis d'un projet, et total de jalons (E0→E4).
+ *
+ * Le DERNIER jalon (E4) n'a pas de jalon suivant vers lequel « passer » : il n'entre dans
+ * `passedMilestones` que par une demande explicite, si bien qu'un projet TERMINÉ (jalon courant =
+ * E4, check-list complète, avancement 100 %) affichait « 4/5 jalons ». Dans cet état final, E4
+ * compte comme franchi. `progressPct` : avancement COMPLET du projet (`projetProgress`, items
+ * automatiques compris) — omis, repli sur `milestoneProgressPct` (items auto non répondus).
+ */
+export function projetMilestoneCounts(
+  action: MilestoneProgressEntity,
+  progressPct?: number
+): {
   passed: number;
   total: number;
 } {
+  const passedList = action.milestones?.passedMilestones ?? [];
+  const lastMilestone = MILESTONE_ORDER[MILESTONE_ORDER.length - 1];
+  const finalReached =
+    action.milestones?.currentMilestone === lastMilestone &&
+    !passedList.includes(lastMilestone) &&
+    (progressPct ?? milestoneProgressPct(action)) >= 100;
   return {
-    passed: action.milestones?.passedMilestones.length ?? 0,
+    passed: passedList.length + (finalReached ? 1 : 0),
     total: Object.keys(MILESTONE_WEIGHT_DELTA).length,
   };
 }

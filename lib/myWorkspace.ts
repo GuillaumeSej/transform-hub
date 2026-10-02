@@ -77,7 +77,7 @@ import {
   type MilestoneApprovalPayload,
   type StrategicApproval,
 } from "@/lib/strategicApprovals";
-import { canFillIndicatorValue, currentPeriod } from "@/lib/kpiHistory";
+import { canFillIndicatorValue, currentPeriod, isFuturePeriod } from "@/lib/kpiHistory";
 import { comparePeriods, indicatorPeriodRange } from "@/lib/indicatorPeriod";
 import {
   getAuthorizedPrograms,
@@ -351,8 +351,14 @@ export function missingMeasurementPeriod(
     const createdMonth = Number(created.slice(0, 4)) * 12 + Number(created.slice(5, 7)) - 1;
     if (createdMonth > expected.endMonthIndex) return undefined; // créé après la période attendue
   }
+  // Une mesure sur une période FUTURE (postérieure à la période en cours — saisie erronée d'avant
+  // le garde-fou, ex. 2027-03) ne couvre pas la période attendue : le rappel reste affiché.
+  const now = new Date(`${today}T00:00:00`);
   const covered = measurements.some(
-    (m) => m.indicatorId === indicator.id && comparePeriods(m.period, expected.period) >= 0
+    (m) =>
+      m.indicatorId === indicator.id &&
+      comparePeriods(m.period, expected.period) >= 0 &&
+      !isFuturePeriod(m.period, indicator.frequency, now)
   );
   return covered ? undefined : expected.period;
 }
@@ -708,7 +714,12 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
         programId: a.programId,
         dedupeKey: a.kind === "milestone" ? `projet:${a.targetId}:milestone` : `strategic:${a.id}`,
       };
-      if (decidableIds.has(a.id) && (nominal || !pilotView)) {
+      // « À valider » = EXACTEMENT les demandes décidables maintenant (`bucketApprovals().pending`,
+      // `canDecide`) — même règle que le badge Validation et la cloche (`buildApprovalAlerts`).
+      // Auparavant un profil de pilotage (admin, cto…) n'y voyait que les demandes où il était
+      // approbateur NOMMÉ : un admin décidable via le repli admin avait 3 au badge / 3 à la
+      // cloche mais 0 ici.
+      if (decidableIds.has(a.id)) {
         todo.push({
           ...base,
           id: `strategicApproval:${a.id}`,
