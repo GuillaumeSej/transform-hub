@@ -2688,6 +2688,8 @@ const en: Record<string, string> = {
   "finance.chart.engagedTitleOneOff": "One-off costs (CAPEX + one-off OPEX): committed vs upcoming",
   "finance.chart.engagedScopeNote":
     'Total {total} (committed {engaged} · upcoming {upcoming}) — recurring OPEX excluded, same scope as the dashboard "CAPEX & one-off costs" KPI.',
+  "finance.chart.engagedUndetailedNote":
+    "Including {amount} on {count} lever(s) without detailed cost lines (committed pro rata to progress, as in the KPI).",
   "finance.chart.hierarchyTitleAllCosts":
     "Total costs incl. recurring OPEX, by P&L account / cost center",
   "finance.chart.hierarchyScopeNote":
@@ -3210,7 +3212,7 @@ const en: Record<string, string> = {
   "chart.waterfall.drill.intro.initial":
     "Frozen annualized plan of all levers (including cancelled).",
   "chart.waterfall.drill.intro.reforecast":
-    "Reforecast work packages only: annualized gain before (initial plan) and after reforecast.",
+    "Active levers whose reforecast value differs from the initial plan: annualized gain before (initial plan) and after reforecast.",
   "chart.waterfall.drill.intro.cancelled":
     "Initial annualized plan of cancelled levers, removed from the target.",
   "chart.waterfall.drill.intro.gross":

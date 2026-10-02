@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   bucketCostsByPeriod,
   bucketInvestVsSavingsByPeriod,
@@ -6,11 +6,13 @@ import {
   bucketSavingsByPeriod,
   costRowsForPeriod,
   costsByHierarchyNode,
+  engagedVsUpcomingRows,
   flattenCostImpacts,
   flattenOneOffGainImpacts,
   flattenSavingImpacts,
   groupCostsByWorkstream,
   investCostRowsBySegment,
+  investVsSavingsRowsForPeriod,
   isCostEngaged,
   isInvestNature,
   recurringOpexReconciliation,
@@ -18,6 +20,7 @@ import {
   splitByNature,
   splitEngagedVsUpcoming,
 } from "@/lib/financeCosts";
+import { impactYearRange, programSummary } from "@/lib/engine";
 import type {
   ActionImpact,
   BeTrackData,
@@ -683,5 +686,114 @@ describe("financeCosts — recurringOpexReconciliation (OPEX récurrent Finance 
     expect(r.fteHires).toBe(0.35);
     expect(r.dashboard).toBe(2.05);
     expect(r.other).toBe(0);
+  });
+});
+
+// ─── Audit lot 2 — cohérence des chiffres entre écrans ────────────────────────────────────────
+
+describe("financeCosts — périodes en EXERCICES fiscaux (audit lot 2, point 1)", () => {
+  // Exercice d'avril (fyStartMonth = 3) : un CAPEX de 1,1 en février 2026 tombe dans l'exercice
+  // 2025 (FY25/26), un OPEX ponctuel de 1,7 en septembre 2026 dans l'exercice 2026 (FY26/27).
+  // Avant : découpage CIVIL — une seule barre « 2026 » de 2,8, alors que le P&L et le tableau de la
+  // même page (exercices) affichent 1,1 + 1,7.
+  const capexImp = impact({
+    id: "c1",
+    nature: "capex",
+    amount: 1.1,
+    capexDeploymentDate: "2026-02-15",
+  });
+  const oneOffImp = impact({
+    id: "c2",
+    nature: "oneoff",
+    amount: 1.7,
+    capexDeploymentDate: "2026-09-01",
+  });
+  const gainImp = impact({
+    id: "s1",
+    type: "saving",
+    amount: 1.2,
+    gainDate: "2026-01-01",
+    endDate: "2026-12-31",
+  });
+  const lever = { ...baseLever, impacts: [capexImp, oneOffImp, gainImp] };
+  const data = makeData([lever]);
+  const FY_APRIL = 3;
+
+  it("Engagement des coûts : barres par exercice (1,1 | 1,7), plus une année civile de 2,8", () => {
+    expect(bucketCostsByPeriod(data, "year", isInvestNature, FY_APRIL)).toEqual([
+      { period: "FY25/26", sortKey: "2025", delta: 1.1, cumulative: 1.1 },
+      { period: "FY26/27", sortKey: "2026", delta: 1.7, cumulative: 2.8 },
+    ]);
+    // Même exercice que le moteur du P&L / tableau Finance (`impactYearRange`, exercices).
+    expect(impactYearRange(capexImp, lever, FY_APRIL)?.[0]).toBe(2025);
+    expect(impactYearRange(oneOffImp, lever, FY_APRIL)?.[0]).toBe(2026);
+    // Détail au clic d'une barre = sa valeur.
+    const rows = costRowsForPeriod(data, "year", "2025", isInvestNature, FY_APRIL);
+    expect(rows.reduce((s, r) => s + r.amount, 0)).toBe(1.1);
+  });
+
+  it("trimestres FISCAUX : février = Q4 de l'exercice 2025, septembre = Q2 de l'exercice 2026", () => {
+    expect(bucketCostsByPeriod(data, "quarter", isInvestNature, FY_APRIL)).toEqual([
+      { period: "Q4 FY25/26", sortKey: "2025-Q4", delta: 1.1, cumulative: 1.1 },
+      { period: "Q2 FY26/27", sortKey: "2026-Q2", delta: 1.7, cumulative: 2.8 },
+    ]);
+  });
+
+  it("Invest vs Savings : investissement et run-rate ventilés par exercice", () => {
+    const points = bucketInvestVsSavingsByPeriod(data, "year", FY_APRIL);
+    expect(points.map((p) => [p.period, p.investCost, p.grossSavings])).toEqual([
+      ["FY25/26", 1.1, 0.3], // janv.-mars 2026 : 3 × 0,1
+      ["FY26/27", 1.7, 0.9], // avr.-déc. 2026 : 9 × 0,1
+      ["FY27/28", 0, 0], // horizon : 12 mois après la dernière date
+    ]);
+    const rows = investVsSavingsRowsForPeriod(data, "year", "2025", FY_APRIL);
+    expect(rows[0].net).toBe(-0.8);
+  });
+
+  it("exercice civil (défaut) : libellés et découpage inchangés", () => {
+    expect(bucketCostsByPeriod(data, "year", isInvestNature)).toEqual([
+      { period: "2026", sortKey: "2026", delta: 2.8, cumulative: 2.8 },
+    ]);
+  });
+});
+
+describe("financeCosts — donut « Coûts ponctuels » = KPI du dashboard (audit lot 2, point 3)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("inclut les leviers sans ligne de coût (prorata de l'avancement, comme le KPI)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
+    // Levier détaillé : CAPEX 1,0 déployé (engagé) + OPEX ponctuel 1,8 à venir.
+    const detailed: Lever = {
+      ...baseLever,
+      id: "LD",
+      impacts: [
+        impact({ id: "d1", nature: "capex", amount: 1, capexDeploymentDate: "2026-03-01" }),
+        impact({ id: "d2", nature: "oneoff", amount: 1.8, capexDeploymentDate: "2026-12-01" }),
+      ],
+    };
+    // Levier « macro » : coûts saisis au niveau du levier (0,4 + 0,1), avancement 60 %.
+    const macro: Lever = {
+      ...baseLever,
+      id: "LM",
+      capex: 0.4,
+      opexOneOff: 0.1,
+      impacts: [],
+      actions: [action({ id: "AM", declaredProgressPct: 60 })],
+    };
+    const data = makeData([detailed, macro]);
+    const kpi = programSummary(data);
+    expect(kpi.engagedCosts).toBe(1.3);
+    expect(kpi.reforecastCosts).toBe(3.3);
+    // Avant : 1,0 / 2,8 (36 %) — le levier macro était exclu du donut.
+    const split = splitEngagedVsUpcoming(data);
+    expect(split).toEqual({ engaged: 1.3, upcoming: 2, total: 3.3 });
+    const detail = engagedVsUpcomingRows(data);
+    expect(detail.undetailed).toEqual({ engaged: 0.3, upcoming: 0.2, leverCount: 1 });
+    // Le détail par chantier / levier retombe sur les segments.
+    const sum = (rows: { amount: number }[]) =>
+      Math.round(rows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
+    expect(sum(detail.engagedRows)).toBe(1.3);
+    expect(sum(detail.upcomingRows)).toBe(2);
   });
 });

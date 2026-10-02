@@ -2734,6 +2734,8 @@ const es: Record<string, string> = {
     "Costes puntuales (CAPEX + OPEX puntual): comprometidos vs futuros",
   "finance.chart.engagedScopeNote":
     "Total {total} (comprometido {engaged} · futuro {upcoming}) — OPEX recurrente excluido, mismo perímetro que el KPI «CAPEX y costes puntuales» del dashboard.",
+  "finance.chart.engagedUndetailedNote":
+    "De ello, {amount} en {count} palanca(s) sin línea de coste detallada (comprometido a prorrata del avance, como en el KPI).",
   "finance.chart.hierarchyTitleAllCosts":
     "Costes totales incl. OPEX recurrente, por cuenta P&L / centro de coste",
   "finance.chart.hierarchyScopeNote":
@@ -3163,7 +3165,7 @@ const es: Record<string, string> = {
   "chart.waterfall.drill.intro.initial":
     "Plan congelado anualizado de todas las palancas (incluidas las canceladas).",
   "chart.waterfall.drill.intro.reforecast":
-    "Solo los proyectos reprevistos: ganancia anualizada antes (plan inicial) y después.",
+    "Palancas activas cuyo valor reprevisto difiere del plan inicial: ganancia anualizada antes (plan inicial) y después.",
   "chart.waterfall.drill.intro.cancelled":
     "Plan inicial anualizado de las palancas canceladas, retiradas del objetivo.",
   "chart.waterfall.drill.intro.gross":

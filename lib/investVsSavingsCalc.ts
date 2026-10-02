@@ -94,9 +94,12 @@ export function buildInvestVsSavingsCalc(
   granularity: FinanceGranularity,
   periodKey: string | null,
   /** Points déjà calculés par le graphique (évite de les recalculer) — optionnel. */
-  precomputedPoints?: InvestVsSavingsPoint[]
+  precomputedPoints?: InvestVsSavingsPoint[],
+  /** Mois (0-11) de début d'exercice — le même que le graphique (périodes fiscales). */
+  fyStartMonth = 0
 ): InvestVsSavingsCalc | null {
-  const points = precomputedPoints ?? bucketInvestVsSavingsByPeriod(data, granularity);
+  const points =
+    precomputedPoints ?? bucketInvestVsSavingsByPeriod(data, granularity, fyStartMonth);
   if (points.length === 0) return null;
   const payback = investVsSavingsPayback(points);
 
@@ -107,7 +110,7 @@ export function buildInvestVsSavingsCalc(
   if (periodKey === null) {
     scoped = points;
     // Horizon complet : mêmes flux que les barres (run-rate compris), agrégés par levier en une passe.
-    rows = mergeLeverRows(investVsSavingsRowsForPeriod(data, granularity, null));
+    rows = mergeLeverRows(investVsSavingsRowsForPeriod(data, granularity, null, fyStartMonth));
     const first = points[0].period;
     const last = points[points.length - 1].period;
     periodLabel = first === last ? first : `${first} → ${last}`;
@@ -116,7 +119,7 @@ export function buildInvestVsSavingsCalc(
     const point = points.find((p) => p.sortKey === periodKey);
     if (!point) return null;
     scoped = [point];
-    rows = investVsSavingsRowsForPeriod(data, granularity, periodKey);
+    rows = investVsSavingsRowsForPeriod(data, granularity, periodKey, fyStartMonth);
     periodLabel = point.period;
     cumulative = point.netCumulative;
   }

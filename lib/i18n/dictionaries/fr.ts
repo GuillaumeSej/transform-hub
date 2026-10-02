@@ -2839,6 +2839,8 @@ const fr: Record<string, string> = {
     "Coûts ponctuels (CAPEX + OPEX ponctuel) : engagés vs à venir",
   "finance.chart.engagedScopeNote":
     "Total {total} (engagé {engaged} · à venir {upcoming}) — OPEX récurrent exclu, même périmètre que le KPI « CAPEX & coûts ponctuels » du dashboard.",
+  "finance.chart.engagedUndetailedNote":
+    "Dont {amount} sur {count} levier(s) sans ligne de coût détaillée (engagé au prorata de l'avancement, comme le KPI).",
   "finance.chart.hierarchyTitleAllCosts":
     "Coûts totaux yc OPEX récurrent, par compte P&L / centre de coût",
   "finance.chart.hierarchyScopeNote":
@@ -3357,7 +3359,7 @@ const fr: Record<string, string> = {
   "chart.waterfall.drill.intro.initial":
     "Plan figé annualisé de tous les leviers (y compris annulés).",
   "chart.waterfall.drill.intro.reforecast":
-    "Uniquement les chantiers réactualisés : gain annualisé avant (plan initial) et après réactualisation.",
+    "Leviers actifs dont la valeur réactualisée s'écarte du plan initial : gain annualisé avant (plan initial) et après réactualisation.",
   "chart.waterfall.drill.intro.cancelled":
     "Plan initial annualisé des leviers annulés, retirés de la cible.",
   "chart.waterfall.drill.intro.gross":
