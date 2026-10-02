@@ -3872,6 +3872,11 @@ const es: Record<string, string> = {
     "Filtros no aplicables a las palancas (solo movimientos): {filters}.",
   "hr.fteCoverage.periodNotApplied":
     "El periodo solo se aplica a los movimientos: las palancas se cuentan sobre todo el programa.",
+  // Lote 3 — cálculo sobre el programa completo: etiquetas de agregados fuera del perímetro.
+  "strategicScope.outOfScopeChantier": "Iniciativa fuera de su perímetro",
+  "strategicPrerequisite.outOfScope": "Prerrequisito fuera de su perímetro",
+  "effectifs.staffingRate.otherChantiers": "Otras iniciativas (fuera de su perímetro)",
+  "effectifs.moneyBudget.otherChantiers": "Otras iniciativas",
 };
 
 export default es;

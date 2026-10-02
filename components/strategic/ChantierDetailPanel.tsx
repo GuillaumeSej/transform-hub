@@ -86,6 +86,7 @@ import { EMPTY_BUDGET, rollupBudgets } from "@/lib/budgetRollup";
 import { aggregateLinkedKpis, readKpi } from "@/lib/chantierKpis";
 import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
+import { maskDependencyAlerts, maskDependencyOverviewRows } from "@/lib/strategicProgramScope";
 import {
   approverLabel,
   createProjetFlow,
@@ -2088,17 +2089,40 @@ export function ChantierDetailPanel({
     [chantier, chantierActions, data.projetProgress]
   );
 
+  // Lot 3 : dépendances et prérequis résolus sur le programme COMPLET (même verdict pour tous
+  // les profils) ; ce qui est hors du périmètre du lecteur n'est jamais nommé.
+  const outOfScopeChantierLabel = t(
+    "strategicScope.outOfScopeChantier",
+    "Chantier hors de votre périmètre"
+  );
+  const prerequisiteScope = useMemo(
+    () => ({
+      visibleActionIds: data.visibleActionIds,
+      outOfScopeLabel: t("strategicPrerequisite.outOfScope", "Prérequis hors de votre périmètre"),
+    }),
+    [data.visibleActionIds, t]
+  );
+
   // Alertes de dépendance dont CE chantier est le côté bloqué (`sourceId`) — même valeur affichée
   // sur la carte "Dépendances / Prérequis" de CHAQUE levier (round 7, décision actée : les
   // dépendances restent une donnée de chantier, pas de levier).
   const chantierBlockingAlerts = useMemo(
     () =>
       chantier
-        ? chantierDependencyAlerts(data.chantiers, data.chantierActions).filter(
-            (a) => a.sourceId === chantier.id
-          )
+        ? maskDependencyAlerts(
+            chantierDependencyAlerts(data.program.chantiers, data.program.chantierActions),
+            data.visibleChantierIds,
+            outOfScopeChantierLabel,
+            "source"
+          ).filter((a) => a.sourceId === chantier.id)
         : [],
-    [chantier, data.chantiers, data.chantierActions]
+    [
+      chantier,
+      data.program.chantiers,
+      data.program.chantierActions,
+      data.visibleChantierIds,
+      outOfScopeChantierLabel,
+    ]
   );
 
   // Carte "Dépendances" de la Vue d'ensemble : dépendances du chantier ET de ses projets
@@ -2107,11 +2131,25 @@ export function ChantierDetailPanel({
   const dependencyRows = useMemo(
     () =>
       chantier
-        ? chantierDependencyOverview(chantier, data.chantiers, data.chantierActions, {
-            progressOf: data.projetProgress,
-          })
+        ? maskDependencyOverviewRows(
+            chantierDependencyOverview(
+              chantier,
+              data.program.chantiers,
+              data.program.chantierActions,
+              { progressOf: data.projetProgress }
+            ),
+            data.visibleChantierIds,
+            outOfScopeChantierLabel
+          )
         : [],
-    [chantier, data.chantiers, data.chantierActions, data.projetProgress]
+    [
+      chantier,
+      data.program.chantiers,
+      data.program.chantierActions,
+      data.projetProgress,
+      data.visibleChantierIds,
+      outOfScopeChantierLabel,
+    ]
   );
 
   // Bloc "critères de succès" — texte libre, sauvegardé au blur (pas de bouton dédié : cohérent
@@ -3712,8 +3750,9 @@ export function ChantierDetailPanel({
                   const actionDeliverables = normalizeDeliverables(eff.deliverables);
                   const startInfo = canStartAction(
                     action,
-                    data.chantierActions,
-                    data.projetProgress
+                    data.program.chantierActions,
+                    data.projetProgress,
+                    prerequisiteScope
                   );
                   // Défaut défensif pour un levier créé avant l'introduction des jalons E0→E4 (round
                   // 5, déplacé au levier round 7) — ou jamais encore touché : "encore à E0, rien de

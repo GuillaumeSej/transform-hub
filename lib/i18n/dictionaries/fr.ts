@@ -3969,6 +3969,11 @@ const fr: Record<string, string> = {
     "Filtres non applicables aux leviers (mouvements uniquement) : {filters}.",
   "hr.fteCoverage.periodNotApplied":
     "La période ne s'applique qu'aux mouvements : les leviers sont comptés sur tout le programme.",
+  // Lot 3 — calcul sur le programme complet : libellés des agrégats hors périmètre du lecteur.
+  "strategicScope.outOfScopeChantier": "Chantier hors de votre périmètre",
+  "strategicPrerequisite.outOfScope": "Prérequis hors de votre périmètre",
+  "effectifs.staffingRate.otherChantiers": "Autres chantiers (hors de votre périmètre)",
+  "effectifs.moneyBudget.otherChantiers": "Autres chantiers",
 };
 
 export default fr;

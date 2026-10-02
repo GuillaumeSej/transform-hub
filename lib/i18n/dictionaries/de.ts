@@ -3888,6 +3888,11 @@ const de: Record<string, string> = {
     "Nicht auf Hebel anwendbare Filter (nur Bewegungen): {filters}.",
   "hr.fteCoverage.periodNotApplied":
     "Der Zeitraum gilt nur für Bewegungen: Hebel werden über das gesamte Programm gezählt.",
+  // Lot 3 — Berechnung auf dem gesamten Programm: Bezeichnungen der Aggregate außerhalb des Bereichs.
+  "strategicScope.outOfScopeChantier": "Handlungsfeld außerhalb Ihres Bereichs",
+  "strategicPrerequisite.outOfScope": "Voraussetzung außerhalb Ihres Bereichs",
+  "effectifs.staffingRate.otherChantiers": "Andere Handlungsfelder (außerhalb Ihres Bereichs)",
+  "effectifs.moneyBudget.otherChantiers": "Andere Handlungsfelder",
 };
 
 export default de;

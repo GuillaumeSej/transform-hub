@@ -164,7 +164,13 @@ export function AxisChantierProjetAccordion({
   clickableActionIds = "all",
   progressOf = (a) => milestoneProgressPct(a),
   users,
+  progressBase,
 }: {
+  /** Programme COMPLET (`useStrategicData().program`, lot 3) : base du % d'AXE, pour que l'axe
+   *  affiche le même avancement quel que soit le lecteur (60 % pour l'admin, 20 % pour un non
+   *  habilité avant correction) — les chantiers masqués comptent, sans être listés. Omis = calcul
+   *  sur `chantiers`/`chantierActions` visibles. */
+  progressBase?: { chantiers: Chantier[]; chantierActions: ChantierAction[] };
   /** Annuaire : sponsors/responsables affichés par leur NOM (repli : identifiant brut). */
   users?: Pick<AuthUser, "username" | "name">[];
   /** Ordre d'apparition = numérotation "Axe {n}" (position 1-based, jamais retriée). */
@@ -260,7 +266,12 @@ export function AxisChantierProjetAccordion({
                 "{n} chantiers",
                 "{n} chantier"
               )}
-              pct={axisProgressPct(axis.id, chantiers, chantierActions, progressOf)}
+              pct={axisProgressPct(
+                axis.id,
+                progressBase?.chantiers ?? chantiers,
+                progressBase?.chantierActions ?? chantierActions,
+                progressOf
+              )}
             />
 
             {axisOpen && (

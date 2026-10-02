@@ -2469,7 +2469,10 @@ export function buildApprovalAlerts(
   approvals: StrategicApproval[],
   user: Actor | null | undefined,
   data: StrategicApprovalData,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** Données servant aux LIBELLÉS (lot 3) : celles, filtrées, du lecteur — `data` (programme
+   *  complet) ne sert qu'à décider qui peut traiter quoi (`canDecide`). Défaut : `data`. */
+  display: StrategicApprovalData = data
 ): Alert[] {
   if (!user) return [];
   const alerts: Alert[] = [];
@@ -2477,7 +2480,7 @@ export function buildApprovalAlerts(
   for (const a of approvals) {
     const requester = displayName(a.requestedBy, data.users, a.requestedByName);
     const decider = displayName(a.decidedBy, data.users, a.decidedByName);
-    const label = describeApproval(a, data).subject;
+    const label = describeApproval(a, display).subject;
     const phrase = nounPhraseI18n(a);
     const common = {
       scope: a.targetId,
@@ -2497,7 +2500,7 @@ export function buildApprovalAlerts(
     ) {
       const decidedAt = a.decidedAt ?? a.requestedAt;
       if (new Date(decidedAt).getTime() >= cutoff) {
-        const notice = kpiCorrectionNoticeText(a, data);
+        const notice = kpiCorrectionNoticeText(a, display);
         alerts.push({
           ...common,
           id: `strategic-approval-${a.id}-info`,

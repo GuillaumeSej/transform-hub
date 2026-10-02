@@ -575,6 +575,7 @@ export function StrategicAxesView() {
               expandAllSignal={expandAllSignal}
               clickableActionIds={data.clickableActionIds}
               progressOf={data.projetProgress}
+              progressBase={data.program}
               users={data.users}
             />
           </div>

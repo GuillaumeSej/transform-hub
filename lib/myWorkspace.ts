@@ -40,6 +40,7 @@
  */
 import { resolveApprovalQueue, resolveRealizedApprovalQueue } from "@/lib/hooks/useApprovalQueue";
 import type { StrategicData } from "@/lib/hooks/useStrategicData";
+import type { StrategicProgramData } from "@/lib/strategicProgramScope";
 import { generateAlerts } from "@/lib/alertEngine";
 import { alertTitle } from "@/lib/alertText";
 import { leverProgressPct, workstreamProgressPct } from "@/lib/engine";
@@ -146,6 +147,14 @@ export type MyWorkspaceStrategicInput = Pick<
   projetProgress?: ProjetProgressLookup;
   /** Demandes de validation stratégiques du programme (`useStrategicApprovals().approvals`). */
   approvals?: StrategicApproval[];
+  /** Collections NON filtrées du programme (`useStrategicData().program`, lot 3) : santé et
+   *  avancement (axe, chantier, programme) y sont calculés pour afficher le MÊME chiffre que pour
+   *  tout autre profil. Les lignes du périmètre restent celles des entités VISIBLES ci-dessus.
+   *  Absent = calcul sur les collections visibles (appelants historiques, tests). */
+  program?: Pick<
+    StrategicProgramData,
+    "axes" | "chantiers" | "chantierActions" | "indicators" | "measurements"
+  >;
 };
 
 export type MyWorkspaceInput = {
@@ -866,18 +875,27 @@ export function performanceProgramProgressPct(levers: Lever[]): number | undefin
   return pct ?? undefined;
 }
 
+/** Base de CALCUL du Plan Stratégique : le programme complet s'il est fourni (lot 3), sinon les
+ *  collections visibles. */
+function strategicCalcBase(strategic: MyWorkspaceStrategicInput) {
+  return strategic.program ?? strategic;
+}
+
 function strategicHealthLookup(strategic: MyWorkspaceStrategicInput) {
   const cache = new Map<string, WorkspaceHealth>();
+  // Santé résolue sur le programme COMPLET (lot 3) : une dépendance vers un chantier masqué rend
+  // un chantier « critique » pour tous les profils, pas seulement pour l'admin.
+  const base = strategicCalcBase(strategic);
   return (chantier: Chantier): WorkspaceHealth => {
     const hit = cache.get(chantier.id);
     if (hit) return hit;
     const h = chantierHealthToWorkspace(
       chantierHealthState(
         chantier,
-        strategic.indicators,
-        strategic.measurements,
-        strategic.chantiers,
-        strategic.chantierActions
+        base.indicators,
+        base.measurements,
+        base.chantiers,
+        base.chantierActions
       )
     );
     cache.set(chantier.id, h);
@@ -926,6 +944,9 @@ function buildPerimeter(
 
   if (strategic) {
     const { axes, chantiers, chantierActions } = strategic;
+    // Lot 3 : avancement et santé calculés sur le programme COMPLET (`calc`), lignes du périmètre
+    // limitées aux entités visibles.
+    const calc = strategicCalcBase(strategic);
     const progressOf: ProjetProgressLookup =
       strategic.projetProgress ?? ((a) => milestoneProgressPct(a));
     const healthOf = strategicHealthLookup(strategic);
@@ -933,7 +954,7 @@ function buildPerimeter(
 
     for (const axis of axes as StrategicAxis[]) {
       if (axis.owner !== user.username) continue;
-      const own = chantiers.filter((c) => c.axisIds.includes(axis.id));
+      const own = calc.chantiers.filter((c) => c.axisIds.includes(axis.id));
       out.push({
         id: `axis:${axis.id}`,
         kind: "axis",
@@ -941,8 +962,9 @@ function buildPerimeter(
         label: axis.name,
         role: t("me.role.axisSponsor", "Sponsor d'axe"),
         health: worstHealth(own.map(healthOf)),
-        // Même % que la feuille de route / l'accordéon d'axe (`axisProgressPct`), audit fix #2.
-        progressPct: axisProgressPct(axis.id, chantiers, chantierActions, progressOf),
+        // Même % que la feuille de route / l'accordéon d'axe (`axisProgressPct`), audit fix #2 —
+        // sur le programme complet (lot 3).
+        progressPct: axisProgressPct(axis.id, calc.chantiers, calc.chantierActions, progressOf),
         href: leverHref(axis.id),
         programId: strategic.programId,
       });
@@ -960,7 +982,7 @@ function buildPerimeter(
         health: healthOf(chantier),
         // Même % que la fiche chantier, le Gantt et la feuille de route (moyenne PONDÉRÉE par
         // `chantierWeightPct`, `chantierDeclaredProgress`), audit fix #2.
-        progressPct: chantierDeclaredProgress(chantier.id, chantierActions, progressOf),
+        progressPct: chantierDeclaredProgress(chantier.id, calc.chantierActions, progressOf),
         href: chantierHref(chantier.id),
         programId: chantier.programId ?? strategic.programId,
       });
@@ -1023,14 +1045,17 @@ function buildPilotPerimeter(
         const progressOf: ProjetProgressLookup =
           strategic.projetProgress ?? ((a) => milestoneProgressPct(a));
         const healthOf = strategicHealthLookup(strategic);
-        health = worstHealth(strategic.chantiers.map(healthOf));
+        // Lot 3 : agrégats PROGRAMME calculés sur le programme COMPLET — même santé et même % pour
+        // tous les profils (34 % pour l'admin, 21 % pour un non habilité avant correction).
+        const calc = strategicCalcBase(strategic);
+        health = worstHealth(calc.chantiers.map(healthOf));
         // Le dashboard stratégique n'a pas d'agrégat programme : `programProgressPct` prolonge la
         // chaîne projet → chantier (pondéré) → axe (moyenne des chantiers) → programme (moyenne
         // des axes portant au moins un chantier), audit fix #2.
         progressPct = programProgressPct(
-          strategic.axes,
-          strategic.chantiers,
-          strategic.chantierActions,
+          calc.axes,
+          calc.chantiers,
+          calc.chantierActions,
           progressOf
         );
       }

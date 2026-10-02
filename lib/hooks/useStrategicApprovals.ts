@@ -112,6 +112,7 @@ import {
   type StrategicApprovalTarget,
 } from "@/lib/strategicApprovals";
 import type { ApprovalStep } from "@/lib/strategicHierarchy";
+import type { StrategicProgramData } from "@/lib/strategicProgramScope";
 import type { Alert, AuthUser } from "@/types";
 
 type ApprovalUser = Pick<
@@ -136,7 +137,12 @@ export type UseStrategicApprovalsArgs = {
   user: ApprovalUser | null | undefined;
   companyId: string | null | undefined;
   programId: string | null | undefined;
-  data: Omit<StrategicApprovalData, "programId">;
+  /** Données VISIBLES du lecteur (`useStrategicData`) — libellés des alertes. Si elles portent
+   *  `program` (collections NON filtrées du programme, `useStrategicData().program`), le routage,
+   *  la décision (`canDecide`, paliers) et les EFFETS d'une demande sont calculés sur le programme
+   *  COMPLET (lot 3) : une demande sur un projet d'un chantier confidentiel est routée vers son
+   *  vrai approbateur et appliquée sans « Projet introuvable », quel que soit le décideur. */
+  data: Omit<StrategicApprovalData, "programId"> & { program?: StrategicProgramData };
 };
 
 export function useStrategicApprovals({
@@ -165,7 +171,13 @@ export function useStrategicApprovals({
     () => (programId ? all.filter((a) => a.programId === programId) : []),
     [all, programId]
   );
+  // Base de DÉCISION (routage, habilitation, effets) : programme complet si fourni (lot 3).
   const fullData = useMemo<StrategicApprovalData>(
+    () => ({ ...data, ...(data.program ?? {}), programId }),
+    [data, programId]
+  );
+  // Base d'AFFICHAGE (libellés des alertes) : données visibles du lecteur.
+  const displayData = useMemo<StrategicApprovalData>(
     () => ({ ...data, programId }),
     [data, programId]
   );
@@ -179,8 +191,8 @@ export function useStrategicApprovals({
     [approvals, user, fullData]
   );
   const alerts = useMemo<Alert[]>(
-    () => buildApprovalAlerts(approvals, user, fullData),
-    [approvals, user, fullData]
+    () => buildApprovalAlerts(approvals, user, fullData, new Date(), displayData),
+    [approvals, user, fullData, displayData]
   );
 
   const logAudit = useCallback(

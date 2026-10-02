@@ -909,6 +909,31 @@ export function chantierBounds(
 }
 
 /**
+ * Message d'une alerte de dépendance (« qui bloque qui, de combien de jours ») — extrait de
+ * `chantierDependencyAlerts` pour pouvoir le RECOMPOSER avec des noms masqués
+ * (`maskDependencyAlerts`, lib/strategicProgramScope.ts) : l'alerte est calculée sur le programme
+ * COMPLET, mais le nom d'un chantier hors du périmètre du lecteur ne doit jamais s'afficher.
+ * `delayDays` est la valeur signée du calcul (FS/SF positifs, SS/FF déjà absolus).
+ */
+export function dependencyAlertMessage(
+  type: ChantierDependencyType,
+  sourceName: string,
+  targetName: string,
+  delayDays: number
+): string {
+  switch (type) {
+    case "FS":
+      return `"${targetName}" se termine ${delayDays} jours après le début prévu de "${sourceName}"`;
+    case "SS":
+      return `"${sourceName}" et "${targetName}" ont ${delayDays} jours de décalage au démarrage`;
+    case "FF":
+      return `"${sourceName}" et "${targetName}" ont ${delayDays} jours de décalage à la fin`;
+    case "SF":
+      return `"${targetName}" démarre ${delayDays} jours après la fin prévue de "${sourceName}"`;
+  }
+}
+
+/**
  * Évalue toutes les dépendances inter-chantiers contre les dates courantes et retourne les
  * contraintes violées. Aucune date n'est modifiée : c'est du signalement pur, à afficher en
  * alerte sur la fiche d'axe et le dashboard stratégique. Même logique FS/SS/FF/SF que
@@ -939,7 +964,6 @@ export function chantierDependencyAlerts(
       if (!target || !targetBounds) continue;
 
       let violated = false;
-      let message = "";
       let delayDays = 0;
       let sourceDate = "";
       let targetDate = "";
@@ -951,7 +975,6 @@ export function chantierDependencyAlerts(
           violated = delayDays > 0;
           sourceDate = sourceBounds.start;
           targetDate = targetBounds.end;
-          message = `"${target.name}" se termine ${delayDays} jours après le début prévu de "${source.name}"`;
           break;
         case "SS":
           // Les deux doivent démarrer ensemble.
@@ -959,7 +982,6 @@ export function chantierDependencyAlerts(
           violated = delayDays > SIMULTANEITY_TOLERANCE_DAYS;
           sourceDate = sourceBounds.start;
           targetDate = targetBounds.start;
-          message = `"${source.name}" et "${target.name}" ont ${delayDays} jours de décalage au démarrage`;
           break;
         case "FF":
           // Les deux doivent finir ensemble.
@@ -967,7 +989,6 @@ export function chantierDependencyAlerts(
           violated = delayDays > SIMULTANEITY_TOLERANCE_DAYS;
           sourceDate = sourceBounds.end;
           targetDate = targetBounds.end;
-          message = `"${source.name}" et "${target.name}" ont ${delayDays} jours de décalage à la fin`;
           break;
         case "SF":
           // Le bloqueur (target) doit démarrer avant que le bloqué (source) puisse finir.
@@ -975,7 +996,6 @@ export function chantierDependencyAlerts(
           violated = delayDays > 0;
           sourceDate = sourceBounds.end;
           targetDate = targetBounds.start;
-          message = `"${target.name}" démarre ${delayDays} jours après la fin prévue de "${source.name}"`;
           break;
       }
 
@@ -988,7 +1008,7 @@ export function chantierDependencyAlerts(
           targetName: target.name,
           targetDate,
           type: dep.type,
-          message,
+          message: dependencyAlertMessage(dep.type, source.name, target.name, delayDays),
           delayDays: Math.abs(delayDays),
         });
       }
@@ -1068,6 +1088,18 @@ export function isProjetDone(
 }
 
 /**
+ * Visibilité appliquée au TEXTE des raisons de blocage (`canStartAction`, `programBlockedActions`)
+ * — jamais au verdict : les cibles sont toujours résolues sur `allActions`, à passer = le
+ * programme COMPLET (`useStrategicData().program.chantierActions`). Un prérequis dont la cible
+ * existe mais n'est pas dans `visibleActionIds` produit `outOfScopeLabel` (traduit par l'appelant,
+ * clé `strategicPrerequisite.outOfScope`) au lieu du nom du projet. Omis = tout est nommé.
+ */
+export type PrerequisiteVisibility = {
+  visibleActionIds?: ReadonlySet<string>;
+  outOfScopeLabel?: string;
+};
+
+/**
  * Une action peut-elle démarrer, au regard de ses prérequis (`ChantierAction.prerequisites`) ?
  * v1 PUREMENT INFORMATIVE (voir plan round 4, point 5) : un prérequis non satisfait n'empêche
  * RIEN — il s'affiche seulement (badge cadenas sur le Gantt, détail sur la fiche chantier).
@@ -1080,7 +1112,8 @@ export function isProjetDone(
 export function canStartAction(
   action: Pick<ChantierAction, "prerequisites">,
   allActions: ChantierAction[],
-  progressOf?: ProjetProgressLookup
+  progressOf?: ProjetProgressLookup,
+  scope?: PrerequisiteVisibility
 ): { blocked: boolean; reasons: string[] } {
   const reasons: string[] = [];
 
@@ -1091,7 +1124,14 @@ export function canStartAction(
         reasons.push(`Prérequis introuvable (action supprimée ou invalide)`);
         continue;
       }
-      if (!isProjetDone(target, progressOf)) reasons.push(`En attente de "${target.name}"`);
+      if (isProjetDone(target, progressOf)) continue;
+      // Cible EXISTANTE mais hors du périmètre du lecteur : le blocage est réel (même verdict pour
+      // tous les profils), seul son NOM est tu — jamais « introuvable ».
+      if (scope?.visibleActionIds && !scope.visibleActionIds.has(target.id)) {
+        reasons.push(scope.outOfScopeLabel ?? "Prérequis hors de votre périmètre");
+        continue;
+      }
+      reasons.push(`En attente de "${target.name}"`);
     } else {
       if (!prerequisite.done) reasons.push(prerequisite.label || "Prérequis externe non satisfait");
     }
@@ -1847,10 +1887,15 @@ export function isChantierLate(
  */
 export function programBlockedActions(
   actions: ChantierAction[],
-  progressOf?: ProjetProgressLookup
+  progressOf?: ProjetProgressLookup,
+  /** `allActions` : programme COMPLET dans lequel résoudre les cibles (défaut `actions`) — à
+   *  fournir dès que `actions` est la sélection visible du lecteur, sans quoi un prérequis hors
+   *  périmètre serait déclaré « introuvable ». Voir `PrerequisiteVisibility`. */
+  scope?: PrerequisiteVisibility & { allActions?: ChantierAction[] }
 ): { action: ChantierAction; reasons: string[] }[] {
+  const targets = scope?.allActions ?? actions;
   return actions
-    .map((action) => ({ action, ...canStartAction(action, actions, progressOf) }))
+    .map((action) => ({ action, ...canStartAction(action, targets, progressOf, scope) }))
     .filter((r) => r.blocked)
     .map(({ action, reasons }) => ({ action, reasons }));
 }

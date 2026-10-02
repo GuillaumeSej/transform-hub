@@ -961,6 +961,7 @@ export function KpiPageClient() {
     chantierActions,
     indicators,
     measurements,
+    program,
     loading: dataLoading,
     addMeasurement,
     updateMeasurement,
@@ -1451,8 +1452,11 @@ export function KpiPageClient() {
           sur un Plan Performance (tout y est en euros économisés). Le haut de page porte donc le
           compteur on-track/à risque, puis les KPI business (indicateurs de niveau axe). */}
       <IndicatorStatusSummary
-        indicators={indicators}
-        measurements={measurements}
+        // Lot 3 (décision PO) : % sur la trajectoire = TOUS les indicateurs du programme (segment
+        // gris « sans donnée » compris), même chiffre que le dashboard et pour tous les profils —
+        // la synthèse n'affiche que des comptes ; ventilation limitée aux axes VISIBLES.
+        indicators={program.indicators}
+        measurements={program.measurements}
         showTotal={false}
         labels={{
           tracked: t("kpi.summary.tracked"),

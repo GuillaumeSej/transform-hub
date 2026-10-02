@@ -31,6 +31,7 @@ import {
   milestoneProgressPct,
   resolveUserFullName,
   type ChantierDependencyAlert,
+  type PrerequisiteVisibility,
   type ProjetProgressLookup,
 } from "@/lib/axisLogic";
 import type { AuthUser, Chantier, ChantierAction, MaturityStageConfig } from "@/types";
@@ -133,7 +134,12 @@ export function ChantierGantt({
   labels,
   progressOf = (a) => milestoneProgressPct(a),
   users,
+  prerequisiteScope,
 }: {
+  /** Visibilité du lecteur pour le TEXTE des raisons de blocage (lot 3) : un prérequis dont la
+   *  cible (résolue dans `allActions`, programme complet) est hors périmètre s'affiche « hors de
+   *  votre périmètre », jamais par son nom ni comme « introuvable ». */
+  prerequisiteScope?: PrerequisiteVisibility;
   /** Annuaire : responsable de projet affiché par son NOM dans l'infobulle (repli : identifiant). */
   users?: Pick<AuthUser, "username" | "name">[];
   chantiers: Chantier[];
@@ -383,7 +389,8 @@ export function ChantierGantt({
                             const startInfo = canStartAction(
                               action,
                               effectiveAllActions,
-                              progressOf
+                              progressOf,
+                              prerequisiteScope
                             );
                             return (
                               <TimelineBar

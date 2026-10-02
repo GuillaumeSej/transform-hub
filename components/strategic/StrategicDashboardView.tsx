@@ -36,7 +36,13 @@ import {
   resolveIndicatorStatus,
   resolveUserFullName,
 } from "@/lib/axisLogic";
-import { rollupBudgets } from "@/lib/budgetRollup";
+import {
+  budgetAxisShares,
+  budgetChantierShares,
+  rollupBudgets,
+  type BudgetShare,
+} from "@/lib/budgetRollup";
+import { maskDependencyAlerts } from "@/lib/strategicProgramScope";
 import {
   STRATEGIC_DASHBOARD_WIDGET_REGISTRY,
   SPAN_COL_CLASS,
@@ -372,8 +378,9 @@ export function StrategicDashboardView() {
     indicators,
     measurements,
     projetProgress,
-    programAxisIds,
-    fullScope,
+    program,
+    visibleChantierIds,
+    visibleActionIds,
   } = strategic;
 
   /** Round 25 (RBAC) : `axis_sponsor` perd le clic-vers-KPI sur les puces "#N indicateur" de la
@@ -438,16 +445,11 @@ export function StrategicDashboardView() {
    *  feuille de route et donut par chantier. Un chantier multi-axe n'est attribué qu'à son axe
    *  primaire, la somme des axes vaut donc le total programme. */
   const budgetRollup = useMemo(
-    // Axe d'attribution d'un chantier multi-axe résolu sur TOUS les axes du programme
-    // (`programAxisIds`), jamais sur les seuls axes visibles du lecteur.
-    () =>
-      rollupBudgets(
-        axes,
-        chantiers,
-        chantierActions,
-        programAxisIds.map((id) => ({ id }))
-      ),
-    [axes, chantiers, chantierActions, programAxisIds]
+    // Lot 3 : calculé sur le programme COMPLET (`program`) — même total, mêmes montants d'axe et de
+    // chantier pour tous les profils ; l'affichage passe par les parts partagées
+    // (`budgetAxisShares`/`budgetChantierShares`), où ce qui est masqué n'apparaît qu'agrégé.
+    () => rollupBudgets(program.axes, program.chantiers, program.chantierActions),
+    [program.axes, program.chantiers, program.chantierActions]
   );
   const allocatedBudgetTotal = budgetRollup.programme.allocated;
 
@@ -457,9 +459,9 @@ export function StrategicDashboardView() {
    *  budget prévisionnel n'est déclaré. */
   const programBudgetCheck = useMemo(() => {
     const forecast = activeProgram?.budget;
-    // Le prévisionnel porte sur le programme ENTIER : un lecteur dont le périmètre est restreint
-    // (confidentialité, ownership) n'a qu'un total partiel — aucune comparaison dans ce cas.
-    if (!activeProgram || forecast === undefined || !fullScope) return undefined;
+    // Le total est celui du programme ENTIER pour tous les profils (lot 3) : la comparaison au
+    // prévisionnel vaut donc pour tout lecteur.
+    if (!activeProgram || forecast === undefined) return undefined;
     const fmt = (value: number) =>
       formatCompactCurrency(value, normalizeCurrency(activeProgram.currency), locale, 2);
     const over = allocatedBudgetTotal > forecast;
@@ -484,7 +486,7 @@ export function StrategicDashboardView() {
         forecast > 0 ? `+${formatPercent(diff / forecast, locale, 1)}` : "—"
       );
     return { over, lines: [{ text, over }] };
-  }, [activeProgram, allocatedBudgetTotal, locale, t, fullScope]);
+  }, [activeProgram, allocatedBudgetTotal, locale, t]);
 
   /** Numérotation globale 3-5-15 des indicateurs (`numberIndicators`, lib/axisLogic.ts) — alimente
    *  UNIQUEMENT la liste de la puce "indicateurs" du bandeau d'en-tête (round 12) : chaque ligne
@@ -497,30 +499,53 @@ export function StrategicDashboardView() {
   /** Budget alloué total PAR AXE (round 12) — alimente la liste de la puce "budget" du bandeau
    *  d'en-tête : un simple regroupement/somme, pas de graphique (une répartition en camembert est
    *  ajoutée en parallèle sur la page Axes stratégiques elle-même). */
-  const axisBudgets = useMemo(
-    () =>
-      axes.map((axis) => ({
-        axis,
-        total: budgetRollup.axes.get(axis.id)?.allocated ?? 0,
-      })),
-    [axes, budgetRollup]
-  );
+  // Parts PARTAGÉES avec le donut de la page Effectifs (`budgetAxisShares`) : axes visibles, puis
+  // « Sans axe » et « Autres axes » (agrégat anonyme hors périmètre) — la somme du détail est
+  // TOUJOURS égale au montant de la puce.
+  const axisBudgets = useMemo(() => budgetAxisShares(budgetRollup, axes), [axes, budgetRollup]);
 
+  // Lot 3 : alertes évaluées sur le programme COMPLET (une dépendance vers un chantier masqué
+  // compte pour tous), puis masquées : au moins une extrémité visible, l'autre renommée
+  // « chantier hors de votre périmètre ».
+  const outOfScopeChantierLabel = t(
+    "strategicScope.outOfScopeChantier",
+    "Chantier hors de votre périmètre"
+  );
   const dependencyAlerts = useMemo(
     () =>
-      chantierDependencyAlerts(chantiers, chantierActions).sort(
-        (a, b) => b.delayDays - a.delayDays
-      ),
-    [chantiers, chantierActions]
+      maskDependencyAlerts(
+        chantierDependencyAlerts(program.chantiers, program.chantierActions),
+        visibleChantierIds,
+        outOfScopeChantierLabel,
+        "either"
+      ).sort((a, b) => b.delayDays - a.delayDays),
+    [program.chantiers, program.chantierActions, visibleChantierIds, outOfScopeChantierLabel]
   );
 
+  const outOfScopePrerequisiteLabel = t(
+    "strategicPrerequisite.outOfScope",
+    "Prérequis hors de votre périmètre"
+  );
   /** Round 9, point 1 : leviers dont au moins un prérequis n'est pas satisfait
    *  (`programBlockedActions`, lib/axisLogic.ts) — même parti pris purement informatif que
    *  `dependencyAlerts` ci-dessus, alimente la deuxième sous-section du widget
-   *  "chantier-dependency-alerts". */
+   *  "chantier-dependency-alerts". Lot 3 : cibles résolues sur le programme COMPLET — un
+   *  prérequis hors périmètre n'est plus « introuvable » mais « hors de votre périmètre » (même
+   *  verdict de blocage pour tous). */
   const blockedActions = useMemo(
-    () => programBlockedActions(chantierActions, projetProgress),
-    [chantierActions, projetProgress]
+    () =>
+      programBlockedActions(chantierActions, projetProgress, {
+        allActions: program.chantierActions,
+        visibleActionIds,
+        outOfScopeLabel: outOfScopePrerequisiteLabel,
+      }),
+    [
+      chantierActions,
+      projetProgress,
+      program.chantierActions,
+      visibleActionIds,
+      outOfScopePrerequisiteLabel,
+    ]
   );
 
   /** Nom de chantier par id — la sous-section "Prérequis en attente" doit afficher le CHANTIER
@@ -755,24 +780,20 @@ export function StrategicDashboardView() {
   }, [indicators]);
 
   /** Parts du donut budgétaire de l'axe actuellement ouvert (`budgetDonutAxisId`) — porté depuis
-   *  `StrategicAxesView.tsx`. */
-  /** Chantiers dont le budget est ATTRIBUÉ à cet axe (axe primaire, voir lib/budgetRollup.ts) —
-   *  sous-ensemble de `chantiersByAxis` : un chantier multi-axe n'y figure que sous un seul axe. */
-  const budgetAttributedChantiers = (axisId: string) =>
-    chantiers.filter((c) => budgetRollup.chantierAxisId.get(c.id) === axisId);
-
+   *  `StrategicAxesView.tsx`. Lot 3 : parts PARTAGÉES avec le drill-down Effectifs
+   *  (`budgetChantierShares`) — chantiers visibles ATTRIBUÉS à l'axe (axe primaire, voir
+   *  lib/budgetRollup.ts) + « Autres chantiers » (agrégat anonyme) ; somme = budget de l'axe. */
   const budgetDonutSlices: BudgetDonutSlice[] | null = useMemo(() => {
     if (!budgetDonutAxisId) return null;
-    return chantiers
-      .filter((c) => budgetRollup.chantierAxisId.get(c.id) === budgetDonutAxisId)
-      .map((chantier) => ({ chantier, f: budgetRollup.chantiers.get(chantier.id) }))
-      .filter(({ f }) => (f?.allocated ?? 0) > 0 || (f?.consumed ?? 0) > 0)
-      .map(({ chantier, f }) => ({
-        name: chantier.name,
-        value: f?.allocated ?? 0,
-        consumed: f?.consumed ?? 0,
-      }));
-  }, [budgetDonutAxisId, chantiers, budgetRollup]);
+    return budgetChantierShares(budgetRollup, budgetDonutAxisId, chantiers).map((share) => ({
+      name:
+        share.kind === "chantier"
+          ? (chantiers.find((c) => c.id === share.id)?.name ?? "")
+          : t("effectifs.moneyBudget.otherChantiers", "Autres chantiers"),
+      value: share.figures.allocated,
+      consumed: share.figures.consumed,
+    }));
+  }, [budgetDonutAxisId, chantiers, budgetRollup, t]);
 
   /** Résout le nom d'un chantier vers son id, dans l'axe ouvert — pour le `onSliceClick` du donut
    *  (le donut ne connaît que les NOMS, voir `BudgetDonutChart`). */
@@ -800,8 +821,8 @@ export function StrategicDashboardView() {
     const axisFigures = budgetRollup.axes.get(axis.id);
     const axisBudget = axisFigures?.allocated ?? 0;
     const axisConsumed = axisFigures?.consumed ?? 0;
-    const axisHasBudgetSlices = budgetAttributedChantiers(axis.id).some(
-      (c) => (budgetRollup.chantiers.get(c.id)?.allocated ?? 0) > 0
+    const axisHasBudgetSlices = budgetChantierShares(budgetRollup, axis.id, chantiers).some(
+      (share) => share.figures.allocated > 0
     );
 
     return (
@@ -1143,12 +1164,15 @@ export function StrategicDashboardView() {
           <Card className="mb-0 h-full">
             <CardHeader title={t("strategicDashboard.widget.indicatorStatus")} />
             <CardBody>
-              {indicators.length === 0 ? (
+              {program.indicators.length === 0 ? (
                 emptyLine(t("strategicDashboard.noIndicators"))
               ) : (
                 <IndicatorStatusSummary
-                  indicators={indicators}
-                  measurements={measurements}
+                  // Lot 3 (décision PO) : % sur la trajectoire = TOUS les indicateurs du programme
+                  // (segment gris « sans donnée » compris), quel que soit le lecteur — seuls des
+                  // comptes s'affichent ici, aucun nom d'indicateur.
+                  indicators={program.indicators}
+                  measurements={program.measurements}
                   showTotal={false}
                   labels={summaryLabels}
                   // Round 6, point 1 : le widget passe en XL (largeur pleine) mais cette grille
@@ -1310,21 +1334,33 @@ export function StrategicDashboardView() {
                 }
                 title={t("strategicDashboard.popover.budgetTitle")}
                 emptyLabel={t("strategicDashboard.popover.emptyBudget")}
-                items={axisBudgets.map(({ axis, total }) => ({
-                  key: axis.id,
-                  // Round 13, point 2 : deux segments (nom d'axe / montant) en JSX plutôt qu'une
-                  // seule chaîne interpolée — le montant reste sur la même ligne, aligné à droite,
-                  // quelle que soit la longueur du nom d'axe (qui tronque plutôt que de wrapper).
-                  label: (
-                    <span className="flex w-full items-center justify-between gap-2">
-                      <span className="truncate">{axis.name}</span>
-                      <span className="shrink-0 whitespace-nowrap font-semibold text-primary">
-                        {formatCurrency(total, { currency: activeProgram.currency })}
+                items={axisBudgets.map((share: BudgetShare) => {
+                  const axis =
+                    share.kind === "axis" ? axes.find((a) => a.id === share.id) : undefined;
+                  const name = axis
+                    ? axis.name
+                    : share.kind === "unattributed"
+                      ? t("effectifs.moneyBudget.unattributedAxis", "Sans axe")
+                      : t("effectifs.moneyBudget.otherAxes", "Autres axes");
+                  return {
+                    key: axis ? axis.id : `__${share.kind}`,
+                    // Round 13, point 2 : deux segments (nom d'axe / montant) en JSX plutôt qu'une
+                    // seule chaîne interpolée — le montant reste sur la même ligne, aligné à
+                    // droite, quelle que soit la longueur du nom d'axe (qui tronque).
+                    label: (
+                      <span className="flex w-full items-center justify-between gap-2">
+                        <span className="truncate">{name}</span>
+                        <span className="shrink-0 whitespace-nowrap font-semibold text-primary">
+                          {formatCurrency(share.figures.allocated, {
+                            currency: activeProgram.currency,
+                          })}
+                        </span>
                       </span>
-                    </span>
-                  ),
-                  onClick: () => router.push(axisDetailHref(axis.id)),
-                }))}
+                    ),
+                    // Parts agrégées (« Sans axe », « Autres axes ») : non navigables.
+                    onClick: axis ? () => router.push(axisDetailHref(axis.id)) : undefined,
+                  };
+                })}
               />
             </BudgetChipTooltip>
           </div>
@@ -1525,7 +1561,11 @@ export function StrategicDashboardView() {
                 <button
                   key={`${alert.sourceId}-${alert.targetId}-${alert.type}`}
                   type="button"
-                  onClick={() => openChantierPanel(alert.sourceId)}
+                  onClick={() =>
+                    openChantierPanel(
+                      visibleChantierIds.has(alert.sourceId) ? alert.sourceId : alert.targetId
+                    )
+                  }
                   className="block w-full border-b border-border py-2.5 text-left transition last:border-0 first:pt-0 hover:bg-neutral-50"
                 >
                   <div className="flex flex-wrap items-center gap-2">

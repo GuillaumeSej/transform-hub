@@ -38,6 +38,7 @@ import {
 } from "@/lib/axisLogic";
 import { resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { filterStrategicByClearance } from "@/lib/strategicConfidentiality";
+import type { StrategicProgramData } from "@/lib/strategicProgramScope";
 import { isAnyAdmin } from "@/lib/roleProfiles";
 import { todayISO } from "@/lib/dateUtils";
 import { normalizePeriod } from "@/lib/indicatorPeriod";
@@ -163,6 +164,19 @@ export type StrategicData = {
    *  ni de périmètre n'en masque) — seule condition pour comparer un total au budget prévisionnel
    *  du programme (`Program.budget`), qui porte sur le programme entier. */
   fullScope: boolean;
+  /** Collections NON filtrées du programme actif (scopées au `programId`, AVANT confidentialité et
+   *  ownership) — base de TOUS les calculs agrégés (taux de staffing et alertes de sur-staffing,
+   *  avancement d'axe/programme, santé, dépendances, prérequis, validation, budget, % trajectoire)
+   *  pour que le même chiffre s'affiche quel que soit le profil du lecteur. JAMAIS rendues telles
+   *  quelles : l'affichage reste sur les projections filtrées ci-dessus, un élément hors périmètre
+   *  n'apparaissant qu'agrégé (voir lib/strategicProgramScope.ts). */
+  program: StrategicProgramData;
+  /** Ids des chantiers VISIBLES du lecteur (= `chantiers`) — pour masquer à l'affichage ce que les
+   *  calculs sur `program` font intervenir (`maskStaffingForDisplay`, `maskDependencyAlerts`…). */
+  visibleChantierIds: ReadonlySet<string>;
+  /** Ids des projets VISIBLES du lecteur (= `chantierActions`) — même usage, pour les prérequis
+   *  (`canStartAction`/`programBlockedActions`, option `visibleActionIds`). */
+  visibleActionIds: ReadonlySet<string>;
 
   // ── Mutations ──────────────────────────────────────────────────────────────────────────────
   createAxis: (
@@ -555,6 +569,37 @@ export function useStrategicData(
     return visible;
   }, [clearanceFiltered, ownershipScope]);
 
+  // ── Programme COMPLET (lot 3) : mêmes collections, AVANT tout filtre de visibilité — exposées
+  // pour les calculs agrégés uniquement (voir `StrategicData.program`). Mesures rattachées via les
+  // indicateurs du programme (elles ne portent pas de `programId`).
+  const programScopedMeasurements = useMemo(() => {
+    const ids = new Set(programScopedIndicators.map((i) => i.id));
+    return allMeasurements.filter((m) => ids.has(m.indicatorId));
+  }, [allMeasurements, programScopedIndicators]);
+  const program: StrategicProgramData = useMemo(
+    () => ({
+      axes: programScopedAxes,
+      chantiers: programScopedChantiers,
+      chantierActions: programScopedActionsForScope,
+      indicators: programScopedIndicators,
+      measurements: programScopedMeasurements,
+      staffing: programScopedStaffing,
+    }),
+    [
+      programScopedAxes,
+      programScopedChantiers,
+      programScopedActionsForScope,
+      programScopedIndicators,
+      programScopedMeasurements,
+      programScopedStaffing,
+    ]
+  );
+  const visibleChantierIds = useMemo(() => new Set(chantiers.map((c) => c.id)), [chantiers]);
+  const visibleActionIds = useMemo(
+    () => new Set(chantierActions.map((a) => a.id)),
+    [chantierActions]
+  );
+
   // Refs toujours à jour : les mutations doivent lire l'état le plus récent sans être recréées à
   // chaque rendu (même motivation que les refs de `useBeTrackData`).
   const indicatorsRef = useRef(allIndicators);
@@ -896,6 +941,9 @@ export function useStrategicData(
     projetAutoFlags,
     programAxisIds,
     fullScope,
+    program,
+    visibleChantierIds,
+    visibleActionIds,
     createAxis,
     updateAxis,
     removeAxis,

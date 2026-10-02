@@ -3801,6 +3801,11 @@ const en: Record<string, string> = {
     "Filters not applicable to initiatives (movements only): {filters}.",
   "hr.fteCoverage.periodNotApplied":
     "The period only applies to movements: initiatives are counted over the whole programme.",
+  // Lot 3 — computed on the full programme: labels of aggregates outside the reader's scope.
+  "strategicScope.outOfScopeChantier": "Work package outside your scope",
+  "strategicPrerequisite.outOfScope": "Prerequisite outside your scope",
+  "effectifs.staffingRate.otherChantiers": "Other work packages (outside your scope)",
+  "effectifs.moneyBudget.otherChantiers": "Other work packages",
 };
 
 export default en;
