@@ -10,6 +10,7 @@ import {
   canonicalizeRowKeys,
   excelRowNumber,
   isBlankCell,
+  isPercentFormat,
   normalizeHeaderKey,
   parseCellDate,
   parseCellNumber,
@@ -2294,7 +2295,7 @@ function rescalePercentCells(
       const cell = ws[XLSX.utils.encode_cell({ r, c })] as
         { t?: string; v?: unknown; z?: unknown } | undefined;
       if (!cell || cell.t !== "n" || typeof cell.v !== "number") continue;
-      if (typeof cell.z !== "string" || !cell.z.includes("%")) continue;
+      if (!isPercentFormat(cell.z)) continue;
       row[header] = Math.round(cell.v * 100 * 1e9) / 1e9;
     }
   });
