@@ -333,6 +333,14 @@ vi.mock("@/lib/firestore/admin", () => ({
   },
 }));
 vi.mock("@/lib/firestore/levers", () => ({ appendAuditEntries: noop }));
+// Lot 3 (intégrité) : les effets d'une décision sont écrits en un seul writeBatch via
+// commitApprovalEffects — on enregistre les projets écrits pour vérifier l'effet appliqué.
+vi.mock("@/lib/firestore/strategicCascade", () => ({
+  commitApprovalEffects: (effects: { saveActions: unknown[] }) => {
+    fx.saveChantierAction.calls.push(...effects.saveActions);
+    return Promise.resolve();
+  },
+}));
 vi.mock("@/lib/firestore/strategicApprovals", () => ({
   subscribeStrategicApprovals: sub(fx.approvals),
   saveStrategicApproval: noop,
