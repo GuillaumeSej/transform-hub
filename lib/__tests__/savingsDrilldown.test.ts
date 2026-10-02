@@ -133,6 +133,58 @@ describe("buildDrilldownEntries", () => {
   });
 });
 
+describe("détail de la cascade = barres (audit lot 2, point 2)", () => {
+  // P : réactualisé (flag `reforecast`), impacts nets 1,2 vs plan figé 1,0 → +0,2.
+  // Q : PAS de flag `reforecast`, impacts nets 0,8 (1,3 − OPEX récurrent 0,5) vs plan 1,0 → −0,2 ;
+  //     son plan figé porte un OPEX récurrent de 0,65 (périmé : les impacts disent 0,5).
+  // C : abandonné, plan figé 0,4.
+  const levers = [
+    lever({
+      id: "P",
+      lockedPlan: snap(1),
+      reforecast: snap(1),
+      impacts: [{ id: "p1", label: "g", type: "saving", nature: "opex_rec", amount: 1.2 }],
+    } as Partial<Lever>),
+    lever({
+      id: "Q",
+      lockedPlan: snap(1, 0.65),
+      impacts: [
+        { id: "q1", label: "g", type: "saving", nature: "opex_rec", amount: 1.3 },
+        { id: "q2", label: "o", type: "cost", nature: "opex_rec", amount: 0.5 },
+      ],
+    } as Partial<Lever>),
+    lever({ id: "C", status: "cancelled", lockedPlan: snap(0.4) }),
+  ];
+  const w = savingsWaterfall({ levers } as unknown as BeTrackData);
+  const detailOf = (step: Parameters<typeof buildDrilldownEntries>[0]) =>
+    drilldownTotals(
+      groupEntries(buildDrilldownEntries(step, levers), "workstream", {
+        workstreams: [],
+      })
+    ).value;
+
+  it("Σ du détail = barre, pour chaque étape", () => {
+    expect(w.steps.find((s) => s.key === "reforecast")?.value).toBeCloseTo(0, 5);
+    expect(w.opexRec).toBe(0.5);
+    // Avant : détail réactualisé +0,2 (seuls les leviers flaggés) et OPEX récurrent −0,65 (plan
+    // figé) pour des barres à 0,0 et −0,5.
+    expect(detailOf("reforecast")).toBeCloseTo(w.reforecastDelta, 5);
+    expect(detailOf("opexRec")).toBeCloseTo(-w.opexRec, 5);
+    expect(detailOf("initial")).toBeCloseTo(w.initial, 5);
+    expect(detailOf("cancelled")).toBeCloseTo(-w.cancelled, 5);
+    expect(detailOf("target")).toBeCloseTo(w.target, 5);
+    expect(detailOf("gross")).toBeCloseTo(w.gross, 5);
+  });
+
+  it("le delta réactualisé liste tous les leviers actifs qui s'écartent du plan figé", () => {
+    const e = buildDrilldownEntries("reforecast", levers);
+    expect(e.map((x) => [x.leverId, Math.round(x.value * 100) / 100])).toEqual([
+      ["P", 0.2],
+      ["Q", -0.2],
+    ]);
+  });
+});
+
 describe("geography grouping", () => {
   it("resolves ancestor at level, leaf if more macro, null if unattached", () => {
     expect(geographyGroupNode("paris", "country", nodes, levels)?.id).toBe("fr");

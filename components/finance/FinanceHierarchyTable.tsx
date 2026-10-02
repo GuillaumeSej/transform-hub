@@ -14,6 +14,7 @@ import {
   type FinanceSortKey,
 } from "@/lib/dashboardSavings";
 import { sortedHierarchyLevels } from "@/lib/financeCosts";
+import { fiscalYearLabel } from "@/lib/fiscalYear";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { BeTrackData, HierarchyLevelDef, HierarchyNode } from "@/types";
 import { formatAmountM } from "@/lib/format";
@@ -79,9 +80,9 @@ export function FinanceHierarchyTable({
   const yearsButtonLabel = useMemo(() => {
     if (!yearFilterActive) return t("finance.hierarchyTable.allYears", "Toutes les années");
     const sorted = Array.from(selectedYears).sort((a, b) => a - b);
-    if (sorted.length <= 2) return sorted.join(", ");
+    if (sorted.length <= 2) return sorted.map((y) => fiscalYearLabel(y, fyStartMonth)).join(", ");
     return `${sorted.length} ${t("finance.hierarchyTable.yearsSelected", "années sélectionnées")}`;
-  }, [selectedYears, yearFilterActive, t]);
+  }, [selectedYears, yearFilterActive, t, fyStartMonth]);
 
   const levelIdx = Math.max(
     0,
@@ -251,7 +252,9 @@ export function FinanceHierarchyTable({
                       onChange={() => toggleYear(y)}
                     />
                     <span className={selectedYears.has(y) ? "font-semibold text-primary" : ""}>
-                      {y}
+                      {/* Exercice : « FY26/27 » si décalé (mêmes libellés que le P&L et les
+                          graphiques de la page), l'année seule sinon. */}
+                      {fiscalYearLabel(y, fyStartMonth)}
                     </span>
                   </label>
                 ))}

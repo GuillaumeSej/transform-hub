@@ -17,10 +17,8 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import * as engine from "@/lib/engine";
 import {
   costsByHierarchyNode,
-  flattenCostImpacts,
+  engagedVsUpcomingRows,
   groupCostsByWorkstream,
-  isCostEngaged,
-  isInvestNature,
   sortedHierarchyLevels,
   recurringOpexReconciliation,
   splitByNature,
@@ -64,36 +62,11 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
   const [rawPath, setRawPath] = useState<DrillStep[]>([]);
   const [leafLever, setLeafLever] = useState<{ wsId: string; leverId: string } | null>(null);
 
-  // "Engagé" = règle DATÉE unique (`isCostEngaged` → `engine.isInvestCostEngaged`), la MÊME que le
-  // KPI héros "CAPEX & coûts one-off" du dashboard (`programSummary.engagedCosts`) — audit M8 :
-  // avant, chaque ligne était proratisée par le champ stocké et périmé `lever.progress`.
-  const split = useMemo(() => {
-    const investRows = flattenCostImpacts(data).filter(({ impact }) =>
-      isInvestNature(impact.nature)
-    );
-    const today = new Date();
-    const engagedRows: { lever: Lever; amount: number }[] = [];
-    const upcomingRows: { lever: Lever; amount: number }[] = [];
-    let engaged = 0;
-    let upcoming = 0;
-    for (const row of investRows) {
-      if (row.impact.amount === 0) continue;
-      if (isCostEngaged(row, today)) {
-        engagedRows.push({ lever: row.lever, amount: row.impact.amount });
-        engaged += row.impact.amount;
-      } else {
-        upcomingRows.push({ lever: row.lever, amount: row.impact.amount });
-        upcoming += row.impact.amount;
-      }
-    }
-    return {
-      engagedRows,
-      upcomingRows,
-      engaged: round2(engaged),
-      upcoming: round2(upcoming),
-      total: round2(engaged + upcoming),
-    };
-  }, [data]);
+  // MÊME périmètre et MÊMES fonctions que le KPI héros "CAPEX & coûts ponctuels" du dashboard
+  // (`programSummary.engagedCosts` / `reforecastCosts`) : règle DATÉE unique par ligne de coût
+  // (audit M8) ET leviers sans ligne de coût au prorata de leur avancement (audit lot 2 — ils
+  // étaient exclus du donut, d'où 1,0 / 2,8 ici vs 1,3 / 3,3 sur le KPI).
+  const split = useMemo(() => engagedVsUpcomingRows(data, new Date()), [data]);
 
   const engagedLabel = t("finance.chart.engaged", "Déjà engagé");
   const upcomingLabel = t("finance.chart.upcoming", "À venir");
@@ -270,7 +243,20 @@ export function CostEngagedVsUpcomingChart({ data }: { data: BeTrackData }) {
               )
                 .replace("{total}", fmt(split.total))
                 .replace("{engaged}", fmt(split.engaged))
-                .replace("{upcoming}", fmt(split.upcoming))}
+                .replace("{upcoming}", fmt(split.upcoming))
+                .concat(
+                  split.undetailed.leverCount > 0
+                    ? ` ${t(
+                        "finance.chart.engagedUndetailedNote",
+                        "Dont {amount} sur {count} levier(s) sans ligne de coût détaillée (engagé au prorata de l'avancement, comme le KPI)."
+                      )
+                        .replace(
+                          "{amount}",
+                          fmt(round2(split.undetailed.engaged + split.undetailed.upcoming))
+                        )
+                        .replace("{count}", String(split.undetailed.leverCount))}`
+                    : ""
+                )}
             >
               <Info size={13} className="shrink-0 text-tertiary" />
             </Tooltip>

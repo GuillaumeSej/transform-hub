@@ -6,7 +6,15 @@ import type {
   Lever,
   Workstream,
 } from "@/types";
-import { MONTH_LABELS, isInvestCostEngaged, leverImpactsOf, leverOpexRecOf } from "@/lib/engine";
+import {
+  MONTH_LABELS,
+  displayedReforecastSnapshot,
+  isInvestCostEngaged,
+  leverEngagedInvestCost,
+  leverImpactsOf,
+  leverOpexRecOf,
+} from "@/lib/engine";
+import { fiscalYearLabel } from "@/lib/fiscalYear";
 import { impactDatesOf } from "@/lib/impactKinds";
 import { parseLocalDate } from "@/lib/impactStatus";
 
@@ -76,11 +84,11 @@ export function flattenOneOffGainImpacts(data: BeTrackData): SavingImpactRow[] {
 /** Leviers actifs qui portent un coût CAPEX/OPEX chiffré au niveau du levier (champs cachés
  *  `capex`/`opexOneOff`/`opexRec`, saisie manuelle sans plan d'action détaillé) mais dont AUCUN
  *  impact "cost" n'apparaît dans `flattenCostImpacts` — parce qu'ils n'ont pas d'`actions`, ou que
- *  leurs actions n'ont aucun impact de type "cost". Tous les graphiques de `financeCosts.ts`
- *  (engagé/à venir, répartition par centre de coût, timeline...) sont construits exclusivement à
+ *  leurs actions n'ont aucun impact de type "cost". Les graphiques datés / ventilés de
+ *  `financeCosts.ts` (répartition par centre de coût, timeline...) sont construits exclusivement à
  *  partir de `flattenCostImpacts` (source de vérité "plan d'action"), donc CES leviers n'y
- *  contribuent jamais et n'apparaissent dans AUCUN graphique — pas seulement celui par centre de
- *  coût. Sert à afficher une note explicite ("N leviers sans plan d'action détaillé, non inclus")
+ *  contribuent pas — seul le donut engagé / à venir les compte (`engagedVsUpcomingRows`, aligné
+ *  sur le KPI du dashboard). Sert à afficher une note explicite ("N leviers sans plan d'action détaillé, non inclus")
  *  plutôt qu'un silence trompeur ("aucun coût saisi") quand ces leviers existent bel et bien avec
  *  un CAPEX/OPEX renseigné. */
 export function leversWithUndetailedCosts(data: BeTrackData): Lever[] {
@@ -128,25 +136,90 @@ export function isCostEngaged(
   return isInvestCostEngaged(row.impact, row.lever, today);
 }
 
-/** Répartition Engagé / À venir / Total (€M) des coûts "Invest" (CAPEX + OPEX one-off,
- *  OPEX récurrent EXCLU — décision produit round finance-charts-v2) — alimente
- *  `CostEngagedVsUpcomingChart`. */
+/** Détail Engagé / À venir des coûts "Invest" (CAPEX + OPEX one-off, OPEX récurrent EXCLU —
+ *  décision produit round finance-charts-v2), MÊME périmètre et MÊMES fonctions que le KPI
+ *  « CAPEX & coûts ponctuels » du dashboard (`engine.programSummary` : `engagedCosts` /
+ *  `reforecastCosts`) — audit lot 2, le donut excluait les leviers sans ligne de coût (KPI
+ *  1,3 / 3,3 vs donut 1,0 / 2,8) alors que son infobulle annonçait « même périmètre » :
+ *  - levier avec lignes de coût Invest : chaque ligne, engagée selon la règle datée unique
+ *    (`isCostEngaged` → `engine.isInvestCostEngaged`) ;
+ *  - levier SANS ligne de coût Invest (saisie macro au niveau du levier) : engagé =
+ *    `engine.leverEngagedInvestCost` (coûts × avancement), total = coûts réactualisés
+ *    (`engine.displayedReforecastSnapshot`), à venir = total − engagé — exactement le KPI.
+ *  Leviers abandonnés exclus (comme le KPI). Les lignes `{ lever, amount }` alimentent le
+ *  drill-down chantier → levier ; `undetailed` isole la part des leviers non détaillés. */
+export function engagedVsUpcomingRows(
+  data: BeTrackData,
+  today: Date = new Date()
+): {
+  engagedRows: { lever: Lever; amount: number }[];
+  upcomingRows: { lever: Lever; amount: number }[];
+  engaged: number;
+  upcoming: number;
+  total: number;
+  undetailed: { engaged: number; upcoming: number; leverCount: number };
+} {
+  const engagedRows: { lever: Lever; amount: number }[] = [];
+  const upcomingRows: { lever: Lever; amount: number }[] = [];
+  let undetailedEngaged = 0;
+  let undetailedUpcoming = 0;
+  let undetailedCount = 0;
+  for (const lever of data.levers) {
+    if (lever.status === "cancelled") continue;
+    const investLines = leverImpactsOf(lever).filter(
+      (impact) => impact.type === "cost" && isInvestNature(impact.nature)
+    );
+    if (investLines.length > 0) {
+      for (const impact of investLines) {
+        if (impact.amount === 0) continue;
+        const row = { lever, amount: impact.amount };
+        if (isCostEngaged({ impact, lever }, today)) engagedRows.push(row);
+        else upcomingRows.push(row);
+      }
+      continue;
+    }
+    const snap = displayedReforecastSnapshot(lever);
+    const total = snap.capex + snap.opexOneOff;
+    const engaged = leverEngagedInvestCost(lever, today);
+    // À venir ≥ 0 : un engagé (champs courants × avancement) supérieur au réactualisé ne crée pas
+    // de part négative — cas de données incohérentes, le total du donut dépasse alors le KPI.
+    const upcoming = Math.max(0, total - engaged);
+    if (engaged === 0 && upcoming === 0) continue;
+    undetailedCount += 1;
+    if (engaged !== 0) {
+      engagedRows.push({ lever, amount: engaged });
+      undetailedEngaged += engaged;
+    }
+    if (upcoming !== 0) {
+      upcomingRows.push({ lever, amount: upcoming });
+      undetailedUpcoming += upcoming;
+    }
+  }
+  const sum = (rows: { amount: number }[]) => rows.reduce((s, r) => s + r.amount, 0);
+  const engaged = sum(engagedRows);
+  const upcoming = sum(upcomingRows);
+  return {
+    engagedRows,
+    upcomingRows,
+    engaged: round2(engaged),
+    upcoming: round2(upcoming),
+    total: round2(engaged + upcoming),
+    undetailed: {
+      engaged: round2(undetailedEngaged),
+      upcoming: round2(undetailedUpcoming),
+      leverCount: undetailedCount,
+    },
+  };
+}
+
+/** Répartition Engagé / À venir / Total (€M) des coûts "Invest" — totaux de
+ *  `engagedVsUpcomingRows` (donut `CostEngagedVsUpcomingChart`, = KPI du dashboard). */
 export function splitEngagedVsUpcoming(
   data: BeTrackData,
   today: Date = new Date()
 ): { engaged: number; upcoming: number; total: number } {
-  const rows = flattenCostImpacts(data).filter(({ impact }) => isInvestNature(impact.nature));
-  let engaged = 0;
-  let upcoming = 0;
-  for (const row of rows) {
-    if (isCostEngaged(row, today)) engaged += row.impact.amount;
-    else upcoming += row.impact.amount;
-  }
-  return {
-    engaged: round2(engaged),
-    upcoming: round2(upcoming),
-    total: round2(engaged + upcoming),
-  };
+  const { engaged, upcoming, total } = engagedVsUpcomingRows(data, today);
+  return { engaged, upcoming, total };
 }
 
 /** Lignes de coût "Invest" (CAPEX + OPEX one-off) déjà engagées ou à venir — pendant "détail" de
@@ -218,18 +291,29 @@ export type CostPeriodPoint = {
   cumulative: number;
 };
 
-/** Clé de tri chronologique "YYYY", "YYYY-Q" ou "YYYY-MM" pour un point temporel — même principe
- *  que `periodSortKey` dans lib/engine.ts (non exporté), étendu à la granularité "year". */
-function periodSortKey(d: Date, granularity: FinanceGranularity): string {
-  if (granularity === "year") return `${d.getFullYear()}`;
-  if (granularity === "quarter") return `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
-  return `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+/** Clé de tri chronologique "YYYY", "YYYY-Q" ou "YYYY-MM" pour un point temporel. Années et
+ *  trimestres = EXERCICES FISCAUX du programme (audit lot 2, même convention que le P&L et le
+ *  tableau par niveau financier de la page Finance, `engine.impactYearRange`) : "YYYY" = l'exercice
+ *  qui COMMENCE en YYYY, Q1 = ses 3 premiers mois ; `fyStartMonth` = mois (0-11) de début
+ *  d'exercice, 0 (défaut) = années civiles. Les mois restent des mois civils ("YYYY-MM", MM 0-11). */
+function periodSortKey(d: Date, granularity: FinanceGranularity, fyStartMonth = 0): string {
+  if (granularity === "month") {
+    return `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+  }
+  const fiscalMonth = (d.getMonth() - fyStartMonth + 12) % 12; // 0 = 1er mois de l'exercice
+  const fiscalYear = d.getMonth() >= fyStartMonth ? d.getFullYear() : d.getFullYear() - 1;
+  if (granularity === "year") return `${fiscalYear}`;
+  return `${fiscalYear}-Q${Math.floor(fiscalMonth / 3) + 1}`;
 }
 
-function periodLabel(sortKey: string, granularity: FinanceGranularity): string {
-  if (granularity === "year") return sortKey;
+/** Libellé d'une clé de période : exercice décalé → "FY26/27" / "Q1 FY26/27" (`fiscalYearLabel`,
+ *  lib/fiscalYear.ts) ; exercice civil → "2026" / "Q1 2026" (inchangé) ; mois → "Apr 2026". */
+function periodLabel(sortKey: string, granularity: FinanceGranularity, fyStartMonth = 0): string {
+  if (granularity === "year") return fiscalYearLabel(Number(sortKey), fyStartMonth);
   const [year, part] = sortKey.split(granularity === "quarter" ? "-Q" : "-");
-  return granularity === "quarter" ? `Q${part} ${year}` : `${MONTH_LABELS[Number(part)]} ${year}`;
+  return granularity === "quarter"
+    ? `Q${part} ${fiscalYearLabel(Number(year), fyStartMonth)}`
+    : `${MONTH_LABELS[Number(part)]} ${year}`;
 }
 
 /** Index de mois absolu (année × 12 + mois) d'une date ISO — `NaN` si invalide. */
@@ -239,8 +323,12 @@ function monthIndexOf(date: string | undefined): number {
   return Number.isNaN(d.getTime()) ? NaN : d.getFullYear() * 12 + d.getMonth();
 }
 
-function periodKeyOfMonthIndex(mi: number, granularity: FinanceGranularity): string {
-  return periodSortKey(new Date(Math.floor(mi / 12), mi % 12, 1), granularity);
+function periodKeyOfMonthIndex(
+  mi: number,
+  granularity: FinanceGranularity,
+  fyStartMonth = 0
+): string {
+  return periodSortKey(new Date(Math.floor(mi / 12), mi % 12, 1), granularity, fyStartMonth);
 }
 
 /** Liste ordonnée des clés de période (mois) couvrant [start, end] inclus — sert à répartir un
@@ -266,7 +354,8 @@ type PeriodAttributedCostRow = CostImpactRow & { periodAmount: number; periodKey
 
 function attributeCostRowsToPeriods(
   rows: CostImpactRow[],
-  granularity: FinanceGranularity
+  granularity: FinanceGranularity,
+  fyStartMonth = 0
 ): PeriodAttributedCostRow[] {
   const out: PeriodAttributedCostRow[] = [];
   for (const row of rows) {
@@ -284,24 +373,35 @@ function attributeCostRowsToPeriods(
       for (const monthKey of months) {
         const [year, month] = monthKey.split("-").map(Number);
         const d = new Date(year, month, 1);
-        out.push({ ...row, periodAmount: perMonth, periodKey: periodSortKey(d, granularity) });
+        out.push({
+          ...row,
+          periodAmount: perMonth,
+          periodKey: periodSortKey(d, granularity, fyStartMonth),
+        });
       }
       continue;
     }
     const ref = parseLocalDate(referenceDate(impact, lever));
-    out.push({ ...row, periodAmount: impact.amount, periodKey: periodSortKey(ref, granularity) });
+    out.push({
+      ...row,
+      periodAmount: impact.amount,
+      periodKey: periodSortKey(ref, granularity, fyStartMonth),
+    });
   }
   return out;
 }
 
-function pointsFromPeriodAmounts(byPeriod: Map<string, number>): CostPeriodPoint[] {
+function pointsFromPeriodAmounts(
+  byPeriod: Map<string, number>,
+  fyStartMonth = 0
+): CostPeriodPoint[] {
   const sortedKeys = Array.from(byPeriod.keys()).sort();
   let cumulative = 0;
   return sortedKeys.map((key) => {
     const delta = round2(byPeriod.get(key) ?? 0);
     cumulative = round2(cumulative + delta);
     return {
-      period: periodLabel(key, granularityHintFromKey(key)),
+      period: periodLabel(key, granularityHintFromKey(key), fyStartMonth),
       sortKey: key,
       delta,
       cumulative,
@@ -325,36 +425,41 @@ function granularityHintFromKey(key: string): FinanceGranularity {
  *
  *  `natureFilter`, optionnel, restreint les lignes de coût prises en compte (ex. Invest uniquement
  *  — `isInvestNature` — pour `CostCommitmentTimelineChart` et la série "Coûts (Invest)" du
- *  graphique Invest vs Savings). Omis = tous les coûts (comportement historique). */
+ *  graphique Invest vs Savings). Omis = tous les coûts (comportement historique).
+ *
+ *  `fyStartMonth` (0-11) : années / trimestres = exercices fiscaux du programme (voir
+ *  `periodSortKey`) — la page Finance passe le même que son P&L et son tableau. */
 export function bucketCostsByPeriod(
   data: BeTrackData,
   granularity: FinanceGranularity = "quarter",
-  natureFilter?: (nature: ActionImpact["nature"]) => boolean
+  natureFilter?: (nature: ActionImpact["nature"]) => boolean,
+  fyStartMonth = 0
 ): CostPeriodPoint[] {
   let rows = flattenCostImpacts(data);
   if (natureFilter) rows = rows.filter(({ impact }) => natureFilter(impact.nature));
-  const attributed = attributeCostRowsToPeriods(rows, granularity);
+  const attributed = attributeCostRowsToPeriods(rows, granularity, fyStartMonth);
   const byPeriod = new Map<string, number>();
   for (const row of attributed) {
     byPeriod.set(row.periodKey, (byPeriod.get(row.periodKey) ?? 0) + row.periodAmount);
   }
-  return pointsFromPeriodAmounts(byPeriod);
+  return pointsFromPeriodAmounts(byPeriod, fyStartMonth);
 }
 
 /** Détail des lignes de coût (avec leur montant attribué) qui contribuent à UNE période donnée
  *  (`periodKey`, tel que renvoyé dans `CostPeriodPoint.sortKey` par `bucketCostsByPeriod`) — sert
  *  au drill-down au clic sur une barre de `CostCommitmentTimelineChart`. Même `natureFilter` que
  *  `bucketCostsByPeriod` : à fournir identique pour rester cohérent avec le montant affiché sur la
- *  barre cliquée. */
+ *  barre cliquée (de même que `fyStartMonth`). */
 export function costRowsForPeriod(
   data: BeTrackData,
   granularity: FinanceGranularity,
   periodKey: string,
-  natureFilter?: (nature: ActionImpact["nature"]) => boolean
+  natureFilter?: (nature: ActionImpact["nature"]) => boolean,
+  fyStartMonth = 0
 ): { lever: Lever; amount: number }[] {
   let rows = flattenCostImpacts(data);
   if (natureFilter) rows = rows.filter(({ impact }) => natureFilter(impact.nature));
-  return attributeCostRowsToPeriods(rows, granularity)
+  return attributeCostRowsToPeriods(rows, granularity, fyStartMonth)
     .filter((row) => row.periodKey === periodKey)
     .map((row) => ({ lever: row.lever, amount: row.periodAmount }));
 }
@@ -417,10 +522,12 @@ function recurringFlows(data: BeTrackData): RecurringFlow[] {
  *  de fin si renseignée (audit M6 : un gain annuel n'était compté qu'une fois, au trimestre de sa
  *  date, ce qui faussait le cumul, le ROI et le délai de retour). Horizon : de la première date à
  *  12 mois après la dernière date connue (au moins un an plein de run-rate) — toutes les périodes
- *  de l'horizon sont présentes, même vides. Leviers annulés exclus. */
+ *  de l'horizon sont présentes, même vides. Leviers annulés exclus. Années / trimestres =
+ *  exercices fiscaux selon `fyStartMonth` (voir `periodSortKey`). */
 function investVsSavingsEntries(
   data: BeTrackData,
-  granularity: FinanceGranularity
+  granularity: FinanceGranularity,
+  fyStartMonth = 0
 ): { entries: InvestVsSavingsEntry[]; periodKeys: string[] } {
   const investRows = attributeCostRowsToPeriods(
     flattenCostImpacts(data).filter(({ impact }) => isInvestNature(impact.nature)),
@@ -453,21 +560,21 @@ function investVsSavingsEntries(
   };
   for (const r of investRows) {
     const mi = monthKeyToIndex(r.periodKey);
-    const e = entryFor(r.lever, periodKeyOfMonthIndex(mi, granularity));
+    const e = entryFor(r.lever, periodKeyOfMonthIndex(mi, granularity, fyStartMonth));
     if (r.impact.nature === "capex") e.capex += r.periodAmount;
     else e.opexOneOff += r.periodAmount;
   }
   for (const f of flows) {
     const last = Math.min(f.toMi, endMi);
     for (let mi = f.fromMi; mi <= last; mi++) {
-      const e = entryFor(f.lever, periodKeyOfMonthIndex(mi, granularity));
+      const e = entryFor(f.lever, periodKeyOfMonthIndex(mi, granularity, fyStartMonth));
       if (f.kind === "gain") e.grossSavings += f.annual / 12;
       else e.opexRec += f.annual / 12;
     }
   }
   const periodKeys: string[] = [];
   for (let mi = startMi; mi <= endMi; mi++) {
-    const key = periodKeyOfMonthIndex(mi, granularity);
+    const key = periodKeyOfMonthIndex(mi, granularity, fyStartMonth);
     if (periodKeys[periodKeys.length - 1] !== key) periodKeys.push(key);
   }
   return { entries: Array.from(byKey.values()), periodKeys };
@@ -478,30 +585,32 @@ function investVsSavingsEntries(
  *  même attribution que `bucketInvestVsSavingsByPeriod` (champ `opexRecStarted`). */
 export function bucketRecurrentOpexByPeriod(
   data: BeTrackData,
-  granularity: FinanceGranularity = "quarter"
+  granularity: FinanceGranularity = "quarter",
+  fyStartMonth = 0
 ): CostPeriodPoint[] {
-  const { entries } = investVsSavingsEntries(data, granularity);
+  const { entries } = investVsSavingsEntries(data, granularity, fyStartMonth);
   const byPeriod = new Map<string, number>();
   for (const e of entries) {
     if (e.opexRec) byPeriod.set(e.periodKey, (byPeriod.get(e.periodKey) ?? 0) + e.opexRec);
   }
-  return pointsFromPeriodAmounts(byPeriod);
+  return pointsFromPeriodAmounts(byPeriod, fyStartMonth);
 }
 
 /** Gains bruts récurrents (run-rate, départs ETP compris) par période — même attribution que
  *  `bucketInvestVsSavingsByPeriod` (champ `grossSavings`). Gains one-off exclus. */
 export function bucketSavingsByPeriod(
   data: BeTrackData,
-  granularity: FinanceGranularity = "quarter"
+  granularity: FinanceGranularity = "quarter",
+  fyStartMonth = 0
 ): CostPeriodPoint[] {
-  const { entries } = investVsSavingsEntries(data, granularity);
+  const { entries } = investVsSavingsEntries(data, granularity, fyStartMonth);
   const byPeriod = new Map<string, number>();
   for (const e of entries) {
     if (e.grossSavings) {
       byPeriod.set(e.periodKey, (byPeriod.get(e.periodKey) ?? 0) + e.grossSavings);
     }
   }
-  return pointsFromPeriodAmounts(byPeriod);
+  return pointsFromPeriodAmounts(byPeriod, fyStartMonth);
 }
 
 export type InvestVsSavingsPoint = {
@@ -529,12 +638,14 @@ export type InvestVsSavingsPoint = {
  *  réelles) aux gains récurrents en run-rate, nets de l'OPEX récurrent en run-rate (voir
  *  `investVsSavingsEntries`). Alimente le graphique "Coût d'investissement vs Savings" : une barre
  *  signée par période (`netPeriodResult`) + une courbe de cumul (`netCumulative`) qui matérialise
- *  le breakeven. Toutes les périodes de l'horizon sont présentes (cumul continu). */
+ *  le breakeven. Toutes les périodes de l'horizon sont présentes (cumul continu). Années /
+ *  trimestres = exercices fiscaux selon `fyStartMonth` (0 = années civiles). */
 export function bucketInvestVsSavingsByPeriod(
   data: BeTrackData,
-  granularity: FinanceGranularity = "quarter"
+  granularity: FinanceGranularity = "quarter",
+  fyStartMonth = 0
 ): InvestVsSavingsPoint[] {
-  const { entries, periodKeys } = investVsSavingsEntries(data, granularity);
+  const { entries, periodKeys } = investVsSavingsEntries(data, granularity, fyStartMonth);
   const byKey = new Map<string, { investCost: number; grossSavings: number; opexRec: number }>();
   for (const key of periodKeys) byKey.set(key, { investCost: 0, grossSavings: 0, opexRec: 0 });
   for (const e of entries) {
@@ -554,7 +665,7 @@ export function bucketInvestVsSavingsByPeriod(
     const netPeriodResult = round2(netSavings - investCost);
     cumulative = round2(cumulative + netPeriodResult);
     return {
-      period: periodLabel(key, granularity),
+      period: periodLabel(key, granularity, fyStartMonth),
       sortKey: key,
       investCost,
       grossSavings,
@@ -745,13 +856,14 @@ export type InvestVsSavingsLeverRow = {
 
 /** Décomposition par levier d'une période du graphique "Coût d'investissement vs Savings" (mêmes
  *  flux que `bucketInvestVsSavingsByPeriod` — voir `investVsSavingsEntries`). `periodKey === null`
- *  = tout l'horizon (vue « Total » du détail de calcul). */
+ *  = tout l'horizon (vue « Total » du détail de calcul). `fyStartMonth` : le même que le graphique. */
 export function investVsSavingsRowsForPeriod(
   data: BeTrackData,
   granularity: FinanceGranularity,
-  periodKey: string | null
+  periodKey: string | null,
+  fyStartMonth = 0
 ): InvestVsSavingsLeverRow[] {
-  const { entries } = investVsSavingsEntries(data, granularity);
+  const { entries } = investVsSavingsEntries(data, granularity, fyStartMonth);
   const byLever = new Map<string, InvestVsSavingsLeverRow>();
   for (const e of entries) {
     if (periodKey !== null && e.periodKey !== periodKey) continue;

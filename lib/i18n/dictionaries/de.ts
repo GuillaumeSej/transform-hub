@@ -2739,6 +2739,8 @@ const de: Record<string, string> = {
     "Einmalkosten (CAPEX + einmaliger OPEX): gebunden vs. anstehend",
   "finance.chart.engagedScopeNote":
     "Gesamt {total} (gebunden {engaged} · anstehend {upcoming}) — wiederkehrender OPEX ausgeschlossen, gleicher Umfang wie die Dashboard-Kennzahl „CAPEX & Einmalkosten“.",
+  "finance.chart.engagedUndetailedNote":
+    "Davon {amount} auf {count} Hebel(n) ohne detaillierte Kostenzeile (anteilig zum Fortschritt gebunden, wie in der Kennzahl).",
   "finance.chart.hierarchyTitleAllCosts":
     "Gesamtkosten inkl. wiederkehrendem OPEX, nach GuV-Konto / Kostenstelle",
   "finance.chart.hierarchyScopeNote":
@@ -3169,7 +3171,7 @@ const de: Record<string, string> = {
   "chart.waterfall.drill.intro.initial":
     "Eingefrorener annualisierter Plan aller Hebel (einschließlich stornierter).",
   "chart.waterfall.drill.intro.reforecast":
-    "Nur neu prognostizierte Arbeitspakete: annualisierter Gewinn vorher (Ursprungsplan) und nachher.",
+    "Aktive Hebel, deren neu prognostizierter Wert vom Ursprungsplan abweicht: annualisierter Gewinn vorher (Ursprungsplan) und nachher.",
   "chart.waterfall.drill.intro.cancelled":
     "Ursprünglicher annualisierter Plan stornierter Hebel, aus dem Ziel entfernt.",
   "chart.waterfall.drill.intro.gross":

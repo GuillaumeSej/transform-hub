@@ -1,17 +1,20 @@
 import type { HierarchyLevelDef, HierarchyNode, Lever, Workstream } from "@/types";
 import {
+  displayedLockedPlanNet,
   displayedReforecastNet,
   leverImpactsOf,
   leverOpexRecOf,
   realizedSavings,
-  reforecastSnapshotOf,
 } from "@/lib/engine";
 import { resolveHierarchyNodeChain } from "@/lib/hierarchyLogic";
 
 /**
- * Logique pure du détail (pop-up) de chaque étape de la cascade des économies. Mêmes fonctions de
- * calcul que `savingsTriple` / `engine.savingsWaterfall` (displayedReforecastNet, realizedSavings,
- * plan figé) pour une cohérence stricte avec le graphe "Réalisation des économies".
+ * Logique pure du détail (pop-up) de chaque étape de la cascade des économies. EXACTEMENT les
+ * mêmes fonctions que les barres (`engine.savingsWaterfall`) — plan figé `displayedLockedPlanNet`,
+ * réactualisé `displayedReforecastNet`, réalisé `realizedSavings`, OPEX récurrent `leverOpexRecOf`
+ * — et le même périmètre de leviers, pour que la somme du détail de chaque étape égale sa barre
+ * (audit lot 2 : le détail lisait le plan figé pour l'OPEX récurrent et ne gardait que les leviers
+ * flaggés « réactualisé » pour le delta, d'où 0,65 vs 0,5 et +0,2 vs 0,0).
  */
 
 export type DrilldownStepKey =
@@ -20,7 +23,8 @@ export type DrilldownDimension = "workstream" | "geography";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r1 = (n: number) => Math.round(n * 10) / 10;
-const lockedNet = (l: Lever) => l.lockedPlan?.netSavings ?? l.netSavings;
+/** Plan figé d'un levier — même définition que le « Planifié initial » de la cascade. */
+const lockedNet = (l: Lever) => displayedLockedPlanNet(l).value;
 
 export type OpexSegment = { key: string; label: string; value: number };
 
@@ -50,14 +54,15 @@ export type DrilldownEntry = {
 export type OpexNatureLabeler = (natureId: string | undefined) => string;
 
 /** OPEX récurrent d'un levier segmenté par nature d'impact (nature configurable, sinon le type :
- *  ETP recrutés / non détaillé). Le total des segments = snapshot (réactualisé ?? plan figé). */
+ *  ETP recrutés / non détaillé). Le total des segments = `engine.leverOpexRecOf` (réactualisé
+ *  effectif : impacts si le levier en porte, sinon réactualisé enregistré / plan figé), la valeur
+ *  sommée par la barre « OPEX récurrent » de la cascade. */
 export function leverOpexRecSegments(
   lever: Lever,
   natureLabel: OpexNatureLabeler,
   labels: { fte: string; other: string }
 ): OpexSegment[] {
-  const snap = reforecastSnapshotOf(lever) ?? lever.lockedPlan ?? lever;
-  const total = snap.opexRec;
+  const total = leverOpexRecOf(lever);
   const acc = new Map<string, OpexSegment>();
   // Clé = libellé normalisé : deux natures de même nom fusionnent en un seul segment.
   const add = (_key: string, label: string, v: number) => {
@@ -79,8 +84,9 @@ export function leverOpexRecSegments(
   }
   const detailed = Array.from(acc.values()).reduce((s, x) => s + x.value, 0);
   const rest = r2(total - detailed);
+  // Tout écart non nul (au centime de M€) va dans « Non détaillé » : Σ segments = total exact.
   if (acc.size === 0 && total !== 0) add("other", labels.other, total);
-  else if (Math.abs(rest) >= 0.05) add("other", labels.other, rest);
+  else if (Math.abs(rest) >= 0.005) add("other", labels.other, rest);
   const segs = Array.from(acc.values());
   return segs.filter((s) => Math.abs(s.value) > 0.004).map((s) => ({ ...s, value: r2(s.value) }));
 }
@@ -138,9 +144,12 @@ export function buildDrilldownEntries(
     } else if (cancelled) {
       continue;
     } else if (step === "reforecast") {
+      // TOUS les leviers actifs qui s'écartent de leur plan figé, flaggés « réactualisé » ou non :
+      // la barre (`savingsWaterfall.reforecastDelta` = cible − plan figé des actifs) les compte tous
+      // — un levier porteur d'impacts a pour réactualisé le net de ses impacts dès sa validation.
       const refo = displayedReforecastNet(l);
       const delta = refo.value - locked;
-      if (refo.isReforecast && Math.abs(delta) >= 0.005)
+      if (Math.abs(delta) >= 0.005)
         out.push({
           ...base(l),
           before: locked,
@@ -162,7 +171,7 @@ export function buildDrilldownEntries(
       });
     } else {
       const segments = leverOpexRecSegments(l, natureLabel, labels);
-      const total = segments.reduce((s, x) => s + x.value, 0);
+      const total = leverOpexRecOf(l);
       if (Math.abs(total) >= 0.005)
         out.push({
           ...base(l),

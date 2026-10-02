@@ -64,21 +64,38 @@ export {
 
 /** #2 — Engagement des coûts Invest (CAPEX + OPEX one-off) dans le temps, toggle
  *  mensuel/trimestriel/annuel, barre cliquable (drill-down par workstream/levier). */
-export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
+export function CostCommitmentTimelineChart({
+  data,
+  fyStartMonth = 0,
+}: {
+  data: BeTrackData;
+  /** Mois (0-11) de début d'exercice du programme : années / trimestres = exercices fiscaux, comme
+   *  le P&L et le tableau de la page (audit lot 2). */
+  fyStartMonth?: number;
+}) {
   const { t } = useTranslation();
   const [granularity, setGranularity] = useState<FinanceGranularity>("quarter");
   // Référence stable tant que le contenu ne change pas (voir lib/hooks/useStableChartData.ts) : un
   // re-rendu de la page avec des données identiques ne relance plus l'animation d'entrée.
   const points = useStableValue(
-    useMemo(() => bucketCostsByPeriod(data, granularity, isInvestNature), [data, granularity])
+    useMemo(
+      () => bucketCostsByPeriod(data, granularity, isInvestNature, fyStartMonth),
+      [data, granularity, fyStartMonth]
+    )
   );
   const [selectedPeriod, setSelectedPeriod] = useState<{ key: string; label: string } | null>(null);
 
   const groups = useMemo(() => {
     if (!selectedPeriod) return [];
-    const rows = costRowsForPeriod(data, granularity, selectedPeriod.key, isInvestNature);
+    const rows = costRowsForPeriod(
+      data,
+      granularity,
+      selectedPeriod.key,
+      isInvestNature,
+      fyStartMonth
+    );
     return groupCostsByWorkstream(rows, data.workstreams);
-  }, [selectedPeriod, data, granularity]);
+  }, [selectedPeriod, data, granularity, fyStartMonth]);
 
   // Aperçu au survol (retour PO) : 3 principaux leviers de la période survolée — mêmes lignes que
   // le détail ouvert au clic (`costRowsForPeriod`), calculées à la demande et mises en cache.
@@ -88,7 +105,9 @@ export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
       let top = cache.get(periodKey);
       if (!top) {
         top = topContributors(
-          leverAmounts(costRowsForPeriod(data, granularity, periodKey, isInvestNature)),
+          leverAmounts(
+            costRowsForPeriod(data, granularity, periodKey, isInvestNature, fyStartMonth)
+          ),
           3,
           0.005
         );
@@ -96,7 +115,7 @@ export function CostCommitmentTimelineChart({ data }: { data: BeTrackData }) {
       }
       return top;
     };
-  }, [data, granularity]);
+  }, [data, granularity, fyStartMonth]);
   const maxDelta = Math.max(1e-9, ...points.map((p) => Math.abs(p.delta)));
   const totalCost = points.length > 0 ? points[points.length - 1].cumulative : 0;
   const openPeriod = (p: { sortKey?: string; period?: string } | undefined) => {
@@ -226,7 +245,14 @@ const COLOR_CUMULATIVE = "#0a0a0a";
  *  CAPEX/OPEX one-off de la période domine, positive dès que les gains nets le dépassent) + une
  *  courbe de cumul qui matérialise le breakeven (le point où elle repasse au-dessus de 0),
  *  tooltip détaillé au survol (décomposition investCost/grossSavings/opexRecStarted/netSavings). */
-export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
+export function InvestVsSavingsChart({
+  data,
+  fyStartMonth = 0,
+}: {
+  data: BeTrackData;
+  /** Mois (0-11) de début d'exercice : années / trimestres = exercices fiscaux (audit lot 2). */
+  fyStartMonth?: number;
+}) {
   const { t } = useTranslation();
   const [granularity, setGranularity] = useState<FinanceGranularity>("quarter");
   // Pop-up "détail du calcul" : undefined = fermée, null = vue Total, sinon clé de la période.
@@ -236,12 +262,12 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
   const points = useStableValue(
     useMemo(
       () =>
-        bucketInvestVsSavingsByPeriod(data, granularity).map((p) => ({
+        bucketInvestVsSavingsByPeriod(data, granularity, fyStartMonth).map((p) => ({
           ...p,
           negOpex: -p.opexRecStarted,
           negInvest: -p.investCost,
         })),
-      [data, granularity]
+      [data, granularity, fyStartMonth]
     )
   );
   const open = (p: { sortKey?: string } | undefined) => {
@@ -255,7 +281,7 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
       let top = cache.get(periodKey);
       if (!top) {
         top = topContributors(
-          investVsSavingsRowsForPeriod(data, granularity, periodKey).map((r) => ({
+          investVsSavingsRowsForPeriod(data, granularity, periodKey, fyStartMonth).map((r) => ({
             id: r.leverId,
             code: r.leverCode,
             name: r.leverName,
@@ -268,7 +294,7 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
       }
       return top;
     };
-  }, [data, granularity]);
+  }, [data, granularity, fyStartMonth]);
   const tooltipContent = useCallback(
     (props: { active?: boolean; payload?: InvestVsSavingsTooltipPayload }) => (
       <InvestVsSavingsTooltip {...props} topLeversOf={topLeversOf} />
@@ -402,6 +428,7 @@ export function InvestVsSavingsChart({ data }: { data: BeTrackData }) {
       <InvestVsSavingsCalcModal
         data={data}
         granularity={granularity}
+        fyStartMonth={fyStartMonth}
         points={points}
         periodKey={calcKey}
         onPeriodChange={setCalcKey}

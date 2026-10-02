@@ -31,6 +31,7 @@ type CalcLine = {
 export function InvestVsSavingsCalcModal({
   data,
   granularity,
+  fyStartMonth = 0,
   points,
   periodKey,
   onPeriodChange,
@@ -38,6 +39,8 @@ export function InvestVsSavingsCalcModal({
 }: {
   data: BeTrackData;
   granularity: FinanceGranularity;
+  /** Même exercice fiscal que le graphique (clés de période "YYYY" / "YYYY-Q#" fiscales). */
+  fyStartMonth?: number;
   points: InvestVsSavingsPoint[];
   /** `undefined` = fermé, `null` = vue Total, sinon clé de la période affichée. */
   periodKey: string | null | undefined;
@@ -51,8 +54,8 @@ export function InvestVsSavingsCalcModal({
     () =>
       periodKey === undefined
         ? null
-        : buildInvestVsSavingsCalc(data, granularity, periodKey, points),
-    [data, granularity, periodKey, points]
+        : buildInvestVsSavingsCalc(data, granularity, periodKey, points, fyStartMonth),
+    [data, granularity, periodKey, points, fyStartMonth]
   );
   const fmt = (v: number) => engine.fmtCurr(v);
   const wsName = (id: string) => data.workstreams.find((w) => w.id === id)?.name ?? id;

@@ -139,7 +139,7 @@ export function SavingsStepDrilldownModal({
     ),
     reforecast: t(
       "chart.waterfall.drill.intro.reforecast",
-      "Uniquement les chantiers réactualisés : gain annualisé avant (plan initial) et après réactualisation."
+      "Leviers actifs dont la valeur réactualisée s'écarte du plan initial : gain annualisé avant (plan initial) et après réactualisation."
     ),
     cancelled: t(
       "chart.waterfall.drill.intro.cancelled",

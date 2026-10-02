@@ -16,6 +16,21 @@ export type FiscalYearPeriod = {
   endISO: string;
 };
 
+/** Libellé d'un exercice fiscal à cheval sur deux années civiles, identifié par son année de
+ *  début : 2026 → "FY26/27". Seule mise en forme de ce libellé (`generateFiscalYears`, graphiques
+ *  Finance — lib/financeCosts.ts). */
+export function fiscalYearSpanLabel(startYear: number): string {
+  return `FY${String(startYear).slice(-2)}/${String(startYear + 1).slice(-2)}`;
+}
+
+/** Libellé de l'exercice qui COMMENCE en `startYear` pour un exercice débutant au mois
+ *  `fyStartMonth` (0-11) — convention des filtres « Année » de la page Finance (P&L, tableau par
+ *  niveau financier) : exercice civil (janvier) → l'année seule ("2026", libellés historiques
+ *  inchangés) ; exercice décalé → "FY26/27", pour qu'on ne lise pas « 2026 » comme l'année civile. */
+export function fiscalYearLabel(startYear: number, fyStartMonth = 0): string {
+  return fyStartMonth === 0 ? String(startYear) : fiscalYearSpanLabel(startYear);
+}
+
 /** Détermine si un `Program.fyStart` correspond à une année civile (1er janvier). */
 function isCalendarFy(fyStart: string): boolean {
   const m = Number(fyStart.slice(5, 7));
@@ -48,7 +63,7 @@ export function generateFiscalYears(
     const fyEndISO = nextStart.toISOString().slice(0, 10);
     // Skippe les FY entièrement hors plage.
     if (fyEndISO < fromISO || fyStartISO > toISO) continue;
-    const label = calendarFy ? `FY${y}` : `FY${String(y).slice(-2)}/${String(y + 1).slice(-2)}`;
+    const label = calendarFy ? `FY${y}` : fiscalYearSpanLabel(y);
     result.push({ label, startISO: fyStartISO, endISO: fyEndISO });
   }
   return result;

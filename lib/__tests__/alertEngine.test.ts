@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { generateAlerts } from "@/lib/alertEngine";
+import { computeLeverRisk } from "@/lib/engine";
+import { leverHealthCounts } from "@/lib/leverHealth";
 import type { BeTrackData, Lever, LeverAction, LeverStatus } from "@/types";
 
 /** Action en retard : statut non-"done" avec une date de fin passée (voir engine.isActionLate) —
@@ -509,5 +511,105 @@ describe("alertEngine — generateAlerts", () => {
     });
     const autoAlerts = generateAlerts(data).filter((a) => a.source === "auto");
     expect(autoAlerts).toHaveLength(0);
+  });
+});
+
+describe("alertEngine — montant et date des alertes auto (audit lot 2, point 4)", () => {
+  // « Aujourd'hui » = 2026-10-02 ; 2026-01-01 = 274 jours plus tôt.
+  afterEach(() => vi.useRealTimers());
+  const OLD = "2026-01-01";
+  // R : réalisé à 100 % (2,2 M€ réalisés sur 2,2), dépendance FS en conflit avec T.
+  const R: Lever = {
+    ...baseLever,
+    id: "R",
+    name: "Réalisé",
+    status: "delivered",
+    netSavings: 2.2,
+    start: "2026-03-01",
+    end: "2026-09-30",
+    lastUpdate: OLD,
+    dependencies: [{ targetId: "T", type: "FS" }],
+    impacts: [
+      { id: "r1", label: "g", type: "saving", nature: "opex_rec", amount: 2.2, status: "done" },
+    ],
+  };
+  // S : 30 k€ non réalisés ; conflit FS créé il y a 3 jours par le décalage de T (S inchangé depuis
+  // 274 jours).
+  const S: Lever = {
+    ...baseLever,
+    id: "S",
+    name: "Petit",
+    netSavings: 0.03,
+    start: "2026-03-01",
+    lastUpdate: OLD,
+    dependencies: [{ targetId: "T", type: "FS" }],
+    impacts: [],
+  };
+  const T: Lever = {
+    ...baseLever,
+    id: "T",
+    name: "Bloqueur",
+    start: "2026-01-01",
+    end: "2026-12-31",
+    lastUpdate: "2026-09-29",
+    impacts: [],
+  };
+  // U : vraiment à risque — action échue le 2026-09-10, 2 M€ de gains.
+  const U: Lever = {
+    ...baseLever,
+    id: "U",
+    name: "En retard",
+    lastUpdate: OLD,
+    actions: [{ ...lateAction("u1"), end: "2026-09-10", impacts: [] }],
+    impacts: [
+      {
+        id: "u2",
+        label: "g",
+        type: "saving",
+        nature: "opex_rec",
+        amount: 2,
+        gainDate: "2027-01-01",
+      },
+    ],
+  };
+  // V : vraiment à risque — dépassement CAPEX de 0,6 M€.
+  const plan = { grossSavings: 0, netSavings: 0, opexOneOff: 0, opexRec: 0, capex: 1 };
+  const V: Lever = {
+    ...baseLever,
+    id: "V",
+    name: "Dépassement",
+    lastUpdate: "2026-09-20",
+    lockedPlan: plan,
+    reforecast: plan,
+    impacts: [{ id: "v1", label: "c", type: "cost", nature: "capex", amount: 1.6 }],
+  };
+  const levers = [R, S, T, U, V];
+
+  it("montant à risque = non réalisé, date = événement déclencheur, ids stables", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-02T12:00:00Z"));
+    const alerts = generateAlerts(makeData({ levers }));
+    const byId = (id: string) => alerts.find((a) => a.id === id);
+    // Avant : −2,2 M€ (net stocké entier, levier pourtant réalisé à 100 %), alerte orange.
+    expect(byId("AUTO-DEP-R-T")?.impactEur).toBe(0);
+    expect(byId("AUTO-DEP-R-T")?.type).toBe("blue");
+    expect(byId("AUTO-DEP-S-T")?.impactEur).toBe(-30_000);
+    expect(byId("AUTO-DEP-S-T")?.type).toBe("amber");
+    // Avant : lastUpdate de S (2026-01-01, 274 j). Après : dernière modification des deux leviers.
+    expect(byId("AUTO-DEP-S-T")?.ts).toBe("2026-09-29");
+    // Retard : lendemain de l'échéance de l'action (avant : lastUpdate du levier, 2026-01-01).
+    expect(byId("AUTO-DELAY-U")?.ts).toBe("2026-09-11");
+    expect(byId("AUTO-COST-V")?.ts).toBe("2026-09-20");
+  });
+
+  it("« Leviers à risque » : 2 (U, V) et non 4 — R et S ne sont plus Critique", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-02T12:00:00Z"));
+    const alerts = generateAlerts(makeData({ levers }));
+    expect(computeLeverRisk("R", alerts).level).toBe("low");
+    expect(computeLeverRisk("S", alerts).level).toBe("low");
+    expect(computeLeverRisk("U", alerts).level).toBe("critical");
+    expect(computeLeverRisk("V", alerts).level).toBe("critical");
+    expect(leverHealthCounts(levers, alerts).atRisk).toBe(2);
   });
 });

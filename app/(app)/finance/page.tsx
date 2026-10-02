@@ -30,6 +30,7 @@ import { matchesFilter } from "@/lib/filterUtils";
 import { MultiSelect } from "@/components/shared/MultiSelect";
 import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/leversLogic";
 import { pnlLeverContributionsByAccount } from "@/lib/financePreview";
+import { fiscalYearLabel } from "@/lib/fiscalYear";
 
 /**
  * Module Finance — le compte de résultat configuré (baseline P&L éditable, reforecast, waterfall)
@@ -359,7 +360,9 @@ export default function FinancePage() {
   );
   // Sous-titre de l'aperçu : période filtrée + base de calcul, comme `PeriodBasisNote`.
   const pnlPreviewSubtitle = [
-    [pnlYear, pnlQuarter, pnlMonth].filter(Boolean).join(" · "),
+    [pnlYear && fiscalYearLabel(Number(pnlYear), fyStartMonth), pnlQuarter, pnlMonth]
+      .filter(Boolean)
+      .join(" · "),
     engine.isSubAnnualPeriod(pnlPeriodFilter)
       ? t("pnl.periodBasis.period", "Effet sur la période")
       : t("pnl.periodBasis.annual", "Base annuelle (effet année pleine)"),
@@ -418,9 +421,11 @@ export default function FinancePage() {
         fyStartMonth={fyStartMonth}
       />
 
-      <InvestVsSavingsChart data={filteredData} />
+      {/* Années / trimestres = EXERCICES FISCAUX du programme, comme le P&L et le tableau ci-dessus
+          (audit lot 2 : ces deux graphiques découpaient en années civiles). */}
+      <InvestVsSavingsChart data={filteredData} fyStartMonth={fyStartMonth} />
 
-      <CostCommitmentTimelineChart data={filteredData} />
+      <CostCommitmentTimelineChart data={filteredData} fyStartMonth={fyStartMonth} />
 
       <Card className="mb-0">
         <CardHeader
@@ -466,9 +471,11 @@ export default function FinancePage() {
                   setPnlMonth("");
                 }}
               >
+                {/* Valeur = année de DÉBUT de l'exercice ; libellé « FY26/27 » pour un exercice
+                    décalé (`fiscalYearLabel`, mêmes libellés que les graphiques de la page). */}
                 {pnlYearOptions.map((y) => (
                   <option key={y} value={y}>
-                    {y}
+                    {fiscalYearLabel(Number(y), fyStartMonth)}
                   </option>
                 ))}
               </select>

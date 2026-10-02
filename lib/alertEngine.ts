@@ -8,6 +8,7 @@ import {
   leverImpactsOf,
 } from "@/lib/engine";
 import { formatAmountM } from "@/lib/format";
+import { parseLocalDate } from "@/lib/impactStatus";
 
 /**
  * Générateur d'alertes automatiques — fonction pure qui analyse les données du programme
@@ -34,6 +35,63 @@ function fmtImpact(v: number): string {
   return formatAmountM(v);
 }
 
+// ── Date de détection des alertes auto (audit lot 2) ─────────────────────────────────────────
+// Une alerte auto n'est pas persistée : elle est recalculée à chaque rendu. Sa date (`ts`, lue
+// par `engine.computeLeverRisk` pour le critère « délai ») est donc la date de l'ÉVÉNEMENT
+// DÉCLENCHEUR, dérivée des données — déterministe, identique pour tous les utilisateurs, stable
+// tant que l'alerte persiste (le fait déclencheur ne change pas), sans écriture en base. Avant :
+// `lastUpdate` du levier pour toutes, d'où un levier « Critique par délai » (274 j) sur une alerte
+// de dépendance née du décalage récent d'un AUTRE levier.
+
+/** Date calendaire locale "YYYY-MM-DD". */
+function isoDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function timeOf(raw: string | undefined): number {
+  if (!raw) return NaN;
+  return new Date(raw).getTime();
+}
+
+/** Retard : date à laquelle le levier est devenu en retard = la plus ancienne entrée en retard de
+ *  ses actions en retard — lendemain de l'échéance (règle `engine.isActionLate`) ; action passée
+ *  « En retard » à la main avant son échéance : modification du levier qui a posé ce statut
+ *  (`lastUpdate`, borne la plus récente possible). */
+function delayDetectedAt(
+  lever: { lastUpdate?: string },
+  lateActions: { end?: string }[],
+  now: number
+): string {
+  let best = "";
+  let bestTime = Infinity;
+  for (const a of lateActions) {
+    let candidate = lever.lastUpdate ?? "";
+    const due = a.end ? parseLocalDate(a.end) : null;
+    if (due && !Number.isNaN(due.getTime())) {
+      const dayAfterDue = new Date(due.getFullYear(), due.getMonth(), due.getDate() + 1);
+      if (dayAfterDue.getTime() <= now) candidate = isoDay(dayAfterDue);
+    }
+    const t = timeOf(candidate);
+    if (Number.isFinite(t) && t < bestTime) {
+      bestTime = t;
+      best = candidate;
+    }
+  }
+  return best || lever.lastUpdate || "";
+}
+
+/** Dépendance : le conflit de dates naît d'une modification de l'un OU l'autre des deux leviers
+ *  (dates, ou ajout du lien) — date de la plus récente des deux (`lastUpdate`), pas celle du seul
+ *  levier bloqué. */
+function dependencyDetectedAt(...levers: ({ lastUpdate?: string } | undefined)[]): string {
+  let best = "";
+  for (const l of levers) {
+    const raw = l?.lastUpdate;
+    if (raw && (!best || timeOf(raw) > timeOf(best))) best = raw;
+  }
+  return best;
+}
+
 /**
  * @param programType Type du programme dont on génère les alertes — voir `useActiveProgram`.
  *   Passé EXPLICITEMENT par l'appelant plutôt que déduit ici : `BeTrackData` ne porte aucune
@@ -55,7 +113,8 @@ export function generateAlerts(
 
   // ── 1. Leviers en retard — dérivé UNIQUEMENT du retard de leurs actions ────
   // (voir engine.underperformers / engine.isActionLate : c'est le seul mécanisme de détection).
-  const underperf = underperformers(data);
+  const now = Date.now();
+  const underperf = underperformers(data, undefined, now);
   for (const u of underperf) {
     const totalActions = u.actions?.length ?? 0;
     // Part (0-1) des actions en retard, pondérée par `weightPct` si les poids somment à 100
@@ -77,7 +136,8 @@ export function generateAlerts(
     auto.push({
       id: `AUTO-DELAY-${u.id}`,
       type: lateRatio > 0.5 ? "red" : "amber",
-      ts: u.lastUpdate || "",
+      // Date de l'événement : entrée en retard de la 1re action en retard (pas `lastUpdate`).
+      ts: delayDetectedAt(u, u.lateActions, now),
       scope: u.id,
       title: `Levier "${u.name}" en retard : ${u.lateActionsCount} action(s) sur ${totalActions}`,
       desc: `${u.lateActionsCount} action(s) du plan d'action sont en retard (date de fin dépassée ou statut "En retard"). Impact estimé : ${fmtImpact(impact)} sur le run-rate.`,
@@ -105,10 +165,18 @@ export function generateAlerts(
   const depAlerts = dependencyAlerts(data);
   for (const da of depAlerts) {
     const sourceLever = data.levers.find((l) => l.id === da.sourceId);
+    const targetLever = data.levers.find((l) => l.id === da.targetId);
+    // Montant à risque = savings NON RÉALISÉS (`da.impactEur`, M€ — même valeur que le panneau
+    // Dépendances), plus jamais le net stocké entier du levier (audit lot 2 : −2,2 M€ affichés
+    // sur un levier réalisé à 100 %, panneau = 0 €).
+    const atRiskEur = Math.round(da.impactEur * 1_000_000);
     auto.push({
+      // Identifiant inchangé (source + cible) : l'état « Résolu » persisté reste rattaché.
       id: `AUTO-DEP-${da.sourceId}-${da.targetId}`,
-      type: "amber",
-      ts: sourceLever?.lastUpdate || "",
+      // Rien à risque (savings déjà réalisés) → information (bleu) : l'alerte reste visible mais
+      // ne fait plus monter le risque du levier (`computeLeverRisk` ne compte que rouge / orange).
+      type: atRiskEur > 0 ? "amber" : "blue",
+      ts: dependencyDetectedAt(sourceLever, targetLever),
       scope: da.sourceId,
       title: `Dépendance bloquée : ${da.sourceName} → ${da.targetName}`,
       desc: da.message,
@@ -118,7 +186,7 @@ export function generateAlerts(
         vars: { source: da.sourceName, target: da.targetName, days: da.delayDays },
       },
       actorRole: "lever",
-      impactEur: sourceLever ? Math.round(-(sourceLever.netSavings * 1000000)) : undefined,
+      impactEur: atRiskEur > 0 ? -atRiskEur : 0,
       owner: sourceLever?.owner,
       companyId: sourceLever?.companyId,
       source: "auto",
@@ -127,6 +195,9 @@ export function generateAlerts(
   }
 
   // ── 3. Dépassement de coûts (dès le 1er €) — Plan Performance uniquement ───
+  // Date des alertes 3 / 3bis / 4 : `lastUpdate` du levier — l'écart réactualisé vs plan figé ne
+  // dépend QUE des données du levier lui-même, il naît donc d'une de ses modifications (la
+  // dernière est la date la plus récente possible de l'événement déclencheur).
   for (const l of financialAlertsEnabled ? active : []) {
     if (!l.reforecast || !l.lockedPlan) continue;
     // Réactualisé EFFECTIF (recalculé depuis les impacts, règle C3) — même source que le KPI coûts.
