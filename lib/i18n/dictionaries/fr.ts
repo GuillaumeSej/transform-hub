@@ -862,6 +862,8 @@ const fr: Record<string, string> = {
   "hr.fteCard.planned": "Planifié (mouvements)",
   "hr.fteCard.levers": "Visé (leviers)",
   "hr.fteCard.coveragePct": "{pct} % de l'ambition des leviers couverte",
+  "hr.fteCard.coverageBasis":
+    "Couverture calculée sur les {n} ETP des seuls mouvements rattachés aux leviers du périmètre.",
   "hr.fteCard.headcount": "Effectif",
   "hr.fteCard.targetShort": "cible",
   "hr.kpi.targetLabel": "Cible {v}",

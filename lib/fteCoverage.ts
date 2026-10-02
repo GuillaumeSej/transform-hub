@@ -8,8 +8,20 @@
  *   - reste à couvrir = |leviers| − mouvements projetés dans le SENS des leviers : un mouvement de
  *     sens contraire (ex. recrutement face à un levier de réduction) augmente le reste à couvrir.
  *
- * Fonction pure, sans dépendance React.
+ * Périmètre des mouvements qui « couvrent » (lot 2, cohérence A — une seule définition pour le
+ * Dashboard Performance, la carte ETP du Dashboard RH et sa fiche « Couverture leviers ») :
+ * `movementsOfPerimeterLevers` = mouvements RATTACHÉS à un levier du périmètre, leviers ABANDONNÉS
+ * COMPRIS (règle PO « leviers abandonnés inclus partout ») ; un mouvement sans levier (ou rattaché à
+ * un levier hors périmètre) ne couvre aucune ambition et n'entre pas dans le calcul. Le reste à
+ * couvrir reste NET : un mouvement rattaché à un levier sans ambition ETP (cas d'un levier abandonné,
+ * dont l'ambition vaut 0 dans `leverTargetFte`) vient en compensation — exactement la ligne de
+ * réconciliation de la fiche (somme des restes par levier − compensations = reste global).
+ *
+ * Fonctions pures, sans dépendance React.
  */
+import type { Lever, WorkforceMovement } from "@/types";
+import { leverTargetFte } from "@/lib/engine";
+import { hrProgramSummary } from "@/lib/hrProgramSummary";
 
 export type FteCoverageStatus =
   /** Ni ambition levier ni mouvement : rien à afficher. */
@@ -63,4 +75,29 @@ export function fteCoverage(leverFte: number, movementFte: number): FteCoverage 
   if (gap > 0) return { ...base, remaining: gap, exceeded: 0, coveragePct, status: "remaining" };
   if (gap < 0) return { ...base, remaining: 0, exceeded: -gap, coveragePct, status: "exceeded" };
   return { ...base, remaining: 0, exceeded: 0, coveragePct, status: "covered" };
+}
+
+/** Mouvements RH rattachés aux leviers du périmètre (`levers`, abandonnés COMPRIS — voir l'en-tête).
+ *  Sélecteur UNIQUE des « ETP couverts par des mouvements RH ». */
+export function movementsOfPerimeterLevers<M extends Pick<WorkforceMovement, "leverId">>(
+  movements: M[],
+  levers: Pick<Lever, "id">[]
+): M[] {
+  const ids = new Set(levers.map((l) => l.id));
+  return movements.filter((m) => !!m.leverId && ids.has(m.leverId));
+}
+
+/** Couverture des ETP visés par les leviers du périmètre : ambition `leverTargetFte(levers)` vs
+ *  impact ETP cible (`hrProgramSummary(...).fte.target`, mouvements abandonnés exclus) des
+ *  mouvements rattachés (`movementsOfPerimeterLevers`). `linkedCount` = nombre de mouvements
+ *  rattachés (0 → rien à afficher côté Dashboard Performance). */
+export function leverFteCoverage(
+  levers: Pick<Lever, "id" | "status" | "fteImpact">[],
+  movements: WorkforceMovement[]
+): FteCoverage & { linkedCount: number } {
+  const linked = movementsOfPerimeterLevers(movements, levers);
+  return {
+    ...fteCoverage(leverTargetFte(levers), hrProgramSummary(linked).fte.target),
+    linkedCount: linked.length,
+  };
 }

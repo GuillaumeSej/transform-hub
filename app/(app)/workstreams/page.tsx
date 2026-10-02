@@ -99,8 +99,11 @@ export default function WorkstreamsPage() {
   const cancelledCount = scopedLevers.length - visibleLevers.length;
   const summary = engine.programSummary({ ...data, levers: visibleLevers });
 
-  // Même définition que partout (`engine.realizationPct` : cible ≤ 0 ou réalisé négatif → 0 %).
-  const reforecastPct = engine.realizationPct(summary.realized, summary.reforecastTarget);
+  // Même définition et même valeur que le KPI du dashboard : `summary.progressPct`
+  // (`engine.realizationPct` sur les montants NON arrondis). Recalculer depuis `summary.realized` /
+  // `summary.reforecastTarget` (arrondis au dixième) décalait d'un point (55 % ici, 54 % au
+  // dashboard — lot 2, cohérence A).
+  const reforecastPct = summary.progressPct;
 
   // Risque RECALCULÉ depuis les alertes (`engine.computeLeverRisk`, même source que la bibliothèque
   // des leviers et la fiche levier) — pas le champ stocké `Lever.risk`, figé à l'import.

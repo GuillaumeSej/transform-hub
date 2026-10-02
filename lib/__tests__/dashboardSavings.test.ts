@@ -10,7 +10,9 @@ import {
   waterfallBars,
 } from "@/lib/dashboardSavings";
 import type { SavingsWaterfall, FinanceHierarchyRow } from "@/lib/engine";
-import type { HierarchyNode, Lever } from "@/types";
+import { programSummary, realizationPct, workstreamSummary } from "@/lib/engine";
+import { barRealizationPct } from "@/components/shared/charts/WorkstreamBarChart";
+import type { BeTrackData, HierarchyNode, Lever } from "@/types";
 
 const lever = (o: Partial<Lever>): Lever =>
   ({
@@ -28,6 +30,61 @@ describe("savingsTriple", () => {
     const t = savingsTriple([lever({}), lever({ id: "C", status: "cancelled" })]);
     expect(t.planned).toBe(16);
     expect(t.reforecast).toBe(12);
+  });
+});
+
+describe("taux de réalisation — page Chantiers, KPI du dashboard et infobulle des barres (lot 2)", () => {
+  // Réactualisé 10,04 (arrondi 10,0) ; réalisé 5,46 (arrondi 5,5) : 54,4 % → 54 % sur les montants
+  // exacts, 55 % recalculé depuis les montants arrondis (constat d'audit : Chantiers 55 % /
+  // Dashboard 54 %).
+  const l = {
+    id: "R",
+    ws: "WS1",
+    status: "in_progress",
+    netSavings: 10.04,
+    actions: [
+      {
+        id: "a",
+        name: "a",
+        start: "2026-01-01",
+        end: "2026-02-01",
+        status: "done",
+        impacts: [{ id: "i", type: "saving", amount: 5.46 }],
+      },
+    ],
+  } as unknown as Lever;
+  const data = {
+    levers: [l],
+    workforce: { movements: [] },
+  } as unknown as BeTrackData;
+
+  it("avant : recalcul depuis les montants arrondis → 55 % au lieu de 54 %", () => {
+    const s = programSummary(data);
+    expect(s.realized).toBe(5.5);
+    expect(s.reforecastTarget).toBe(10);
+    expect(realizationPct(s.realized, s.reforecastTarget)).toBe(55);
+    expect(s.progressPct).toBe(54);
+  });
+
+  it("après : page Chantiers (summary.progressPct), synthèse chantier, barres et infobulle = 54 %", () => {
+    const kpi = programSummary(data).progressPct;
+    const triple = savingsTriple([l]);
+    expect(triple.realizationPct).toBe(kpi);
+    expect(workstreamSummary(data, "WS1").progressPct).toBe(kpi);
+    // Infobulle « Taux de réalisation » : la valeur portée par la barre prime sur le recalcul.
+    expect(
+      barRealizationPct({
+        realized: triple.realized,
+        target: triple.reforecast,
+        realizationPct: triple.realizationPct,
+      })
+    ).toBe(kpi);
+  });
+
+  it("infobulle : jamais négative, masquée sans cible positive", () => {
+    expect(barRealizationPct({ realized: -2, target: 10 })).toBe(0);
+    expect(barRealizationPct({ realized: 3, target: 0 })).toBeNull();
+    expect(barRealizationPct({ realized: 3, target: 4 })).toBe(75);
   });
 });
 

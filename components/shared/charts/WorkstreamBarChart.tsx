@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { formatMillions } from "@/lib/format";
+import { realizationPct } from "@/lib/engine";
 import { leverGapContributors } from "@/lib/chartPreview";
 import { ChartHoverArea, FloatingPreview, HIDDEN_TOOLTIP_WRAPPER } from "./HoverPreview";
 
@@ -28,6 +29,10 @@ export type WorkstreamBarPoint = {
   /** Planifié initial (plan figé) — dessiné en contour pointillé derrière/autour des barres. */
   planned?: number;
   reforecast?: number;
+  /** Taux de réalisation calculé en amont sur les montants NON arrondis (`savingsTriple`) — même
+   *  valeur que le KPI / la synthèse des chantiers. Absent (vues pivot) : `realizationPct(realized,
+   *  target)` sur les valeurs du point. */
+  realizationPct?: number;
   /** Détail par levier de la contribution à la cible / au réalisé — alimente le tooltip détaillé
    *  (même esprit que le Mekko : lister les leviers derrière un segment agrégé). Optionnel : les
    *  vues issues du builder générique (pivot par dimension libre) ne le fournissent pas encore. */
@@ -38,6 +43,17 @@ export type WorkstreamBarPoint = {
 };
 
 type ChartDatum = WorkstreamBarPoint & { remaining: number };
+
+/** « Taux de réalisation » de l'aperçu au survol : `point.realizationPct` (non arrondi, même valeur
+ *  que le KPI du dashboard et la synthèse des chantiers) sinon `engine.realizationPct` sur les
+ *  valeurs du point — jamais négatif. `null` (ligne masquée) sans cible positive. Avant (lot 2,
+ *  cohérence A) : formule locale sur des valeurs arrondies, qui pouvait devenir négative. */
+export function barRealizationPct(
+  point: Pick<WorkstreamBarPoint, "realized" | "target" | "realizationPct">
+): number | null {
+  if (!(point.target > 0)) return null;
+  return point.realizationPct ?? realizationPct(point.realized, point.target);
+}
 
 /** Découpe un label en (au plus) 2 lignes pour l'affichage sous l'axe X — sans troncature dure du
  *  nom complet dans le cas courant (contrairement à l'ancien `TruncatedTick` à `maxLen = 12`).
@@ -149,7 +165,8 @@ export function WorkstreamBarDetail({
   return (
     <ul className="space-y-3">
       {rows.map((row) => {
-        const pct = row.target > 0 ? Math.round((row.realized / row.target) * 100) : 0;
+        // Définition unique du taux de réalisation (cible ≤ 0 ou réalisé négatif → 0 %).
+        const pct = realizationPct(row.realized, row.target);
         const targetWidth = Math.max(2, (row.target / maxTarget) * 100);
         const realizedWidth = row.target > 0 ? Math.min(100, (row.realized / row.target) * 100) : 0;
         return (
@@ -520,7 +537,7 @@ function WorkstreamBarPreview({
   const { realized, target, planned } = point;
   const max = Math.max(Math.abs(realized), Math.abs(target), Math.abs(planned ?? 0), 1e-9);
   const width = (v: number) => `${Math.max(2, (Math.abs(v) / max) * 100)}%`;
-  const rate = target > 0 ? Math.round((realized / target) * 100) : null;
+  const rate = barRealizationPct(point);
   const gap = planned !== undefined ? Math.round((realized - planned) * 10) / 10 : null;
   const top = leverGapContributors(point.leverBreakdown).slice(0, 3);
   const row = (swatch: ReactNode, label: string, value: number) => (

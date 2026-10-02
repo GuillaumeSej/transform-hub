@@ -11,7 +11,7 @@ import {
   useRealizedApprovalQueue,
 } from "@/lib/hooks/useApprovalQueue";
 import { decideImpactRealized } from "@/lib/impactStatus";
-import { fmtCurr } from "@/lib/engine";
+import { formatImpactSignedAmount } from "@/lib/impactAmountSign";
 import { useRole } from "@/lib/hooks/useRole";
 import { useStrategicData, type StrategicData } from "@/lib/hooks/useStrategicData";
 import { useToast } from "@/lib/hooks/useToast";
@@ -229,8 +229,9 @@ function PerformanceValidationTable({ user }: { user: AuthUser | null }) {
                     </td>
                     <td className="px-4 py-3 text-secondary">{impact.label}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-primary">
-                      {impact.type === "cost" ? "−" : ""}
-                      {fmtCurr(impact.amount)}
+                      {/* Montant signé : coûts ET recrutements ETP en « − » (même libellé que la
+                          cloche, `formatImpactSignedAmount`). */}
+                      {formatImpactSignedAmount(impact)}
                     </td>
                     <td className="px-4 py-3 text-secondary">
                       {impact.realizedApproval?.requestedBy ?? "—"}

@@ -32,8 +32,9 @@
  *        qui n'est pas encore bloquée n'apparaît PAS dans « À faire » (exceptions d'abord) ;
  *      · alertes : seulement les `pilotTopAlerts` plus graves (rouge puis ambre, tri de
  *        `generateAlerts`) ;
- *      · périmètre : une ligne par programme (santé = pire alerte ouverte de ses leviers côté
- *        Performance, pire `chantierHealthState` côté Stratégique ; `neutral` si non chargé/vide).
+ *      · périmètre : une ligne par programme (santé = pire `computeLeverHealth` de ses leviers et
+ *        avancement = `performanceProgramProgressPct` côté Performance, pire
+ *        `chantierHealthState` côté Stratégique ; `neutral` si non chargé/vide).
  *  - Dédoublonnage : un même objet (clé `dedupeKey`) remonté par plusieurs sources ne garde que
  *    l'élément le plus grave ; un élément de « À faire » est retiré de « À venir »/« Bloqué ».
  */
@@ -41,6 +42,8 @@ import { resolveApprovalQueue, resolveRealizedApprovalQueue } from "@/lib/hooks/
 import type { StrategicData } from "@/lib/hooks/useStrategicData";
 import { generateAlerts } from "@/lib/alertEngine";
 import { alertTitle } from "@/lib/alertText";
+import { leverProgressPct, workstreamProgressPct } from "@/lib/engine";
+import { computeLeverHealth } from "@/lib/leverHealth";
 import { targetAlerts } from "@/lib/notifications";
 import { isAlertRelevantForUser } from "@/lib/alertRelevance";
 import { movementAlerts, primaryAlertKindByMovement, type MovementAlertKind } from "@/lib/hrEngine";
@@ -386,6 +389,10 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
   // ── Plan Performance ─────────────────────────────────────────────────────────────────────
   // Toutes les alertes (non ciblées) servent aussi à la santé du périmètre.
   const allAlerts: Alert[] = perf ? generateAlerts(perf) : [];
+  // Seuils de risque de l'entreprise : santé des leviers du périmètre (`computeLeverHealth`).
+  const riskThresholds = (input.companies ?? []).find(
+    (c) => c.id === user.companyId
+  )?.riskThresholds;
 
   if (perf) {
     const wsById = new Map(perf.workstreams.map((w) => [w.id, w]));
@@ -808,8 +815,17 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
     upcoming: upcomingFinal.map(strip(user)).sort(sortUpcoming),
     blocked: blockedFinal.map(strip(user)).sort(sortBlocked),
     perimeter: (pilotView
-      ? buildPilotPerimeter(user, programs, pilotProgramIds, perf, strategic, allAlerts, t)
-      : buildPerimeter(user, perf, strategic, allAlerts, today, t)
+      ? buildPilotPerimeter(
+          user,
+          programs,
+          pilotProgramIds,
+          perf,
+          strategic,
+          allAlerts,
+          riskThresholds,
+          t
+        )
+      : buildPerimeter(user, perf, strategic, allAlerts, riskThresholds, today, t)
     ).map((entry) => ({ ...entry, href: reachableHref(user, entry.plan, entry.href) })),
     pilotView,
   };
@@ -817,13 +833,37 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
 
 // ─── Périmètre ──────────────────────────────────────────────────────────────────────────────
 
-/** Santé d'un levier = pire alerte OUVERTE dont il est le scope (même source que la cloche). */
-function leverHealth(lever: Lever, alerts: Alert[]): WorkspaceHealth {
-  if (lever.status === "cancelled") return "neutral";
-  const open = alerts.filter((a) => a.scope === lever.id && !a.resolved);
-  if (open.some((a) => a.type === "red")) return "red";
-  if (open.some((a) => a.type === "amber")) return "amber";
-  return "green";
+type RiskThresholds = Company["riskThresholds"];
+
+/** Santé d'un levier = `computeLeverHealth` (lib/leverHealth.ts), SOURCE UNIQUE partagée avec la
+ *  matrice « Santé des initiatives », le KPI « Leviers à risque », la page Chantiers et la
+ *  bibliothèque : risque recalculé (`computeLeverRisk`, seuils de l'entreprise) — Critique/Élevé
+ *  → rouge, Moyen → orange, Faible → vert, abandonné → neutre. Avant (lot 2, cohérence A) : la
+ *  couleur de la pire alerte ouverte (un levier « Critique » ailleurs pouvait n'être qu'orange
+ *  ici, et une petite alerte rouge sous les seuils le passait au rouge). */
+function leverHealth(lever: Lever, alerts: Alert[], thresholds?: RiskThresholds): WorkspaceHealth {
+  const { health } = computeLeverHealth(lever, alerts, thresholds);
+  return health === "cancelled"
+    ? "neutral"
+    : health === "critical"
+      ? "red"
+      : health === "watch"
+        ? "amber"
+        : "green";
+}
+
+/** « Avancement » d'un programme Performance : MÊME formule que l'avancement d'un chantier
+ *  (`workstreamProgressPct` : `leverProgressPct` de chaque levier non abandonné, pondéré par sa
+ *  valeur réactualisée, moyenne simple à défaut), appliquée à tous les leviers du programme. Les
+ *  poids déclarés `workstreamWeightPct` sont propres à un chantier : ignorés à cette échelle.
+ *  `undefined` sans levier actif. Remplace la moyenne simple du champ stocké `lever.progress`. */
+export function performanceProgramProgressPct(levers: Lever[]): number | undefined {
+  const PROGRAM_KEY = "__program__";
+  const pct = workstreamProgressPct(
+    levers.map((l) => ({ ...l, ws: PROGRAM_KEY, workstreamWeightPct: undefined })),
+    PROGRAM_KEY
+  );
+  return pct ?? undefined;
 }
 
 function strategicHealthLookup(strategic: MyWorkspaceStrategicInput) {
@@ -845,11 +885,6 @@ function strategicHealthLookup(strategic: MyWorkspaceStrategicInput) {
   };
 }
 
-function average(values: number[]): number | undefined {
-  if (values.length === 0) return undefined;
-  return Math.round(values.reduce((s, v) => s + v, 0) / values.length);
-}
-
 function sortPerimeter(a: WorkspacePerimeterEntry, b: WorkspacePerimeterEntry): number {
   return HEALTH_RANK[a.health] - HEALTH_RANK[b.health] || a.label.localeCompare(b.label);
 }
@@ -859,6 +894,7 @@ function buildPerimeter(
   perf: BeTrackData | null,
   strategic: MyWorkspaceStrategicInput | null,
   alerts: Alert[],
+  riskThresholds: RiskThresholds,
   today: string,
   t: Translate
 ): WorkspacePerimeterEntry[] {
@@ -878,8 +914,10 @@ function buildPerimeter(
         plan: "performance",
         label: leverContext(lever),
         role: owned ? roleOwner : roleSponsor,
-        health: leverHealth(lever, alerts),
-        progressPct: lever.progress,
+        health: leverHealth(lever, alerts, riskThresholds),
+        // « Avancement » = `leverProgressPct` (plan d'action), même valeur que la bibliothèque,
+        // la fiche, le Kanban et l'export — jamais le champ stocké `lever.progress` (périmé).
+        progressPct: leverProgressPct(lever),
         href: leverHref(lever.id),
         programId: lever.programId,
       });
@@ -966,6 +1004,7 @@ function buildPilotPerimeter(
   perf: BeTrackData | null,
   strategic: MyWorkspaceStrategicInput | null,
   alerts: Alert[],
+  riskThresholds: RiskThresholds,
   t: Translate
 ): WorkspacePerimeterEntry[] {
   const inScope = programs.filter((p) => !scope || scope.has(p.id));
@@ -978,8 +1017,8 @@ function buildPilotPerimeter(
         const levers = perf.levers.filter(
           (l) => l.programId === program.id && l.status !== "cancelled"
         );
-        health = worstHealth(levers.map((l) => leverHealth(l, alerts)));
-        progressPct = average(levers.map((l) => l.progress));
+        health = worstHealth(levers.map((l) => leverHealth(l, alerts, riskThresholds)));
+        progressPct = performanceProgramProgressPct(levers);
       } else if (type === "strategic" && strategic && strategic.programId === program.id) {
         const progressOf: ProjetProgressLookup =
           strategic.projetProgress ?? ((a) => milestoneProgressPct(a));

@@ -823,6 +823,8 @@ const es: Record<string, string> = {
   "hr.fteCard.planned": "Planificado (movimientos)",
   "hr.fteCard.levers": "Objetivo (palancas)",
   "hr.fteCard.coveragePct": "{pct} % de la ambición de las palancas cubierta",
+  "hr.fteCard.coverageBasis":
+    "Cobertura calculada sobre los {n} ETC de los movimientos vinculados a las palancas del perímetro.",
   "hr.fteCard.headcount": "Plantilla",
   "hr.fteCard.targetShort": "objetivo",
   "hr.kpi.targetLabel": "Objetivo {v}",
