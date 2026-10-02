@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -287,7 +288,7 @@ export function ProgramsPanel({
         fyEnd: "2026-12",
         baselineEBIT: 0,
         revenue: 0,
-        createdAt: new Date().toISOString().slice(0, 10),
+        createdAt: todayISO(),
         type: form.type,
         ...(form.type === "performance" ? { actionPlanEnabled: form.actionPlanEnabled } : {}),
       });

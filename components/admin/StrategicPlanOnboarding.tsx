@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { useMemo, useState } from "react";
 import { CheckCircle2, Download, FileSpreadsheet, PencilLine, X } from "lucide-react";
 import type { MaturityStageConfig, Program } from "@/types";
@@ -97,7 +98,7 @@ export function StrategicPlanOnboarding({
       fyEnd,
       baselineEBIT: 0,
       revenue: 0,
-      createdAt: program?.createdAt ?? new Date().toISOString().slice(0, 10),
+      createdAt: program?.createdAt ?? todayISO(),
       type: "strategic",
     });
     await ensureDefaultMaturityStages(companyId, programId);

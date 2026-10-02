@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
-import { XLSX_READ_OPTIONS } from "@/lib/excelParse";
+import { readXlsxWorkbook } from "@/lib/excelParse";
 import {
   applyPeopleMapping,
   baselinePeriod,
@@ -110,7 +110,7 @@ function applyToExisting(
 
 function loadFixture() {
   const buf = readFileSync(path.join(__dirname, "fixtures", "plan_strategique_pre-rempli.xlsx"));
-  return XLSX.read(buf, XLSX_READ_OPTIONS);
+  return readXlsxWorkbook(XLSX, buf);
 }
 
 describe("#1 personnes : Owner/Pilote/Sponsor stockés en username", () => {
@@ -279,7 +279,7 @@ describe("#3 ré-import idempotent (upsert) + export aller-retour", () => {
 
     const exported = buildStrategicPlanExportWorkbook(existing, stages, XLSX);
     const reread = () =>
-      XLSX.read(XLSX.write(exported, { type: "array", bookType: "xlsx" }), XLSX_READ_OPTIONS);
+      readXlsxWorkbook(XLSX, XLSX.write(exported, { type: "array", bookType: "xlsx" }));
 
     const roundTrip = run(parseStrategicImportWorkbook(reread(), XLSX), existing);
     expect(roundTrip.errors).toEqual([]);
@@ -500,10 +500,7 @@ describe("points mineurs", () => {
       "Actions"
     );
     const result = run(
-      parseStrategicImportWorkbook(
-        XLSX.read(XLSX.write(wb, { type: "array" }), XLSX_READ_OPTIONS),
-        XLSX
-      )
+      parseStrategicImportWorkbook(readXlsxWorkbook(XLSX, XLSX.write(wb, { type: "array" })), XLSX)
     );
     expect(result.toCreate.actions).toHaveLength(1);
     expect(result.warnings.map((w) => w.code)).toContain("sheetAlias");

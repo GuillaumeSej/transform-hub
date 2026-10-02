@@ -1,5 +1,5 @@
 import type { WorkBook } from "xlsx";
-import { XLSX_READ_OPTIONS } from "@/lib/excelParse";
+import { XLSX_READ_OPTIONS, convertExcelDateCells, readXlsxWorkbook } from "@/lib/excelParse";
 
 /**
  * Lecture d'un fichier importé (xlsx/xls/csv) en classeur SheetJS, avec un décodage CSV fiable.
@@ -75,13 +75,20 @@ export async function readSpreadsheet(bytes: ArrayBuffer, fileName: string): Pro
   const XLSX = await import("xlsx");
   const lower = fileName.toLowerCase();
   if (lower.endsWith(".csv") || lower.endsWith(".txt")) {
-    return XLSX.read(decodeCsvBytes(bytes), {
-      type: "string",
-      raw: XLSX_READ_OPTIONS.raw,
-      cellDates: XLSX_READ_OPTIONS.cellDates,
-    });
+    // `raw` : toutes les cellules restent du texte ; la conversion des dates est sans effet ici
+    // mais appliquée par cohérence avec le classeur binaire.
+    return convertExcelDateCells(
+      XLSX.read(decodeCsvBytes(bytes), {
+        type: "string",
+        raw: XLSX_READ_OPTIONS.raw,
+        cellDates: XLSX_READ_OPTIONS.cellDates,
+        cellNF: XLSX_READ_OPTIONS.cellNF,
+      }),
+      (z) => XLSX.SSF.is_date(z)
+    );
   }
-  return XLSX.read(bytes, XLSX_READ_OPTIONS);
+  // Dates converties depuis le numéro de série (pas `cellDates`, faux en Europe/Paris).
+  return readXlsxWorkbook(XLSX, bytes);
 }
 
 /** Raccourci navigateur : `File` -> classeur. */

@@ -7,7 +7,7 @@ import {
   validateHierarchyImportRows,
   hierarchyNodeToExcelRow,
 } from "@/lib/hierarchyExcel";
-import { XLSX_READ_OPTIONS } from "@/lib/excelParse";
+import { readXlsxWorkbook } from "@/lib/excelParse";
 import fr from "@/lib/i18n/dictionaries/fr";
 import type { HierarchyLevelDef, HierarchyNode } from "@/types";
 
@@ -247,7 +247,7 @@ describe("hierarchyExcel — audit du 24/09/2026", () => {
       XLSX.utils.json_to_sheet(rows, { header: headers }),
       "Arborescence"
     );
-    const read = XLSX.read(XLSX.write(wb, { type: "array", bookType: "xlsx" }), XLSX_READ_OPTIONS);
+    const read = readXlsxWorkbook(XLSX, XLSX.write(wb, { type: "array", bookType: "xlsx" }));
     return XLSX.utils.sheet_to_json<Record<string, unknown>>(read.Sheets["Arborescence"], {
       defval: "",
     });
@@ -340,7 +340,7 @@ describe("hierarchyExcel — audit du 24/09/2026", () => {
       ]),
       "A"
     );
-    const read = XLSX.read(XLSX.write(wb, { type: "array", bookType: "xlsx" }), XLSX_READ_OPTIONS);
+    const read = readXlsxWorkbook(XLSX, XLSX.write(wb, { type: "array", bookType: "xlsx" }));
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(read.Sheets["A"], {
       defval: "",
     });

@@ -1,3 +1,4 @@
+import { todayISO } from "@/lib/dateUtils";
 import * as engine from "@/lib/engine";
 import { formatAuditValue } from "@/lib/auditFormat";
 import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
@@ -395,8 +396,9 @@ export function applyPlanLock<T extends PlanLockable>(entity: T): T {
  * une mise à jour optimiste locale puis d'écrire dans Firestore en tâche de fond.
  */
 
+/** Date métier du jour : LOCALE (`todayISO`), jamais `toISOString()` (UTC, veille avant 2h à Paris). */
 function nowDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 function nowTs(): string {

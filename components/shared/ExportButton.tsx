@@ -1,5 +1,6 @@
 "use client";
 
+import { todayISO } from "@/lib/dateUtils";
 import { FileSpreadsheet } from "lucide-react";
 import { useMemo } from "react";
 import { generateAlerts } from "@/lib/alertEngine";
@@ -83,10 +84,7 @@ export function ExportButton({
 
     const program = programs.find((p) => p.id === selectedProgramId);
     const programPart = fileSlug(program?.name ?? selectedProgramId ?? "leviers");
-    XLSX.writeFile(
-      workbook,
-      `leviers_${programPart}_${new Date().toISOString().slice(0, 10)}.xlsx`
-    );
+    XLSX.writeFile(workbook, `leviers_${programPart}_${todayISO()}.xlsx`);
 
     const truncated = leversToExport.filter(
       (l) => (l.description ?? "").length > EXCEL_CELL_MAX_LENGTH

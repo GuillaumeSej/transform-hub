@@ -10,6 +10,7 @@ import {
   resolveStrategicRoleForProgram,
 } from "@/lib/axisLogic";
 import { samePeriod } from "@/lib/indicatorPeriod";
+import { localDateOfInstant } from "@/lib/dateUtils";
 import {
   adminUsernames,
   kpiAuthorFloor,
@@ -1685,7 +1686,11 @@ export function applyApprovedPayload(
         }
         const status = computeIndicatorStatus(indicator, next);
         if (status !== indicator.status) {
-          effects.saveIndicators.push({ ...indicator, status, lastUpdate: decidedAt.slice(0, 10) });
+          effects.saveIndicators.push({
+            ...indicator,
+            status,
+            lastUpdate: localDateOfInstant(decidedAt),
+          });
         }
         return effects;
       }
@@ -1727,7 +1732,7 @@ export function applyApprovedPayload(
         effects.saveIndicators.push({
           ...indicator,
           status,
-          lastUpdate: (approval.decidedAt ?? new Date().toISOString()).slice(0, 10),
+          lastUpdate: localDateOfInstant(approval.decidedAt ?? new Date().toISOString()),
         });
       }
       return effects;
@@ -1794,7 +1799,9 @@ export function applyApprovedPayload(
         (next as Record<string, unknown>)[key] = value === null ? undefined : value;
       }
       const decidedAt = approval.decidedAt ?? new Date().toISOString();
-      effects.saveChantiers.push(stripUndefined({ ...next, lastUpdate: decidedAt.slice(0, 10) }));
+      effects.saveChantiers.push(
+        stripUndefined({ ...next, lastUpdate: localDateOfInstant(decidedAt) })
+      );
       return effects;
     }
     case "chantier_create": {
@@ -1830,7 +1837,7 @@ export function applyApprovedPayload(
         (next as Record<string, unknown>)[key] = value === null ? undefined : value;
       }
       const decidedAt = approval.decidedAt ?? new Date().toISOString();
-      effects.saveAxes.push(stripUndefined({ ...next, lastUpdate: decidedAt.slice(0, 10) }));
+      effects.saveAxes.push(stripUndefined({ ...next, lastUpdate: localDateOfInstant(decidedAt) }));
       return effects;
     }
     case "indicator_update": {
@@ -1845,7 +1852,10 @@ export function applyApprovedPayload(
         (next as Record<string, unknown>)[key] = value === null ? undefined : value;
       }
       const decidedAt = approval.decidedAt ?? new Date().toISOString();
-      const updated: Indicator = stripUndefined({ ...next, lastUpdate: decidedAt.slice(0, 10) });
+      const updated: Indicator = stripUndefined({
+        ...next,
+        lastUpdate: localDateOfInstant(decidedAt),
+      });
       // La cible a changé : le statut (en avance / en retard) peut changer aussi.
       const status = computeIndicatorStatus(updated, data.measurements ?? []);
       effects.saveIndicators.push({ ...updated, status });
@@ -2492,7 +2502,7 @@ export function buildApprovalAlerts(
           ...common,
           id: `strategic-approval-${a.id}-info`,
           type: "blue",
-          ts: decidedAt.slice(0, 10),
+          ts: localDateOfInstant(decidedAt),
           createdAt: decidedAt,
           title: notice.title,
           desc: notice.desc,
@@ -2508,7 +2518,7 @@ export function buildApprovalAlerts(
           ...common,
           id: `strategic-approval-${a.id}-todo`,
           type: "amber",
-          ts: a.requestedAt.slice(0, 10),
+          ts: localDateOfInstant(a.requestedAt),
           createdAt: a.requestedAt,
           title: `À valider · ${label}`,
           desc: `${requester} demande ${verbPhrase(a, false)}.`,
@@ -2535,7 +2545,7 @@ export function buildApprovalAlerts(
           ...common,
           id: `strategic-approval-${a.id}-wait`,
           type: "blue",
-          ts: a.requestedAt.slice(0, 10),
+          ts: localDateOfInstant(a.requestedAt),
           createdAt: a.requestedAt,
           title: `Demande en attente · ${label}`,
           desc: `Votre demande de ${verbPhrase(a, false)} attend la validation de ${approver}.`,
@@ -2558,7 +2568,7 @@ export function buildApprovalAlerts(
         ...common,
         id: `strategic-approval-${a.id}-decision`,
         type: approved ? "green" : "red",
-        ts: decidedAt.slice(0, 10),
+        ts: localDateOfInstant(decidedAt),
         createdAt: decidedAt,
         title: `${approved ? "Demande validée" : "Demande refusée"} · ${label}`,
         desc: `${decider} a ${approved ? "validé" : "refusé"} ${verbPhrase(a, false)}${comment}.`,
@@ -2578,7 +2588,7 @@ export function buildApprovalAlerts(
         ...common,
         id: `strategic-approval-${a.id}-decided`,
         type: approved ? "green" : "red",
-        ts: decidedAt.slice(0, 10),
+        ts: localDateOfInstant(decidedAt),
         createdAt: decidedAt,
         title: `${approved ? "Validation enregistrée" : "Refus enregistré"} · ${label}`,
         desc: `Vous avez ${approved ? "validé" : "refusé"} ${verbPhrase(a, false)} demandé(e) par ${requester}.`,

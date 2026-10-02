@@ -10,7 +10,7 @@ import {
   employeeToExcelRow,
   movementToExcelRow,
 } from "@/lib/hrExcel";
-import { XLSX_READ_OPTIONS } from "@/lib/excelParse";
+import { readXlsxWorkbook } from "@/lib/excelParse";
 import { readSpreadsheet } from "@/lib/excelFileRead";
 import fr from "@/lib/i18n/dictionaries/fr";
 import type { BeTrackData, Employee, WorkforceMovement } from "@/types";
@@ -101,7 +101,7 @@ function roundTripWorkbook(
     HR_MOVEMENT_SHEET
   );
   const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
-  const read = XLSX.read(buf, XLSX_READ_OPTIONS);
+  const read = readXlsxWorkbook(XLSX, buf);
   const rows = (name: string) =>
     XLSX.utils.sheet_to_json<Record<string, unknown>>(read.Sheets[name], { defval: "" });
   return { employeeRows: rows(HR_EMPLOYEE_SHEET), movementRows: rows(HR_MOVEMENT_SHEET) };
@@ -340,7 +340,7 @@ describe("buildHrImportPlan — contrôles", () => {
       XLSX.utils.aoa_to_sheet([["Matricule", "Nom"], ["E1", "A"], [], [], ["", "Sans matricule"]]),
       HR_EMPLOYEE_SHEET
     );
-    const read = XLSX.read(XLSX.write(wb, { type: "array", bookType: "xlsx" }), XLSX_READ_OPTIONS);
+    const read = readXlsxWorkbook(XLSX, XLSX.write(wb, { type: "array", bookType: "xlsx" }));
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(read.Sheets[HR_EMPLOYEE_SHEET], {
       defval: "",
     });
