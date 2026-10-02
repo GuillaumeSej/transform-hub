@@ -10,10 +10,19 @@ import {
   canonicalizeRowKeys,
   excelRowNumber,
   isBlankCell,
+  isPercentFormat,
   normalizeHeaderKey,
   parseCellDate,
   parseCellNumber,
 } from "@/lib/excelParse";
+import { applyExcelDateColumns, readOptionalTextCell } from "@/lib/excelCells";
+import {
+  STAFFING_MAX_FTE,
+  checkStaffingLine,
+  matchStaffingRows,
+  type StaffingLineError,
+  type StaffingMatchRow,
+} from "@/lib/staffingLineValidation";
 import { currentPeriod } from "@/lib/kpiHistory";
 import type {
   Chantier,
@@ -158,6 +167,9 @@ export const STRATEGIC_STAFFING_IMPORT_HEADERS = [
   "Précision",
   "Date début",
   "Date fin",
+  // Colonne technique (remplie par l'export) : rapprochement d'une ligne existante même quand ses
+  // dates changent — voir `matchStaffingRows`, lib/staffingLineValidation.ts.
+  "ID ligne",
 ] as const;
 
 /** Longueurs maximales des champs texte (au-delà = erreur de ligne). */
@@ -285,6 +297,21 @@ export const STRATEGIC_IMPORT_MESSAGES = {
     "« {name} » ne correspond à aucun compte : conservé en texte, sans effet sur la visibilité ni sur les validations ({count} référence(s))",
   personAmbiguous:
     "« {name} » correspond à plusieurs comptes ({usernames}) : non rattaché — indiquez l'identifiant exact",
+  // Feuille ETP — même règle que l'écran et l'import Effectifs (lib/staffingLineValidation.ts).
+  staffingFteTooHigh:
+    '"{column}" ({value}) dépasse le plafond de {max} ETP par ligne — répartissez le besoin sur plusieurs lignes',
+  staffingUnknownTeam: 'Équipe "{value}" absente de la base ETP (attendu : {expected})',
+  staffingNoTeams: "aucune équipe dans la base ETP",
+  staffingTeamLeftBase:
+    'Équipe "{value}" absente de la base ETP — ligne existante mise à jour quand même',
+  staffingDatesMissing: "Ligne ETP existante sans date de début ou de fin — dates à compléter",
+  staffingOutsideProject: 'Dates hors de la période du projet "{code}" ({start} → {end})',
+  staffingUnknownLineId:
+    'ID ligne "{id}" inconnu dans ce programme — ligne rapprochée sans identifiant',
+  staffingDuplicateLineId:
+    'ID ligne "{id}" présent plusieurs fois dans la feuille (lignes {rows}) — videz la cellule "ID ligne" des lignes copiées',
+  staffingDuplicateRow:
+    "Ligne ETP en doublon (même chantier, projet, équipe et dates que la ligne {line})",
 } as const;
 
 export type StrategicImportMessageCode = keyof typeof STRATEGIC_IMPORT_MESSAGES;
@@ -403,6 +430,9 @@ export type StrategicImportOptions = {
   users?: { username: string; name: string }[];
   /** Horloge injectable (tests). */
   now?: Date;
+  /** Équipes de la base ETP de l'entreprise (feuille ETP : la "Fonction" doit en faire partie).
+   *  Absent = référentiel indisponible, équipe non contrôlée. */
+  knownDepartments?: string[];
 };
 
 // ---------- Utilitaires ----------
@@ -890,6 +920,15 @@ const SHEET_SPECS: Record<SheetKey, SheetSpec> = {
 };
 
 type PreparedRow = { row: Record<string, unknown>; rowNumber: number };
+
+/** Ligne de la feuille ETP lue (avant rapprochement et règle commune de staffing). */
+type StaffingSheetRow = StaffingMatchRow & {
+  actionCode: string;
+  /** Texte brut du nombre d'ETP (messages). */
+  fteRaw: string;
+  fte: number | undefined;
+  noteCell: ReturnType<typeof readOptionalTextCell>;
+};
 
 /** Canonicalise les en-têtes d'une feuille (casse/accents/alias), signale une fois par feuille les
  *  colonnes inconnues (avertissement) et obligatoires manquantes (erreur, feuille ignorée). */
@@ -1924,11 +1963,14 @@ export function validateStrategicImportRows(
     if (code) indicatorCodeSeen.set(code.toLowerCase(), rowNumber);
   }
 
-  // ---------- Feuille "ETP" (upsert sur chantier + projet + fonction) ----------
+  // ---------- Feuille "ETP" (staffing) ----------
+  // Même règle que l'écran et l'import Effectifs (`checkStaffingLine`, lib/staffingLineValidation.ts)
+  // et même rapprochement : "ID ligne", puis chantier + projet + équipe + dates, puis sans les
+  // dates si la correspondance est unique (voir `matchStaffingRows`).
   const staffingToCreate: ChantierStaffing[] = [];
   const staffingToUpdate: ChantierStaffing[] = [];
   let staffingUnchanged = 0;
-  const usedStaffing = new Set<string>();
+  const etpRows: StaffingSheetRow[] = [];
 
   for (const { row, rowNumber } of prepared.etp) {
     if (isRowEmpty(row)) continue;
@@ -1952,49 +1994,179 @@ export function validateStrategicImportRows(
     const fn = text(sheet, rowNumber, row, "Fonction (équipe, base ETP)", { required: true });
     if (fn === null) continue;
     const fteParsed = parseCellNumber(row["Nombre d'ETP"]);
-    if (!fteParsed || !fteParsed.ok || fteParsed.value <= 0) {
-      err(sheet, rowNumber, "notPositive", { column: "Nombre d'ETP" });
+    if (fteParsed && !fteParsed.ok) {
+      err(sheet, rowNumber, "notNumber", { column: "Nombre d'ETP", value: fteParsed.raw });
       continue;
     }
-    const note = text(sheet, rowNumber, row, "Précision", {
-      max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
-    });
-    if (note === null) continue;
+    // "Précision" : vide = conservée, "-" = effacée (règle commune, lib/excelCells.ts).
+    const noteCell = readOptionalTextCell(row["Précision"]);
+    if (noteCell.kind === "set" && noteCell.value.length > STRATEGIC_IMPORT_MAX_TEXT_LENGTH) {
+      err(sheet, rowNumber, "tooLong", {
+        column: "Précision",
+        max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
+        length: noteCell.value.length,
+      });
+      continue;
+    }
     const startDate = optDate(sheet, rowNumber, row, "Date début");
     if (startDate === null) continue;
     const endDate = optDate(sheet, rowNumber, row, "Date fin");
     if (endDate === null) continue;
-    if (!checkOrder(sheet, rowNumber, startDate, endDate, "Date début", "Date fin")) continue;
-
-    const fields = defined({ fte: fteParsed.value, note, startDate, endDate });
-    const existing = exStaffing.find(
-      (s) =>
-        !usedStaffing.has(s.id) &&
-        s.chantierId === chantierId &&
-        (s.actionId ?? undefined) === actionId &&
-        norm(s.function) === norm(fn)
-    );
-    if (existing) {
-      usedStaffing.add(existing.id);
-      const merged: ChantierStaffing = { ...existing, ...fields };
-      if (sameIgnoring(merged, existing, [])) staffingUnchanged += 1;
-      else staffingToUpdate.push(merged);
-    } else {
-      staffingToCreate.push({
-        id: makeId("ST"),
-        companyId: resolvedCompanyId,
-        programId: resolvedProgramId,
-        chantierId,
-        function: fn,
-        fte: fteParsed.value,
-        ...(note ? { note } : {}),
-        ...(startDate ? { startDate } : {}),
-        ...(endDate ? { endDate } : {}),
-        ...(actionId ? { actionId } : {}),
-        createdAt: today,
-      });
-    }
+    etpRows.push({
+      rowNumber,
+      chantierId,
+      actionId,
+      actionCode,
+      fn,
+      fteRaw: str(row["Nombre d'ETP"]),
+      fte: fteParsed?.ok ? fteParsed.value : undefined,
+      noteCell,
+      startDate,
+      endDate,
+      lineId: str(row["ID ligne"]),
+    });
   }
+
+  const etpMatch = matchStaffingRows(etpRows, exStaffing);
+  const duplicatedEtp = new Set<number>();
+  etpMatch.duplicateIds.forEach((rowNumbers, id) => {
+    for (const n of rowNumbers) {
+      duplicatedEtp.add(n);
+      err("ETP", n, "staffingDuplicateLineId", { id, rows: rowNumbers.join(", ") });
+    }
+  });
+  for (const u of etpMatch.unknownIds)
+    warn("ETP", u.rowNumber, "staffingUnknownLineId", { id: u.id });
+  const firstEtpRowByKey = new Map<string, number>();
+  const duplicatedFirstEtpRows = new Map<number, number>();
+  const etpCreations = new Map<number, ChantierStaffing>();
+  const actionOf = (id: string) =>
+    parsedActions.find((p) => p.action.id === id)?.action ?? exActions.find((a) => a.id === id);
+  for (const r of etpRows) {
+    if (duplicatedEtp.has(r.rowNumber)) continue;
+    const sheet = "ETP";
+    const { rowNumber, matched } = r;
+    // Cellule de date vide sur une mise à jour = date existante conservée.
+    const startDate = r.startDate ?? matched?.startDate;
+    const endDate = r.endDate ?? matched?.endDate;
+    const legacyUndated = matched !== undefined && (!startDate || !endDate);
+    const action = r.actionId ? actionOf(r.actionId) : undefined;
+    const check = checkStaffingLine(
+      { team: r.fn, fte: r.fte, startDate, endDate },
+      {
+        knownTeams: options.knownDepartments,
+        currentTeam: matched?.function,
+        projectRange: action ? { start: action.start, end: action.end } : null,
+      }
+    );
+    let rowFailed = false;
+    for (const code of Object.values(check.errors) as StaffingLineError[]) {
+      // Ligne historique sans date : mise à jour acceptée, dates à compléter.
+      if ((code === "startRequired" || code === "endRequired") && legacyUndated) continue;
+      rowFailed = true;
+      const known = options.knownDepartments ?? [];
+      switch (code) {
+        case "teamRequired":
+          err(sheet, rowNumber, "required", { column: "Fonction (équipe, base ETP)" });
+          break;
+        case "teamUnknown":
+          err(sheet, rowNumber, "staffingUnknownTeam", {
+            value: r.fn,
+            expected:
+              known.length > 0 ? known.join(", ") : STRATEGIC_IMPORT_MESSAGES.staffingNoTeams,
+          });
+          break;
+        case "fteRequired":
+          err(sheet, rowNumber, "required", { column: "Nombre d'ETP" });
+          break;
+        case "fteInvalid":
+          err(sheet, rowNumber, "notNumber", { column: "Nombre d'ETP", value: r.fteRaw });
+          break;
+        case "fteNotPositive":
+          err(sheet, rowNumber, "notPositive", { column: "Nombre d'ETP" });
+          break;
+        case "fteTooHigh":
+          err(sheet, rowNumber, "staffingFteTooHigh", {
+            column: "Nombre d'ETP",
+            value: r.fteRaw,
+            max: STAFFING_MAX_FTE,
+          });
+          break;
+        case "startRequired":
+        case "endRequired":
+          err(sheet, rowNumber, "requiredDate", {
+            column: code === "startRequired" ? "Date début" : "Date fin",
+          });
+          break;
+        case "endBeforeStart":
+          checkOrder(sheet, rowNumber, startDate, endDate, "Date début", "Date fin");
+          break;
+        default:
+          // startInvalid / endInvalid : impossibles ici (dates déjà lues par `optDate`).
+          err(sheet, rowNumber, "invalidDate", {
+            column: code === "startInvalid" ? "Date début" : "Date fin",
+            value: (code === "startInvalid" ? startDate : endDate) ?? "",
+          });
+      }
+    }
+    if (rowFailed) continue;
+    if (legacyUndated) warn(sheet, rowNumber, "staffingDatesMissing");
+    if (check.warnings.includes("teamLeftBase"))
+      warn(sheet, rowNumber, "staffingTeamLeftBase", { value: r.fn });
+    if (check.warnings.includes("outsideProject") && action)
+      warn(sheet, rowNumber, "staffingOutsideProject", {
+        code: r.actionCode,
+        start: action.start ?? "",
+        end: action.end ?? "",
+      });
+
+    const note =
+      r.noteCell.kind === "set"
+        ? r.noteCell.value
+        : r.noteCell.kind === "keep"
+          ? matched?.note
+          : undefined;
+    const fields = {
+      chantierId: r.chantierId,
+      function: check.team,
+      fte: check.fte as number,
+      ...(note ? { note } : {}),
+      ...(startDate ? { startDate } : {}),
+      ...(endDate ? { endDate } : {}),
+      ...(r.actionId ? { actionId: r.actionId } : {}),
+    };
+    if (matched) {
+      // Champs facultatifs retirés quand la fusion les efface ("-" en Précision, projet retiré).
+      const merged: ChantierStaffing = { ...matched, ...fields };
+      if (!note) delete merged.note;
+      if (!r.actionId) delete merged.actionId;
+      if (sameIgnoring(merged, matched, [])) staffingUnchanged += 1;
+      else staffingToUpdate.push(merged);
+      continue;
+    }
+    const key = [r.chantierId, r.actionId ?? "", norm(check.team), startDate, endDate].join("|");
+    const first = firstEtpRowByKey.get(key);
+    if (first !== undefined) {
+      err(sheet, rowNumber, "staffingDuplicateRow", { line: first });
+      duplicatedFirstEtpRows.set(first, rowNumber);
+      continue;
+    }
+    firstEtpRowByKey.set(key, rowNumber);
+    etpCreations.set(rowNumber, {
+      id: makeId("ST"),
+      companyId: resolvedCompanyId,
+      programId: resolvedProgramId,
+      ...fields,
+      createdAt: today,
+    });
+  }
+  // Une création en doublon invalide aussi la 1re occurrence (on ne sait pas laquelle est juste).
+  duplicatedFirstEtpRows.forEach((dup, first) =>
+    err("ETP", first, "staffingDuplicateRow", { line: dup })
+  );
+  etpCreations.forEach((entry, rowNumber) => {
+    if (!duplicatedFirstEtpRows.has(rowNumber)) staffingToCreate.push(entry);
+  });
 
   const peopleList = people.finish(warn);
 
@@ -2084,8 +2256,49 @@ export function parseStrategicImportWorkbook(
     const headerRow = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" })[0] ?? [];
     result.headers![key] = headerRow.map((h) => str(h)).filter(Boolean);
     result[key] = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+    rescalePercentCells(key, ws, headerRow, result[key], XLSX);
   }
   return result;
+}
+
+/** Colonnes en points de pourcentage (0 à 100) — en-tête canonique et alias. */
+const PERCENT_COLUMNS: Partial<Record<SheetKey, string[]>> = {
+  actions: ["Poids dans le chantier (%)", "Poids dans le chantier"],
+};
+
+/**
+ * Cellule au FORMAT POURCENTAGE d'Excel dans une colonne en points de % : Excel stocke « 40 % »
+ * sous la forme 0,4 — lue telle quelle, elle devenait un poids de 0,4 % (audit lot 4). La valeur
+ * est ramenée en points (× 100, arrondie pour effacer le bruit binaire : 0,07 × 100 = 7,000…01).
+ * Le format est connu grâce à `cellNF` (`XLSX_READ_OPTIONS`) ; un CSV n'a pas de format (« 40% »
+ * y est du texte, déjà lu 40 par `parseCellNumber`). Les bornes 0–100 restent contrôlées par la
+ * validation (hors bornes = erreur de ligne, jamais ramené en silence).
+ */
+function rescalePercentCells(
+  key: SheetKey,
+  ws: WorkBook["Sheets"][string],
+  headerRow: unknown[],
+  rows: Record<string, unknown>[],
+  XLSX: XlsxModule
+): void {
+  const wanted = PERCENT_COLUMNS[key];
+  if (!wanted || !ws["!ref"]) return;
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  const wantedNorm = new Set(wanted.map(norm));
+  headerRow.forEach((h, i) => {
+    const header = str(h);
+    if (!header || !wantedNorm.has(norm(header))) return;
+    const c = range.s.c + i;
+    for (const row of rows) {
+      const r = (row as { __rowNum__?: number }).__rowNum__;
+      if (typeof r !== "number") continue;
+      const cell = ws[XLSX.utils.encode_cell({ r, c })] as
+        { t?: string; v?: unknown; z?: unknown } | undefined;
+      if (!cell || cell.t !== "n" || typeof cell.v !== "number") continue;
+      if (!isPercentFormat(cell.z)) continue;
+      row[header] = Math.round(cell.v * 100 * 1e9) / 1e9;
+    }
+  });
 }
 
 // ---------- Modèle & export ----------
@@ -2131,6 +2344,15 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
   ["4. Mise à jour d'un plan existant"],
   [
     "Exportez le plan (bouton « Exporter le plan »), modifiez le fichier puis réimportez-le : l'aperçu indique ce qui sera créé, mis à jour ou inchangé. Une cellule vide ne remplace jamais une valeur existante.",
+  ],
+  [
+    `Feuille ETP : une ligne = une équipe de la base ETP ("Fonction") sur un chantier ou un projet ; "Nombre d'ETP" > 0 et au plus ${STAFFING_MAX_FTE} par ligne (répartissez un besoin plus important sur plusieurs lignes) ; "Date début" et "Date fin" obligatoires (fin >= début). "ID ligne" (rempli par l'export) identifie la ligne : ne le modifiez pas, laissez-le vide pour une nouvelle ligne. "Précision" vide = précision conservée ; un tiret "-" l'efface.`,
+  ],
+  [
+    "Poids dans le chantier (%) : saisissez 40 ou 40 % (une cellule au format pourcentage d'Excel est bien lue 40) ; une valeur hors de 0 à 100 est refusée.",
+  ],
+  [
+    "Dates : les exports écrivent de vraies dates Excel (JJ/MM/AAAA) ; JJ/MM/AAAA ou AAAA-MM-JJ sont acceptés à l'import.",
   ],
   [""],
   ["5. Workflow conseillé (pré-remplissage par IA)"],
@@ -2320,11 +2542,23 @@ export const STRATEGIC_STAFFING_EXAMPLE_ROWS = [
     "2026-01-15",
     "2026-03-31",
   ],
-  ["CH2", "", "Ressources Humaines", 1, "Cheffe de projet RH à mi-temps", "2026-02-01", ""],
-  ["CH3", "", "Cybersécurité", 1.5, "", "", ""],
+  [
+    "CH2",
+    "",
+    "Ressources Humaines",
+    1,
+    "Cheffe de projet RH à mi-temps",
+    "2026-02-01",
+    "2026-12-31",
+  ],
+  ["CH3", "", "Cybersécurité", 1.5, "", "2026-01-01", "2026-06-30"],
 ];
 
 type SheetRows = Record<SheetKey, unknown[][]>;
+
+/** Colonnes date des feuilles : écrites en VRAIES cellules date Excel (JJ/MM/AAAA), relues
+ *  exactement par l'import (`readXlsxWorkbook`). */
+const DATE_HEADERS = ["Date début", "Date fin", "Échéance"] as const;
 
 /** Compose un classeur au format d'import (feuille "Lisez-moi" + 6 feuilles). */
 function buildWorkbook(rows: SheetRows, XLSX: XlsxModule): WorkBook {
@@ -2335,6 +2569,7 @@ function buildWorkbook(rows: SheetRows, XLSX: XlsxModule): WorkBook {
   for (const key of Object.keys(SHEET_SPECS) as SheetKey[]) {
     const headers = SHEET_SPECS[key].headers;
     const sheet = XLSX.utils.aoa_to_sheet([[...headers], ...rows[key]]);
+    applyExcelDateColumns(XLSX, sheet, DATE_HEADERS);
     sheet["!cols"] = headers.map((h) => ({ wch: Math.max(14, Math.min(48, h.length + 2)) }));
     XLSX.utils.book_append_sheet(wb, sheet, STRATEGIC_IMPORT_SHEET_NAMES[key]);
   }
@@ -2440,6 +2675,7 @@ export function buildStrategicPlanExportWorkbook(
         s.note ?? "",
         s.startDate ?? "",
         s.endDate ?? "",
+        s.id,
       ]),
     },
     XLSX

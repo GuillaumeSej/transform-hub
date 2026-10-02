@@ -6,6 +6,7 @@ import {
   HR_IMPORT_ISSUES,
   HR_MOVEMENT_HEADERS,
   HR_MOVEMENT_SHEET,
+  buildHrExportWorkbook,
   buildHrImportPlan,
   employeeToExcelRow,
   movementToExcelRow,
@@ -13,6 +14,9 @@ import {
 import { readXlsxWorkbook } from "@/lib/excelParse";
 import { readSpreadsheet } from "@/lib/excelFileRead";
 import fr from "@/lib/i18n/dictionaries/fr";
+import en from "@/lib/i18n/dictionaries/en";
+import de from "@/lib/i18n/dictionaries/de";
+import es from "@/lib/i18n/dictionaries/es";
 import type { BeTrackData, Employee, WorkforceMovement } from "@/types";
 
 const alice: Employee = {
@@ -349,10 +353,167 @@ describe("buildHrImportPlan — contrôles", () => {
   });
 });
 
+describe(`Base ETP — export en vraies dates, aller-retour .xlsx (fuseau ${process.env.TZ ?? "(système)"})`, () => {
+  /** Export réel (buildHrExportWorkbook) → .xlsx → relecture comme le bouton d'import. */
+  function exportAndRead(
+    employees: Employee[],
+    movements: WorkforceMovement[],
+    data: BeTrackData
+  ): { employeeRows: Record<string, unknown>[]; movementRows: Record<string, unknown>[] } {
+    const wb = buildHrExportWorkbook(XLSX, employees, movements, data, programs);
+    const read = readXlsxWorkbook(XLSX, XLSX.write(wb, { type: "array", bookType: "xlsx" }));
+    const rows = (name: string) =>
+      XLSX.utils.sheet_to_json<Record<string, unknown>>(read.Sheets[name], { defval: "" });
+    return { employeeRows: rows(HR_EMPLOYEE_SHEET), movementRows: rows(HR_MOVEMENT_SHEET) };
+  }
+
+  it("dates écrites en vraies cellules date JJ/MM/AAAA (texte libre de « Départ retraite » conservé)", () => {
+    const data = makeData();
+    const wb = buildHrExportWorkbook(XLSX, [alice], [mv], data, programs);
+    const emp = wb.Sheets[HR_EMPLOYEE_SHEET];
+    expect(emp["O1"].v).toBe("Date d'entrée");
+    expect(emp["O2"]).toMatchObject({ t: "n", v: 43891, z: "dd/mm/yyyy" }); // 01/03/2020
+    expect(emp["P2"]).toMatchObject({ t: "s", v: "2041" });
+    const mov = wb.Sheets[HR_MOVEMENT_SHEET];
+    expect(mov["M1"].v).toBe("Date planifiée");
+    expect(mov["M2"]).toMatchObject({ t: "n", z: "dd/mm/yyyy" });
+  });
+
+  it("aller-retour .xlsx sans modification : aucune écriture (dates relues au jour près)", () => {
+    const data = makeData([alice], [{ ...mv, actualDate: "2026-03-31", status: "Réalisé" }]);
+    const sheets = exportAndRead(
+      [alice],
+      [{ ...mv, actualDate: "2026-03-31", status: "Réalisé" }],
+      data
+    );
+    expect(sheets.employeeRows[0]["Date d'entrée"]).toBeInstanceOf(Date);
+    const plan = buildHrImportPlan(sheets, data, programs);
+    expect(errorsOf(plan)).toEqual([]);
+    expect(plan.employees).toEqual([]);
+    expect(plan.movements).toEqual([]);
+    expect(plan.unchangedEmployees).toBe(1);
+    expect(plan.unchangedMovements).toBe(1);
+  });
+
+  it("mouvement PSE sans dispositif social : exporté vide, réimporté sans mise à jour fantôme", () => {
+    const legacyPse = { ...mv, socialScheme: undefined, inPSE: true } as WorkforceMovement;
+    const data = makeData([alice], [legacyPse]);
+    const row = movementToExcelRow(legacyPse, data, programs);
+    expect(row["Dispositif social"]).toBe("");
+    expect(row.PSE).toBe("Oui");
+    const plan = buildHrImportPlan(exportAndRead([alice], [legacyPse], data), data, programs);
+    expect(errorsOf(plan)).toEqual([]);
+    expect(plan.movements).toEqual([]);
+    expect(plan.unchangedMovements).toBe(1);
+  });
+});
+
+describe("Base ETP — contrôles de grandeur", () => {
+  const codes = (plan: ReturnType<typeof buildHrImportPlan>) => plan.issues.map((i) => i.code);
+
+  it("« 80 » dans la colonne ETP d'un salarié n'est plus lu 80 ETP", () => {
+    const update = buildHrImportPlan(
+      { employeeRows: [{ Matricule: "00042", ETP: 80 }] },
+      makeData()
+    );
+    expect(update.employees).toEqual([]);
+    expect(update.issues.map((i) => i.reason)).toEqual([
+      "ETP = 80 hors bornes (0 à 1,5 ETP par personne ; 80 % s'écrit 0,8) — valeur existante conservée",
+    ]);
+
+    const creation = buildHrImportPlan(
+      { employeeRows: [{ Matricule: "E9", Nom: "Bob", Niveau: "Local", ETP: "-0,5" }] },
+      makeData([], [])
+    );
+    expect(creation.employees[0].fte).toBe(1);
+    expect(codes(creation)).toContain("fteOutOfRangeDefault");
+
+    const ok = buildHrImportPlan(
+      { employeeRows: [{ Matricule: "00042", ETP: "1,5" }] },
+      makeData()
+    );
+    expect(ok.employees[0].fte).toBe(1.5);
+    expect(ok.issues).toEqual([]);
+  });
+
+  it("salaire négatif refusé ; salaire très élevé appliqué avec avertissement", () => {
+    const negative = buildHrImportPlan(
+      { employeeRows: [{ Matricule: "00042", "Salaire brut annuel (€)": -45000 }] },
+      makeData()
+    );
+    expect(negative.employees).toEqual([]);
+    expect(codes(negative)).toEqual(["negativeKept"]);
+
+    const high = buildHrImportPlan(
+      { employeeRows: [{ Matricule: "00042", "Salaire brut annuel (€)": "2 500 000" }] },
+      makeData()
+    );
+    expect(high.employees[0].salary).toBe(2500000);
+    expect(codes(high)).toEqual(["amountHigh"]);
+  });
+
+  it("ETP d'un mouvement : négatif refusé, au-delà de 1,5 averti", () => {
+    const negative = buildHrImportPlan(
+      { movementRows: [{ "ID mouvement": "MV001", "ETP concernés": -1 }] },
+      makeData()
+    );
+    expect(negative.movements).toEqual([]);
+    expect(codes(negative)).toEqual(["negativeKept"]);
+    const high = buildHrImportPlan(
+      { movementRows: [{ "ID mouvement": "MV001", "ETP concernés": 3 }] },
+      makeData()
+    );
+    expect(high.movements[0].fte).toBe(3);
+    expect(codes(high)).toEqual(["movementFteHigh"]);
+  });
+});
+
+describe("Base ETP — cellule vide = conservée, tiret = effacé", () => {
+  it("fiche employé : tiret efface un champ facultatif, refusé sur un champ obligatoire", () => {
+    const plan = buildHrImportPlan(
+      {
+        employeeRows: [
+          { Matricule: "00042", Nom: "-", Direction: "-", Équipe: "", "Départ retraite": "-" },
+        ],
+      },
+      makeData()
+    );
+    expect(plan.employees).toEqual([{ ...alice, direction: "", retirement: "" }]);
+    expect(plan.issues.map((i) => [i.code, i.vars.column])).toEqual([["clearNotAllowed", "Nom"]]);
+  });
+
+  it("mouvement : commentaire, date réalisée et dispositif social effacés par un tiret", () => {
+    const realised = { ...mv, status: "Réalisé", actualDate: "2026-09-30" } as WorkforceMovement;
+    const plan = buildHrImportPlan(
+      {
+        movementRows: [
+          {
+            "ID mouvement": "MV001",
+            Commentaire: "-",
+            "Date réalisée": "-",
+            "Dispositif social": "-",
+            "Département d'arrivée": "",
+            Statut: "Planifié",
+          },
+        ],
+      },
+      makeData([alice], [realised])
+    );
+    expect(errorsOf(plan)).toEqual([]);
+    const m = plan.movements[0];
+    expect(m.comment).toBeUndefined();
+    expect(m.actualDate).toBeNull();
+    expect(m.socialScheme).toBeUndefined();
+    expect(m.inPSE).toBe(false);
+    expect(m.toDepartment).toBe("Achats");
+  });
+});
+
 describe("HR_IMPORT_ISSUES ↔ dictionnaire français", () => {
-  it("chaque modèle est présent à l'identique dans fr.ts", () => {
+  it("chaque modèle est présent à l'identique dans fr.ts (et traduit en/de/es)", () => {
     for (const [code, template] of Object.entries(HR_IMPORT_ISSUES)) {
       expect(fr[`hrImport.issue.${code}`], code).toBe(template);
+      for (const dict of [en, de, es]) expect(dict[`hrImport.issue.${code}`], code).toBeTruthy();
     }
   });
 });

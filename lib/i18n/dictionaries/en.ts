@@ -1308,7 +1308,8 @@ const en: Record<string, string> = {
   "shared.hrExcelButtons.exportButton": "Export Excel",
   "shared.hrExcelButtons.importButton": "Import Excel",
   "shared.hrExcelButtons.exportSuccessBody": "{emp} employees · {mov} movements",
-  "shared.hrExcelButtons.templateDownloadedBody": "Fill in the columns, then import the file",
+  "shared.hrExcelButtons.templateDownloadedBody":
+    "Fill in the columns, then import the file. When updating, an empty cell keeps the existing value; a dash “-” clears it.",
   "shared.hrExcelButtons.importDoneBody":
     "{emp} employee(s) · {created} movement(s) created, {updated} updated",
   "shared.hrExcelButtons.employeesUnit": "employee(s)",
@@ -2115,6 +2116,23 @@ const en: Record<string, string> = {
     "“{name}” matches no account: kept as text, with no effect on visibility or approvals ({count} reference(s))",
   "strategicImport.msg.personAmbiguous":
     "“{name}” matches several accounts ({usernames}): not linked — enter the exact username",
+  "strategicImport.msg.staffingFteTooHigh":
+    '"{column}" ({value}) exceeds the cap of {max} FTEs per line — split the need across several lines',
+  "strategicImport.msg.staffingUnknownTeam":
+    'Team "{value}" not in the FTE base (expected: {expected})',
+  "strategicImport.msg.staffingNoTeams": "no team in the FTE base",
+  "strategicImport.msg.staffingTeamLeftBase":
+    'Team "{value}" not in the FTE base — existing line updated anyway',
+  "strategicImport.msg.staffingDatesMissing":
+    "Existing FTE line without a start or end date — dates to be completed",
+  "strategicImport.msg.staffingOutsideProject":
+    'Dates outside the period of project "{code}" ({start} → {end})',
+  "strategicImport.msg.staffingUnknownLineId":
+    'Line ID "{id}" unknown in this programme — line matched without an ID',
+  "strategicImport.msg.staffingDuplicateLineId":
+    'Line ID "{id}" appears several times in the sheet (rows {rows}) — clear the "ID ligne" cell of copied rows',
+  "strategicImport.msg.staffingDuplicateRow":
+    "Duplicate FTE line (same work package, project, team and dates as row {line})",
   "strategicImport.accountStatusOrphan":
     "login account created but profile not saved — complete it in Admin > Users",
   "strategicImport.readErrorTitle": "Unreadable file",
@@ -2375,13 +2393,18 @@ const en: Record<string, string> = {
   "staffing.saveEdit": "Save",
   "staffing.validation.teamRequired": "Select a team.",
   "staffing.validation.fteRequired": "Enter the number of FTEs.",
-  "staffing.validation.fteInvalid": "The number of FTEs must be strictly positive (e.g. 0.5).",
+  "staffing.validation.fteInvalid": "The number of FTEs must be a number (e.g. 0.5).",
   "staffing.validation.startRequired": "Start date is required.",
   "staffing.validation.startInvalid": "Invalid start date.",
   "staffing.validation.endRequired": "End date is required.",
   "staffing.validation.endInvalid": "Invalid end date.",
   "staffing.validation.endBeforeStart": "End date must be on or after the start date.",
   "staffing.validation.outsideProject": "Warning: these dates fall outside the project period.",
+  "staffing.validation.fteNotPositive": "The number of FTEs must be strictly positive.",
+  "staffing.validation.fteTooHigh":
+    "At most {max} FTEs per line: split a larger need across several lines.",
+  "staffing.validation.teamUnknown": "This team does not exist in the FTE base.",
+  "staffing.validation.teamLeftBase": "Warning: this team is no longer in the FTE base.",
 
   // ─── Staffing page (/effectifs, Strategic Plan) ───────────────────────────
   "effectifs.title": "Budget & mobilized staffing",
@@ -2534,11 +2557,12 @@ const en: Record<string, string> = {
   "staffingImport.confirmButton": "Confirm import",
   "staffingImport.toCreateLabel": "line(s) to create",
   "staffingImport.toUpdateLabel": "line(s) to update",
+  "staffingImport.unchangedLabel": "unchanged line(s)",
   "staffingImport.errorRow": "row(s) in error",
   "staffingImport.lineLabel": "Row",
   "staffingImport.templateDownloadedTitle": "Template downloaded",
   "staffingImport.templateDownloadedBody":
-    "Columns: Work package (exact name), Function, FTE, Start date, End date, Lever (optional, exact name), Note (optional). A row matching an existing entry (same work package + function + dates + lever) is updated rather than duplicated.",
+    "Columns: Work package (exact name), Function (team from the FTE base), FTE (at most 5 per line), Start date and End date (required), Lever (optional, exact name), Note (optional), Line ID (filled in by the export, leave empty for a new line). An existing line is found by its line ID (otherwise work package + function + dates + lever) and updated rather than duplicated. Empty cell = value kept; a dash “-” in Note clears it.",
   "staffingImport.successMessage": "Import complete",
   "staffingImport.importDoneBody": "{created} line(s) created · {updated} line(s) updated",
   "staffingImport.errorTitle": "Import failed",
@@ -3407,6 +3431,20 @@ const en: Record<string, string> = {
   "hrImport.issue.unknownSocialScheme": 'Unknown social scheme "{value}" — "Autre" used',
   "hrImport.issue.hrValidatedNotRealised": '"Validé RH" = Yes while the status is "{status}"',
   "hrImport.issue.actualDateNotRealised": 'Actual date filled in while the status is "{status}"',
+  "hrImport.issue.fteOutOfRangeKept":
+    "{column} = {value} out of range (0 to {max} FTE per person; 80% is written 0.8) — existing value kept",
+  "hrImport.issue.fteOutOfRangeDefault":
+    "{column} = {value} out of range (0 to {max} FTE per person; 80% is written 0.8) — {fallback} used",
+  "hrImport.issue.negativeKept":
+    "{column} = {value}: negative values are not accepted — existing value kept",
+  "hrImport.issue.negativeDefault":
+    "{column} = {value}: negative values are not accepted — {fallback} used",
+  "hrImport.issue.amountHigh":
+    "{column} = {value}: unusually high amount (more than {max}) — please check",
+  "hrImport.issue.movementFteHigh":
+    "{column} = {value}: more than {max} FTE for a single movement — please check (one movement = one person or position)",
+  "hrImport.issue.clearNotAllowed":
+    '{column}: the dash "-" cannot clear a required value — existing value kept',
   "hrImport.rowPrefix": "{sheet} · row {row}:",
   "hrImport.filePrefix": "{sheet}:",
   "hrImport.createdUnit": "created",
@@ -3426,8 +3464,7 @@ const en: Record<string, string> = {
   "staffingImport.issue.unknownFunction": 'Unknown team "{value}" (expected: {expected})',
   "staffingImport.issue.functionLeftBase":
     'Team "{value}" is no longer in the FTE base — existing line updated anyway',
-  "staffingImport.issue.invalidFte":
-    '"ETP" must be a number strictly greater than 0 and at most {max} (read: "{value}")',
+  "staffingImport.issue.invalidFte": '"ETP" must be a number, e.g. 0.5 (read: "{value}")',
   "staffingImport.issue.invalidDate":
     '{column} "{value}" is unreadable or impossible (expected DD/MM/YYYY or YYYY-MM-DD)',
   "staffingImport.issue.startAfterEnd": "Start date ({start}) is after the end date ({end})",
@@ -3435,6 +3472,20 @@ const en: Record<string, string> = {
   "staffingImport.issue.duplicateRow":
     "Duplicate row (same work package, team, dates and lever as row {other})",
   "staffingImport.issue.noDepartments": "no team in the FTE base",
+  "staffingImport.issue.missingFunction": '"Fonction" is required (team from the FTE base)',
+  "staffingImport.issue.missingFte": '"ETP" is required',
+  "staffingImport.issue.fteNotPositive": '"ETP" must be strictly positive (read: {value})',
+  "staffingImport.issue.fteTooHigh":
+    '"ETP" ({value}) exceeds the cap of {max} FTEs per line — split the need across several lines',
+  "staffingImport.issue.missingDate": '"{column}" is required (date DD/MM/YYYY)',
+  "staffingImport.issue.datesMissing":
+    "Existing line without a start or end date — dates to be completed",
+  "staffingImport.issue.outsideProject":
+    'Dates outside the period of lever "{project}" ({start} → {end})',
+  "staffingImport.issue.unknownLineId":
+    'Line ID "{id}" unknown in this programme — line matched without an ID',
+  "staffingImport.issue.duplicateLineId":
+    'Line ID "{id}" appears several times in the file (rows {rows}) — clear the "ID ligne" cell of copied rows',
   "staffingImport.exportButton": "Export",
   "staffingImport.exportDoneBody": "{n} staffing line(s) exported",
   "adminHierarchy.issue.missingColumns": "Missing required columns: {columns}",

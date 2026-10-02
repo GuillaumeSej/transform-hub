@@ -1317,7 +1317,7 @@ const de: Record<string, string> = {
   "shared.hrExcelButtons.importButton": "Excel importieren",
   "shared.hrExcelButtons.exportSuccessBody": "{emp} Mitarbeiter · {mov} Bewegungen",
   "shared.hrExcelButtons.templateDownloadedBody":
-    "Füllen Sie die Spalten aus und importieren Sie anschließend die Datei",
+    "Füllen Sie die Spalten aus und importieren Sie anschließend die Datei. Bei einer Aktualisierung behält eine leere Zelle den bestehenden Wert; ein Bindestrich „-“ löscht ihn.",
   "shared.hrExcelButtons.importDoneBody":
     "{emp} Mitarbeiter · {created} Bewegung(en) erstellt, {updated} aktualisiert",
   "shared.hrExcelButtons.employeesUnit": "Mitarbeiter",
@@ -2150,6 +2150,23 @@ const de: Record<string, string> = {
     "„{name}“ entspricht keinem Konto: als Text beibehalten, ohne Wirkung auf Sichtbarkeit und Freigaben ({count} Verweis(e))",
   "strategicImport.msg.personAmbiguous":
     "„{name}“ entspricht mehreren Konten ({usernames}): nicht zugeordnet — geben Sie den genauen Benutzernamen an",
+  "strategicImport.msg.staffingFteTooHigh":
+    "„{column}“ ({value}) überschreitet die Obergrenze von {max} VZÄ pro Zeile — verteilen Sie den Bedarf auf mehrere Zeilen",
+  "strategicImport.msg.staffingUnknownTeam":
+    "Team „{value}“ nicht in der FTE-Basis (erwartet: {expected})",
+  "strategicImport.msg.staffingNoTeams": "kein Team in der FTE-Basis",
+  "strategicImport.msg.staffingTeamLeftBase":
+    "Team „{value}“ nicht in der FTE-Basis — bestehende Zeile trotzdem aktualisiert",
+  "strategicImport.msg.staffingDatesMissing":
+    "Bestehende FTE-Zeile ohne Beginn- oder Enddatum — Daten ergänzen",
+  "strategicImport.msg.staffingOutsideProject":
+    "Daten außerhalb des Zeitraums des Projekts „{code}“ ({start} → {end})",
+  "strategicImport.msg.staffingUnknownLineId":
+    "Zeilen-ID „{id}“ in diesem Programm unbekannt — Zeile ohne ID zugeordnet",
+  "strategicImport.msg.staffingDuplicateLineId":
+    "Zeilen-ID „{id}“ mehrfach im Blatt (Zeilen {rows}) — leeren Sie die Zelle „ID ligne“ kopierter Zeilen",
+  "strategicImport.msg.staffingDuplicateRow":
+    "Doppelte FTE-Zeile (gleiches Arbeitspaket, Projekt, Team und gleiche Daten wie Zeile {line})",
   "strategicImport.accountStatusOrphan":
     "Anmeldekonto angelegt, aber Profil nicht gespeichert — unter Admin > Benutzer vervollständigen",
   "strategicImport.readErrorTitle": "Datei nicht lesbar",
@@ -2413,7 +2430,7 @@ const de: Record<string, string> = {
   "staffing.saveEdit": "Speichern",
   "staffing.validation.teamRequired": "Wählen Sie ein Team.",
   "staffing.validation.fteRequired": "Geben Sie die Anzahl der VZÄ an.",
-  "staffing.validation.fteInvalid": "Die Anzahl der VZÄ muss strikt positiv sein (z. B. 0,5).",
+  "staffing.validation.fteInvalid": "Die Anzahl der VZÄ muss eine Zahl sein (z. B. 0,5).",
   "staffing.validation.startRequired": "Das Beginndatum ist erforderlich.",
   "staffing.validation.startInvalid": "Ungültiges Beginndatum.",
   "staffing.validation.endRequired": "Das Enddatum ist erforderlich.",
@@ -2421,6 +2438,11 @@ const de: Record<string, string> = {
   "staffing.validation.endBeforeStart": "Das Enddatum muss am oder nach dem Beginndatum liegen.",
   "staffing.validation.outsideProject":
     "Achtung: Diese Daten liegen außerhalb des Projektzeitraums.",
+  "staffing.validation.fteNotPositive": "Die Anzahl der VZÄ muss strikt positiv sein.",
+  "staffing.validation.fteTooHigh":
+    "Höchstens {max} VZÄ pro Zeile: Verteilen Sie einen größeren Bedarf auf mehrere Zeilen.",
+  "staffing.validation.teamUnknown": "Dieses Team existiert nicht in der FTE-Basis.",
+  "staffing.validation.teamLeftBase": "Achtung: Dieses Team ist nicht mehr in der FTE-Basis.",
 
   // ─── Seite Personaleinsatz (/effectifs, Strategieplan) ────────────────────
   "effectifs.title": "Budget & eingesetztes Personal",
@@ -2582,11 +2604,12 @@ const de: Record<string, string> = {
   "staffingImport.confirmButton": "Import bestätigen",
   "staffingImport.toCreateLabel": "Zeile(n) zu erstellen",
   "staffingImport.toUpdateLabel": "Zeile(n) zu aktualisieren",
+  "staffingImport.unchangedLabel": "unveränderte Zeile(n)",
   "staffingImport.errorRow": "Zeile(n) mit Fehler",
   "staffingImport.lineLabel": "Zeile",
   "staffingImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "staffingImport.templateDownloadedBody":
-    "Spalten: Arbeitspaket (exakter Name), Funktion, VZÄ, Startdatum, Enddatum, Hebel (optional, exakter Name), Bemerkung (optional). Eine Zeile, die einem bestehenden Eintrag entspricht (gleiches Arbeitspaket + Funktion + Daten + Hebel), wird aktualisiert statt dupliziert.",
+    "Spalten: Arbeitspaket (exakter Name), Funktion (Team aus der FTE-Basis), VZÄ (höchstens 5 pro Zeile), Startdatum und Enddatum (Pflicht), Hebel (optional, exakter Name), Bemerkung (optional), Zeilen-ID (vom Export ausgefüllt, für eine neue Zeile leer lassen). Eine bestehende Zeile wird über ihre Zeilen-ID gefunden (sonst Arbeitspaket + Funktion + Daten + Hebel) und aktualisiert statt dupliziert. Leere Zelle = Wert bleibt erhalten; ein Bindestrich „-“ in der Bemerkung löscht sie.",
   "staffingImport.successMessage": "Import abgeschlossen",
   "staffingImport.importDoneBody": "{created} Zeile(n) erstellt · {updated} Zeile(n) aktualisiert",
   "staffingImport.errorTitle": "Import fehlgeschlagen",
@@ -3485,6 +3508,20 @@ const de: Record<string, string> = {
     "Unbekanntes Sozialinstrument „{value}“ — „Autre“ verwendet",
   "hrImport.issue.hrValidatedNotRealised": "„Validé RH“ = Ja, obwohl der Status „{status}“ ist",
   "hrImport.issue.actualDateNotRealised": "Ist-Datum angegeben, obwohl der Status „{status}“ ist",
+  "hrImport.issue.fteOutOfRangeKept":
+    "{column} = {value} außerhalb der Grenzen (0 bis {max} VZÄ pro Person; 80 % wird als 0,8 erfasst) — bestehender Wert beibehalten",
+  "hrImport.issue.fteOutOfRangeDefault":
+    "{column} = {value} außerhalb der Grenzen (0 bis {max} VZÄ pro Person; 80 % wird als 0,8 erfasst) — {fallback} verwendet",
+  "hrImport.issue.negativeKept":
+    "{column} = {value}: negative Werte sind nicht zulässig — bestehender Wert beibehalten",
+  "hrImport.issue.negativeDefault":
+    "{column} = {value}: negative Werte sind nicht zulässig — {fallback} verwendet",
+  "hrImport.issue.amountHigh":
+    "{column} = {value}: ungewöhnlich hoher Betrag (mehr als {max}) — bitte prüfen",
+  "hrImport.issue.movementFteHigh":
+    "{column} = {value}: mehr als {max} VZÄ für eine einzelne Bewegung — bitte prüfen (eine Bewegung = eine Person oder Stelle)",
+  "hrImport.issue.clearNotAllowed":
+    "{column}: Der Bindestrich „-“ kann keinen Pflichtwert löschen — bestehender Wert beibehalten",
   "hrImport.rowPrefix": "{sheet} · Zeile {row}:",
   "hrImport.filePrefix": "{sheet}:",
   "hrImport.createdUnit": "angelegt",
@@ -3504,8 +3541,7 @@ const de: Record<string, string> = {
   "staffingImport.issue.unknownFunction": "Unbekanntes Team „{value}“ (erwartet: {expected})",
   "staffingImport.issue.functionLeftBase":
     "Team „{value}“ ist nicht mehr in der FTE-Basis — bestehende Zeile trotzdem aktualisiert",
-  "staffingImport.issue.invalidFte":
-    "„ETP“ muss eine Zahl größer 0 und höchstens {max} sein (gelesen: „{value}“)",
+  "staffingImport.issue.invalidFte": "„ETP“ muss eine Zahl sein, z. B. 0,5 (gelesen: „{value}“)",
   "staffingImport.issue.invalidDate":
     "{column} „{value}“ nicht lesbar oder unmöglich (erwartet TT/MM/JJJJ oder JJJJ-MM-TT)",
   "staffingImport.issue.startAfterEnd": "Startdatum ({start}) liegt nach dem Enddatum ({end})",
@@ -3514,6 +3550,20 @@ const de: Record<string, string> = {
   "staffingImport.issue.duplicateRow":
     "Doppelte Zeile (gleiches Arbeitspaket, Team, Daten und Hebel wie Zeile {other})",
   "staffingImport.issue.noDepartments": "kein Team in der FTE-Basis",
+  "staffingImport.issue.missingFunction": "„Fonction“ ist Pflicht (Team aus der FTE-Basis)",
+  "staffingImport.issue.missingFte": "„ETP“ ist Pflicht",
+  "staffingImport.issue.fteNotPositive": "„ETP“ muss strikt positiv sein (gelesen: {value})",
+  "staffingImport.issue.fteTooHigh":
+    "„ETP“ ({value}) überschreitet die Obergrenze von {max} VZÄ pro Zeile — verteilen Sie den Bedarf auf mehrere Zeilen",
+  "staffingImport.issue.missingDate": "„{column}“ ist Pflicht (Datum TT/MM/JJJJ)",
+  "staffingImport.issue.datesMissing":
+    "Bestehende Zeile ohne Beginn- oder Enddatum — Daten ergänzen",
+  "staffingImport.issue.outsideProject":
+    "Daten außerhalb des Zeitraums des Hebels „{project}“ ({start} → {end})",
+  "staffingImport.issue.unknownLineId":
+    "Zeilen-ID „{id}“ in diesem Programm unbekannt — Zeile ohne ID zugeordnet",
+  "staffingImport.issue.duplicateLineId":
+    "Zeilen-ID „{id}“ mehrfach in der Datei (Zeilen {rows}) — leeren Sie die Zelle „ID ligne“ kopierter Zeilen",
   "staffingImport.exportButton": "Exportieren",
   "staffingImport.exportDoneBody": "{n} Staffing-Zeile(n) exportiert",
   "adminHierarchy.issue.missingColumns": "Pflichtspalten fehlen: {columns}",

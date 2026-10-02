@@ -79,7 +79,10 @@ export function StaffingDraftTable({
   const [formKey, setFormKey] = useState(0);
 
   const totalFte = rows.reduce((sum, r) => sum + (r.fte || 0), 0);
-  const validation = validateStaffingLine(form, projectDates ?? null);
+  const validation = validateStaffingLine(form, {
+    projectRange: projectDates ?? null,
+    knownTeams: departmentNames.length > 0 ? departmentNames : undefined,
+  });
 
   const add = () => {
     if (readOnly || !validation.valid || validation.fte === null) return;

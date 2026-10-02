@@ -1,12 +1,20 @@
 import { describe, it, expect } from "vitest";
+import * as XLSX from "xlsx";
 import {
   STAFFING_IMPORT_HEADERS,
   STAFFING_IMPORT_ISSUES,
+  STAFFING_IMPORT_SHEET_NAME,
+  buildStaffingExportWorkbook,
   buildStaffingTemplateRows,
+  buildStaffingTemplateWorkbook,
   staffingToExcelRows,
   validateStaffingImportRows,
 } from "@/lib/staffingExcelImport";
+import { readSpreadsheet } from "@/lib/excelFileRead";
 import fr from "@/lib/i18n/dictionaries/fr";
+import en from "@/lib/i18n/dictionaries/en";
+import de from "@/lib/i18n/dictionaries/de";
+import es from "@/lib/i18n/dictionaries/es";
 import type { Chantier, ChantierAction, ChantierStaffing } from "@/types";
 
 const companyId = "C1";
@@ -249,19 +257,94 @@ describe("validateStaffingImportRows — contrôles de l'audit du 24/09/2026", (
     expect(ko.errors.map((e) => e.code)).toEqual(["startAfterEnd"]);
   });
 
-  it("ETP borné : 0 < ETP ≤ 5", () => {
+  it("ETP borné : 0 < ETP ≤ 5, messages distincts (illisible / non positif / plafond)", () => {
     const result = run([
       baseRow({ ETP: 0 }),
       baseRow({ ETP: "6", Fonction: "IT / SI" }),
-      baseRow({ ETP: "abc", "Date fin": "" }),
-      baseRow({ ETP: 5, "Date début": "" }),
+      baseRow({ ETP: "abc", "Date fin": "2026-07-31" }),
+      baseRow({ ETP: 5, "Date début": "2026-02-01" }),
+      baseRow({ ETP: "", "Date début": "2026-03-01" }),
     ]);
     expect(result.errors.map((e) => [e.rowNumber, e.code])).toEqual([
-      [2, "invalidFte"],
-      [3, "invalidFte"],
+      [2, "fteNotPositive"],
+      [3, "fteTooHigh"],
       [4, "invalidFte"],
+      [6, "missingFte"],
+    ]);
+    expect(result.errors.map((e) => e.reason)).toEqual([
+      '"ETP" doit être strictement positif (lu : 0)',
+      '"ETP" (6) dépasse le plafond de 5 ETP par ligne — répartissez le besoin sur plusieurs lignes',
+      '"ETP" doit être un nombre, ex. 0,5 (lu : "abc")',
+      '"ETP" est obligatoire',
     ]);
     expect(result.rows).toHaveLength(1);
+  });
+
+  it("même règle que l'écran : dates obligatoires à la création, équipe de la base ETP", () => {
+    const result = run([
+      baseRow({ "Date fin": "" }),
+      baseRow({ "Date début": "", Fonction: "IT / SI" }),
+      baseRow({ Fonction: "" }),
+      baseRow({ ETP: 7, Fonction: "Astrologie" }),
+    ]);
+    expect(result.errors.map((e) => [e.rowNumber, e.code])).toEqual([
+      [2, "missingDate"],
+      [3, "missingDate"],
+      [4, "missingFunction"],
+      [5, "unknownFunction"],
+      [5, "fteTooHigh"],
+    ]);
+    expect(result.errors[0].reason).toBe('"Date fin" est obligatoire (date JJ/MM/AAAA)');
+    expect(result.rows).toEqual([]);
+  });
+
+  it("avertit (sans bloquer) quand les dates sortent de la période du levier", () => {
+    const result = run([
+      baseRow({ Levier: "Cartographier le processus actuel", "Date fin": "2026-06-30" }),
+    ]);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.map((w) => w.code)).toEqual(["outsideProject"]);
+    expect(result.rows).toHaveLength(1);
+  });
+
+  it("Note : cellule vide = note conservée, tiret = note effacée", () => {
+    const existing: ChantierStaffing = {
+      id: "ST-1",
+      companyId,
+      programId,
+      chantierId: "CH1",
+      function: "RH",
+      fte: 1,
+      startDate: "2026-01-01",
+      endDate: "2026-06-30",
+      note: "Marie",
+      createdAt: "2025-12-01",
+    };
+    const kept = run([baseRow({ Note: "", ETP: 2 })], [existing]);
+    expect(kept.rows[0].entry.note).toBe("Marie");
+    const cleared = run([baseRow({ Note: "-" })], [existing]);
+    expect(cleared.rows).toHaveLength(1);
+    expect(cleared.rows[0].isUpdate).toBe(true);
+    expect(cleared.rows[0].entry).not.toHaveProperty("note");
+  });
+
+  it("ligne historique sans dates : mise à jour acceptée avec avertissement « dates à compléter »", () => {
+    const legacy: ChantierStaffing = {
+      id: "ST-legacy",
+      companyId,
+      programId,
+      chantierId: "CH1",
+      function: "RH",
+      fte: 1,
+      createdAt: "2025-12-01",
+    };
+    const result = run(
+      [baseRow({ "Date début": "", "Date fin": "", ETP: 2, "ID ligne": "ST-legacy" })],
+      [legacy]
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.map((w) => w.code)).toEqual(["datesMissing"]);
+    expect(result.rows[0]).toMatchObject({ isUpdate: true, entry: { id: "ST-legacy", fte: 2 } });
   });
 
   it("noms tolérants aux espaces multiples / accents / casse", () => {
@@ -348,14 +431,14 @@ describe("validateStaffingImportRows — contrôles de l'audit du 24/09/2026", (
     const exported = staffingToExcelRows(existing, [baseChantier()], [baseAction()]);
     const result = run(exported, existing);
     expect(result.errors).toEqual([]);
-    expect(result.warnings).toEqual([]);
-    expect(result.rows.map((r) => [r.entry.id, r.isUpdate])).toEqual([
-      ["ST-2", true],
-      ["ST-1", true],
+    // ST-2 est une ligne historique sans dates : signalée « à compléter », mais inchangée ; ST-1
+    // déborde de la période de son levier (avertissement non bloquant, comme à l'écran).
+    expect(result.warnings.map((w) => [w.rowNumber, w.code])).toEqual([
+      [2, "datesMissing"],
+      [3, "outsideProject"],
     ]);
-    for (const r of result.rows) {
-      expect(r.entry).toEqual(existing.find((e) => e.id === r.entry.id));
-    }
+    expect(result.rows).toEqual([]);
+    expect(result.unchanged).toBe(2);
   });
 
   it("numéros de ligne Excel exacts malgré les lignes vides (__rowNum__)", () => {
@@ -365,10 +448,171 @@ describe("validateStaffingImportRows — contrôles de l'audit du 24/09/2026", (
   });
 });
 
+describe(`Effectifs — vrai classeur .xlsx, rapprochement par ID ligne (fuseau ${process.env.TZ ?? "(système)"})`, () => {
+  const chantiers = [baseChantier()];
+  const actions = [baseAction()];
+  const existing: ChantierStaffing[] = [
+    {
+      id: "ST-A",
+      companyId,
+      programId,
+      chantierId: "CH1",
+      function: "RH",
+      fte: 1,
+      startDate: "2026-01-01",
+      endDate: "2026-03-31",
+      note: "Marie",
+      createdAt: "2025-12-01",
+    },
+    {
+      id: "ST-B",
+      companyId,
+      programId,
+      chantierId: "CH1",
+      function: "IT / SI",
+      fte: 0.5,
+      startDate: "2026-03-01",
+      endDate: "2026-12-31",
+      createdAt: "2025-12-01",
+    },
+  ];
+
+  /** Export réel → octets .xlsx → relecture comme l'appli (readSpreadsheet). */
+  async function exportAndRead(
+    edit?: (ws: XLSX.WorkSheet) => void
+  ): Promise<Record<string, unknown>[]> {
+    const wb = buildStaffingExportWorkbook(XLSX, existing, chantiers, actions);
+    if (edit) edit(wb.Sheets[STAFFING_IMPORT_SHEET_NAME]);
+    const bytes = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    const read = await readSpreadsheet(bytes, "effectifs.xlsx");
+    return XLSX.utils.sheet_to_json<Record<string, unknown>>(
+      read.Sheets[STAFFING_IMPORT_SHEET_NAME],
+      { defval: "" }
+    );
+  }
+  const run = (rows: Record<string, unknown>[], current = existing) =>
+    validateStaffingImportRows(
+      rows,
+      companyId,
+      programId,
+      chantiers,
+      actions,
+      current,
+      knownDepartments
+    );
+
+  it("l'export écrit de vraies cellules date JJ/MM/AAAA et une colonne ID ligne", () => {
+    const wb = buildStaffingExportWorkbook(XLSX, existing, chantiers, actions);
+    const ws = wb.Sheets[STAFFING_IMPORT_SHEET_NAME];
+    expect(ws["H1"].v).toBe("ID ligne");
+    // Ligne 2 = "IT / SI" (tri par fonction) : date début 01/03/2026.
+    expect(ws["D2"]).toMatchObject({ t: "n", v: 46082, z: "dd/mm/yyyy" });
+    expect(ws["H2"].v).toBe("ST-B");
+  });
+
+  it("aller-retour .xlsx sans modification : 0 création, 0 mise à jour, aucune anomalie", async () => {
+    const rows = await exportAndRead();
+    expect(rows[0]["Date début"]).toBeInstanceOf(Date);
+    const result = run(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.rows).toEqual([]);
+    expect(result.unchanged).toBe(2);
+  });
+
+  it("export → date de fin modifiée → import = 1 mise à jour, 0 création (plus de doublon)", async () => {
+    const rows = await exportAndRead((ws) => {
+      // Ligne 3 = "RH" (ST-A) : fin 31/03/2026 → 30/06/2026, saisie comme dans Excel.
+      ws["E3"] = { t: "n", v: 46203, z: "dd/mm/yyyy" };
+    });
+    const result = run(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.rows.filter((r) => !r.isUpdate)).toEqual([]);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].entry).toEqual({ ...existing[0], endDate: "2026-06-30" });
+    expect(result.unchanged).toBe(1);
+  });
+
+  it("sans colonne ID ligne (ancien fichier) : rapprochement sans les dates si unique", () => {
+    const rows = staffingToExcelRows(existing, chantiers, actions).map((r) => {
+      const { ["ID ligne"]: _id, ...rest } = r;
+      void _id;
+      return rest.Fonction === "RH" ? { ...rest, "Date fin": "2026-06-30" } : rest;
+    });
+    const result = run(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ isUpdate: true, entry: { id: "ST-A" } });
+
+    // Deux lignes existantes candidates (même chantier + équipe) : pas de rapprochement deviné.
+    const twin: ChantierStaffing = {
+      ...existing[0],
+      id: "ST-A2",
+      startDate: "2026-07-01",
+      endDate: "2026-09-30",
+    };
+    const ambiguous = run([rows.find((r) => r.Fonction === "RH")!], [existing[0], twin]);
+    expect(ambiguous.rows).toHaveLength(1);
+    expect(ambiguous.rows[0].isUpdate).toBe(false);
+  });
+
+  it("ID ligne copié sur deux lignes = erreur ; ID inconnu = avertissement et création", () => {
+    const [it1] = staffingToExcelRows(existing, chantiers, actions);
+    const dup = run([it1, { ...it1, "Date début": "2026-04-01" }]);
+    expect(dup.errors.map((e) => [e.rowNumber, e.code])).toEqual([
+      [2, "duplicateLineId"],
+      [3, "duplicateLineId"],
+    ]);
+    expect(dup.rows).toEqual([]);
+
+    // ID inconnu : avertissement, puis rapprochement « sans identifiant » (ici : clé sans dates
+    // unique → mise à jour de ST-B)…
+    const unknown = run([{ ...it1, "ID ligne": "ST-ailleurs", "Date début": "2026-04-01" }]);
+    expect(unknown.warnings.map((w) => w.code)).toEqual(["unknownLineId"]);
+    expect(unknown.rows).toHaveLength(1);
+    expect(unknown.rows[0]).toMatchObject({ isUpdate: true, entry: { id: "ST-B" } });
+    // …ou création (nouvel id, jamais celui du fichier) quand rien ne correspond.
+    const created = run([
+      {
+        ...it1,
+        "ID ligne": "ST-ailleurs",
+        Levier: "Cartographier le processus actuel",
+        "Date début": "2026-02-01",
+        "Date fin": "2026-03-31",
+      },
+    ]);
+    expect(created.rows).toHaveLength(1);
+    expect(created.rows[0].isUpdate).toBe(false);
+    expect(created.rows[0].entry.id).not.toBe("ST-ailleurs");
+  });
+
+  it("le modèle (exemples commentés, vraies dates) ne produit aucune ligne", async () => {
+    const wb = buildStaffingTemplateWorkbook(XLSX, chantiers, actions, knownDepartments);
+    const bytes = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    const read = await readSpreadsheet(bytes, "modele.xlsx");
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(read.Sheets["ETP"], {
+      defval: "",
+    });
+    const result = run(rows);
+    expect(result.errors).toEqual([]);
+    expect(result.rows).toEqual([]);
+    // Retirer le "#" d'un exemple suffit à l'importer.
+    const example = rows.find((r) => String(r.Chantier).startsWith("# Refonte"))!;
+    const activated = run([{ ...example, Chantier: "Refonte du parcours achats" }], []);
+    expect(activated.errors).toEqual([]);
+    expect(activated.rows[0].entry).toMatchObject({
+      startDate: "2026-01-01",
+      endDate: "2026-06-30",
+    });
+  });
+});
+
 describe("STAFFING_IMPORT_ISSUES ↔ dictionnaire français", () => {
   it("chaque modèle est présent à l'identique dans fr.ts", () => {
     for (const [code, template] of Object.entries(STAFFING_IMPORT_ISSUES)) {
       expect(fr[`staffingImport.issue.${code}`], code).toBe(template);
+      for (const dict of [en, de, es])
+        expect(dict[`staffingImport.issue.${code}`], code).toBeTruthy();
     }
   });
 });

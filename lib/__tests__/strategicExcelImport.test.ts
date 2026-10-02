@@ -584,6 +584,9 @@ describe("validateStrategicImportRows", () => {
         baseStaffingRow({
           "Fonction (équipe, base ETP)": "Ressources Humaines",
           "Nombre d'ETP": 1,
+          // Dates obligatoires (même règle que l'écran, lib/staffingLineValidation.ts).
+          "Date début": "2026-01-01",
+          "Date fin": "2026-12-31",
         }),
       ],
     };

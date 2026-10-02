@@ -14,6 +14,7 @@ import {
   parseCellDate,
   parseCellNumber,
 } from "@/lib/excelParse";
+import { applyExcelDateColumns, isClearMarker } from "@/lib/excelCells";
 import { makeIssue, type ImportIssue } from "@/lib/importIssue";
 import { nextMovementId } from "@/lib/workforceLogic";
 
@@ -24,8 +25,16 @@ import { nextMovementId } from "@/lib/workforceLogic";
  *
  * Règles d'import (audit du 24/09/2026) :
  * - Mise à jour = PATCH : seules les colonnes présentes ET non vides modifient l'existant. Une
- *   cellule vide ne remplace jamais une valeur existante (pas d'effacement par `undefined`/""), et
- *   les champs non exportés (snapshots, rattachements d'arborescence…) sont conservés.
+ *   cellule vide ne remplace jamais une valeur existante, et les champs non exportés (snapshots,
+ *   rattachements d'arborescence…) sont conservés. Un tiret « - » EFFACE un champ facultatif
+ *   (règle commune aux imports, `lib/excelCells.ts`) : textes de la fiche employé, date d'entrée,
+ *   départ retraite ; commentaire, département d'arrivée, pays, RH local, date réalisée et
+ *   dispositif social d'un mouvement. Sur une valeur obligatoire (nom, département, libellé…), le
+ *   tiret est refusé (avertissement, valeur conservée).
+ * - Bornes (audit lot 4) : ETP d'une personne entre 0 et `HR_MAX_PERSON_FTE` (« 80 » n'est plus lu
+ *   80 ETP), montants de salaire/économies/coût ≥ 0 (l'impact masse salariale reste signé),
+ *   avertissement au-delà de `HR_SALARY_WARNING_THRESHOLD` pour un salaire.
+ * - Export : dates en vraies cellules date Excel (`buildHrExportWorkbook`).
  * - Nombres/dates via `lib/excelParse.ts` (FR/EN, séries Excel) : valeur illisible = avertissement
  *   explicite + valeur existante conservée (jamais de repli silencieux).
  * - Énumérations (type, statut, niveau, dispositif social, Oui/Non) : comparaison insensible à la
@@ -121,7 +130,26 @@ export const HR_IMPORT_ISSUES: Record<string, string> = {
   unknownSocialScheme: 'Dispositif social "{value}" inconnu — "Autre" utilisé',
   hrValidatedNotRealised: '"Validé RH" = Oui alors que le statut est "{status}"',
   actualDateNotRealised: 'Date réalisée renseignée alors que le statut est "{status}"',
+  fteOutOfRangeKept:
+    "{column} = {value} hors bornes (0 à {max} ETP par personne ; 80 % s'écrit 0,8) — valeur existante conservée",
+  fteOutOfRangeDefault:
+    "{column} = {value} hors bornes (0 à {max} ETP par personne ; 80 % s'écrit 0,8) — {fallback} utilisé",
+  negativeKept:
+    "{column} = {value} : une valeur négative n'est pas acceptée — valeur existante conservée",
+  negativeDefault:
+    "{column} = {value} : une valeur négative n'est pas acceptée — {fallback} utilisé",
+  amountHigh: "{column} = {value} : montant inhabituellement élevé (plus de {max}) — à vérifier",
+  movementFteHigh:
+    "{column} = {value} : plus de {max} ETP pour un seul mouvement — à vérifier (un mouvement = une personne ou un poste)",
+  clearNotAllowed:
+    '{column} : le tiret "-" ne peut pas effacer une valeur obligatoire — valeur existante conservée',
 };
+
+/** ETP d'une personne (fiche employé) : entre 0 et 1,5 (au-delà : faute de frappe probable, ex.
+ *  « 80 » pour un 80 %). Même seuil d'alerte pour l'ETP d'un mouvement (non bloquant). */
+export const HR_MAX_PERSON_FTE = 1.5;
+/** Salaire brut annuel au-delà duquel l'import avertit (valeur appliquée). */
+export const HR_SALARY_WARNING_THRESHOLD = 1_000_000;
 
 export type ProgramRef = { id: string; name: string };
 
@@ -174,13 +202,57 @@ export function movementToExcelRow(
     "Date réalisée": m.actualDate ?? "",
     Statut: m.status,
     "Validé RH": m.hrValidated ? "Oui" : "Non",
-    "Dispositif social": m.socialScheme ?? (m.inPSE ? "PSE" : ""),
+    // Dispositif réellement saisi uniquement : un mouvement sans dispositif mais marqué PSE
+    // (booléen historique) est porté par la colonne "PSE" — exporter "PSE" ici le faisait
+    // réimporter avec un dispositif, soit une mise à jour fantôme à chaque aller-retour.
+    "Dispositif social": m.socialScheme ?? "",
     PSE: m.inPSE ? "Oui" : "Non",
     "Impact masse salariale (€/an)": m.salaryImpact,
     "Économies (€)": m.savings,
     "Coût one-off (€)": m.cost,
     Commentaire: m.comment ?? "",
   };
+}
+
+type XlsxUtilsModule = Pick<typeof import("xlsx"), "utils">;
+
+/** Colonnes date des deux feuilles : écrites en VRAIES cellules date Excel (JJ/MM/AAAA), relues
+ *  exactement par l'import. "Départ retraite" est un texte libre : seule une date ISO y devient
+ *  une cellule date (une année seule, "2041", reste du texte). */
+const HR_DATE_HEADERS = ["Date d'entrée", "Départ retraite", "Date planifiée", "Date réalisée"];
+
+/** Classeur d'export (ou modèle vide) de la base ETP : feuilles "Base ETP" + "Mouvements",
+ *  ré-importable tel quel (aller-retour sans changement). */
+export function buildHrExportWorkbook(
+  XLSX: XlsxUtilsModule,
+  employees: Employee[],
+  movements: WorkforceMovement[],
+  data: Pick<BeTrackData, "levers">,
+  programs?: ProgramRef[]
+): ReturnType<XlsxUtilsModule["utils"]["book_new"]> {
+  const wb = XLSX.utils.book_new();
+  const sheetOf = (rows: Record<string, string | number>[], headers: readonly string[]) => {
+    const ws =
+      rows.length > 0
+        ? XLSX.utils.json_to_sheet(rows, { header: [...headers] })
+        : XLSX.utils.aoa_to_sheet([[...headers]]);
+    applyExcelDateColumns(XLSX, ws, HR_DATE_HEADERS);
+    return ws;
+  };
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheetOf(employees.map(employeeToExcelRow), HR_EMPLOYEE_HEADERS),
+    HR_EMPLOYEE_SHEET
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
+    sheetOf(
+      movements.map((m) => movementToExcelRow(m, data, programs)),
+      HR_MOVEMENT_HEADERS
+    ),
+    HR_MOVEMENT_SHEET
+  );
+  return wb;
 }
 
 // ---------- Import : helpers ----------
@@ -333,21 +405,52 @@ function readDate(row: Record<string, unknown>, col: string): Read<string> {
 }
 
 /** Lit un nombre ; en cas de valeur illisible : avertissement et valeur existante conservée
- *  (création : `fallback`). */
+ *  (création : `fallback`). `bounds` : bornes de grandeur — hors bornes, même traitement qu'une
+ *  valeur illisible, avec un message dédié (`min: 0` seul = montant négatif refusé). */
 function numberField(
   row: Record<string, unknown>,
   col: string,
   s: Sink,
   isNew: boolean,
-  fallback: number
+  fallback: number,
+  bounds?: { min?: number; max?: number; code: "fteOutOfRange" | "negative" }
 ): number | undefined {
   const r = readNumber(row, col);
-  if (r.kind === "ok") return r.value;
+  if (r.kind === "ok") {
+    const { value } = r;
+    if (
+      bounds &&
+      ((bounds.min !== undefined && value < bounds.min) ||
+        (bounds.max !== undefined && value > bounds.max))
+    ) {
+      const max = bounds.max === undefined ? "" : String(bounds.max).replace(".", ",");
+      const vars = { column: col, value: String(value).replace(".", ","), max, fallback };
+      warn(s, `${bounds.code}${isNew ? "Default" : "Kept"}`, vars);
+      return undefined;
+    }
+    return value;
+  }
   if (r.kind === "invalid") {
     if (isNew) warn(s, "invalidNumberDefault", { column: col, value: r.raw, fallback });
     else warn(s, "invalidNumberKept", { column: col, value: r.raw });
   }
   return undefined;
+}
+
+/** Texte facultatif : vide = conservé (`undefined`), "-" = effacé (""), sinon la valeur. */
+function optionalText(row: Record<string, unknown>, col: string): string | undefined {
+  if (!has(row, col)) return undefined;
+  return isClearMarker(row[col]) ? "" : text(row[col]);
+}
+
+/** Texte obligatoire : le tiret d'effacement est refusé (avertissement, valeur conservée). */
+function requiredText(row: Record<string, unknown>, col: string, s: Sink): string | undefined {
+  if (!has(row, col)) return undefined;
+  if (isClearMarker(row[col])) {
+    warn(s, "clearNotAllowed", { column: col });
+    return undefined;
+  }
+  return text(row[col]);
 }
 
 function boolField(row: Record<string, unknown>, col: string, s: Sink): boolean | undefined {
@@ -413,7 +516,7 @@ function parseEmployee(
     s
   );
   const existing = id ? ctx.employees.find((e) => e.id === id) : undefined;
-  const name = text(row["Nom"]);
+  const name = isClearMarker(row["Nom"]) ? "" : text(row["Nom"]);
   if (!id || (!existing && !name)) {
     fail(s, "missingIdOrName");
     return done(null, false, false);
@@ -421,8 +524,10 @@ function parseEmployee(
   const isNew = !existing;
   const patch: Partial<Employee> = {};
 
+  const nameValue = requiredText(row, "Nom", s);
+  if (nameValue !== undefined) patch.name = nameValue;
+  // Champs texte facultatifs : vide = conservé, "-" = effacé.
   const textCols: [string, keyof Employee][] = [
-    ["Nom", "name"],
     ["Direction", "direction"],
     ["RH local", "hrOwner"],
     ["Région", "region"],
@@ -433,14 +538,15 @@ function parseEmployee(
     ["Entité", "entity"],
   ];
   for (const [col, key] of textCols) {
-    if (has(row, col)) (patch as Record<string, unknown>)[key] = text(row[col]);
+    const value = optionalText(row, col);
+    if (value !== undefined) (patch as Record<string, unknown>)[key] = value;
   }
 
-  if (has(row, "Département")) {
-    const raw = text(row["Département"]);
-    const known = ctx.departments.find((d) => enumKey(d.name) === enumKey(raw));
-    if (!known) warn(s, "unknownDepartment", { value: raw });
-    patch.department = known?.name ?? raw;
+  const department = requiredText(row, "Département", s);
+  if (department !== undefined) {
+    const known = ctx.departments.find((d) => enumKey(d.name) === enumKey(department));
+    if (!known) warn(s, "unknownDepartment", { value: department });
+    patch.department = known?.name ?? department;
   }
 
   if (has(row, "Niveau")) {
@@ -454,26 +560,43 @@ function parseEmployee(
     warn(s, "emptyDefault", { column: "Niveau", fallback: "Local" });
   }
 
-  const fte = numberField(row, "ETP", s, isNew, 1);
+  // ETP d'une personne borné à [0 ; HR_MAX_PERSON_FTE] : « 80 » n'est plus lu 80 ETP.
+  const fte = numberField(row, "ETP", s, isNew, 1, {
+    min: 0,
+    max: HR_MAX_PERSON_FTE,
+    code: "fteOutOfRange",
+  });
   if (fte !== undefined) patch.fte = fte;
   else if (isNew && readNumber(row, "ETP").kind === "empty")
     warn(s, "emptyDefault", { column: "ETP", fallback: 1 });
-  const salary = numberField(row, "Salaire brut annuel (€)", s, isNew, 0);
-  if (salary !== undefined) patch.salary = salary;
+  const salaryCol = "Salaire brut annuel (€)";
+  const salary = numberField(row, salaryCol, s, isNew, 0, { min: 0, code: "negative" });
+  if (salary !== undefined) {
+    patch.salary = salary;
+    if (salary > HR_SALARY_WARNING_THRESHOLD)
+      warn(s, "amountHigh", {
+        column: salaryCol,
+        value: salary,
+        max: `${HR_SALARY_WARNING_THRESHOLD.toLocaleString("fr-FR")} €`,
+      });
+  }
 
-  const hire = readDate(row, "Date d'entrée");
-  if (hire.kind === "ok") patch.hireDate = hire.value;
-  else if (hire.kind === "invalid")
-    warn(s, isNew ? "invalidDateEmpty" : "invalidDateKept", {
-      column: "Date d'entrée",
-      value: hire.raw,
-    });
+  if (has(row, "Date d'entrée") && isClearMarker(row["Date d'entrée"])) patch.hireDate = "";
+  else {
+    const hire = readDate(row, "Date d'entrée");
+    if (hire.kind === "ok") patch.hireDate = hire.value;
+    else if (hire.kind === "invalid")
+      warn(s, isNew ? "invalidDateEmpty" : "invalidDateKept", {
+        column: "Date d'entrée",
+        value: hire.raw,
+      });
+  }
 
   // "Départ retraite" : texte libre (date, année ou mention) — une date Excel est normalisée.
   if (has(row, "Départ retraite")) {
     const v = row["Départ retraite"];
     const d = v instanceof Date ? parseCellDate(v) : undefined;
-    patch.retirement = d?.ok ? d.value : text(v);
+    patch.retirement = isClearMarker(v) ? "" : d?.ok ? d.value : text(v);
   }
 
   const base: Employee = {
@@ -553,12 +676,14 @@ function parseMovement(
   const id = text(row["ID mouvement"]);
   const existing = id ? ctx.movements.find((m) => m.id === id) : undefined;
   const isNew = !existing;
-  const label = text(row["Employé / Poste"]);
+  const labelCleared = isClearMarker(row["Employé / Poste"]);
+  const label = labelCleared ? "" : text(row["Employé / Poste"]);
   if (isNew && !label) {
     fail(s, "missingLabel");
     return done(null, true, false);
   }
   const patch: Partial<WorkforceMovement> = {};
+  if (labelCleared) warn(s, "clearNotAllowed", { column: "Employé / Poste" });
   if (label) patch.label = label;
 
   // Type — obligatoire à la création, jamais deviné.
@@ -602,13 +727,16 @@ function parseMovement(
     return done(null, true, false);
   }
 
-  const actual = readDate(row, "Date réalisée");
-  if (actual.kind === "ok") patch.actualDate = actual.value;
-  else if (actual.kind === "invalid")
-    warn(s, isNew ? "invalidDateEmpty" : "invalidDateKept", {
-      column: "Date réalisée",
-      value: actual.raw,
-    });
+  if (has(row, "Date réalisée") && isClearMarker(row["Date réalisée"])) patch.actualDate = null;
+  else {
+    const actual = readDate(row, "Date réalisée");
+    if (actual.kind === "ok") patch.actualDate = actual.value;
+    else if (actual.kind === "invalid")
+      warn(s, isNew ? "invalidDateEmpty" : "invalidDateKept", {
+        column: "Date réalisée",
+        value: actual.raw,
+      });
+  }
 
   // Statut
   if (has(row, "Statut")) {
@@ -629,9 +757,16 @@ function parseMovement(
     warn(s, "emptyDefault", { column: "Statut", fallback: "Planifié" });
   }
 
-  const fte = numberField(row, "ETP concernés", s, isNew, 1);
-  if (fte !== undefined) patch.fte = fte;
-  else if (isNew && readNumber(row, "ETP concernés").kind === "empty")
+  const fte = numberField(row, "ETP concernés", s, isNew, 1, { min: 0, code: "negative" });
+  if (fte !== undefined) {
+    patch.fte = fte;
+    if (fte > HR_MAX_PERSON_FTE)
+      warn(s, "movementFteHigh", {
+        column: "ETP concernés",
+        value: fte,
+        max: String(HR_MAX_PERSON_FTE).replace(".", ","),
+      });
+  } else if (isNew && readNumber(row, "ETP concernés").kind === "empty")
     warn(s, "emptyDefault", { column: "ETP concernés", fallback: 1 });
   const salaryImpact = numberField(row, "Impact masse salariale (€/an)", s, isNew, 0);
   if (salaryImpact !== undefined) patch.salaryImpact = salaryImpact;
@@ -640,17 +775,26 @@ function parseMovement(
   const cost = numberField(row, "Coût one-off (€)", s, isNew, 0);
   if (cost !== undefined) patch.cost = cost;
 
-  if (has(row, "Département")) patch.department = text(row["Département"]);
-  if (has(row, "Département d'arrivée")) patch.toDepartment = text(row["Département d'arrivée"]);
-  if (has(row, "Pays")) patch.country = text(row["Pays"]);
-  if (has(row, "RH local")) patch.hrOwner = text(row["RH local"]);
-  if (has(row, "Commentaire")) patch.comment = text(row["Commentaire"]);
+  const department = requiredText(row, "Département", s);
+  if (department !== undefined) patch.department = department;
+  // Facultatifs : vide = conservé, "-" = effacé.
+  const toDepartment = optionalText(row, "Département d'arrivée");
+  if (toDepartment !== undefined) patch.toDepartment = toDepartment || undefined;
+  const country = optionalText(row, "Pays");
+  if (country !== undefined) patch.country = country;
+  const hrOwner = optionalText(row, "RH local");
+  if (hrOwner !== undefined) patch.hrOwner = hrOwner;
+  const comment = optionalText(row, "Commentaire");
+  if (comment !== undefined) patch.comment = comment || undefined;
 
   const hrValidated = boolField(row, "Validé RH", s);
   if (hrValidated !== undefined) patch.hrValidated = hrValidated;
 
   // Dispositif social (le booléen "PSE" historique n'est lu qu'en l'absence de dispositif).
-  if (has(row, "Dispositif social")) {
+  if (has(row, "Dispositif social") && isClearMarker(row["Dispositif social"])) {
+    patch.socialScheme = undefined;
+    patch.inPSE = false;
+  } else if (has(row, "Dispositif social")) {
     const raw = text(row["Dispositif social"]);
     let scheme = SOCIAL_SCHEME_SYNONYMS[enumKey(raw)];
     if (!scheme) {
@@ -659,7 +803,9 @@ function parseMovement(
     }
     patch.socialScheme = scheme;
     patch.inPSE = scheme === "PSE";
-  } else if (boolField(row, "PSE", s) === true) {
+  } else if (boolField(row, "PSE", s) === true && !existing?.inPSE) {
+    // Mouvement déjà marqué PSE (sans dispositif) : rien à changer — l'export ne porte plus
+    // "PSE" dans "Dispositif social" pour ce cas (plus de mise à jour fantôme).
     patch.socialScheme = "PSE";
     patch.inPSE = true;
   }

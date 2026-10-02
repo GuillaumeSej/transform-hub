@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import {
-  STAFFING_LINE_MESSAGES,
+  staffingLineMessage,
   type StaffingLineInput,
   type StaffingLineValidation,
 } from "@/lib/staffingLineValidation";
@@ -66,8 +66,7 @@ export function StaffingLineFields({
   const errorFor = (field: keyof StaffingLineInput): string | null => {
     const code = validation.errors[field];
     if (!code || !(showAllErrors || touched[field])) return null;
-    const [key, fallback] = STAFFING_LINE_MESSAGES[code];
-    return t(key, fallback);
+    return staffingLineMessage(t, code);
   };
 
   const inputClass = (field: keyof StaffingLineInput) =>
@@ -89,7 +88,8 @@ export function StaffingLineFields({
     </span>
   );
 
-  const outside = validation.warnings.includes("outsideProject");
+  // Avertissements non bloquants (hors période du projet, équipe sortie de la base ETP).
+  const warnings = validation.warnings;
 
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -176,12 +176,12 @@ export function StaffingLineFields({
         {errorNode("endDate")}
       </label>
       {extraFields}
-      {outside && (
-        <p className="flex items-start gap-1.5 text-[11px] text-rag-amber sm:col-span-3">
+      {warnings.map((w) => (
+        <p key={w} className="flex items-start gap-1.5 text-[11px] text-rag-amber sm:col-span-3">
           <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-          {t(...STAFFING_LINE_MESSAGES.outsideProject)}
+          {staffingLineMessage(t, w)}
         </p>
-      )}
+      ))}
     </div>
   );
 }

@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  STAFFING_LINE_MESSAGES,
+  STAFFING_MAX_FTE,
   isIsoDate,
   isStaffingLineMissingDates,
   parseFte,
+  staffingLineMessage,
   validateStaffingLine,
 } from "@/lib/staffingLineValidation";
+import fr from "@/lib/i18n/dictionaries/fr";
+import en from "@/lib/i18n/dictionaries/en";
+import de from "@/lib/i18n/dictionaries/de";
+import es from "@/lib/i18n/dictionaries/es";
 
 const valid = { team: "Data", fte: "0,5", startDate: "2026-03-01", endDate: "2026-06-30" };
 
@@ -64,9 +71,49 @@ describe("validateStaffingLine", () => {
     });
   });
 
-  it("rejects a non-positive ETP", () => {
-    expect(validateStaffingLine({ ...valid, fte: "0" }).errors.fte).toBe("fteInvalid");
+  it("rejects a non-positive ETP and an unreadable one with distinct codes", () => {
+    expect(validateStaffingLine({ ...valid, fte: "0" }).errors.fte).toBe("fteNotPositive");
+    expect(validateStaffingLine({ ...valid, fte: "-1" }).errors.fte).toBe("fteNotPositive");
     expect(validateStaffingLine({ ...valid, fte: "x" }).errors.fte).toBe("fteInvalid");
+    expect(validateStaffingLine({ ...valid, fte: "abc" }).errors.fte).toBe("fteInvalid");
+  });
+
+  it(`caps a line at STAFFING_MAX_FTE (${STAFFING_MAX_FTE}) ETP — same rule as both imports`, () => {
+    expect(validateStaffingLine({ ...valid, fte: "5" }).valid).toBe(true);
+    expect(validateStaffingLine({ ...valid, fte: "5,5" }).errors.fte).toBe("fteTooHigh");
+    expect(validateStaffingLine({ ...valid, fte: "8" }).errors.fte).toBe("fteTooHigh");
+    expect(validateStaffingLine({ ...valid, fte: "8" }).fte).toBeNull();
+  });
+
+  it("checks the team against the FTE base when it is provided", () => {
+    const knownTeams = ["Data", "RH"];
+    expect(validateStaffingLine({ ...valid, team: " data " }, { knownTeams }).team).toBe("Data");
+    expect(validateStaffingLine({ ...valid, team: "Astrologie" }, { knownTeams }).errors.team).toBe(
+      "teamUnknown"
+    );
+    // Ligne existante dont l'équipe a quitté la base : modifiable, avec avertissement.
+    const legacy = validateStaffingLine(
+      { ...valid, team: "Logistique" },
+      { knownTeams, currentTeam: "Logistique" }
+    );
+    expect(legacy.valid).toBe(true);
+    expect(legacy.warnings).toEqual(["teamLeftBase"]);
+    // Référentiel absent (chargement) : pas de contrôle.
+    expect(validateStaffingLine({ ...valid, team: "Astrologie" }).valid).toBe(true);
+  });
+
+  it("renders exact translated messages with the cap filled in", () => {
+    const t = (_key: string, fallback?: string) => fallback ?? "";
+    expect(staffingLineMessage(t, "fteTooHigh")).toBe(
+      "Au plus 5 ETP par ligne : répartissez un besoin plus important sur plusieurs lignes."
+    );
+    expect(staffingLineMessage(t, "fteInvalid")).toBe(
+      "Le nombre d'ETP doit être un nombre (ex. 0,5)."
+    );
+    for (const [code, [key, fallback]] of Object.entries(STAFFING_LINE_MESSAGES)) {
+      expect(fr[key], code).toBe(fallback);
+      for (const dict of [en, de, es]) expect(dict[key], `${code} traduit`).toBeTruthy();
+    }
   });
 
   it("rejects end before start but allows same day", () => {
