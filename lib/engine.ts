@@ -31,9 +31,20 @@ import {
   isRecurringImpact,
   parseLocalDate,
 } from "@/lib/impactStatus";
-import { impactDatesOf, isFteDeparture, isFteHire } from "@/lib/impactKinds";
+import {
+  impactDatesOf,
+  isFteDeparture,
+  isFteHire,
+  isWorkingCapitalImpact,
+} from "@/lib/impactKinds";
 import { isActiveMovement } from "@/lib/workforceLogic";
-import { formatCompactCurrency, formatMillions, formatNumber } from "@/lib/format";
+import {
+  formatCompactCurrency,
+  formatMillions,
+  formatNumber,
+  isDisplayableNumber,
+  MISSING_VALUE,
+} from "@/lib/format";
 import { workstreamDeclaredProgress } from "@/lib/workstreamLogic";
 
 /**
@@ -70,6 +81,9 @@ export type LeverImpactTotals = {
   fteNet: number;
   /** grossAnnual − opexRec (règle métier "net = brut − OPEX récurrent" ; CAPEX et one-off exclus). */
   netAnnual: number;
+  /** Gains « Impact BFR » (trésorerie, `isWorkingCapitalImpact`) — JAMAIS dans les économies
+   *  (brut, net, one-off) : affichés à part sur la fiche levier et dans l'export. */
+  workingCapital: number;
 };
 
 /** Totaux financiers/ETP dérivés des impacts du levier (source de vérité unique). */
@@ -81,7 +95,13 @@ export function leverImpactTotals(lever: Lever | LeverImpact[]): LeverImpactTota
   let opexRec = 0;
   let capex = 0;
   let fte = 0;
+  let workingCapital = 0;
   for (const imp of impacts) {
+    if (isWorkingCapitalImpact(imp)) {
+      // Impact de trésorerie (BFR) : hors économies, totalisé à part.
+      workingCapital += imp.amount;
+      continue;
+    }
     if (imp.type === "saving") {
       if (imp.gainRecurrence === "oneoff") oneOffGains += imp.amount;
       else gross += imp.amount;
@@ -116,6 +136,7 @@ export function leverImpactTotals(lever: Lever | LeverImpact[]): LeverImpactTota
     fteNet: Math.round(fte * 10) / 10,
     // Règle métier : net annuel = gain brut − OPEX récurrent. CAPEX et coûts one-off n'y entrent JAMAIS.
     netAnnual: round2(gross - opexRec),
+    workingCapital: round2(workingCapital),
   };
 }
 
@@ -181,6 +202,8 @@ function impactsRealizedNet(
     // Règle UNIQUE « réalisé » (audit M7) : statut effectif non planifié ET validé par la finance
     // (ou sans workflow de validation) — voir `isImpactRealized`, complément de `isImpactLate`.
     if (!isImpactRealized(imp, today, leverStatus)) continue;
+    // Impact BFR (trésorerie) : jamais dans le réalisé des économies.
+    if (isWorkingCapitalImpact(imp)) continue;
     if (imp.type === "saving") {
       if (imp.gainRecurrence !== "oneoff") gross += imp.amount;
       if (imp.fteCount) fte += imp.fteCount;
@@ -210,6 +233,7 @@ function doneActionImpactsTotal(lever: Lever, pick: "net" | "gross" | "fte"): nu
   for (const action of lever.actions ?? []) {
     if (action.status !== "done") continue;
     for (const imp of action.impacts ?? []) {
+      if (isWorkingCapitalImpact(imp)) continue;
       if (pick === "fte") {
         // Même signe que `leverImpactTotals` : un départ ETP RETIRE des ETP (+recrutements/−départs).
         if (imp.fteCount) {
@@ -694,6 +718,8 @@ function realizedMonthRange(range: [number, number] | null, today: Date): [numbe
  *  totaux par levier (audit M3/M5 : les deux comptaient CAPEX/one-off, en valeur absolue côté
  *  Finance, en déduction côté P&L). */
 export function impactNetSigned(imp: LeverImpact): number | null {
+  // Impact BFR (trésorerie) : hors net, comme le CAPEX et les one-off.
+  if (isWorkingCapitalImpact(imp)) return null;
   if (imp.type === "saving") return imp.gainRecurrence === "oneoff" ? null : imp.amount;
   if (imp.type === "fte") return isFteHire(imp) ? -imp.amount : imp.amount;
   if (imp.nature === "opex_rec") return -imp.amount;
@@ -1103,15 +1129,17 @@ export function underperformers(data: BeTrackData, wsId?: string, now: number = 
 /** Montant en M (unité des données Plan Performance) → montant compact dans la langue et la devise
  *  actives (`7,7 M €` en fr, `€7.7M` en en) — délègue à `formatCompactCurrency` (lib/format.ts). */
 export function fmtCurr(v: number | null | undefined, dec = 1): string {
-  if (v === null || v === undefined) return "—";
+  // Absent ou invalide (NaN, ±∞) : « — » (voir `formatMillions`).
   return formatMillions(v, dec);
 }
 
-export function fmtPct(v: number): string {
+/** Pourcentage arrondi à l'unité ; absent ou invalide (NaN, ±∞ d'une division par zéro) ⇒ « — ». */
+export function fmtPct(v: number | null | undefined): string {
+  if (!isDisplayableNumber(v)) return MISSING_VALUE;
   return `${Math.round(v)}%`;
 }
 
-export function fmtInt(v: number): string {
+export function fmtInt(v: number | null | undefined): string {
   return formatNumber(v);
 }
 
@@ -1153,7 +1181,10 @@ export function isActionLate(action: LeverAction, today: Date = new Date()): boo
  *  lit plus que l'ancien `action.impacts` (données non migrées). */
 export function actionNetImpact(action: LeverAction): number {
   return (action.impacts ?? []).reduce(
-    (sum, impact) => sum + (impact.type === "saving" ? impact.amount : -impact.amount),
+    (sum, impact) =>
+      isWorkingCapitalImpact(impact)
+        ? sum
+        : sum + (impact.type === "saving" ? impact.amount : -impact.amount),
     0
   );
 }
@@ -1693,7 +1724,10 @@ export function isLeverLate(lever: Lever, today: Date = new Date()): boolean {
   // « Gains en retard » : seuls les impacts de GAIN (un coût non engagé n'est pas un retard de
   // gain) — notion distincte des « Actions en retard » du plan d'action (décision audit C4).
   return leverImpactsOf(lever).some(
-    (imp) => isGainImpact(imp) && isImpactLate(imp, today, lever.end, lever.status)
+    (imp) =>
+      isGainImpact(imp) &&
+      !isWorkingCapitalImpact(imp) &&
+      isImpactLate(imp, today, lever.end, lever.status)
   );
 }
 
@@ -2191,6 +2225,8 @@ export function impactTrajectory(
 
   for (const lever of levers) {
     for (const imp of leverImpactsOf(lever)) {
+      // Impact BFR (trésorerie) : hors courbe des économies.
+      if (isWorkingCapitalImpact(imp)) continue;
       const gainMi = monthIndexOf(imp.gainDate ?? lever.end);
       const costMi = monthIndexOf(imp.capexDeploymentDate ?? imp.capexStartDate ?? lever.start);
       const isGain = imp.type === "saving" || isFteDeparture(imp);
@@ -2463,21 +2499,26 @@ export type SavingsWaterfall = {
  *  (b) décomposition de cette cible : brut − OPEX récurrent = net.
  * Règle métier : net = brut − OPEX récurrent ; le CAPEX et les coûts one-off n'y entrent jamais.
  * Le net est celui de `savingsTriple` (scindé réalisé / reste à faire) ; le brut est dérivé
- * (net + OPEX récurrent) et le Δ réactualisé est dérivé de l'arrondi pour que tout boucle
+ * (net + OPEX récurrent) et le Δ réactualisé est dérivé des autres montants pour que tout boucle
  * exactement. Leviers annulés exclus de la cible.
+ *
+ * Montants NON arrondis (audit lot 4, point 9) : seul le bruit flottant est retiré (`clean`, 1e-6
+ * M€ = 1 €) ; l'arrondi est fait à l'affichage. Avant, chaque montant était arrondi à 0,1 M€ : un
+ * OPEX récurrent de 0,55 M€ s'affichait « 500 k€ » dans la cascade contre « 550 k€ » sur la note
+ * Finance. Les KPI arrondis à 0,1 (`savingsTriple`) valent l'arrondi à 0,1 de ces montants.
  */
 export function savingsWaterfall(data: BeTrackData): SavingsWaterfall {
-  const r1 = (n: number) => Math.round(n * 10) / 10;
+  const clean = (n: number) => Math.round(n * 1e6) / 1e6;
   const active = data.levers.filter((l) => l.status !== "cancelled");
   const cancelledLevers = data.levers.filter((l) => l.status === "cancelled");
   const lockedOf = (l: Lever) => displayedLockedPlanNet(l).value;
-  const realized = r1(active.reduce((s, l) => s + realizedSavings(l), 0));
-  const target = r1(active.reduce((s, l) => s + displayedReforecastNet(l).value, 0));
-  const opexRec = r1(active.reduce((s, l) => s + leverOpexRecOf(l), 0));
-  const cancelled = r1(cancelledLevers.reduce((s, l) => s + lockedOf(l), 0));
-  const initial = r1(plannedInitialNet(data.levers));
-  const reforecastDelta = r1(target + cancelled - initial);
-  const gross = r1(target + opexRec);
+  const realized = clean(active.reduce((s, l) => s + realizedSavings(l), 0));
+  const target = clean(active.reduce((s, l) => s + displayedReforecastNet(l).value, 0));
+  const opexRec = clean(active.reduce((s, l) => s + leverOpexRecOf(l), 0));
+  const cancelled = clean(cancelledLevers.reduce((s, l) => s + lockedOf(l), 0));
+  const initial = clean(plannedInitialNet(data.levers));
+  const reforecastDelta = clean(target + cancelled - initial);
+  const gross = clean(target + opexRec);
   const steps: WaterfallStep[] = [
     {
       key: "initial",
@@ -2491,7 +2532,7 @@ export function savingsWaterfall(data: BeTrackData): SavingsWaterfall {
       label: "Réactualisé",
       kind: "delta",
       value: reforecastDelta,
-      cumulative: r1(initial + reforecastDelta),
+      cumulative: clean(initial + reforecastDelta),
     },
     { key: "cancelled", label: "Annulé", kind: "delta", value: -cancelled, cumulative: target },
     {
@@ -2512,7 +2553,7 @@ export function savingsWaterfall(data: BeTrackData): SavingsWaterfall {
     cancelled,
     target,
     realized,
-    remaining: r1(target - realized),
+    remaining: clean(target - realized),
     gross,
     opexRec,
   };

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import {
   axesSponsoredBy,
   axisDecisionMakers,
@@ -2795,6 +2796,28 @@ describe("axisProgressPct / projetMilestoneCounts", () => {
     expect(projetMilestoneCounts(mk("p", "C", ["E0"])).passed).toBe(1);
     expect(projetMilestoneCounts({}).passed).toBe(0);
     expect(projetMilestoneCounts({}).total).toBeGreaterThan(0);
+  });
+  it("projet terminé (J4 courant, check-list complète, 100 %) : 5/5 jalons, pas 4/5", () => {
+    const done = {
+      milestones: {
+        currentMilestone: "E4" as const,
+        passedMilestones: ["E0", "E1", "E2", "E3"] as (typeof MILESTONE_ORDER)[number][],
+        checklists: {},
+      },
+    };
+    // Avant correctif : passed = 4 (E4 jamais « passé », faute de jalon suivant).
+    expect(projetMilestoneCounts(done, 100)).toEqual({ passed: 5, total: 5 });
+    // J4 en cours, pas terminé : toujours 4/5.
+    expect(projetMilestoneCounts(done, 92).passed).toBe(4);
+    // Sans avancement fourni : repli sur milestoneProgressPct (check-list vide → 80 %).
+    expect(projetMilestoneCounts(done).passed).toBe(4);
+    // E4 déjà dans passedMilestones : jamais compté deux fois.
+    expect(
+      projetMilestoneCounts(
+        { milestones: { ...done.milestones, passedMilestones: [...MILESTONE_ORDER] } },
+        100
+      ).passed
+    ).toBe(5);
   });
 });
 

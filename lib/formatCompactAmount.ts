@@ -12,6 +12,8 @@ export function formatCompactCurrency(
   locale: Locale,
   maximumFractionDigits = 1
 ): string {
+  // Montant absent ou invalide (NaN, ±∞) : « — », jamais « NaN € » (audit lot 4, point 10).
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   const tag = INTL_LOCALE[locale] ?? INTL_LOCALE.fr;
   // Pas de "-0 €" : un montant qui s'arrondit à zéro (|v| < 0,5 sous 1 000) s'affiche "0 €".
   if (Math.abs(value) < 0.5) value = 0;
@@ -31,6 +33,7 @@ export function formatCompactCurrency(
 
 /** Pourcentage localisé (`33 %` en fr/de/es, `33%` en en) à partir d'un ratio (0.33 ⇒ 33 %). */
 export function formatPercent(ratio: number, locale: Locale, maximumFractionDigits = 0): string {
+  if (typeof ratio !== "number" || !Number.isFinite(ratio)) return "—";
   const tag = INTL_LOCALE[locale] ?? INTL_LOCALE.fr;
   return new Intl.NumberFormat(tag, { style: "percent", maximumFractionDigits }).format(ratio);
 }

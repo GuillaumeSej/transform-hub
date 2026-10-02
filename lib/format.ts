@@ -53,12 +53,22 @@ export function intlTag(locale: Locale = currentLocale): string {
   return INTL_LOCALE_TAGS[locale] ?? INTL_LOCALE_TAGS[DEFAULT_LOCALE];
 }
 
-/** Nombre localisé (`1 234,5` en fr, `1,234.5` en en). */
+/** Valeur affichée à la place d'un nombre absent ou invalide (`NaN`, `±∞`, `undefined`, `null`) —
+ *  jamais « NaN € », « ∞ % » ni « undefined » à l'écran (audit lot 4, point 10). */
+export const MISSING_VALUE = "—";
+
+/** Nombre affichable : un `number` fini. Les formateurs renvoient `MISSING_VALUE` sinon. */
+export function isDisplayableNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/** Nombre localisé (`1 234,5` en fr, `1,234.5` en en). Absent/invalide ⇒ « — ». */
 export function formatNumber(
-  value: number,
+  value: number | null | undefined,
   options?: Intl.NumberFormatOptions,
   locale: Locale = currentLocale
 ): string {
+  if (!isDisplayableNumber(value)) return MISSING_VALUE;
   return new Intl.NumberFormat(intlTag(locale), options).format(value);
 }
 
@@ -126,9 +136,10 @@ export function formatDateTime(
 /** Montant COMPLET dans la devise du programme (`7 732 500 €`, `€7,732,500`). Devise non ISO ⇒
  *  nombre localisé suffixé de la devise telle quelle. */
 export function formatCurrency(
-  value: number,
+  value: number | null | undefined,
   opts: { currency?: string; locale?: Locale; maximumFractionDigits?: number } = {}
 ): string {
+  if (!isDisplayableNumber(value)) return MISSING_VALUE;
   const currency = opts.currency ? normalizeCurrency(opts.currency) : currentCurrency;
   const tag = intlTag(opts.locale ?? currentLocale);
   const maximumFractionDigits = opts.maximumFractionDigits ?? 0;
@@ -148,9 +159,10 @@ export function formatCurrency(
 
 /** Montant COMPACT dans la devise du programme (`7,7 M €`, `€7.7M`) — voir lib/formatCompactAmount.ts. */
 export function formatCompactCurrency(
-  value: number,
+  value: number | null | undefined,
   opts: { currency?: string; locale?: Locale; maximumFractionDigits?: number } = {}
 ): string {
+  if (!isDisplayableNumber(value)) return MISSING_VALUE;
   return compactCurrency(
     value,
     opts.currency ? normalizeCurrency(opts.currency) : currentCurrency,
@@ -162,10 +174,11 @@ export function formatCompactCurrency(
 /** Montant exprimé en MILLIONS (unité des données Plan Performance et masse salariale RH) → montant
  *  compact localisé (`7,7 M €` / `€7.7M`). */
 export function formatMillions(
-  valueInMillions: number,
+  valueInMillions: number | null | undefined,
   maximumFractionDigits = 1,
   opts: { currency?: string; locale?: Locale } = {}
 ): string {
+  if (!isDisplayableNumber(valueInMillions)) return MISSING_VALUE;
   return formatCompactCurrency(valueInMillions * 1_000_000, { ...opts, maximumFractionDigits });
 }
 
@@ -186,7 +199,8 @@ type AmountOpts = {
 
 /** Montant en UNITÉS monétaires → `1,8 M €` / `270 k €` (compact par défaut), sans `-0`, signe
  *  `+` optionnel. */
-export function formatAmount(value: number, opts: AmountOpts = {}): string {
+export function formatAmount(value: number | null | undefined, opts: AmountOpts = {}): string {
+  if (!isDisplayableNumber(value)) return MISSING_VALUE;
   const { signed, compact = true, ...rest } = opts;
   const base = compact ? formatCompactCurrency(value, rest) : formatCurrency(value, rest);
   // Signe `+` seulement si le montant AFFICHÉ n'est pas nul (pas de `+0 €`).
@@ -195,17 +209,22 @@ export function formatAmount(value: number, opts: AmountOpts = {}): string {
 }
 
 /** Montant exprimé en MILLIONS (unité des données Plan Performance) → voir `formatAmount`. */
-export function formatAmountM(valueInMillions: number, opts: AmountOpts = {}): string {
+export function formatAmountM(
+  valueInMillions: number | null | undefined,
+  opts: AmountOpts = {}
+): string {
+  if (!isDisplayableNumber(valueInMillions)) return MISSING_VALUE;
   return formatAmount(valueInMillions * 1_000_000, opts);
 }
 
 /** Nombre décimal à précision FIXE bornée (`1,8` en fr, `1.8` en en) — pour les colonnes de
  *  tableaux exprimées dans une unité donnée par l'en-tête (ex. `(M €)`). Jamais `-0`. */
 export function formatDecimal(
-  value: number,
+  value: number | null | undefined,
   fractionDigits = 1,
   locale: Locale = currentLocale
 ): string {
+  if (!isDisplayableNumber(value)) return MISSING_VALUE;
   const v = Math.abs(value) < 0.5 * 10 ** -fractionDigits ? 0 : value;
   return formatNumber(
     v,
@@ -217,9 +236,10 @@ export function formatDecimal(
 /** ETP/FTE : `0,9` (fr) / `0.9` (en), 1 décimale max par défaut ; `unit` (libellé traduit, ex.
  *  `t("etp.column.fte")`) suffixé s'il est fourni ⇒ `0,9 ETP`. Jamais `-0`. */
 export function formatFte(
-  value: number,
+  value: number | null | undefined,
   opts: { unit?: string; maximumFractionDigits?: number; locale?: Locale } = {}
 ): string {
+  if (!isDisplayableNumber(value)) return MISSING_VALUE;
   const digits = opts.maximumFractionDigits ?? 1;
   const v = Math.abs(value) < 0.5 * 10 ** -digits ? 0 : value;
   const n = formatNumber(v, { maximumFractionDigits: digits }, opts.locale ?? currentLocale);
@@ -229,10 +249,11 @@ export function formatFte(
 /** Valeur d'indicateur/KPI (unité libre) : `1 234,5` (fr), 2 décimales max, `unit` suffixé avec
  *  une espace s'il est fourni (`12,5 %`, `3 jours`). Jamais `-0`. */
 export function formatMeasure(
-  value: number,
+  value: number | null | undefined,
   unit?: string,
   locale: Locale = currentLocale
 ): string {
+  if (!isDisplayableNumber(value)) return MISSING_VALUE;
   const v = Math.abs(value) < 0.005 ? 0 : value;
   const n = formatNumber(v, { maximumFractionDigits: 2 }, locale);
   return unit ? `${n} ${unit}` : n;
@@ -240,10 +261,11 @@ export function formatMeasure(
 
 /** Pourcentage exprimé en POINTS (`12.5` ⇒ `12,5 %` fr / `12.5%` en). */
 export function formatPct(
-  valuePct: number,
+  valuePct: number | null | undefined,
   maximumFractionDigits = 0,
   locale: Locale = currentLocale
 ): string {
+  if (!isDisplayableNumber(valuePct)) return MISSING_VALUE;
   const digits = maximumFractionDigits;
   const v = Math.abs(valuePct) < 0.5 * 10 ** -digits ? 0 : valuePct;
   return formatNumber(v / 100, { style: "percent", maximumFractionDigits: digits }, locale);

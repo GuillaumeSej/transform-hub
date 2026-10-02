@@ -158,6 +158,7 @@ const fr: Record<string, string> = {
   "validation.sa.status.pending": "En attente",
   "validation.sa.status.approved": "Validée",
   "validation.sa.status.rejected": "Refusée",
+  "validation.sa.status.cancelled": "Annulée",
   "validation.sa.status.direct": "Appliquée (information)",
   "validation.sa.adjustValue": "Valeur à appliquer (modifiable avant d'accepter)",
   "validation.sa.tab.todo": "À valider",
@@ -1364,7 +1365,6 @@ const fr: Record<string, string> = {
   "shared.leverImportButton.templateDownloadedBody":
     "3 feuilles : Leviers (Code = clé), Actions (Code Levier = FK), Impacts (Code Levier + Nom de l'action = FK). Supprimez la ligne d'exemple avant de remplir.",
   "shared.leverImportButton.workstreamsCreatedNote": "{n} chantier(s) créé(s)",
-  "shared.leverImportButton.ignoredRowsNote": "{n} ligne(s) ignorée(s)",
   "shared.leverImportButton.importDoneBody": "{created} levier(s) créé(s) · {updated} mis à jour",
   "shared.leverImportButton.createCountLabel": "levier(s) à créer",
   "shared.leverImportButton.updateCountLabel": "levier(s) à mettre à jour",
@@ -1401,6 +1401,12 @@ const fr: Record<string, string> = {
     "{n} ligne(s) d'impact existante(s) seront supprimée(s)",
   "shared.leverImportButton.impactsRemovedBody":
     "car absentes de la feuille Impacts du fichier : {list}.",
+  "shared.leverImportButton.emptyCellRule":
+    "Cellule vide = valeur actuelle conservée ; « - » = champ effacé. « Progression (%) » et les montants d'un levier porteur d'impacts sont calculés : leur modification est ignorée.",
+  "shared.leverImportButton.fixErrorsFirst":
+    "Import impossible tant que le fichier contient des erreurs : corrigez les lignes ci-dessous puis rechargez le fichier.",
+  "shared.leverImportButton.confirmLargeValues":
+    "J'ai vérifié les valeurs inhabituellement élevées signalées (unité M€ / ETP) et confirme l'import.",
   "shared.leverImportButton.warningsTitle": "Avertissements (import non bloqué)",
   "shared.exportButton.truncatedTitle": "Descriptions tronquées",
   "shared.exportButton.truncatedBody":
@@ -1464,6 +1470,19 @@ const fr: Record<string, string> = {
     'Nature de l\'impact "{value}" inconnue : valeur ignorée (attendu : {expected})',
   "shared.leverImport.msg.unknownPopulation":
     'Population impactée "{value}" introuvable parmi les chantiers : valeur ignorée',
+  "shared.leverImport.msg.duplicateActionId":
+    'Identifiant d\'action "{id}" en doublon pour le levier "{code}" (déjà utilisé ligne {row})',
+  "shared.leverImport.msg.negativeNotAllowed":
+    '"{field}" ne peut pas être négatif (valeur lue : {value})',
+  "shared.leverImport.msg.computedFromActions":
+    '"{field}" : valeur calculée depuis le plan d\'action ({computed}) — modification ignorée (fichier : {value})',
+  "shared.leverImport.msg.computedFromImpacts":
+    '"{field}" : valeur calculée depuis les impacts du levier ({computed}) — modification ignorée (fichier : {value})',
+  "shared.leverImport.msg.computedFromPlan":
+    '"{field}" : valeur calculée depuis le plan figé / la réactualisation ({computed}) — modification ignorée (fichier : {value})',
+  "shared.leverImport.msg.valueClamped": '"{field}" : {value} hors bornes, ramené à {bound}',
+  "shared.leverImport.msg.largeValue":
+    '"{field}" = {value} {unit} : valeur inhabituellement élevée (au-delà de {threshold}) — vérifiez l\'unité avant de confirmer',
   "shared.leverImport.msg.formulaNoValue":
     "Cellule {cell} : formule sans valeur calculée (classeur non recalculé) — ouvrez et enregistrez le fichier dans Excel avant l'import.",
 
@@ -1610,6 +1629,8 @@ const fr: Record<string, string> = {
 
   // ─── shared.leverForm/actionForm/movementForm/manualAlertForm/dependencyEditor (remédiation i18n) ─
   "shared.actionForm.actionName": "Nom de l'action",
+  "shared.actionForm.duplicateName":
+    "Une autre action de ce levier porte déjà ce nom : choisissez un nom distinct.",
   "shared.actionForm.actionNamePlaceholder": "Ex: Lancer le RFP",
   "shared.actionForm.owner": "Responsable",
   "shared.actionForm.startDate": "Date début",
@@ -1737,6 +1758,7 @@ const fr: Record<string, string> = {
   // sur la fiche détail d'axe.
   "strategicAxes.noIndicatorsShort": "Aucun indicateur",
   "strategicAxes.unassigned": "Non assigné",
+  "strategicAxes.unassignedAxis": "Sans axe",
   "strategicAxes.tree.chantiersN": "{n} chantiers",
   "strategicAxes.tree.chantiersNOne": "{n} chantier",
   "strategicAxes.tree.projetsN": "{n} projets",
@@ -3227,6 +3249,9 @@ const fr: Record<string, string> = {
   "impactsEditor.label": "Libellé",
   "impactsEditor.amount": "Montant (€M)",
   "impactsEditor.oneOff": "Ponctuel",
+  "impactsEditor.workingCapitalBadge": "Impact BFR — trésorerie, hors économies",
+  "impactsEditor.workingCapitalHint":
+    "Impact BFR (trésorerie) : non compté dans les économies (brut, net, réalisé, courbe, P&L).",
   "impactsEditor.untitled": "Impact sans libellé",
   "impactsEditor.statusPlanned": "Planifié",
   "impactsEditor.statusDone": "Réalisé",
@@ -3352,6 +3377,7 @@ const fr: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "OPEX ponctuel",
   "leverDetail.trajectory.detailOpexRec": "OPEX récurrent",
   "leverDetail.trajectory.detailEmpty": "Aucun impact sur cette période.",
+  "leverDetail.workingCapitalNote": "Impact BFR (trésorerie, hors économies) : {amount}",
   "leverDetail.oneOff": "OPEX ponctuel",
   "chart.waterfall.realized": "Réalisé",
   "chart.waterfall.remaining": "Reste à faire",
@@ -3443,6 +3469,8 @@ const fr: Record<string, string> = {
   "strategicApprovals.alert.rejectedTitle": "Demande refusée · {label}",
   "strategicApprovals.alert.approvedDesc": "{decider} a validé {phrase}{comment}.",
   "strategicApprovals.alert.rejectedDesc": "{decider} a refusé {phrase}{comment}.",
+  "strategicApprovals.alert.cancelledTitle": "Demande annulée · {label}",
+  "strategicApprovals.alert.cancelledDesc": "Votre demande de {phrase} a été annulée{comment}.",
   "strategicApprovals.alert.decidedApprovedTitle": "Validation enregistrée · {label}",
   "strategicApprovals.alert.decidedRejectedTitle": "Refus enregistré · {label}",
   "strategicApprovals.alert.decidedApprovedDesc":
@@ -3668,6 +3696,8 @@ const fr: Record<string, string> = {
   "projetWeights.overTotalWarning":
     "Le total déclaré dépasse 100 % : les poids sont normalisés au calcul, et les projets non pondérés reçoivent le poids moyen déclaré.",
   "kpi.periodInvalid": "Période invalide — format attendu : {format}",
+  "kpi.periodFuture":
+    "La période {period} n'a pas encore commencé : une valeur ne peut être saisie que jusqu'à la période en cours ({current}).",
   "kpi.measurement.periodTakenNoRight":
     "Une valeur existe déjà pour la période {period} et vous n'êtes pas habilité à la remplacer.",
   "kpi.measurement.replaceConfirm": "Remplacer la valeur",
@@ -4018,6 +4048,11 @@ const fr: Record<string, string> = {
     "Filtres non applicables aux leviers (mouvements uniquement) : {filters}.",
   "hr.fteCoverage.periodNotApplied":
     "La période ne s'applique qu'aux mouvements : les leviers sont comptés sur tout le programme.",
+  // Lot 3 — calcul sur le programme complet : libellés des agrégats hors périmètre du lecteur.
+  "strategicScope.outOfScopeChantier": "Chantier hors de votre périmètre",
+  "strategicPrerequisite.outOfScope": "Prérequis hors de votre périmètre",
+  "effectifs.staffingRate.otherChantiers": "Autres chantiers (hors de votre périmètre)",
+  "effectifs.moneyBudget.otherChantiers": "Autres chantiers",
 };
 
 export default fr;

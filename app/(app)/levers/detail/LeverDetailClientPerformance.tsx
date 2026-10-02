@@ -282,6 +282,8 @@ export function LeverDetailClientPerformance() {
   // (`engine.displayedLockedPlanNet`), même valeur que le dashboard, la cascade et la Finance
   // (décision audit 2026-09-24, C2). Avant, la fiche affichait la somme COURANTE des impacts sous
   // ce libellé « figé » : le chiffre bougeait à chaque modification et différait des autres écrans.
+  // Gains « Impact BFR » : trésorerie, hors économies — affichés à part (audit lot 4, point 4).
+  const workingCapital = engine.leverImpactTotals(lever).workingCapital;
   const lockedPlanDisplay = engine.displayedLockedPlanNet(lever);
   const reforecastDisplay = engine.displayedReforecastNet(lever);
   // Réconciliation ETP levier ↔ mouvements RH (audit issues #1, #2, #6) — voir
@@ -759,6 +761,7 @@ export function LeverDetailClientPerformance() {
             data={data}
             companyId={user?.companyId}
             initialValues={actionModal.action}
+            existingActions={lever.actions ?? []}
             submitLabel={
               actionModal.mode === "edit"
                 ? t("common.save", "Enregistrer")
@@ -1527,6 +1530,16 @@ export function LeverDetailClientPerformance() {
                 {engine.fmtCurr(consolidatedKPIs?.opexRec ?? lever.opexRec)}
               </Stat>
             </div>
+            {workingCapital !== 0 && (
+              // Impact BFR (trésorerie) : visible ici, jamais compté dans les économies
+              // (`isWorkingCapitalImpact`, audit lot 4 point 4).
+              <p className="-mt-2 mb-4 text-[12px] text-secondary">
+                {t(
+                  "leverDetail.workingCapitalNote",
+                  "Impact BFR (trésorerie, hors économies) : {amount}"
+                ).replace("{amount}", engine.fmtCurr(workingCapital))}
+              </p>
+            )}
             <ImpactsEditor
               scope="financial"
               impacts={lever.impacts ?? []}

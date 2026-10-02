@@ -66,15 +66,8 @@ import {
   saveStrategicApproval,
   decideStrategicApproval,
 } from "@/lib/firestore/strategicApprovals";
-import { saveChantierAction, deleteChantierAction } from "@/lib/firestore/chantierActions";
-import { deleteChantier, saveChantier } from "@/lib/firestore/chantiers";
-import { deleteChantierStaffing, saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
-import { saveStrategicAxis } from "@/lib/firestore/strategicAxes";
-import { saveIndicator } from "@/lib/firestore/indicators";
-import {
-  deleteIndicatorMeasurement,
-  saveIndicatorMeasurement,
-} from "@/lib/firestore/indicatorMeasurements";
+import { saveChantierAction } from "@/lib/firestore/chantierActions";
+import { commitApprovalEffects } from "@/lib/firestore/strategicCascade";
 import { appendAuditEntries } from "@/lib/firestore/levers";
 import {
   kpiCorrectionDecisionInformees,
@@ -112,6 +105,7 @@ import {
   type StrategicApprovalTarget,
 } from "@/lib/strategicApprovals";
 import type { ApprovalStep } from "@/lib/strategicHierarchy";
+import type { StrategicProgramData } from "@/lib/strategicProgramScope";
 import type { Alert, AuthUser } from "@/types";
 
 type ApprovalUser = Pick<
@@ -119,24 +113,34 @@ type ApprovalUser = Pick<
   "username" | "name" | "profiles" | "isGlobalAdmin" | "isCompanyAdmin"
 >;
 
-async function runEffects(effects: ApprovalEffects): Promise<void> {
-  for (const a of effects.saveActions) await saveChantierAction(a);
-  for (const id of effects.deleteActionIds) await deleteChantierAction(id);
-  for (const id of effects.deleteChantierIds) await deleteChantier(id);
-  for (const m of effects.saveMeasurements) await saveIndicatorMeasurement(m);
-  for (const id of effects.deleteMeasurementIds) await deleteIndicatorMeasurement(id);
-  for (const i of effects.saveIndicators) await saveIndicator(i);
-  for (const s of effects.saveStaffing) await saveChantierStaffing(s);
-  for (const c of effects.saveChantiers) await saveChantier(c);
-  for (const ax of effects.saveAxes) await saveStrategicAxis(ax);
-  for (const id of effects.deleteStaffingIds) await deleteChantierStaffing(id);
+/** Écrit les effets d'une décision en UN SEUL `writeBatch` (lot 3) — une suppression approuvée
+ *  emporte toute sa cascade (lignes ETP, indicateurs + mesures, dépendances, demandes en attente
+ *  annulées), voir `commitApprovalEffects` (lib/firestore/strategicCascade.ts). `approvalId` = la
+ *  demande en cours de décision, jamais annulée par sa propre cascade. */
+async function runEffects(
+  effects: ApprovalEffects,
+  companyId: string | null | undefined,
+  actor: Pick<AuthUser, "username" | "name">,
+  approvalId?: string
+): Promise<void> {
+  if (!companyId) throw new Error("Session ou programme indisponible");
+  await commitApprovalEffects(effects, {
+    companyId,
+    actor: { username: actor.username, name: actor.name },
+    approvalId,
+  });
 }
 
 export type UseStrategicApprovalsArgs = {
   user: ApprovalUser | null | undefined;
   companyId: string | null | undefined;
   programId: string | null | undefined;
-  data: Omit<StrategicApprovalData, "programId">;
+  /** Données VISIBLES du lecteur (`useStrategicData`) — libellés des alertes. Si elles portent
+   *  `program` (collections NON filtrées du programme, `useStrategicData().program`), le routage,
+   *  la décision (`canDecide`, paliers) et les EFFETS d'une demande sont calculés sur le programme
+   *  COMPLET (lot 3) : une demande sur un projet d'un chantier confidentiel est routée vers son
+   *  vrai approbateur et appliquée sans « Projet introuvable », quel que soit le décideur. */
+  data: Omit<StrategicApprovalData, "programId"> & { program?: StrategicProgramData };
 };
 
 export function useStrategicApprovals({
@@ -165,7 +169,13 @@ export function useStrategicApprovals({
     () => (programId ? all.filter((a) => a.programId === programId) : []),
     [all, programId]
   );
+  // Base de DÉCISION (routage, habilitation, effets) : programme complet si fourni (lot 3).
   const fullData = useMemo<StrategicApprovalData>(
+    () => ({ ...data, ...(data.program ?? {}), programId }),
+    [data, programId]
+  );
+  // Base d'AFFICHAGE (libellés des alertes) : données visibles du lecteur.
+  const displayData = useMemo<StrategicApprovalData>(
     () => ({ ...data, programId }),
     [data, programId]
   );
@@ -179,8 +189,8 @@ export function useStrategicApprovals({
     [approvals, user, fullData]
   );
   const alerts = useMemo<Alert[]>(
-    () => buildApprovalAlerts(approvals, user, fullData),
-    [approvals, user, fullData]
+    () => buildApprovalAlerts(approvals, user, fullData, new Date(), displayData),
+    [approvals, user, fullData, displayData]
   );
 
   const logAudit = useCallback(
@@ -240,7 +250,7 @@ export function useStrategicApprovals({
         data: dataRef.current,
       });
       await saveStrategicApproval(approval);
-      await runEffects(applyRequestSideEffects(approval, dataRef.current));
+      await runEffects(applyRequestSideEffects(approval, dataRef.current), companyId, user);
       logAudit(approval, "requested");
       return approval;
     },
@@ -355,7 +365,10 @@ export function useStrategicApprovals({
         await runEffects(
           status === "approved"
             ? applyApprovedPayload(decided, dataRef.current)
-            : applyRejectedPayload(decided, dataRef.current)
+            : applyRejectedPayload(decided, dataRef.current),
+          companyId,
+          user,
+          approval.id
         );
       }
       const saved = await decideStrategicApproval(
@@ -401,13 +414,16 @@ export function useStrategicApprovals({
               applyApprovedPayload(
                 { ...saved, payload: { ...payload, stage: "axis" as const } },
                 dataRef.current
-              )
+              ),
+              companyId,
+              user,
+              saved.id
             );
           }
         }
       }
     },
-    [user, logAudit]
+    [user, companyId, logAudit]
   );
 
   const approve = useCallback(

@@ -31,6 +31,9 @@ import {
   currentPeriod,
   defaultYearForMeasurements,
   findPeriodCollision,
+  FutureMeasurementPeriodError,
+  futurePeriodMessage,
+  isFuturePeriod,
   MeasurementPeriodCollisionError,
   parseNumber,
 } from "@/lib/kpiHistory";
@@ -309,6 +312,18 @@ function IndicatorCard({
       );
       return;
     }
+    // Période postérieure à la période en cours : refusée (elle deviendrait la dernière valeur).
+    if (isFuturePeriod(trimmedPeriod, indicator.frequency)) {
+      showToast(
+        futurePeriodMessage(t, {
+          period: trimmedPeriod,
+          current: currentPeriod(indicator.frequency),
+        }),
+        indicator.name,
+        "error"
+      );
+      return;
+    }
     const parsedValue = quantitative ? parseNumber(value) : undefined;
     if (parsedValue === null) {
       showToast(t("kpi.valueInvalid"), "", "error");
@@ -386,7 +401,9 @@ function IndicatorCard({
               "kpi.measurement.periodCollision",
               "Une mesure existe déjà pour la période {period}."
             ).replace("{period}", err.period)
-          : t("kpi.saveError"),
+          : err instanceof FutureMeasurementPeriodError
+            ? futurePeriodMessage(t, err)
+            : t("kpi.saveError"),
         indicator.name,
         "error"
       );
@@ -961,6 +978,7 @@ export function KpiPageClient() {
     chantierActions,
     indicators,
     measurements,
+    program,
     loading: dataLoading,
     addMeasurement,
     updateMeasurement,
@@ -1451,8 +1469,11 @@ export function KpiPageClient() {
           sur un Plan Performance (tout y est en euros économisés). Le haut de page porte donc le
           compteur on-track/à risque, puis les KPI business (indicateurs de niveau axe). */}
       <IndicatorStatusSummary
-        indicators={indicators}
-        measurements={measurements}
+        // Lot 3 (décision PO) : % sur la trajectoire = TOUS les indicateurs du programme (segment
+        // gris « sans donnée » compris), même chiffre que le dashboard et pour tous les profils —
+        // la synthèse n'affiche que des comptes ; ventilation limitée aux axes VISIBLES.
+        indicators={program.indicators}
+        measurements={program.measurements}
         showTotal={false}
         labels={{
           tracked: t("kpi.summary.tracked"),

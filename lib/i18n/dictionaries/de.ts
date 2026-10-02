@@ -130,6 +130,7 @@ const de: Record<string, string> = {
   "validation.sa.status.pending": "Ausstehend",
   "validation.sa.status.approved": "Genehmigt",
   "validation.sa.status.rejected": "Abgelehnt",
+  "validation.sa.status.cancelled": "Storniert",
   "validation.sa.status.direct": "Angewendet (zur Information)",
   "validation.sa.adjustValue": "Anzuwendender Wert (vor dem Annehmen änderbar)",
   "validation.sa.tab.todo": "Zu prüfen",
@@ -1327,7 +1328,6 @@ const de: Record<string, string> = {
   "shared.leverImportButton.templateDownloadedBody":
     "3 Arbeitsblätter: Hebel (Code = Schlüssel), Maßnahmen (Hebel-Code = FK), Auswirkungen (Hebel-Code + Maßnahmenname = FK). Löschen Sie die Beispielzeile, bevor Sie die Datei ausfüllen.",
   "shared.leverImportButton.workstreamsCreatedNote": "{n} Arbeitspaket(e) erstellt",
-  "shared.leverImportButton.ignoredRowsNote": "{n} Zeile(n) ignoriert",
   "shared.leverImportButton.importDoneBody": "{created} Hebel erstellt · {updated} aktualisiert",
   "shared.leverImportButton.createCountLabel": "Hebel zu erstellen",
   "shared.leverImportButton.updateCountLabel": "Hebel zu aktualisieren",
@@ -1350,6 +1350,12 @@ const de: Record<string, string> = {
   "shared.leverImportButton.impactsRemovedTitle": "{n} bestehende Impact-Zeile(n) werden gelöscht",
   "shared.leverImportButton.impactsRemovedBody":
     "da sie in der Registerkarte Impacts der Datei fehlen: {list}.",
+  "shared.leverImportButton.emptyCellRule":
+    "Leere Zelle = aktueller Wert bleibt erhalten; „-“ = Feld wird geleert. „Progression (%)“ und die Beträge eines Hebels mit Impacts werden berechnet: Änderungen daran werden ignoriert.",
+  "shared.leverImportButton.fixErrorsFirst":
+    "Import nicht möglich, solange die Datei Fehler enthält: Korrigieren Sie die Zeilen unten und laden Sie die Datei erneut.",
+  "shared.leverImportButton.confirmLargeValues":
+    "Ich habe die gemeldeten ungewöhnlich hohen Werte (Einheit Mio. € / VZÄ) geprüft und bestätige den Import.",
   "shared.leverImportButton.warningsTitle": "Warnungen (Import nicht blockiert)",
   "shared.exportButton.truncatedTitle": "Beschreibungen gekürzt",
   "shared.exportButton.truncatedBody":
@@ -1415,6 +1421,20 @@ const de: Record<string, string> = {
     "Unbekannte Impact-Art „{value}“: Wert ignoriert (erwartet: {expected})",
   "shared.leverImport.msg.unknownPopulation":
     "Betroffene Population „{value}“ unter den Arbeitspaketen nicht gefunden: Wert ignoriert",
+  "shared.leverImport.msg.duplicateActionId":
+    'Doppelte Maßnahmen-ID "{id}" für Hebel "{code}" (bereits in Zeile {row} verwendet)',
+  "shared.leverImport.msg.negativeNotAllowed":
+    '"{field}" darf nicht negativ sein (gelesener Wert: {value})',
+  "shared.leverImport.msg.computedFromActions":
+    '"{field}": aus dem Maßnahmenplan berechneter Wert ({computed}) — Änderung ignoriert (Datei: {value})',
+  "shared.leverImport.msg.computedFromImpacts":
+    '"{field}": aus den Impacts des Hebels berechneter Wert ({computed}) — Änderung ignoriert (Datei: {value})',
+  "shared.leverImport.msg.computedFromPlan":
+    '"{field}": aus dem eingefrorenen Plan / der Neuprognose berechneter Wert ({computed}) — Änderung ignoriert (Datei: {value})',
+  "shared.leverImport.msg.valueClamped":
+    '"{field}": {value} außerhalb des Bereichs, auf {bound} begrenzt',
+  "shared.leverImport.msg.largeValue":
+    '"{field}" = {value} {unit}: ungewöhnlich hoher Wert (über {threshold}) — prüfen Sie die Einheit vor dem Bestätigen',
   "shared.leverImport.msg.formulaNoValue":
     "Zelle {cell}: Formel ohne berechneten Wert (Arbeitsmappe nicht neu berechnet) — öffnen und speichern Sie die Datei vor dem Import in Excel.",
 
@@ -1569,6 +1589,8 @@ const de: Record<string, string> = {
 
   // ─── shared.leverForm/actionForm/movementForm/manualAlertForm/dependencyEditor (i18n-Nacharbeit) ─
   "shared.actionForm.actionName": "Name der Maßnahme",
+  "shared.actionForm.duplicateName":
+    "Eine andere Maßnahme dieses Hebels trägt bereits diesen Namen: Wählen Sie einen anderen Namen.",
   "shared.actionForm.actionNamePlaceholder": "Bsp.: RFP starten",
   "shared.actionForm.owner": "Verantwortlicher",
   "shared.actionForm.startDate": "Startdatum",
@@ -1687,6 +1709,7 @@ const de: Record<string, string> = {
   "strategicAxes.budgetByChantierModalTitle": "Budgetverteilung nach Baustelle",
   "strategicAxes.noIndicatorsShort": "Kein Indikator",
   "strategicAxes.unassigned": "Nicht zugewiesen",
+  "strategicAxes.unassignedAxis": "Ohne Achse",
   "strategicAxes.tree.chantiersN": "{n} Arbeitspakete",
   "strategicAxes.tree.chantiersNOne": "{n} Arbeitspaket",
   "strategicAxes.tree.projetsN": "{n} Projekte",
@@ -3019,6 +3042,9 @@ const de: Record<string, string> = {
   "impactsEditor.label": "Bezeichnung",
   "impactsEditor.amount": "Betrag (€M)",
   "impactsEditor.oneOff": "Einmalig",
+  "impactsEditor.workingCapitalBadge": "Working Capital — Liquidität, nicht in den Einsparungen",
+  "impactsEditor.workingCapitalHint":
+    "Working-Capital-Effekt (Liquidität): nicht in den Einsparungen gezählt (brutto, netto, realisiert, Kurve, GuV).",
   "impactsEditor.untitled": "Impact ohne Titel",
   "impactsEditor.statusPlanned": "Geplant",
   "impactsEditor.statusDone": "Realisiert",
@@ -3167,6 +3193,8 @@ const de: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "Einmalige OPEX",
   "leverDetail.trajectory.detailOpexRec": "Wiederkehrende OPEX",
   "leverDetail.trajectory.detailEmpty": "Keine Auswirkung in dieser Periode.",
+  "leverDetail.workingCapitalNote":
+    "Working-Capital-Effekt (Liquidität, nicht in den Einsparungen): {amount}",
   "leverDetail.oneOff": "Einmaliges OPEX",
   "chart.waterfall.realized": "Ist",
   "chart.waterfall.remaining": "Verbleibend",
@@ -3360,6 +3388,8 @@ const de: Record<string, string> = {
   "strategicApprovals.alert.rejectedTitle": "Anfrage abgelehnt · {label}",
   "strategicApprovals.alert.approvedDesc": "{decider} hat {phrase} genehmigt{comment}.",
   "strategicApprovals.alert.rejectedDesc": "{decider} hat {phrase} abgelehnt{comment}.",
+  "strategicApprovals.alert.cancelledTitle": "Anfrage storniert · {label}",
+  "strategicApprovals.alert.cancelledDesc": "Ihre Anfrage für {phrase} wurde storniert{comment}.",
   "strategicApprovals.alert.decidedApprovedTitle": "Genehmigung erfasst · {label}",
   "strategicApprovals.alert.decidedRejectedTitle": "Ablehnung erfasst · {label}",
   "strategicApprovals.alert.decidedApprovedDesc":
@@ -3588,6 +3618,8 @@ const de: Record<string, string> = {
   "projetWeights.overTotalWarning":
     "Die deklarierten Gewichte überschreiten 100 %: Sie werden bei der Berechnung normalisiert, und nicht gewichtete Projekte erhalten das durchschnittliche deklarierte Gewicht.",
   "kpi.periodInvalid": "Ungültiger Zeitraum — erwartetes Format: {format}",
+  "kpi.periodFuture":
+    "Der Zeitraum {period} hat noch nicht begonnen: Werte können nur bis zum laufenden Zeitraum ({current}) erfasst werden.",
   "kpi.measurement.periodTakenNoRight":
     "Für den Zeitraum {period} existiert bereits ein Wert, und Sie sind nicht berechtigt, ihn zu ersetzen.",
   "kpi.measurement.replaceConfirm": "Wert ersetzen",
@@ -3938,6 +3970,11 @@ const de: Record<string, string> = {
     "Nicht auf Hebel anwendbare Filter (nur Bewegungen): {filters}.",
   "hr.fteCoverage.periodNotApplied":
     "Der Zeitraum gilt nur für Bewegungen: Hebel werden über das gesamte Programm gezählt.",
+  // Lot 3 — Berechnung auf dem gesamten Programm: Bezeichnungen der Aggregate außerhalb des Bereichs.
+  "strategicScope.outOfScopeChantier": "Handlungsfeld außerhalb Ihres Bereichs",
+  "strategicPrerequisite.outOfScope": "Voraussetzung außerhalb Ihres Bereichs",
+  "effectifs.staffingRate.otherChantiers": "Andere Handlungsfelder (außerhalb Ihres Bereichs)",
+  "effectifs.moneyBudget.otherChantiers": "Andere Handlungsfelder",
 };
 
 export default de;

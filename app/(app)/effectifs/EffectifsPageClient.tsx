@@ -13,7 +13,18 @@ import { Modal } from "@/components/shared/Modal";
 import { StaffingImportButton } from "@/components/strategic/StaffingImportButton";
 import { StaffingPeriodBreakdown } from "@/components/strategic/StaffingPeriodBreakdown";
 import { StaffingRateSection } from "@/components/strategic/StaffingRateSection";
-import { EMPTY_BUDGET, rollupBudgets } from "@/lib/budgetRollup";
+import {
+  budgetAxisShares,
+  budgetChantierShares,
+  EMPTY_BUDGET,
+  rollupBudgets,
+  type BudgetShare,
+} from "@/lib/budgetRollup";
+import {
+  isOutOfScopeChantierId,
+  maskStaffingForDisplay,
+  outOfScopeAxisIds,
+} from "@/lib/strategicProgramScope";
 import { saveChantierStaffing } from "@/lib/firestore/chantierStaffing";
 import { useActiveProgram } from "@/lib/hooks/useActiveProgram";
 import { canOpenRoute } from "@/lib/routeAccess";
@@ -129,7 +140,8 @@ export function EffectifsPageClient() {
     chantierActions,
     staffing,
     strategicRole,
-    programAxisIds,
+    program,
+    visibleChantierIds,
     loading: dataLoading,
   } = useStrategicData(user?.companyId ?? null, activeProgramId, user);
   const {
@@ -195,6 +207,44 @@ export function EffectifsPageClient() {
     [chantiers]
   );
 
+  /** Même map sur le programme COMPLET (lot 3) — filtre d'axe de `StaffingRateSection` : un
+   *  chantier masqué d'un axe visible compte dans cet axe (agrégé « autres chantiers », sans nom). */
+  const programAxisIdsByChantier = useMemo(
+    () => Object.fromEntries(program.chantiers.map((c) => [c.id, c.axisIds])),
+    [program.chantiers]
+  );
+
+  /** Lignes ETP du programme COMPLET masquées pour l'affichage (lot 3) — mêmes ETP pour tous les
+   *  profils dans la répartition par période/équipe/axe, les chantiers hors périmètre réduits à
+   *  des parts anonymes « autres chantiers » (suffixées de leurs axes VISIBLES pour rester
+   *  comptées sous le bon axe). Les maps d'axes et de noms sont complétées pour ces parts. */
+  const displayStaffing = useMemo(
+    () =>
+      maskStaffingForDisplay(program.staffing, visibleChantierIds, {
+        axisIdsByChantier: programAxisIdsByChantier,
+        visibleAxisIds: new Set(axes.map((a) => a.id)),
+      }),
+    [program.staffing, visibleChantierIds, programAxisIdsByChantier, axes]
+  );
+  const otherChantiersLabel = t(
+    "effectifs.staffingRate.otherChantiers",
+    "Autres chantiers (hors de votre périmètre)"
+  );
+  const displayAxisIdsByChantier = useMemo(() => {
+    const map: Record<string, string[]> = { ...axisIdsByChantier };
+    for (const e of displayStaffing) {
+      if (isOutOfScopeChantierId(e.chantierId)) map[e.chantierId] = outOfScopeAxisIds(e.chantierId);
+    }
+    return map;
+  }, [axisIdsByChantier, displayStaffing]);
+  const displayChantierNamesById = useMemo(() => {
+    const map: Record<string, string> = { ...chantierNamesById };
+    for (const e of displayStaffing) {
+      if (isOutOfScopeChantierId(e.chantierId)) map[e.chantierId] = otherChantiersLabel;
+    }
+    return map;
+  }, [chantierNamesById, displayStaffing, otherChantiersLabel]);
+
   /** `ChantierAction.id` → nom, round 26 — colonne "Levier" de `StaffingDetailModal` (modale de
    *  détail exploitable ouverte depuis `StaffingPeriodBreakdown`, voir son doc-comment). */
   const actionNamesById = useMemo(
@@ -225,17 +275,12 @@ export function EffectifsPageClient() {
   // parts par axe (+ la part "sans axe" éventuelle) est EXACTEMENT le total programme affiché au
   // centre du donut. `Chantier.allocatedBudget`/`consumedBudget` (saisies manuelles) ne sont plus
   // lus ici.
-  // Attribution d'un chantier multi-axe calculée sur TOUS les axes du programme
-  // (`programAxisIds`), pas seulement ceux visibles du lecteur — voir `rollupBudgets`.
+  // Lot 3 : calculé sur le programme COMPLET (`program`) — total, axes et chantiers identiques
+  // pour tous les profils ; seules les PARTS affichées sont bornées au périmètre du lecteur
+  // (`budgetAxisShares`/`budgetChantierShares`, ce qui est masqué n'apparaît qu'agrégé).
   const budgetRollup = useMemo(
-    () =>
-      rollupBudgets(
-        axes,
-        chantiers,
-        chantierActions,
-        programAxisIds.map((id) => ({ id }))
-      ),
-    [axes, chantiers, chantierActions, programAxisIds]
+    () => rollupBudgets(program.axes, program.chantiers, program.chantierActions),
+    [program.axes, program.chantiers, program.chantierActions]
   );
   const totalAllocatedBudget = budgetRollup.programme.allocated;
   const totalConsumedBudget = budgetRollup.programme.consumed;
@@ -244,16 +289,6 @@ export function EffectifsPageClient() {
    *  `budgetDrillPath`, `null` tant que le niveau correspondant n'est pas atteint. */
   const budgetDrillAxisId = budgetDrillPath[0]?.id ?? null;
   const budgetDrillChantierId = budgetDrillPath[1]?.id ?? null;
-
-  /** Chantiers ATTRIBUÉS (budgétairement) à l'axe ouvert — même règle d'attribution que le niveau
-   *  axes, pour que la somme des parts chantier = la part de l'axe cliquée. */
-  const drillAxisChantiers = useMemo(
-    () =>
-      budgetDrillAxisId
-        ? chantiers.filter((c) => budgetRollup.chantierAxisId.get(c.id) === budgetDrillAxisId)
-        : [],
-    [budgetDrillAxisId, chantiers, budgetRollup]
-  );
 
   /** Parts du donut pour le niveau COURANT du drill-down EN PLACE (axes, puis chantiers de l'axe
    *  ouvert, puis projets du chantier ouvert), chacune portant l'`id` de son entité. Le composant
@@ -273,64 +308,43 @@ export function EffectifsPageClient() {
           id: a.id,
           slice: { name: a.name, value: f.allocated, consumed: f.consumed },
         }));
-    } else if (budgetDrillAxisId) {
-      entries = drillAxisChantiers
-        .map((c) => ({ c, f: budgetRollup.chantiers.get(c.id) ?? EMPTY_BUDGET }))
-        .filter(({ f }) => hasAmount(f))
-        .map(({ c, f }) => ({
-          id: c.id,
-          slice: { name: c.name, value: f.allocated, consumed: f.consumed },
-        }));
     } else {
-      // Niveau 1 (axes) : alloué ET consommé par axe d'attribution, plus une part "sans axe" et une
-      // part "autres axes" (axe d'attribution hors du périmètre visible) pour que la somme des
-      // parts = le total programme du centre.
-      entries = axes.map((axis) => {
-        const figures = budgetRollup.axes.get(axis.id) ?? EMPTY_BUDGET;
-        return {
-          id: axis.id,
-          slice: { name: axis.name, value: figures.allocated, consumed: figures.consumed },
-        };
-      });
-      const orphan = budgetRollup.unattributed;
-      if (hasAmount(orphan)) {
-        entries.push({
-          id: "",
-          slice: {
-            name: t("effectifs.moneyBudget.unattributedAxis", "Sans axe"),
-            value: orphan.allocated,
-            consumed: orphan.consumed,
-          },
-        });
-      }
-      const shown = entries.reduce(
-        (acc, e) => ({
-          allocated: acc.allocated + e.slice.value,
-          consumed: acc.consumed + (e.slice.consumed ?? 0),
-        }),
-        { allocated: 0, consumed: 0 }
-      );
-      const hidden = {
-        allocated: budgetRollup.programme.allocated - shown.allocated,
-        consumed: budgetRollup.programme.consumed - shown.consumed,
+      // Niveaux 1 (axes) et 2 (chantiers de l'axe ouvert) : parts PARTAGÉES avec la puce « Budget
+      // alloué » du dashboard (lib/budgetRollup.ts) — entités visibles + « Sans axe » + parts
+      // anonymes « Autres axes » / « Autres chantiers » : la somme des parts = le total du centre.
+      const shares: BudgetShare[] = budgetDrillAxisId
+        ? budgetChantierShares(budgetRollup, budgetDrillAxisId, chantiers)
+        : budgetAxisShares(budgetRollup, axes);
+      const nameOf = (share: BudgetShare): string => {
+        switch (share.kind) {
+          case "axis":
+            return axes.find((a) => a.id === share.id)?.name ?? "";
+          case "chantier":
+            return chantierNames.get(share.id) ?? "";
+          case "unattributed":
+            return t("effectifs.moneyBudget.unattributedAxis", "Sans axe");
+          case "otherAxes":
+            return t("effectifs.moneyBudget.otherAxes", "Autres axes");
+          case "otherChantiers":
+            return t("effectifs.moneyBudget.otherChantiers", "Autres chantiers");
+        }
       };
-      if (hidden.allocated > 1e-9 || hidden.consumed > 1e-9) {
-        entries.push({
-          id: "",
-          slice: {
-            name: t("effectifs.moneyBudget.otherAxes", "Autres axes"),
-            value: Math.max(0, hidden.allocated),
-            consumed: Math.max(0, hidden.consumed),
-          },
-        });
-      }
+      entries = shares.map((share) => ({
+        id: share.kind === "axis" || share.kind === "chantier" ? share.id : "",
+        slice: {
+          name: nameOf(share),
+          value: share.figures.allocated,
+          consumed: share.figures.consumed,
+        },
+      }));
     }
     return uniqueSliceNames(entries);
   }, [
     budgetDrillChantierId,
     budgetDrillAxisId,
     chantierActions,
-    drillAxisChantiers,
+    chantiers,
+    chantierNames,
     axes,
     budgetRollup,
     t,
@@ -547,12 +561,13 @@ export function EffectifsPageClient() {
   const needVsAvailableSection = (
     <>
       <StaffingRateSection
-        staffing={staffing}
+        staffing={program.staffing}
         axes={axes}
-        axisIdsByChantier={axisIdsByChantier}
+        axisIdsByChantier={programAxisIdsByChantier}
         fteByDept={fteByDept}
         chantierNamesById={chantierNamesById}
         actionNamesById={actionNamesById}
+        visibleChantierIds={visibleChantierIds}
         onTeamClick={setAvailableTeam}
       />
 
@@ -621,7 +636,7 @@ export function EffectifsPageClient() {
     </>
   );
 
-  if (staffing.length === 0) {
+  if (displayStaffing.length === 0) {
     return (
       <div className="space-y-6">
         {header}
@@ -660,11 +675,11 @@ export function EffectifsPageClient() {
           le cross-filtering équipe/chantier/période qui vivait auparavant sur cette page, ainsi que
           l'ex-carte "Répartition par axe" retirée d'ici). ─────────────────────────────────────── */}
       <StaffingPeriodBreakdown
-        staffing={staffing}
+        staffing={displayStaffing}
         fteByDept={fteByDept}
         axes={axes}
-        chantierNamesById={chantierNamesById}
-        axisIdsByChantier={axisIdsByChantier}
+        chantierNamesById={displayChantierNamesById}
+        axisIdsByChantier={displayAxisIdsByChantier}
         actionNamesById={actionNamesById}
       />
     </div>

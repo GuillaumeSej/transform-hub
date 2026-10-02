@@ -8,6 +8,7 @@ import {
   leverImpactsOf,
 } from "@/lib/engine";
 import { formatAmountM } from "@/lib/format";
+import { isWorkingCapitalImpact } from "@/lib/impactKinds";
 import { parseLocalDate } from "@/lib/impactStatus";
 
 /**
@@ -129,7 +130,9 @@ export function generateAlerts(
     // Impacts désormais portés par le levier : on prend les gains récurrents du levier au prorata
     // des actions en retard (les gains one-off restent hors périmètre).
     const leverSavings = leverImpactsOf(u)
-      .filter((i) => i.type === "saving" && i.gainRecurrence !== "oneoff")
+      .filter(
+        (i) => i.type === "saving" && i.gainRecurrence !== "oneoff" && !isWorkingCapitalImpact(i)
+      )
       .reduce((s, i) => s + i.amount, 0);
     const lateSavingsImpact = lateRatio * leverSavings;
     const impact = -lateSavingsImpact;

@@ -33,6 +33,7 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
+import { maskDependencyAlerts } from "@/lib/strategicProgramScope";
 import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
 import {
   createChantierFlow,
@@ -144,14 +145,37 @@ export function AxisDetailClient() {
     () => (axis ? data.indicators.filter((i) => i.axisId === axis.id) : []),
     [data.indicators, axis]
   );
+  /** Indicateurs de l'axe sur le programme COMPLET (lot 3) — alimente UNIQUEMENT la synthèse
+   *  chiffrée (`IndicatorStatusSummary`, comptes sans nom) : même % sur la trajectoire pour tous
+   *  les profils. Les listes nommées restent sur `axisIndicators` (visibles). */
+  const axisIndicatorsForSummary = useMemo(
+    () => (axis ? data.program.indicators.filter((i) => i.axisId === axis.id) : []),
+    [data.program.indicators, axis]
+  );
 
   // Les dépendances sont évaluées sur TOUT le programme (un chantier de cet axe peut dépendre du
   // chantier d'un autre axe — cas explicitement prévu par le modèle), puis restreintes aux
-  // alertes qui touchent un chantier de cet axe, dans un sens ou dans l'autre.
+  // alertes qui touchent un chantier de cet axe, dans un sens ou dans l'autre. Lot 3 : programme
+  // COMPLET (chantiers masqués compris), l'extrémité hors périmètre renommée sans son nom.
+  const outOfScopeChantierLabel = t(
+    "strategicScope.outOfScopeChantier",
+    "Chantier hors de votre périmètre"
+  );
   const alerts = useMemo(() => {
-    const all = chantierDependencyAlerts(data.chantiers, data.chantierActions);
+    const all = maskDependencyAlerts(
+      chantierDependencyAlerts(data.program.chantiers, data.program.chantierActions),
+      data.visibleChantierIds,
+      outOfScopeChantierLabel,
+      "either"
+    );
     return all.filter((a) => chantierIds.has(a.sourceId) || chantierIds.has(a.targetId));
-  }, [data.chantiers, data.chantierActions, chantierIds]);
+  }, [
+    data.program.chantiers,
+    data.program.chantierActions,
+    data.visibleChantierIds,
+    outOfScopeChantierLabel,
+    chantierIds,
+  ]);
 
   /** Panneau chantier (round 6, point 0 — remplace l'ancienne route `/levers/chantier?id=…`) : monté
    *  ICI plutôt que renvoyé vers la page portefeuille, pour ne pas faire perdre à l'utilisateur son
@@ -417,7 +441,7 @@ export function AxisDetailClient() {
 
       {/* ── Compteur d'ensemble des indicateurs de l'axe ───────────────────────────────────── */}
       <IndicatorStatusSummary
-        indicators={axisIndicators}
+        indicators={axisIndicatorsForSummary}
         measurements={data.measurements}
         showTotal={false}
         labels={{
@@ -487,7 +511,14 @@ export function AxisDetailClient() {
           <ChantierGantt
             chantiers={axisChantiers}
             actions={axisActions}
-            allActions={data.chantierActions}
+            allActions={data.program.chantierActions}
+            prerequisiteScope={{
+              visibleActionIds: data.visibleActionIds,
+              outOfScopeLabel: t(
+                "strategicPrerequisite.outOfScope",
+                "Prérequis hors de votre périmètre"
+              ),
+            }}
             stages={stages}
             progressOf={data.projetProgress}
             users={data.users}

@@ -45,6 +45,7 @@ import {
 } from "@/lib/staffingRate";
 import { useStaffingThresholds } from "@/lib/hooks/useStaffingThresholds";
 import { staffingOverrunText, staffingOverruns } from "@/lib/staffingAlerts";
+import { isOutOfScopeChantierId, maskStaffingForDisplay } from "@/lib/strategicProgramScope";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ChantierStaffing, StrategicAxis } from "@/types";
 
@@ -123,14 +124,24 @@ export function StaffingRateSection({
   fteByDept,
   chantierNamesById,
   actionNamesById,
+  visibleChantierIds,
   onTeamClick,
 }: {
+  /** Lignes ETP du programme COMPLET (`useStrategicData().program.staffing`) : le mobilisé, le
+   *  taux et les alertes de sur-staffing sont ainsi les MÊMES pour tous les profils (lot 3). */
   staffing: ChantierStaffing[];
+  /** Axes VISIBLES du lecteur (options du filtre). */
   axes: StrategicAxis[];
+  /** Chantier → axes, sur le programme COMPLET (le filtre d'axe compte aussi les chantiers
+   *  masqués d'un axe visible, agrégés sans nom). */
   axisIdsByChantier: Record<string, string[] | undefined>;
   fteByDept: Record<string, number>;
   chantierNamesById: Record<string, string>;
   actionNamesById: Record<string, string>;
+  /** Chantiers visibles du lecteur : les lignes des AUTRES chantiers restent comptées mais sont
+   *  affichées agrégées « autres chantiers », sans nom, projet ni personne
+   *  (`maskStaffingForDisplay`). Omis = tout est affiché. */
+  visibleChantierIds?: ReadonlySet<string>;
   /** Détail des employés disponibles d'une équipe (bouton à côté du tag de filtre équipe), géré
    *  par la page. */
   onTeamClick?: (team: string) => void;
@@ -183,10 +194,12 @@ export function StaffingRateSection({
   };
 
   // ── Filtres ────────────────────────────────────────────────────────────────────────────────
-  const filteredStaffing = useMemo(
-    () => filterStaffingByAxes(staffing, axisIdsByChantier, selectedAxisIds),
-    [staffing, axisIdsByChantier, selectedAxisIds]
-  );
+  // Filtre d'axe sur les VRAIS chantiers, PUIS masquage d'affichage : les lignes hors périmètre
+  // gardent leurs ETP (mêmes totaux pour tous) sous la part anonyme « autres chantiers ».
+  const filteredStaffing = useMemo(() => {
+    const byAxes = filterStaffingByAxes(staffing, axisIdsByChantier, selectedAxisIds);
+    return visibleChantierIds ? maskStaffingForDisplay(byAxes, visibleChantierIds) : byAxes;
+  }, [staffing, axisIdsByChantier, selectedAxisIds, visibleChantierIds]);
   const teams = useMemo(() => staffingTeams(staffing, fteByDept), [staffing, fteByDept]);
 
   const axisOptions: DropdownOption[] = useMemo(
@@ -256,10 +269,16 @@ export function StaffingRateSection({
     [filteredStaffing, fteByDept, months, thresholds]
   );
 
+  const otherChantiersLabel = t(
+    "effectifs.staffingRate.otherChantiers",
+    "Autres chantiers (hors de votre périmètre)"
+  );
   const contributionName = (c: { actionId?: string; chantierId: string }) =>
-    c.actionId
-      ? (actionNamesById[c.actionId] ?? t("effectifs.staffingRate.unknownProjet"))
-      : `${chantierNamesById[c.chantierId] ?? t("effectifs.chantierUnknown")} ${t("effectifs.staffingRate.transverse")}`;
+    isOutOfScopeChantierId(c.chantierId)
+      ? otherChantiersLabel
+      : c.actionId
+        ? (actionNamesById[c.actionId] ?? t("effectifs.staffingRate.unknownProjet"))
+        : `${chantierNamesById[c.chantierId] ?? t("effectifs.chantierUnknown")} ${t("effectifs.staffingRate.transverse")}`;
 
   const cellTooltip = (team: string, cell: TeamPeriodCell) => {
     const lines = [
@@ -875,48 +894,56 @@ export function StaffingRateSection({
                                     className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
                                     style={{ backgroundColor: chantierColor(group.chantierId) }}
                                   />
-                                  <span>
-                                    {group.actionId
-                                      ? (actionNamesById[group.actionId] ??
-                                        t("effectifs.staffingRate.unknownProjet"))
-                                      : t("effectifs.staffingRate.transverse")}
-                                    <span className="ml-1.5 font-normal text-tertiary">
-                                      {chantierNamesById[group.chantierId] ??
-                                        t("effectifs.chantierUnknown")}
+                                  {isOutOfScopeChantierId(group.chantierId) ? (
+                                    <span>{otherChantiersLabel}</span>
+                                  ) : (
+                                    <span>
+                                      {group.actionId
+                                        ? (actionNamesById[group.actionId] ??
+                                          t("effectifs.staffingRate.unknownProjet"))
+                                        : t("effectifs.staffingRate.transverse")}
+                                      <span className="ml-1.5 font-normal text-tertiary">
+                                        {chantierNamesById[group.chantierId] ??
+                                          t("effectifs.chantierUnknown")}
+                                      </span>
                                     </span>
-                                  </span>
+                                  )}
                                 </span>
                               </td>
                               <td className="px-3 py-1.5 text-right font-semibold text-primary">
                                 {formatFte(group.fte)}
                               </td>
                             </tr>
-                            {group.lines.map(({ entry, fte }) => (
-                              <tr key={entry.id} className="text-secondary">
-                                <td className="py-1 pl-8 pr-3" />
-                                <td className="px-3 py-1 text-primary">{entry.note || "—"}</td>
-                                <td className="whitespace-nowrap px-3 py-1">
-                                  {entry.startDate ? formatDate(entry.startDate, locale) : "—"}
-                                  {" → "}
-                                  {entry.endDate
-                                    ? formatDate(entry.endDate, locale)
-                                    : t("effectifs.staffingRate.noEndDate")}
-                                </td>
-                                <td className="whitespace-nowrap px-3 py-1 text-right">
-                                  {formatFte(fte)}
-                                  {Math.abs(fte - entry.fte) > 0.005 && (
-                                    <span className="ml-1 text-[11px] text-tertiary">
-                                      (
-                                      {t("effectifs.staffingRate.nominalFte").replace(
-                                        "{fte}",
-                                        formatFte(entry.fte)
-                                      )}
-                                      )
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
+                            {/* Part « autres chantiers » : total seul, jamais le détail des
+                                lignes (personnes, dates) d'un chantier hors périmètre. */}
+                            {(isOutOfScopeChantierId(group.chantierId) ? [] : group.lines).map(
+                              ({ entry, fte }) => (
+                                <tr key={entry.id} className="text-secondary">
+                                  <td className="py-1 pl-8 pr-3" />
+                                  <td className="px-3 py-1 text-primary">{entry.note || "—"}</td>
+                                  <td className="whitespace-nowrap px-3 py-1">
+                                    {entry.startDate ? formatDate(entry.startDate, locale) : "—"}
+                                    {" → "}
+                                    {entry.endDate
+                                      ? formatDate(entry.endDate, locale)
+                                      : t("effectifs.staffingRate.noEndDate")}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-1 text-right">
+                                    {formatFte(fte)}
+                                    {Math.abs(fte - entry.fte) > 0.005 && (
+                                      <span className="ml-1 text-[11px] text-tertiary">
+                                        (
+                                        {t("effectifs.staffingRate.nominalFte").replace(
+                                          "{fte}",
+                                          formatFte(entry.fte)
+                                        )}
+                                        )
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            )}
                           </Fragment>
                         ))}
                       </Fragment>

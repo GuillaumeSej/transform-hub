@@ -131,6 +131,7 @@ const es: Record<string, string> = {
   "validation.sa.status.pending": "Pendiente",
   "validation.sa.status.approved": "Validada",
   "validation.sa.status.rejected": "Rechazada",
+  "validation.sa.status.cancelled": "Cancelada",
   "validation.sa.status.direct": "Aplicada (información)",
   "validation.sa.adjustValue": "Valor a aplicar (modificable antes de aceptar)",
   "validation.sa.tab.todo": "Por validar",
@@ -1326,7 +1327,6 @@ const es: Record<string, string> = {
   "shared.leverImportButton.templateDownloadedBody":
     "3 hojas: Palancas (Código = clave), Acciones (Código Palanca = FK), Impactos (Código Palanca + Nombre de la acción = FK). Elimine la fila de ejemplo antes de completar el archivo.",
   "shared.leverImportButton.workstreamsCreatedNote": "{n} proyecto(s) creado(s)",
-  "shared.leverImportButton.ignoredRowsNote": "{n} fila(s) ignorada(s)",
   "shared.leverImportButton.importDoneBody":
     "{created} palanca(s) creada(s) · {updated} actualizada(s)",
   "shared.leverImportButton.createCountLabel": "palanca(s) a crear",
@@ -1351,6 +1351,12 @@ const es: Record<string, string> = {
     "Se eliminarán {n} línea(s) de impacto existente(s)",
   "shared.leverImportButton.impactsRemovedBody":
     "porque no figuran en la pestaña Impacts del archivo: {list}.",
+  "shared.leverImportButton.emptyCellRule":
+    "Celda vacía = se conserva el valor actual; «-» = se borra el campo. «Progression (%)» y los importes de una palanca con impactos se calculan: su modificación se ignora.",
+  "shared.leverImportButton.fixErrorsFirst":
+    "No se puede importar mientras el archivo contenga errores: corrija las filas siguientes y vuelva a cargar el archivo.",
+  "shared.leverImportButton.confirmLargeValues":
+    "He comprobado los valores inusualmente altos señalados (unidad M€ / ETC) y confirmo la importación.",
   "shared.leverImportButton.warningsTitle": "Advertencias (importación no bloqueada)",
   "shared.exportButton.truncatedTitle": "Descripciones truncadas",
   "shared.exportButton.truncatedBody":
@@ -1416,6 +1422,19 @@ const es: Record<string, string> = {
     'Naturaleza de impacto "{value}" desconocida: valor ignorado (esperado: {expected})',
   "shared.leverImport.msg.unknownPopulation":
     'Población impactada "{value}" no encontrada entre los paquetes de trabajo: valor ignorado',
+  "shared.leverImport.msg.duplicateActionId":
+    'Identificador de acción "{id}" duplicado para la palanca "{code}" (ya usado en la fila {row})',
+  "shared.leverImport.msg.negativeNotAllowed":
+    '"{field}" no puede ser negativo (valor leído: {value})',
+  "shared.leverImport.msg.computedFromActions":
+    '"{field}": valor calculado a partir del plan de acción ({computed}) — modificación ignorada (archivo: {value})',
+  "shared.leverImport.msg.computedFromImpacts":
+    '"{field}": valor calculado a partir de los impactos de la palanca ({computed}) — modificación ignorada (archivo: {value})',
+  "shared.leverImport.msg.computedFromPlan":
+    '"{field}": valor calculado a partir del plan congelado / la reprevisión ({computed}) — modificación ignorada (archivo: {value})',
+  "shared.leverImport.msg.valueClamped": '"{field}": {value} fuera de rango, limitado a {bound}',
+  "shared.leverImport.msg.largeValue":
+    '"{field}" = {value} {unit}: valor inusualmente alto (más de {threshold}) — compruebe la unidad antes de confirmar',
   "shared.leverImport.msg.formulaNoValue":
     "Celda {cell}: fórmula sin valor calculado (libro no recalculado) — abra y guarde el archivo en Excel antes de importar.",
 
@@ -1569,6 +1588,8 @@ const es: Record<string, string> = {
 
   // ─── shared.leverForm/actionForm/movementForm/manualAlertForm/dependencyEditor (remediación i18n) ─
   "shared.actionForm.actionName": "Nombre de la acción",
+  "shared.actionForm.duplicateName":
+    "Otra acción de esta palanca ya tiene este nombre: elija un nombre distinto.",
   "shared.actionForm.actionNamePlaceholder": "Ej.: Lanzar la RFP",
   "shared.actionForm.owner": "Responsable",
   "shared.actionForm.startDate": "Fecha de inicio",
@@ -1685,6 +1706,7 @@ const es: Record<string, string> = {
   "strategicAxes.budgetByChantierModalTitle": "Reparto del presupuesto por obra",
   "strategicAxes.noIndicatorsShort": "Ningún indicador",
   "strategicAxes.unassigned": "Sin asignar",
+  "strategicAxes.unassignedAxis": "Sin eje",
   "strategicAxes.tree.chantiersN": "{n} proyectos",
   "strategicAxes.tree.chantiersNOne": "{n} proyecto",
   "strategicAxes.tree.projetsN": "{n} iniciativas",
@@ -3011,6 +3033,9 @@ const es: Record<string, string> = {
   "impactsEditor.label": "Etiqueta",
   "impactsEditor.amount": "Importe (€M)",
   "impactsEditor.oneOff": "Puntual",
+  "impactsEditor.workingCapitalBadge": "Capital circulante — tesorería, fuera de los ahorros",
+  "impactsEditor.workingCapitalHint":
+    "Impacto en capital circulante (tesorería): no se cuenta en los ahorros (bruto, neto, realizado, curva, P&L).",
   "impactsEditor.untitled": "Impacto sin título",
   "impactsEditor.statusPlanned": "Planificado",
   "impactsEditor.statusDone": "Realizado",
@@ -3159,6 +3184,8 @@ const es: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "OPEX puntual",
   "leverDetail.trajectory.detailOpexRec": "OPEX recurrente",
   "leverDetail.trajectory.detailEmpty": "Ningún impacto en este periodo.",
+  "leverDetail.workingCapitalNote":
+    "Impacto en capital circulante (tesorería, fuera de los ahorros): {amount}",
   "leverDetail.oneOff": "OPEX puntual",
   "chart.waterfall.realized": "Realizado",
   "chart.waterfall.remaining": "Pendiente",
@@ -3352,6 +3379,8 @@ const es: Record<string, string> = {
   "strategicApprovals.alert.rejectedTitle": "Solicitud rechazada · {label}",
   "strategicApprovals.alert.approvedDesc": "{decider} ha validado {phrase}{comment}.",
   "strategicApprovals.alert.rejectedDesc": "{decider} ha rechazado {phrase}{comment}.",
+  "strategicApprovals.alert.cancelledTitle": "Solicitud cancelada · {label}",
+  "strategicApprovals.alert.cancelledDesc": "Su solicitud de {phrase} ha sido cancelada{comment}.",
   "strategicApprovals.alert.decidedApprovedTitle": "Validación registrada · {label}",
   "strategicApprovals.alert.decidedRejectedTitle": "Rechazo registrado · {label}",
   "strategicApprovals.alert.decidedApprovedDesc":
@@ -3576,6 +3605,8 @@ const es: Record<string, string> = {
   "projetWeights.overTotalWarning":
     "Los pesos declarados superan el 100 %: se normalizan en el cálculo y los proyectos sin ponderar reciben el peso medio declarado.",
   "kpi.periodInvalid": "Período no válido — formato esperado: {format}",
+  "kpi.periodFuture":
+    "El período {period} aún no ha comenzado: solo se pueden introducir valores hasta el período en curso ({current}).",
   "kpi.measurement.periodTakenNoRight":
     "Ya existe un valor para el período {period} y no está autorizado a reemplazarlo.",
   "kpi.measurement.replaceConfirm": "Reemplazar el valor",
@@ -3922,6 +3953,11 @@ const es: Record<string, string> = {
     "Filtros no aplicables a las palancas (solo movimientos): {filters}.",
   "hr.fteCoverage.periodNotApplied":
     "El periodo solo se aplica a los movimientos: las palancas se cuentan sobre todo el programa.",
+  // Lote 3 — cálculo sobre el programa completo: etiquetas de agregados fuera del perímetro.
+  "strategicScope.outOfScopeChantier": "Iniciativa fuera de su perímetro",
+  "strategicPrerequisite.outOfScope": "Prerrequisito fuera de su perímetro",
+  "effectifs.staffingRate.otherChantiers": "Otras iniciativas (fuera de su perímetro)",
+  "effectifs.moneyBudget.otherChantiers": "Otras iniciativas",
 };
 
 export default es;

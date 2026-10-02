@@ -23,6 +23,7 @@ import {
   resolveIndicatorStatus,
 } from "@/lib/axisLogic";
 import { cleanupLegacyStorage } from "@/lib/legacyStorageCleanup";
+import { maskDependencyAlerts } from "@/lib/strategicProgramScope";
 import { resolveLandingRoute, resolveUserNav } from "@/lib/nav-config";
 import { canOpenRoute } from "@/lib/routeAccess";
 import { useTrackInAppNavigation } from "@/lib/hooks/useBackOrFallback";
@@ -159,7 +160,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     // 1. Cascades de dépendance entre chantiers — signalement pur (aucune date n'est modifiée),
     //    voir lib/axisLogic.ts. `desc` reprend le message déjà formulé par le moteur (il nomme les
     //    deux chantiers et le nombre de jours), le titre porte le chantier impacté.
-    for (const dep of chantierDependencyAlerts(strategic.chantiers, strategic.chantierActions)) {
+    //    Lot 3 : évaluées sur le programme COMPLET (une dépendance vers un chantier masqué compte
+    //    pour tous les profils), notifiées seulement pour un chantier BLOQUÉ visible, l'autre
+    //    extrémité renommée « chantier hors de votre périmètre » si elle est masquée.
+    const dependencyAlerts = maskDependencyAlerts(
+      chantierDependencyAlerts(strategic.program.chantiers, strategic.program.chantierActions),
+      strategic.visibleChantierIds,
+      t("strategicScope.outOfScopeChantier", "Chantier hors de votre périmètre"),
+      "source"
+    );
+    for (const dep of dependencyAlerts) {
       const id = `strategic-dep-${dep.sourceId}-${dep.type}-${dep.targetId}`;
       const axisId = axisIdByChantier.get(dep.sourceId);
       alerts.push({
@@ -225,14 +235,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     //    "absent = pas d'alerte fabriquée" que les deux blocs précédents. Cette alerte est pour le
     //    PILOTE du plan (`actorRole: "strategic_lead"`), même esprit que `indicator.responsibleRoles[0]`
     //    ci-dessus qui cible le responsable métier de l'indicateur.
-    //    Uniquement pour un lecteur à périmètre COMPLET (`fullScope`, même règle que la puce
-    //    « Budget alloué » de StrategicDashboardView) : le prévisionnel porte sur le programme
-    //    entier, un utilisateur scopé (confidentialité, ownership) n'a qu'un total partiel.
-    if (activeProgram && strategic.fullScope) {
+    //    Lot 3 : total calculé sur le programme COMPLET (`program`) — même montant que la puce
+    //    « Budget alloué » du dashboard, quel que soit le périmètre du lecteur.
+    if (activeProgram) {
       const overrun = programBudgetOverrun(
         activeProgram,
-        strategic.chantiers,
-        strategic.chantierActions
+        strategic.program.chantiers,
+        strategic.program.chantierActions
       );
       if (overrun !== undefined) {
         const id = `strategic-budget-overrun-${activeProgram.id}`;
@@ -263,9 +272,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
     // 4. Sur-staffing : équipe au-delà du seuil « sur-staffé » sur un mois en cours ou à venir
     //    (mêmes calculs que la page Budget & effectifs). Pour le pilote, le RH et les admins.
+    //    Lot 3 : sur les lignes ETP du programme COMPLET — même taux, mêmes alertes pour tous les
+    //    destinataires (une RH non habilitée voyait 75 % là où l'admin voyait 125 %).
     if (staffingRecipient) {
       for (const overrun of staffingOverruns(
-        strategic.staffing,
+        strategic.program.staffing,
         staffingFteByDept,
         today,
         staffingThresholds
@@ -347,8 +358,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     strategic.chantierActions,
     strategic.indicators,
     strategic.measurements,
-    strategic.fullScope,
-    strategic.staffing,
+    strategic.program,
+    strategic.visibleChantierIds,
     strategic.axes,
     staffingRecipient,
     staffingFteByDept,

@@ -76,6 +76,8 @@ export function useMyWorkspace(): { workspace: MyWorkspace; loading: boolean } {
             measurements: strategicData.measurements,
             projetProgress: strategicData.projetProgress,
             approvals: strategicApprovals.approvals,
+            // Lot 3 : santé / avancement calculés sur le programme COMPLET.
+            program: strategicData.program,
           }
         : null,
     [
@@ -86,6 +88,7 @@ export function useMyWorkspace(): { workspace: MyWorkspace; loading: boolean } {
       strategicData.indicators,
       strategicData.measurements,
       strategicData.projetProgress,
+      strategicData.program,
       strategicApprovals.approvals,
     ]
   );
@@ -156,12 +159,14 @@ export function useMyWorkspace(): { workspace: MyWorkspace; loading: boolean } {
     withRealizedMovements: true,
   });
   const { thresholds: staffingThresholds } = useStaffingThresholds();
+  // Lot 3 : lignes ETP du programme COMPLET — mêmes alertes que la cloche et la page Effectifs,
+  // quel que soit le périmètre du destinataire.
   const overruns = useMemo(
     () =>
       staffingRecipient
-        ? staffingOverruns(strategicData.staffing, fteByDept, today, staffingThresholds)
+        ? staffingOverruns(strategicData.program.staffing, fteByDept, today, staffingThresholds)
         : [],
-    [staffingRecipient, strategicData.staffing, fteByDept, today, staffingThresholds]
+    [staffingRecipient, strategicData.program.staffing, fteByDept, today, staffingThresholds]
   );
 
   const workspace = useMemo(

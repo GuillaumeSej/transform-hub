@@ -15,6 +15,15 @@ export function isFteDeparture(imp: Pick<LeverImpact, "type" | "fteDirection">):
   return imp.type === "fte" && fteDirectionOf(imp) === "departure";
 }
 
+/** Gain « Impact BFR » (`savingType === "working_capital"`, besoin en fonds de roulement) : impact
+ *  de TRÉSORERIE ponctuel (stock, délais clients/fournisseurs), pas une économie de P&L. Il
+ *  n'entre JAMAIS dans les économies (brut, net, réalisé, courbe, P&L, Finance, alertes) — seul
+ *  point de vérité pour l'exclure partout où les gains sont sommés (audit lot 4, point 4). Il reste
+ *  visible sur la fiche levier et dans l'export (`LeverImpactTotals.workingCapital`). */
+export function isWorkingCapitalImpact(imp: Pick<LeverImpact, "type" | "savingType">): boolean {
+  return imp.type === "saving" && imp.savingType === "working_capital";
+}
+
 /** Impact ETP de type RECRUTEMENT. */
 export function isFteHire(imp: Pick<LeverImpact, "type" | "fteDirection">): boolean {
   return imp.type === "fte" && fteDirectionOf(imp) === "hire";

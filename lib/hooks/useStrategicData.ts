@@ -1,18 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  subscribeStrategicAxes,
-  saveStrategicAxis,
-  deleteStrategicAxis,
-} from "@/lib/firestore/strategicAxes";
-import { subscribeChantiers, saveChantier, deleteChantier } from "@/lib/firestore/chantiers";
-import {
-  subscribeChantierActions,
-  saveChantierAction,
-  deleteChantierAction,
-} from "@/lib/firestore/chantierActions";
-import { subscribeIndicators, saveIndicator, deleteIndicator } from "@/lib/firestore/indicators";
+import { subscribeStrategicAxes, saveStrategicAxis } from "@/lib/firestore/strategicAxes";
+import { subscribeChantiers, saveChantier } from "@/lib/firestore/chantiers";
+import { subscribeChantierActions, saveChantierAction } from "@/lib/firestore/chantierActions";
+import { subscribeIndicators, saveIndicator } from "@/lib/firestore/indicators";
+import { deleteWithCascade } from "@/lib/firestore/strategicCascade";
+import { dropOrphanIndicators, dropOrphanStaffing } from "@/lib/strategicIntegrity";
 import {
   subscribeIndicatorMeasurements,
   saveIndicatorMeasurement,
@@ -38,11 +32,13 @@ import {
 } from "@/lib/axisLogic";
 import { resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { filterStrategicByClearance } from "@/lib/strategicConfidentiality";
+import type { StrategicProgramData } from "@/lib/strategicProgramScope";
 import { isAnyAdmin } from "@/lib/roleProfiles";
 import { todayISO } from "@/lib/dateUtils";
 import { normalizePeriod } from "@/lib/indicatorPeriod";
 import {
   applyMeasurementEdit,
+  assertMeasurementPeriodNotFuture,
   findPeriodCollision,
   MeasurementPeriodCollisionError,
   type MeasurementEditPatch,
@@ -163,6 +159,19 @@ export type StrategicData = {
    *  ni de périmètre n'en masque) — seule condition pour comparer un total au budget prévisionnel
    *  du programme (`Program.budget`), qui porte sur le programme entier. */
   fullScope: boolean;
+  /** Collections NON filtrées du programme actif (scopées au `programId`, AVANT confidentialité et
+   *  ownership) — base de TOUS les calculs agrégés (taux de staffing et alertes de sur-staffing,
+   *  avancement d'axe/programme, santé, dépendances, prérequis, validation, budget, % trajectoire)
+   *  pour que le même chiffre s'affiche quel que soit le profil du lecteur. JAMAIS rendues telles
+   *  quelles : l'affichage reste sur les projections filtrées ci-dessus, un élément hors périmètre
+   *  n'apparaissant qu'agrégé (voir lib/strategicProgramScope.ts). */
+  program: StrategicProgramData;
+  /** Ids des chantiers VISIBLES du lecteur (= `chantiers`) — pour masquer à l'affichage ce que les
+   *  calculs sur `program` font intervenir (`maskStaffingForDisplay`, `maskDependencyAlerts`…). */
+  visibleChantierIds: ReadonlySet<string>;
+  /** Ids des projets VISIBLES du lecteur (= `chantierActions`) — même usage, pour les prérequis
+   *  (`canStartAction`/`programBlockedActions`, option `visibleActionIds`). */
+  visibleActionIds: ReadonlySet<string>;
 
   // ── Mutations ──────────────────────────────────────────────────────────────────────────────
   createAxis: (
@@ -471,13 +480,27 @@ export function useStrategicData(
   // Masquage de confidentialité HÉRITÉE (lib/strategicConfidentiality.ts) : un chantier sous un
   // axe non accessible est masqué même sans niveau propre ; projets, indicateurs et lignes ETP
   // suivent leur chantier/axe. Admins et appelants non migrés : aucun filtre (inchangé).
+  // Lot 3 — filtre DÉFENSIF des orphelins déjà en base (avant la suppression en cascade) : une ligne
+  // ETP dont le chantier/projet n'existe plus et un indicateur dont le chantier n'existe plus ne
+  // comptent plus nulle part (taux de staffing, alertes, compteurs d'indicateurs à risque). Même
+  // règle que `chantierPlannedFte` (lib/staffingNeed.ts). Nettoyage en base :
+  // scripts/clean-strategic-orphans.js.
   const programScopedIndicators = useMemo(
-    () => allIndicators.filter((i) => i.programId === programId),
-    [allIndicators, programId]
+    () =>
+      dropOrphanIndicators(
+        allIndicators.filter((i) => i.programId === programId),
+        allChantiers
+      ),
+    [allIndicators, allChantiers, programId]
   );
   const programScopedStaffing = useMemo(
-    () => allStaffing.filter((s) => s.programId === programId),
-    [allStaffing, programId]
+    () =>
+      dropOrphanStaffing(
+        allStaffing.filter((s) => s.programId === programId),
+        allChantiers,
+        allActions
+      ),
+    [allStaffing, allChantiers, allActions, programId]
   );
   const clearanceFiltered = useMemo(() => {
     const input = {
@@ -541,8 +564,8 @@ export function useStrategicData(
     return allMeasurements.filter((m) => ids.has(m.indicatorId));
   }, [allMeasurements, indicators]);
   // Le staffing porte son propre `programId` (comme axes/chantiers/indicateurs) : filtrage direct,
-  // sans passer par la liste des chantiers — une ligne dont le chantier vient d'être supprimé
-  // reste ainsi visible dans les agrégats plutôt que de disparaître silencieusement. Round 25 :
+  // sans passer par la liste des chantiers VISIBLES (les lignes orphelines, chantier/projet
+  // supprimé, sont déjà écartées par `programScopedStaffing`, lot 3). Round 25 :
   // ownership scoping ajouté (sinon `axis_sponsor`/`chantier_owner`/`chantier_contributor`
   // verraient les ETP de TOUT le programme sur la page Effectifs, malgré des `axes`/`chantiers`
   // déjà correctement bornés). Confidentialité : `ChantierStaffing` ne porte pas de niveau propre,
@@ -554,6 +577,37 @@ export function useStrategicData(
     }
     return visible;
   }, [clearanceFiltered, ownershipScope]);
+
+  // ── Programme COMPLET (lot 3) : mêmes collections, AVANT tout filtre de visibilité — exposées
+  // pour les calculs agrégés uniquement (voir `StrategicData.program`). Mesures rattachées via les
+  // indicateurs du programme (elles ne portent pas de `programId`).
+  const programScopedMeasurements = useMemo(() => {
+    const ids = new Set(programScopedIndicators.map((i) => i.id));
+    return allMeasurements.filter((m) => ids.has(m.indicatorId));
+  }, [allMeasurements, programScopedIndicators]);
+  const program: StrategicProgramData = useMemo(
+    () => ({
+      axes: programScopedAxes,
+      chantiers: programScopedChantiers,
+      chantierActions: programScopedActionsForScope,
+      indicators: programScopedIndicators,
+      measurements: programScopedMeasurements,
+      staffing: programScopedStaffing,
+    }),
+    [
+      programScopedAxes,
+      programScopedChantiers,
+      programScopedActionsForScope,
+      programScopedIndicators,
+      programScopedMeasurements,
+      programScopedStaffing,
+    ]
+  );
+  const visibleChantierIds = useMemo(() => new Set(chantiers.map((c) => c.id)), [chantiers]);
+  const visibleActionIds = useMemo(
+    () => new Set(chantierActions.map((a) => a.id)),
+    [chantierActions]
+  );
 
   // Refs toujours à jour : les mutations doivent lire l'état le plus récent sans être recréées à
   // chaque rendu (même motivation que les refs de `useBeTrackData`).
@@ -606,15 +660,26 @@ export function useStrategicData(
     [companyId, auditUser]
   );
 
+  // Auteur des suppressions en cascade (annulation des demandes en attente qui visent la cible).
+  const cascadeActor = useMemo(
+    () => ({ username: user?.username ?? auditUser, name: user?.name }),
+    [user?.username, user?.name, auditUser]
+  );
+
   const removeAxis = useCallback<StrategicData["removeAxis"]>(
     async (id) => {
+      if (!companyId) throw new Error("removeAxis: companyId manquant");
       const existing = axesRef.current.find((a) => a.id === id);
-      await deleteStrategicAxis(id);
+      // Lot 3 : suppression BLOQUÉE tant que l'axe porte des chantiers/indicateurs
+      // (`AxisNotEmptyError`, rien d'écrit) — ses chantiers gardaient sinon un `axisIds`
+      // inexistant (comptés dans la puce, absents de la feuille de route). Axe vide : supprimé avec
+      // annulation des demandes en attente qui le visent, en un seul batch.
+      await deleteWithCascade(companyId, { axisIds: [id] }, cascadeActor);
       if (existing) {
         logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "axe", existing.name)]);
       }
     },
-    [companyId, auditUser]
+    [companyId, auditUser, cascadeActor]
   );
 
   const createChantier = useCallback<StrategicData["createChantier"]>(
@@ -651,13 +716,17 @@ export function useStrategicData(
 
   const removeChantier = useCallback<StrategicData["removeChantier"]>(
     async (id) => {
+      if (!companyId) throw new Error("removeChantier: companyId manquant");
       const existing = chantiersRef.current.find((c) => c.id === id);
-      await deleteChantier(id);
+      // Lot 3 : cascade en UN SEUL batch — projets, lignes ETP (chantier ET projets), indicateurs
+      // et leurs mesures, dépendances/prérequis qui les citent, demandes en attente annulées. Les
+      // lignes ETP de niveau chantier restaient sinon comptées (IT 125 % au lieu de 90 %).
+      await deleteWithCascade(companyId, { chantierIds: [id] }, cascadeActor);
       if (existing) {
         logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "chantier", existing.name)]);
       }
     },
-    [companyId, auditUser]
+    [companyId, auditUser, cascadeActor]
   );
 
   const createChantierAction = useCallback<StrategicData["createChantierAction"]>(
@@ -692,20 +761,17 @@ export function useStrategicData(
 
   const removeChantierAction = useCallback<StrategicData["removeChantierAction"]>(
     async (id) => {
+      if (!companyId) throw new Error("removeChantierAction: companyId manquant");
       const existing = actionsRef.current.find((a) => a.id === id);
-      await deleteChantierAction(id);
-      // Suppression en CASCADE des lignes de staffing du projet : elles restaient comptées au
-      // niveau du chantier (orphelines, audit DB-14 / KPI-02).
-      await Promise.all(
-        staffingRef.current
-          .filter((s) => s.actionId === id)
-          .map((s) => deleteChantierStaffing(s.id))
-      );
+      // Suppression en CASCADE (un seul batch, lot 3) : lignes de staffing du projet (elles
+      // restaient comptées au niveau du chantier, audit DB-14 / KPI-02), prérequis qui le citent,
+      // demandes en attente qui le visent (annulées).
+      await deleteWithCascade(companyId, { actionIds: [id] }, cascadeActor);
       if (existing) {
         logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "projet", existing.name)]);
       }
     },
-    [companyId, auditUser]
+    [companyId, auditUser, cascadeActor]
   );
 
   const createIndicator = useCallback<StrategicData["createIndicator"]>(
@@ -750,13 +816,16 @@ export function useStrategicData(
 
   const removeIndicator = useCallback<StrategicData["removeIndicator"]>(
     async (id) => {
+      if (!companyId) throw new Error("removeIndicator: companyId manquant");
       const existing = indicatorsRef.current.find((i) => i.id === id);
-      await deleteIndicator(id);
+      // Lot 3 : ses mesures partent avec lui (un seul batch), demandes en attente qui le visent
+      // (valeur KPI, objectif) annulées.
+      await deleteWithCascade(companyId, { indicatorIds: [id] }, cascadeActor);
       if (existing) {
         logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "indicateur", existing.name)]);
       }
     },
-    [companyId, auditUser]
+    [companyId, auditUser, cascadeActor]
   );
 
   const addMeasurement = useCallback<StrategicData["addMeasurement"]>(
@@ -764,6 +833,12 @@ export function useStrategicData(
       if (!companyId) throw new Error("addMeasurement: companyId manquant");
       // Période normalisée au format canonique quand elle est reconnue ("2026-3" → "2026-03").
       const period = normalizePeriod(input.period) ?? input.period.trim();
+      // Garde-fou : jamais de mesure sur une période postérieure à la période en cours (selon la
+      // fréquence de l'indicateur) — elle deviendrait la « dernière valeur » partout.
+      assertMeasurementPeriodNotFuture(
+        period,
+        indicatorsRef.current.find((i) => i.id === input.indicatorId)?.frequency
+      );
       // Garde-fou : jamais deux mesures pour la même période d'un indicateur (une seconde valeur
       // était ignorée partout sauf sur le graphique). L'UI propose le REMPLACEMENT (correction de
       // la mesure existante, `updateMeasurement`) avant d'arriver ici.
@@ -821,6 +896,10 @@ export function useStrategicData(
       if (patch.period !== undefined) {
         patch = { ...patch, period: normalizePeriod(patch.period) ?? patch.period.trim() };
       }
+      assertMeasurementPeriodNotFuture(
+        patch.period ?? existing.period,
+        indicatorsRef.current.find((i) => i.id === existing.indicatorId)?.frequency
+      );
       const next = applyMeasurementEdit(
         existing,
         patch,
@@ -896,6 +975,9 @@ export function useStrategicData(
     projetAutoFlags,
     programAxisIds,
     fullScope,
+    program,
+    visibleChantierIds,
+    visibleActionIds,
     createAxis,
     updateAxis,
     removeAxis,

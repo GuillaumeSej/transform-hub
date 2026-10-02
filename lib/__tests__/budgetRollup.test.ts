@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { budgetAxisIdOf, rollupBudgets } from "@/lib/budgetRollup";
+import {
+  budgetAxisIdOf,
+  budgetAxisShares,
+  budgetChantierShares,
+  rollupBudgets,
+} from "@/lib/budgetRollup";
 
 const axes = [{ id: "A1" }, { id: "A2" }];
 const chantiers = [
@@ -77,6 +82,46 @@ describe("rollupBudgets — chantier sans projet (audit STR-09)", () => {
     expect(r.chantiers.get("RPA")).toEqual({ allocated: 1_100_000, consumed: 385_000 });
     expect(r.axes.get("A1")).toEqual({ allocated: 1_100_100, consumed: 385_040 });
     expect(r.programme).toEqual({ allocated: 1_100_100, consumed: 385_040 });
+  });
+});
+
+describe("budgetAxisShares / budgetChantierShares — parts partagées dashboard ↔ Effectifs (lot 3)", () => {
+  // Programme COMPLET : A1 (C1 150), A2 (C2 300, multi-axe), C3 sans axe connu (7).
+  const r = rollupBudgets(axes, chantiers, actions);
+  const sum = (shares: { figures: { allocated: number; consumed: number } }[]) =>
+    shares.reduce(
+      (acc, s) => ({
+        allocated: acc.allocated + s.figures.allocated,
+        consumed: acc.consumed + s.figures.consumed,
+      }),
+      { allocated: 0, consumed: 0 }
+    );
+
+  it("tous les axes visibles : axes + « Sans axe », somme = total programme", () => {
+    const shares = budgetAxisShares(r, axes);
+    expect(shares.map((s) => s.kind)).toEqual(["axis", "axis", "unattributed"]);
+    expect(sum(shares)).toEqual(r.programme);
+  });
+
+  it("axe A2 masqué : part anonyme « Autres axes » = A2, somme toujours = total programme", () => {
+    const shares = budgetAxisShares(r, [{ id: "A1" }]);
+    expect(shares).toEqual([
+      { kind: "axis", id: "A1", figures: { allocated: 150, consumed: 40 } },
+      { kind: "unattributed", figures: { allocated: 7, consumed: 1 } },
+      { kind: "otherAxes", figures: { allocated: 300, consumed: 350 } },
+    ]);
+    expect(sum(shares)).toEqual(r.programme);
+  });
+
+  it("chantiers d'un axe : visibles + « Autres chantiers », somme = budget de l'axe", () => {
+    expect(budgetChantierShares(r, "A1", [{ id: "C1" }])).toEqual([
+      { kind: "chantier", id: "C1", figures: { allocated: 150, consumed: 40 } },
+    ]);
+    const hidden = budgetChantierShares(r, "A2", []);
+    expect(hidden).toEqual([
+      { kind: "otherChantiers", figures: { allocated: 300, consumed: 350 } },
+    ]);
+    expect(sum(hidden)).toEqual(r.axes.get("A2"));
   });
 });
 
