@@ -9,13 +9,14 @@ import {
   IMPACT_IMPORT_HEADERS,
   LEVER_IMPORT_HEADERS,
   LEVER_IMPORT_MESSAGES,
+  leverImportHelpRows,
   leverImportTemplateRows,
   validateLeverImportRows,
   type LeverImportError,
   type LeverImportPreview,
   type LeverImportSheet,
 } from "@/lib/leverExcelImport";
-import { normalizeHeaderKey } from "@/lib/excelParse";
+import { convertExcelPercentCells, normalizeHeaderKey } from "@/lib/excelParse";
 import { readSpreadsheetFile } from "@/lib/excelFileRead";
 import { useRole } from "@/lib/hooks/useRole";
 import type { BeTrackData, LifecycleStage, Workstream } from "@/types";
@@ -93,6 +94,7 @@ function blockingPreview(code: "noLeversSheet" | "csvNotSupported"): LeverImport
     actionsRemoved: [],
     impactsRemoved: [],
     actionsSheetPresent: false,
+    needsConfirmation: false,
     toCreateWorkstreams: [],
   };
 }
@@ -147,6 +149,9 @@ export function LeverImportButton({
   const [preview, setPreview] = useState<LeverImportPreview | null>(null);
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
+  // Valeurs hors d'échelle signalées (`needsConfirmation`) : l'import n'est possible qu'après
+  // confirmation explicite (audit lot 4, point 5).
+  const [largeValuesAck, setLargeValuesAck] = useState(false);
   // Réconciliation propriétaire (round "ownership réel", voir lib/leverOwnerReconciliation.ts) :
   // file d'attente affichée par LeverOwnerReconciliationDialog, construite au clic sur "Confirmer
   // l'import" (voir confirmImport) — non-null pendant que ce second dialogue est ouvert.
@@ -171,6 +176,9 @@ export function LeverImportButton({
     XLSX.utils.book_append_sheet(wb, actionsSheet, SHEET_NAMES.actions);
     const impactsSheet = XLSX.utils.aoa_to_sheet([[...IMPACT_IMPORT_HEADERS], ...example.impacts]);
     XLSX.utils.book_append_sheet(wb, impactsSheet, SHEET_NAMES.impacts);
+    // Onglet « Aide » (ignoré à l'import) : règles de remplissage — cellule vide = valeur
+    // conservée, « - » = effacée, colonnes calculées, unités (audit lot 4).
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(leverImportHelpRows()), "Aide");
 
     XLSX.writeFile(wb, "template_leviers.xlsx");
     showToast(
@@ -185,6 +193,7 @@ export function LeverImportButton({
 
   const handleImportFile = async (file: File) => {
     setFileName(file.name);
+    setLargeValuesAck(false);
     // Un CSV ne porte qu'une feuille : il ne peut pas décrire leviers + actions + impacts.
     if (file.name.toLowerCase().endsWith(".csv")) {
       setPreview(blockingPreview("csvNotSupported"));
@@ -195,6 +204,8 @@ export function LeverImportButton({
     try {
       // Point d'entrée unique de lecture (lib/excelFileRead.ts) ; SheetJS chargé au clic.
       [workbook, XLSX] = await Promise.all([readSpreadsheetFile(file), import("xlsx")]);
+      // Cellules au format % des colonnes « (%) » lues telles qu'affichées (40 % → 40).
+      convertExcelPercentCells(workbook);
     } catch (err) {
       console.error("[betrack] lecture du fichier d'import :", err);
       setPreview(blockingPreview("noLeversSheet"));
@@ -253,10 +264,6 @@ export function LeverImportButton({
         preview.toCreateWorkstreams.length > 0
           ? ` · ${t("shared.leverImportButton.workstreamsCreatedNote", "{n} chantier(s) créé(s)").replace("{n}", String(preview.toCreateWorkstreams.length))}`
           : "";
-      const errNote =
-        preview.errors.length > 0
-          ? ` · ${t("shared.leverImportButton.ignoredRowsNote", "{n} ligne(s) ignorée(s)").replace("{n}", String(preview.errors.length))}`
-          : "";
       showToast(
         t("shared.excelIO.importDoneTitle", "Import Excel terminé"),
         t(
@@ -264,9 +271,7 @@ export function LeverImportButton({
           "{created} levier(s) créé(s) · {updated} mis à jour"
         )
           .replace("{created}", String(createdCount))
-          .replace("{updated}", String(updatedCount)) +
-          wsNote +
-          errNote,
+          .replace("{updated}", String(updatedCount)) + wsNote,
         "success"
       );
       setPreview(null);
@@ -293,8 +298,21 @@ export function LeverImportButton({
    *  l'aperçu dont l'"Owner" texte libre est non vide doit être rapproché d'un compte réel. Aucun
    *  levier à réconcilier (colonne "Owner" vide partout, ou aucun candidat trouvé n'étant pas géré
    *  ici — voir le dialogue) : écriture immédiate, comportement inchangé. */
+  /** Import bloqué tant que le fichier contient des erreurs (point 3 : avant, la confirmation
+   *  restait possible et les lignes en erreur — ex. une action en doublon — étaient écartées en
+   *  silence, supprimant l'action existante), ou que des valeurs hors d'échelle n'ont pas été
+   *  confirmées. */
+  const blockedByErrors = (preview?.errors.length ?? 0) > 0;
+  const blockedByLargeValues = !!preview?.needsConfirmation && !largeValuesAck;
+  const canConfirm =
+    !!preview &&
+    !importing &&
+    preview.toUpsert.length > 0 &&
+    !blockedByErrors &&
+    !blockedByLargeValues;
+
   const confirmImport = () => {
-    if (!preview || preview.toUpsert.length === 0) return;
+    if (!preview || !canConfirm) return;
     const queue = buildReconciliationQueue(preview.toUpsert, companyUsers);
     if (queue.length === 0) {
       void writeImport(preview.toUpsert);
@@ -346,11 +364,7 @@ export function LeverImportButton({
             <Button variant="ghost" onClick={() => setPreview(null)}>
               {t("common.cancel", "Annuler")}
             </Button>
-            <Button
-              variant="primary"
-              disabled={importing || (preview?.toUpsert.length ?? 0) === 0}
-              onClick={confirmImport}
-            >
+            <Button variant="primary" disabled={!canConfirm} onClick={confirmImport}>
               {t("shared.excelIO.confirmImportButton", "Confirmer l'import")}
             </Button>
           </>
@@ -374,6 +388,20 @@ export function LeverImportButton({
             {t("shared.leverImportButton.errorRowsLabel", "ligne(s) en erreur")}
           </span>
         </div>
+        <p className="mb-3 text-[11.5px] text-tertiary">
+          {t(
+            "shared.leverImportButton.emptyCellRule",
+            "Cellule vide = valeur actuelle conservée ; « - » = champ effacé. « Progression (%) » et les montants d'un levier porteur d'impacts sont calculés : leur modification est ignorée."
+          )}
+        </p>
+        {blockedByErrors && (
+          <div className="mb-3 rounded-md border border-rag-red/40 bg-rag-red/5 p-2.5 text-xs font-semibold text-rag-red">
+            {t(
+              "shared.leverImportButton.fixErrorsFirst",
+              "Import impossible tant que le fichier contient des erreurs : corrigez les lignes ci-dessous puis rechargez le fichier."
+            )}
+          </div>
+        )}
         {preview && preview.toCreateWorkstreams.length > 0 && (
           <div className="mb-3 rounded-md border border-bp-coral/30 bg-bp-coral/5 p-2.5 text-xs text-secondary">
             <strong className="text-primary">{preview.toCreateWorkstreams.length}</strong>{" "}
@@ -460,7 +488,10 @@ export function LeverImportButton({
               {t("shared.leverImportButton.warningsTitle", "Avertissements (import non bloqué)")}
             </p>
             {preview.warnings.map((w, i) => (
-              <div key={i} className="text-secondary">
+              <div
+                key={i}
+                className={w.needsConfirmation ? "font-semibold text-primary" : "text-secondary"}
+              >
                 [{w.sheet}]{" "}
                 {w.rowNumber > 1 && (
                   <>
@@ -471,6 +502,20 @@ export function LeverImportButton({
               </div>
             ))}
           </div>
+        )}
+        {preview?.needsConfirmation && !blockedByErrors && (
+          <label className="mt-3 flex items-start gap-2 text-xs text-primary">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={largeValuesAck}
+              onChange={(e) => setLargeValuesAck(e.target.checked)}
+            />
+            {t(
+              "shared.leverImportButton.confirmLargeValues",
+              "J'ai vérifié les valeurs inhabituellement élevées signalées (unité M€ / ETP) et confirme l'import."
+            )}
+          </label>
         )}
       </Modal>
 

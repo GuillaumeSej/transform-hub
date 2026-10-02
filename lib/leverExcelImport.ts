@@ -19,7 +19,12 @@ import {
 } from "@/lib/excelParse";
 import { coerceImpactStatus } from "@/lib/impactStatus";
 import { CHARTER_CATEGORICAL } from "@/lib/charterColors";
-import { leverImpactsOf } from "@/lib/engine";
+import {
+  displayedReforecastNet,
+  displayedReforecastSnapshot,
+  leverImpactsOf,
+  leverProgressPct,
+} from "@/lib/engine";
 import { leverImportPatch, normalizeLeverCode } from "@/lib/leversLogic";
 import type {
   ActionImpact,
@@ -68,16 +73,35 @@ function slugifyWorkstreamName(name: string): string {
  *
  * Mise à jour partielle (audit B1) : pour un levier EXISTANT, seules les colonnes PRÉSENTES dans la
  * feuille sont appliquées — un fichier réduit à "Code" + "Statut" ne remet plus à zéro les autres
- * champs. Une cellule numérique vide conserve la valeur existante ; une cellule texte vide efface
- * le champ (sauf "Programme", qui conserve le programme actuel — M10). Les colonnes obligatoires
- * pour une CRÉATION (Nom, Chantier, Statut, Compte P&L, dates) sont vérifiées ligne par ligne.
- * Colonnes inconnues = avertissement ; colonne clé absente (Code…) = erreur.
+ * champs. Les colonnes obligatoires pour une CRÉATION (Nom, Chantier, Statut, Compte P&L, dates)
+ * sont vérifiées ligne par ligne. Colonnes inconnues = avertissement ; colonne clé absente
+ * (Code…) = erreur.
+ *
+ * Cellule vide (audit lot 4, point 7 — même règle que le plan stratégique et la base ETP) : une
+ * cellule VIDE CONSERVE la valeur existante (texte, nombre, date ou liste optionnels, sur les trois
+ * feuilles) ; un tiret « - » (`CLEAR_CELL_TOKENS`) EFFACE le champ. Les colonnes obligatoires ne
+ * peuvent être ni vides ni effacées. Règle rappelée dans l'onglet « Aide » du modèle et dans
+ * l'aperçu.
+ *
+ * Colonnes calculées (audit lot 4, points 1-2) : « Progression (%) » est TOUJOURS calculée (plan
+ * d'action, `leverProgressPct`) et ignorée à l'import ; les montants (brut, net, CAPEX, OPEX) d'un
+ * levier porteur d'impacts ou au plan figé / réactualisé, et ses ETP s'il porte des impacts, sont
+ * calculés et conservés. Une valeur du fichier qui diffère de la valeur calculée (celle écrite par
+ * l'export) est signalée dans l'aperçu (« modification ignorée ») au lieu d'être ignorée en silence.
+ *
+ * Contrôles de grandeur (point 5) : montant négatif là où il n'a pas de sens (brut, CAPEX, OPEX,
+ * montant d'impact, population, nombre d'ETP d'un impact ETP) = erreur ; valeur hors d'échelle
+ * (`LARGE_AMOUNT_M` M€, `LARGE_FTE` ETP…) = avertissement à confirmer explicitement dans l'aperçu
+ * (`needsConfirmation`). Cellule au format pourcentage : lue telle qu'affichée (40 %, voir
+ * `convertExcelPercentCells`) ; une valeur ramenée à une borne est signalée.
  *
  * Plans d'action : feuille "Actions" présente = le fichier fait foi pour les leviers qu'il cite
  * (feuille Leviers, ou lignes Actions/Impacts d'un levier existant absent de la feuille Leviers —
- * M8). Les actions existantes de même nom (insensible à la casse) sont FUSIONNÉES (id, poids,
- * avancement déclaré conservés) ; celles absentes du fichier sont supprimées (signalé dans
- * l'aperçu). Feuille absente = plans d'action conservés.
+ * M8). Chaque ligne est rapprochée d'une action existante par sa colonne technique « ID action »
+ * (écrite par l'export : permet de renommer une action sans la perdre), à défaut par son nom
+ * (insensible à la casse) ; l'action rapprochée est FUSIONNÉE (id, poids, avancement déclaré
+ * conservés) ; celles absentes du fichier sont supprimées (signalé dans l'aperçu). Deux actions
+ * de même nom dans un levier sont refusées (point 3). Feuille absente = plans d'action conservés.
  *
  * Impacts (M5/M6) : un levier ayant au moins une ligne Impacts voit ses impacts remplacés par ceux
  * du fichier, mais chaque ligne est d'abord rapprochée d'un impact existant (type + libellé + date,
@@ -100,6 +124,10 @@ function slugifyWorkstreamName(name: string): string {
 
 // ---------- En-têtes (utilisés par le bouton "Template Excel" et par l'export) ----------
 
+/** En-tête de la colonne informative « impact BFR » de l'export (lib/leverExcel.ts) — ignorée à
+ *  l'import (les impacts BFR vivent dans la feuille Impacts). */
+export const WORKING_CAPITAL_EXPORT_HEADER = "Impact BFR — trésorerie, hors économies (€M)";
+
 export const LEVER_IMPORT_HEADERS = [
   "Code",
   "Type de levier",
@@ -121,6 +149,7 @@ export const LEVER_IMPORT_HEADERS = [
   "Date de départ",
   "Date de fin estimée",
   "Statut",
+  // Colonne CALCULÉE (plan d'action) : écrite par l'export, ignorée à l'import (point 1).
   "Progression (%)",
   "Impact estimé brut (€M)",
   "Impact estimé net (€M)",
@@ -146,6 +175,7 @@ const LEVER_EXTRA_KNOWN_HEADERS = [
   // sans avertissement pour les fichiers exportés avant ce changement.
   "Réactualisé (net)",
   "Planifié initial",
+  WORKING_CAPITAL_EXPORT_HEADER,
   "Créé le",
   "Dernière mise à jour",
 ] as const;
@@ -157,6 +187,9 @@ export const ACTION_IMPORT_HEADERS = [
   "Date début",
   "Date fin",
   "Statut",
+  // Colonne TECHNIQUE écrite par l'export (id de l'action) : clé de rapprochement prioritaire au
+  // ré-import (renommer une action la conserve). Vide pour une nouvelle action.
+  "ID action",
 ] as const;
 
 export const IMPACT_IMPORT_HEADERS = [
@@ -232,7 +265,7 @@ export function leverImportTemplateRows(
         "Date de départ": "2026-01-15",
         "Date de fin estimée": "2026-12-31",
         Statut: "Identifié",
-        "Progression (%)": 40,
+        // « Progression (%) » laissée vide : colonne calculée depuis le plan d'action.
         "Impact estimé brut (€M)": 2.5,
         "Impact estimé net (€M)": 2.1,
         "Impact estimé (ETP)": -1,
@@ -264,6 +297,48 @@ export function leverImportTemplateRows(
       }),
     ],
   };
+}
+
+/** Cellule qui EFFACE un champ (une cellule vide le conserve) — voir l'en-tête du module. */
+export const CLEAR_CELL_TOKENS = ["-", "–", "—"] as const;
+
+/** Seuils d'avertissement « valeur hors d'échelle » (à confirmer dans l'aperçu) : un montant au-delà
+ *  de 1 000 M€ est presque toujours une saisie en € ou k€ dans une colonne en M€. */
+export const LARGE_AMOUNT_M = 1000;
+export const LARGE_FTE = 10000;
+export const LARGE_POPULATION = 1000000;
+
+/** Lignes de l'onglet « Aide » du modèle Excel (règles de remplissage). */
+export function leverImportHelpRows(): string[][] {
+  return [
+    ["Règle", "Détail"],
+    [
+      "Cellule vide",
+      "Conserve la valeur actuelle du levier, de l'action ou de l'impact (rien n'est effacé).",
+    ],
+    ["Tiret « - »", "Efface le champ (texte, date ou nombre optionnel)."],
+    [
+      "Colonnes obligatoires",
+      "Code, Nom du levier, Chantier, Statut, Compte P&L impacté, dates (création) ; Code Levier + Nom de l'action (Actions) ; Code Levier + Type + Montant (Impacts).",
+    ],
+    [
+      "Colonnes calculées",
+      "« Progression (%) » suit le plan d'action ; montants et ETP d'un levier porteur d'impacts (ou au plan figé) suivent ses impacts : une modification de ces colonnes est ignorée et signalée.",
+    ],
+    [
+      "Unités",
+      `Montants en millions d'euros (M€) ; au-delà de ${LARGE_AMOUNT_M} M€ ou ${LARGE_FTE} ETP, l'import demande une confirmation. Montants d'impact, brut, CAPEX et OPEX jamais négatifs.`,
+    ],
+    ["Pourcentages", "Une cellule au format % (40 %) est lue telle qu'affichée (40)."],
+    [
+      "ID action",
+      "Colonne technique écrite par l'export : ne pas modifier ; laisser vide pour une nouvelle action. Deux actions d'un même levier ne peuvent pas porter le même nom.",
+    ],
+    [
+      "Type de gain « Impact BFR »",
+      "Impact de trésorerie (besoin en fonds de roulement) : visible sur la fiche levier, jamais compté dans les économies.",
+    ],
+  ];
 }
 
 // ---------- Messages (code + variables, traduits côté UI) ----------
@@ -308,6 +383,9 @@ export const LEVER_IMPORT_MESSAGES = {
     'Ligne ignorée : le levier "{code}" est en erreur dans la feuille Leviers (corrigez-le d\'abord)',
   duplicateAction:
     'Action "{name}" en doublon pour le levier "{code}" (déjà déclarée ligne {row}, les noms sont comparés sans tenir compte de la casse)',
+  duplicateActionId:
+    'Identifiant d\'action "{id}" en doublon pour le levier "{code}" (déjà utilisé ligne {row})',
+  negativeNotAllowed: '"{field}" ne peut pas être négatif (valeur lue : {value})',
   actionNotFound: 'Action "{name}" introuvable pour le levier "{code}"',
   unknownImpactType: 'Type "{value}" inconnu (attendu : {expected})',
   unknownNature: 'Nature "{value}" inconnue (attendu : {expected})',
@@ -324,6 +402,15 @@ export const LEVER_IMPORT_MESSAGES = {
     'Population impactée "{value}" introuvable parmi les chantiers : valeur ignorée',
   formulaNoValue:
     "Cellule {cell} : formule sans valeur calculée (classeur non recalculé) — ouvrez et enregistrez le fichier dans Excel avant l'import.",
+  computedFromActions:
+    '"{field}" : valeur calculée depuis le plan d\'action ({computed}) — modification ignorée (fichier : {value})',
+  computedFromImpacts:
+    '"{field}" : valeur calculée depuis les impacts du levier ({computed}) — modification ignorée (fichier : {value})',
+  computedFromPlan:
+    '"{field}" : valeur calculée depuis le plan figé / la réactualisation ({computed}) — modification ignorée (fichier : {value})',
+  valueClamped: '"{field}" : {value} hors bornes, ramené à {bound}',
+  largeValue:
+    '"{field}" = {value} {unit} : valeur inhabituellement élevée (au-delà de {threshold}) — vérifiez l\'unité avant de confirmer',
 } as const;
 
 export type LeverImportMessageCode = keyof typeof LEVER_IMPORT_MESSAGES;
@@ -406,7 +493,9 @@ const IMPACT_NATURE_LABEL: Record<ActionImpact["nature"], string> = {
 export const SAVING_TYPE_LABEL: Record<SavingType, string> = {
   cost_reduction: "Réduction de coût",
   revenue_increase: "Augmentation du CA",
-  working_capital: "Impact BFR",
+  // Libellé explicite (point 4) : impact de trésorerie, jamais compté dans les économies
+  // (`isWorkingCapitalImpact`). L'ancien libellé « Impact BFR » reste accepté à l'import.
+  working_capital: "Impact BFR (trésorerie, hors économies)",
 };
 
 const DEPENDENCY_TYPES: DependencyType[] = ["FS", "SS", "FF", "SF"];
@@ -454,6 +543,8 @@ const SAVING_TYPE_BY_LABEL = labelMap(SAVING_TYPE_LABEL, {
   "reduction de cout": "cost_reduction",
   "augmentation ca": "revenue_increase",
   bfr: "working_capital",
+  "impact bfr": "working_capital",
+  "impact bfr (tresorerie)": "working_capital",
 });
 const GAIN_MODE_BY_LABEL = new Map<string, "annual" | "oneoff">(
   (
@@ -546,6 +637,25 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
+/** Lecture d'une cellule optionnelle selon la règle « vide = on conserve ; « - » efface ». */
+type CellText = { kind: "blank" } | { kind: "clear" } | { kind: "value"; value: string };
+function readTextCell(v: unknown): CellText {
+  const s = str(v);
+  if (!s) return { kind: "blank" };
+  if ((CLEAR_CELL_TOKENS as readonly string[]).includes(s)) return { kind: "clear" };
+  return { kind: "value", value: s };
+}
+
+/** Cellule « - » (efface le champ). */
+function isClearCell(v: unknown): boolean {
+  return readTextCell(v).kind === "clear";
+}
+
+/** Égalité à l'arrondi près (valeurs écrites par l'export puis relues). */
+function sameNumber(a: number, b: number): boolean {
+  return Math.abs(a - b) < 1e-6;
+}
+
 function isRowEmpty(row: Record<string, unknown>): boolean {
   return Object.values(row).every((v) => isBlankCell(v));
 }
@@ -621,6 +731,8 @@ export type LeverImportError = {
   reason: string;
   code: LeverImportMessageCode;
   vars?: LeverImportMessageVars;
+  /** Avertissement à CONFIRMER explicitement avant l'import (valeur hors d'échelle — point 5). */
+  needsConfirmation?: boolean;
 };
 
 export type LeverImportWarning = LeverImportError;
@@ -646,6 +758,8 @@ export type LeverImportPreview = {
   impactsRemoved: { code: string; labels: string[] }[];
   /** false = le fichier n'a pas de feuille "Actions" : aucun plan d'action n'est modifié. */
   actionsSheetPresent: boolean;
+  /** Au moins un avertissement doit être confirmé (`needsConfirmation`) avant l'import. */
+  needsConfirmation: boolean;
   /** Chantiers référencés par la feuille "Leviers" mais absents de l'entreprise — auto-créés (id
    *  unique, jamais un id existant : M13), à persister par l'appelant AVANT les leviers. */
   toCreateWorkstreams: Workstream[];
@@ -673,13 +787,21 @@ const LEVER_REQUIRED_FOR_NEW: LeverHeader[] = [
   "Date de fin estimée",
 ];
 
-const NUMERIC_LEVER_FIELDS: [LeverHeader, keyof LeverImportRow][] = [
-  ["Impact estimé brut (€M)", "grossSavings"],
-  ["Impact estimé net (€M)", "netSavings"],
-  ["OPEX one-off (€M)", "opexOneOff"],
-  ["OPEX récurrent (€M/an)", "opexRec"],
-  ["CAPEX (€M)", "capex"],
-  ["Impact estimé (ETP)", "fteImpact"],
+/** Colonnes numériques du levier : clé, négatif autorisé, unité (seuil « hors d'échelle »). */
+const NUMERIC_LEVER_FIELDS: {
+  header: LeverHeader;
+  key: "grossSavings" | "netSavings" | "opexOneOff" | "opexRec" | "capex" | "fteImpact";
+  allowNegative: boolean;
+  unit: "M€" | "ETP";
+}[] = [
+  { header: "Impact estimé brut (€M)", key: "grossSavings", allowNegative: false, unit: "M€" },
+  // Net = brut − OPEX récurrent : peut être négatif.
+  { header: "Impact estimé net (€M)", key: "netSavings", allowNegative: true, unit: "M€" },
+  { header: "OPEX one-off (€M)", key: "opexOneOff", allowNegative: false, unit: "M€" },
+  { header: "OPEX récurrent (€M/an)", key: "opexRec", allowNegative: false, unit: "M€" },
+  { header: "CAPEX (€M)", key: "capex", allowNegative: false, unit: "M€" },
+  // ETP signés (+recrutements / −départs).
+  { header: "Impact estimé (ETP)", key: "fteImpact", allowNegative: true, unit: "ETP" },
 ];
 
 const TEXT_LEVER_FIELDS: [LeverHeader, keyof LeverImportRow][] = [
@@ -746,19 +868,44 @@ export function validateLeverImportRows(
     c: LeverImportMessageCode,
     v?: LeverImportMessageVars
   ) => issue(warnings, s, r, c, v);
+  /** Avertissement à confirmer explicitement dans l'aperçu (valeur hors d'échelle). */
+  const warnToConfirm = (
+    s: LeverImportSheet,
+    r: number,
+    c: LeverImportMessageCode,
+    v?: LeverImportMessageVars
+  ) => {
+    issue(warnings, s, r, c, v);
+    warnings[warnings.length - 1].needsConfirmation = true;
+  };
 
-  /** Nombre optionnel : `undefined` si vide, `null` (+ erreur) si illisible. */
+  /** Nombre optionnel : `undefined` si vide, `null` (+ erreur) si illisible. Contrôles de grandeur
+   *  (point 5) : négatif refusé sauf `allowNegative` ; au-delà de `large` (en valeur absolue),
+   *  avertissement à confirmer. */
   const readNumber = (
     sheet: LeverImportSheet,
     rowNumber: number,
     field: string,
-    v: unknown
+    v: unknown,
+    bounds: { allowNegative?: boolean; large?: number; unit?: string } = { allowNegative: true }
   ): number | undefined | null => {
     const p = parseCellNumber(v);
     if (!p) return undefined;
     if (!p.ok) {
       err(sheet, rowNumber, "invalidNumber", { field, value: p.raw });
       return null;
+    }
+    if (!bounds.allowNegative && p.value < 0) {
+      err(sheet, rowNumber, "negativeNotAllowed", { field, value: p.value });
+      return null;
+    }
+    if (bounds.large !== undefined && Math.abs(p.value) > bounds.large) {
+      warnToConfirm(sheet, rowNumber, "largeValue", {
+        field,
+        value: p.value,
+        unit: bounds.unit ?? "",
+        threshold: `${bounds.large} ${bounds.unit ?? ""}`.trim(),
+      });
     }
     return p.value;
   };
@@ -794,7 +941,14 @@ export function validateLeverImportRows(
   const leverSheetUsable = !(leverDataRows.length > 0 && !hasL("Code"));
   if (!leverSheetUsable) err("Leviers", 1, "missingColumns", { columns: "Code" });
 
-  type ParsedLever = { rowNumber: number; code: string; values: LeverImportRow };
+  type ParsedLever = {
+    rowNumber: number;
+    code: string;
+    values: LeverImportRow;
+    /** Valeurs lues dans les colonnes CALCULÉES (progression, montants, ETP) — comparées à la valeur
+     *  calculée à l'assemblage pour signaler une modification ignorée (point 2). */
+    computedInFile: Partial<Record<LeverHeader, number>>;
+  };
   const parsedLevers: ParsedLever[] = [];
   const codeFirstSeenAtRow = new Map<string, number>();
   /** Codes dont la ligne Leviers est en erreur : leurs lignes Actions/Impacts sont ignorées. */
@@ -988,42 +1142,86 @@ export function validateLeverImportRows(
       return reject();
     }
 
+    // Champs texte optionnels : vide = valeur conservée, « - » = effacée (point 7).
     for (const [header, key] of TEXT_LEVER_FIELDS) {
-      if (hasL(header)) (values as Record<string, unknown>)[key] = str(row[header]);
+      if (!hasL(header)) continue;
+      const cell = readTextCell(row[header]);
+      if (cell.kind === "blank") continue;
+      (values as Record<string, unknown>)[key] = cell.kind === "clear" ? "" : cell.value;
     }
     if (hasL("Description")) {
-      const description = str(row["Description"]);
-      // Description tronquée par l'export (limite de cellule Excel) : on garde la version complète.
-      const truncatedExport =
-        description.length === EXCEL_CELL_MAX &&
-        (existing?.description ?? "").startsWith(description);
-      if (!truncatedExport) values.description = description;
+      const cell = readTextCell(row["Description"]);
+      if (cell.kind === "clear") values.description = "";
+      else if (cell.kind === "value") {
+        const description = cell.value;
+        // Description tronquée par l'export (limite de cellule Excel) : on garde la version complète.
+        const truncatedExport =
+          description.length === EXCEL_CELL_MAX &&
+          (existing?.description ?? "").startsWith(description);
+        if (!truncatedExport) values.description = description;
+      }
     }
 
-    if (hasL("Progression (%)")) {
+    const computedInFile: ParsedLever["computedInFile"] = {};
+    if (hasL("Progression (%)") && !isClearCell(row["Progression (%)"])) {
+      // Colonne CALCULÉE (plan d'action) : jamais appliquée (point 1) ; lue pour signaler une
+      // modification ignorée. Bornes 0-100 : une valeur hors bornes est signalée.
       const n = readNumber("Leviers", rowNumber, "Progression (%)", row["Progression (%)"]);
       if (n === null) return reject();
-      if (n !== undefined) values.progress = clamp(n, 0, 100);
+      if (n !== undefined) {
+        const bounded = clamp(n, 0, 100);
+        if (bounded !== n) {
+          warn("Leviers", rowNumber, "valueClamped", {
+            field: "Progression (%)",
+            value: n,
+            bound: bounded,
+          });
+        }
+        computedInFile["Progression (%)"] = bounded;
+      }
     }
-    for (const [header, key] of NUMERIC_LEVER_FIELDS) {
+    for (const { header, key, allowNegative, unit } of NUMERIC_LEVER_FIELDS) {
       if (!hasL(header)) continue;
-      const n = readNumber("Leviers", rowNumber, header, row[header]);
+      // « - » sur un montant : remis à 0 (champ numérique obligatoire du levier).
+      if (isClearCell(row[header])) {
+        values[key] = 0;
+        continue;
+      }
+      const n = readNumber("Leviers", rowNumber, header, row[header], {
+        allowNegative,
+        large: unit === "ETP" ? LARGE_FTE : LARGE_AMOUNT_M,
+        unit,
+      });
       if (n === null) return reject();
-      if (n !== undefined) (values as Record<string, unknown>)[key] = n;
+      if (n !== undefined) {
+        values[key] = n;
+        computedInFile[header] = n;
+      }
     }
 
     if (hasL("Population impactée")) {
-      // Nombre de personnes (décision 2026-09-28) ; cellule vide = non renseigné.
-      const n = readNumber("Leviers", rowNumber, "Population impactée", row["Population impactée"]);
-      if (n === null) return reject();
-      values.popImpacted = n === undefined ? undefined : Math.max(0, Math.round(n));
+      // Nombre de personnes (décision 2026-09-28) ; vide = conservé, « - » = non renseigné.
+      if (isClearCell(row["Population impactée"])) values.popImpacted = undefined;
+      else {
+        const n = readNumber(
+          "Leviers",
+          rowNumber,
+          "Population impactée",
+          row["Population impactée"],
+          { allowNegative: false, large: LARGE_POPULATION }
+        );
+        if (n === null) return reject();
+        if (n !== undefined) values.popImpacted = Math.round(n);
+      }
     }
 
     const depHeader = "Dépendances (ID:type, séparées par ;)";
-    if (hasL(depHeader)) {
+    const depCell = hasL(depHeader) ? readTextCell(row[depHeader]) : { kind: "blank" as const };
+    if (depCell.kind === "clear") values.dependencies = [];
+    if (depCell.kind === "value") {
       const deps: LeverDependency[] = [];
       let depError = false;
-      str(row[depHeader])
+      depCell.value
         .split(";")
         .map((e) => e.trim())
         .filter(Boolean)
@@ -1052,7 +1250,7 @@ export function validateLeverImportRows(
     values.risk = existing?.risk ?? "low";
 
     if (errors.length > errorsBefore) return reject();
-    parsedLevers.push({ rowNumber, code: existing?.code ?? code, values });
+    parsedLevers.push({ rowNumber, code: existing?.code ?? code, values, computedInFile });
   });
 
   const parsedByCode = new Map(parsedLevers.map((p) => [normalizeLeverCode(p.code), p]));
@@ -1076,6 +1274,8 @@ export function validateLeverImportRows(
 
   // ---------- Feuille "Actions" ----------
   const actionsByLeverCode = new Map<string, { rowNumber: number; action: LeverAction }[]>();
+  /** Actions existantes déjà rapprochées, par levier : une action n'est fusionnée qu'une fois. */
+  const matchedActionIds = new Map<string, Map<string, number>>();
   let actionSeq = 0;
   if (sheets.actions !== null) {
     const actionSheet = canonicalizeSheet(sheets.actions, ACTION_IMPORT_HEADERS);
@@ -1103,6 +1303,8 @@ export function validateLeverImportRows(
           return;
         }
         const list = actionsByLeverCode.get(key) ?? [];
+        // Deux actions de même nom dans un levier : refusé (point 3) — le rapprochement par nom et
+        // la feuille Impacts (« Nom de l'action ») ne sauraient pas les distinguer.
         const dup = list.find((a) => nk(a.action.name) === nk(name));
         if (dup) {
           err("Actions", rowNumber, "duplicateAction", {
@@ -1113,7 +1315,26 @@ export function validateLeverImportRows(
           return;
         }
 
-        const prev = (existingByCode.get(key)?.actions ?? []).find((a) => nk(a.name) === nk(name));
+        // Rapprochement : colonne technique « ID action » (export) en priorité, sinon le nom ; une
+        // action existante n'est rapprochée qu'une fois.
+        const existingActions = existingByCode.get(key)?.actions ?? [];
+        const used = matchedActionIds.get(key) ?? new Map<string, number>();
+        const idRaw = hasA("ID action") ? str(row["ID action"]) : "";
+        if (idRaw && used.has(idRaw)) {
+          err("Actions", rowNumber, "duplicateActionId", {
+            id: idRaw,
+            code: leverCodeRaw,
+            row: used.get(idRaw)!,
+          });
+          return;
+        }
+        const prev =
+          (idRaw ? existingActions.find((a) => a.id === idRaw) : undefined) ??
+          existingActions.find((a) => !used.has(a.id) && nk(a.name) === nk(name));
+        if (prev) {
+          used.set(prev.id, rowNumber);
+          matchedActionIds.set(key, used);
+        }
         if (!prev) {
           const missing = (["Statut", "Date début", "Date fin"] as const).filter((h) => !hasA(h));
           if (missing.length > 0) {
@@ -1151,11 +1372,19 @@ export function validateLeverImportRows(
           }
           dates[key2] = d;
         }
-        const owner = hasA("Owner") ? str(row["Owner"]) || undefined : prev?.owner;
+        // Owner : vide = conservé, « - » = effacé (point 7).
+        const ownerCell = hasA("Owner") ? readTextCell(row["Owner"]) : { kind: "blank" as const };
+        const owner =
+          ownerCell.kind === "value"
+            ? ownerCell.value
+            : ownerCell.kind === "clear"
+              ? undefined
+              : prev?.owner;
 
         let action: LeverAction;
         if (prev) {
           action = { ...prev, name, owner, start: dates.start!, end: dates.end!, status: status! };
+          if (action.owner === undefined) delete action.owner;
           if (action.status !== "done") delete action.deliveredDate;
         } else {
           actionSeq += 1;
@@ -1253,7 +1482,12 @@ export function validateLeverImportRows(
           return;
         }
 
-        const amount = readNumber("Impacts", rowNumber, "Montant (€M)", row["Montant (€M)"]);
+        // Montant : toujours positif (le type donne le sens) ; hors d'échelle = à confirmer.
+        const amount = readNumber("Impacts", rowNumber, "Montant (€M)", row["Montant (€M)"], {
+          allowNegative: false,
+          large: LARGE_AMOUNT_M,
+          unit: "M€",
+        });
         if (amount === null) return;
         if (amount === undefined) {
           err("Impacts", rowNumber, "invalidNumber", { field: "Montant (€M)", value: "" });
@@ -1261,18 +1495,31 @@ export function validateLeverImportRows(
         }
         fields.amount = amount;
 
-        if (hasI("ETP")) {
-          const fte = readNumber("Impacts", rowNumber, "ETP", row["ETP"]);
+        // Colonnes optionnelles : vide = valeur conservée (impact rapproché), « - » = effacée
+        // (point 7) ; seule une colonne renseignée ou effacée pose une clé dans `fields`.
+        const optional = (header: ImpactHeader): CellText =>
+          hasI(header) ? readTextCell(row[header]) : { kind: "blank" };
+
+        const fteCell = optional("ETP");
+        if (fteCell.kind === "clear") fields.fteCount = undefined;
+        else if (fteCell.kind === "value") {
+          // Nombre d'ETP d'un impact ETP : positif (le sens vient de la colonne « Sens »).
+          const fte = readNumber("Impacts", rowNumber, "ETP", row["ETP"], {
+            allowNegative: type !== "fte",
+            large: LARGE_FTE,
+            unit: "ETP",
+          });
           if (fte === null) return;
           fields.fteCount = fte;
         }
 
-        if (hasI("Type de gain")) {
-          const raw = str(row["Type de gain"]);
-          const st = raw ? SAVING_TYPE_BY_LABEL.get(nk(raw)) : undefined;
-          if (raw && !st) {
+        const savingCell = optional("Type de gain");
+        if (savingCell.kind === "clear") fields.savingType = undefined;
+        else if (savingCell.kind === "value") {
+          const st = SAVING_TYPE_BY_LABEL.get(nk(savingCell.value));
+          if (!st) {
             err("Impacts", rowNumber, "unknownSavingType", {
-              value: raw,
+              value: savingCell.value,
               expected: Object.values(SAVING_TYPE_LABEL).join(", "),
             });
             return;
@@ -1284,68 +1531,78 @@ export function validateLeverImportRows(
           ["Date CAPEX", "capexDeploymentDate"],
           ["Date gain", "gainDate"],
         ] as const) {
-          if (!hasI(header)) continue;
+          const cell = optional(header);
+          if (cell.kind === "clear") fields[key2] = undefined;
+          if (cell.kind !== "value") continue;
           const d = readDate("Impacts", rowNumber, header, row[header]);
           if (d === null) return;
           fields[key2] = d;
         }
 
-        if (hasI("Poste de coût")) {
-          const raw = str(row["Poste de coût"]);
-          if (raw) {
-            const pnl = resolvePnlAccount(data.pnlAccounts, raw);
-            if (!pnl) {
-              err("Impacts", rowNumber, "unknownCostAccount", {
-                value: raw,
-                expected: data.pnlAccounts.map((p) => p.name || p.id).join(", "),
-              });
-              return;
-            }
-            fields.pnlMap = pnl.id;
-          } else fields.pnlMap = undefined;
+        const pnlCell = optional("Poste de coût");
+        if (pnlCell.kind === "clear") fields.pnlMap = undefined;
+        else if (pnlCell.kind === "value") {
+          const pnl = resolvePnlAccount(data.pnlAccounts, pnlCell.value);
+          if (!pnl) {
+            err("Impacts", rowNumber, "unknownCostAccount", {
+              value: pnlCell.value,
+              expected: data.pnlAccounts.map((p) => p.name || p.id).join(", "),
+            });
+            return;
+          }
+          fields.pnlMap = pnl.id;
         }
-        if (hasI("Centre de coût")) fields.costCenter = str(row["Centre de coût"]) || undefined;
-        if (hasI("Entité P&L")) fields.entity = str(row["Entité P&L"]) || undefined;
-        if (hasI("Technologie")) fields.technology = str(row["Technologie"]) || undefined;
+        for (const [header, key2] of [
+          ["Centre de coût", "costCenter"],
+          ["Entité P&L", "entity"],
+          ["Technologie", "technology"],
+        ] as const) {
+          const cell = optional(header);
+          if (cell.kind === "clear") fields[key2] = undefined;
+          else if (cell.kind === "value") fields[key2] = cell.value;
+        }
 
-        if (hasI("Mode")) {
-          const raw = str(row["Mode"]);
-          const mode = raw ? GAIN_MODE_BY_LABEL.get(nk(raw)) : undefined;
-          if (raw && !mode) {
-            err("Impacts", rowNumber, "unknownMode", { value: raw });
+        const modeCell = optional("Mode");
+        if (modeCell.kind === "clear") fields.gainRecurrence = undefined;
+        else if (modeCell.kind === "value") {
+          const mode = GAIN_MODE_BY_LABEL.get(nk(modeCell.value));
+          if (!mode) {
+            err("Impacts", rowNumber, "unknownMode", { value: modeCell.value });
             return;
           }
           fields.gainRecurrence = mode;
         }
-        if (hasI("Sens")) {
-          const raw = str(row["Sens"]);
-          const dir = raw ? FTE_DIRECTION_BY_LABEL.get(nk(raw)) : undefined;
-          if (raw && !dir) {
-            err("Impacts", rowNumber, "unknownDirection", { value: raw });
+        const dirCell = optional("Sens");
+        if (dirCell.kind === "clear") fields.fteDirection = undefined;
+        else if (dirCell.kind === "value") {
+          const dir = FTE_DIRECTION_BY_LABEL.get(nk(dirCell.value));
+          if (!dir) {
+            err("Impacts", rowNumber, "unknownDirection", { value: dirCell.value });
             return;
           }
           fields.fteDirection = dir;
         }
-        if (hasI("Statut impact")) {
-          const raw = str(row["Statut impact"]);
-          const st = raw ? IMPACT_STATUS_BY_LABEL.get(nk(raw)) : undefined;
-          if (raw && !st) {
-            err("Impacts", rowNumber, "unknownImpactStatus", { value: raw });
+        const statusCell = optional("Statut impact");
+        if (statusCell.kind === "clear") fields.status = undefined;
+        else if (statusCell.kind === "value") {
+          const st = IMPACT_STATUS_BY_LABEL.get(nk(statusCell.value));
+          if (!st) {
+            err("Impacts", rowNumber, "unknownImpactStatus", { value: statusCell.value });
             return;
           }
           fields.status = st;
         }
-        if (hasI("Nature de l'impact")) {
-          const raw = str(row["Nature de l'impact"]);
-          if (raw) {
-            const nat = natures.find((n) => nk(n.label) === nk(raw) || n.id === raw);
-            if (nat) fields.natureId = nat.id;
-            else
-              warn("Impacts", rowNumber, "unknownImpactNature", {
-                value: raw,
-                expected: natures.map((n) => n.label).join(", "),
-              });
-          } else fields.natureId = undefined;
+        const natureIdCell = optional("Nature de l'impact");
+        if (natureIdCell.kind === "clear") fields.natureId = undefined;
+        else if (natureIdCell.kind === "value") {
+          const raw = natureIdCell.value;
+          const nat = natures.find((n) => nk(n.label) === nk(raw) || n.id === raw);
+          if (nat) fields.natureId = nat.id;
+          else
+            warn("Impacts", rowNumber, "unknownImpactNature", {
+              value: raw,
+              expected: natures.map((n) => n.label).join(", "),
+            });
         }
 
         const natureForLabel = fields.nature ?? "oneoff";
@@ -1518,12 +1775,34 @@ export function validateLeverImportRows(
       }
     }
 
+    // Avancement : TOUJOURS calculé depuis le plan d'action (`leverProgressPct`) — la colonne
+    // « Progression (%) » n'est jamais appliquée (point 1 : avant, un levier sans action revenait
+    // à la valeur exportée, 0 ou 100, au lieu de sa valeur stockée → faux « mis à jour »).
+    values.progress = existing?.progress ?? 0;
+    const inFile = parsed?.computedInFile ?? {};
+    const rowNumber = parsed?.rowNumber ?? 0;
+    /** Signale une colonne calculée dont la valeur du fichier diffère de la valeur calculée. */
+    const flagIgnored = (
+      header: LeverHeader,
+      computed: number,
+      code: "computedFromActions" | "computedFromImpacts" | "computedFromPlan"
+    ) => {
+      const value = inFile[header];
+      if (value === undefined || sameNumber(value, computed)) return;
+      warn("Leviers", rowNumber, code, { field: header, value, computed: round6(computed) });
+    };
+    // Référence = valeur écrite par l'export (levier existant), ou calculée (nouveau levier).
+    flagIgnored(
+      "Progression (%)",
+      leverProgressPct(existing ?? { actions: values.actions, status: values.status }),
+      "computedFromActions"
+    );
+
     if (existing) {
-      // Champs dérivés : l'avancement suit le plan d'action ; les montants suivent les impacts
-      // (ou le plan figé / le réactualisé) — les valeurs du fichier ne s'appliquent donc pas dans ces
-      // cas : l'export écrit le réactualisé affiché (`displayedReforecastSnapshot`), qui diffère alors
-      // des champs courants.
-      if ((values.actions ?? []).length > 0) values.progress = existing.progress;
+      // Champs dérivés : les montants suivent les impacts (ou le plan figé / le réactualisé) — les
+      // valeurs du fichier ne s'appliquent donc pas dans ces cas : l'export écrit le réactualisé
+      // affiché (`displayedReforecastSnapshot`), qui diffère alors des champs courants. Une valeur
+      // modifiée dans le fichier est signalée (point 2), jamais ignorée en silence.
       const hasImpacts = (values.impacts ?? []).length > 0;
       if (hasImpacts || existing.lockedPlan || existing.reforecast) {
         values.grossSavings = existing.grossSavings;
@@ -1531,8 +1810,18 @@ export function validateLeverImportRows(
         values.opexOneOff = existing.opexOneOff;
         values.opexRec = existing.opexRec;
         values.capex = existing.capex;
+        const source = hasImpacts ? "computedFromImpacts" : "computedFromPlan";
+        const refo = displayedReforecastSnapshot(existing);
+        flagIgnored("Impact estimé brut (€M)", refo.grossSavings, source);
+        flagIgnored("Impact estimé net (€M)", displayedReforecastNet(existing).value, source);
+        flagIgnored("CAPEX (€M)", refo.capex, source);
+        flagIgnored("OPEX one-off (€M)", refo.opexOneOff, source);
+        flagIgnored("OPEX récurrent (€M/an)", refo.opexRec, source);
       }
-      if (hasImpacts) values.fteImpact = existing.fteImpact;
+      if (hasImpacts) {
+        values.fteImpact = existing.fteImpact;
+        flagIgnored("Impact estimé (ETP)", existing.fteImpact, "computedFromImpacts");
+      }
 
       if (Object.keys(leverImportPatch(existing, values)).length === 0) {
         unchangedCodes.push(existing.code);
@@ -1556,6 +1845,12 @@ export function validateLeverImportRows(
     actionsRemoved,
     impactsRemoved,
     actionsSheetPresent: sheets.actions !== null,
+    needsConfirmation: warnings.some((w) => w.needsConfirmation),
     toCreateWorkstreams: Array.from(newWorkstreamsByName.values()),
   };
+}
+
+/** Valeur affichée dans un message (bruit flottant retiré). */
+function round6(n: number): number {
+  return Math.round(n * 1e6) / 1e6;
 }

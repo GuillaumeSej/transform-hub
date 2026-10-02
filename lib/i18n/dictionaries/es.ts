@@ -1326,7 +1326,6 @@ const es: Record<string, string> = {
   "shared.leverImportButton.templateDownloadedBody":
     "3 hojas: Palancas (Código = clave), Acciones (Código Palanca = FK), Impactos (Código Palanca + Nombre de la acción = FK). Elimine la fila de ejemplo antes de completar el archivo.",
   "shared.leverImportButton.workstreamsCreatedNote": "{n} proyecto(s) creado(s)",
-  "shared.leverImportButton.ignoredRowsNote": "{n} fila(s) ignorada(s)",
   "shared.leverImportButton.importDoneBody":
     "{created} palanca(s) creada(s) · {updated} actualizada(s)",
   "shared.leverImportButton.createCountLabel": "palanca(s) a crear",
@@ -1351,6 +1350,12 @@ const es: Record<string, string> = {
     "Se eliminarán {n} línea(s) de impacto existente(s)",
   "shared.leverImportButton.impactsRemovedBody":
     "porque no figuran en la pestaña Impacts del archivo: {list}.",
+  "shared.leverImportButton.emptyCellRule":
+    "Celda vacía = se conserva el valor actual; «-» = se borra el campo. «Progression (%)» y los importes de una palanca con impactos se calculan: su modificación se ignora.",
+  "shared.leverImportButton.fixErrorsFirst":
+    "No se puede importar mientras el archivo contenga errores: corrija las filas siguientes y vuelva a cargar el archivo.",
+  "shared.leverImportButton.confirmLargeValues":
+    "He comprobado los valores inusualmente altos señalados (unidad M€ / ETC) y confirmo la importación.",
   "shared.leverImportButton.warningsTitle": "Advertencias (importación no bloqueada)",
   "shared.exportButton.truncatedTitle": "Descripciones truncadas",
   "shared.exportButton.truncatedBody":
@@ -1416,6 +1421,19 @@ const es: Record<string, string> = {
     'Naturaleza de impacto "{value}" desconocida: valor ignorado (esperado: {expected})',
   "shared.leverImport.msg.unknownPopulation":
     'Población impactada "{value}" no encontrada entre los paquetes de trabajo: valor ignorado',
+  "shared.leverImport.msg.duplicateActionId":
+    'Identificador de acción "{id}" duplicado para la palanca "{code}" (ya usado en la fila {row})',
+  "shared.leverImport.msg.negativeNotAllowed":
+    '"{field}" no puede ser negativo (valor leído: {value})',
+  "shared.leverImport.msg.computedFromActions":
+    '"{field}": valor calculado a partir del plan de acción ({computed}) — modificación ignorada (archivo: {value})',
+  "shared.leverImport.msg.computedFromImpacts":
+    '"{field}": valor calculado a partir de los impactos de la palanca ({computed}) — modificación ignorada (archivo: {value})',
+  "shared.leverImport.msg.computedFromPlan":
+    '"{field}": valor calculado a partir del plan congelado / la reprevisión ({computed}) — modificación ignorada (archivo: {value})',
+  "shared.leverImport.msg.valueClamped": '"{field}": {value} fuera de rango, limitado a {bound}',
+  "shared.leverImport.msg.largeValue":
+    '"{field}" = {value} {unit}: valor inusualmente alto (más de {threshold}) — compruebe la unidad antes de confirmar',
   "shared.leverImport.msg.formulaNoValue":
     "Celda {cell}: fórmula sin valor calculado (libro no recalculado) — abra y guarde el archivo en Excel antes de importar.",
 
@@ -1569,6 +1587,8 @@ const es: Record<string, string> = {
 
   // ─── shared.leverForm/actionForm/movementForm/manualAlertForm/dependencyEditor (remediación i18n) ─
   "shared.actionForm.actionName": "Nombre de la acción",
+  "shared.actionForm.duplicateName":
+    "Otra acción de esta palanca ya tiene este nombre: elija un nombre distinto.",
   "shared.actionForm.actionNamePlaceholder": "Ej.: Lanzar la RFP",
   "shared.actionForm.owner": "Responsable",
   "shared.actionForm.startDate": "Fecha de inicio",
@@ -2990,6 +3010,9 @@ const es: Record<string, string> = {
   "impactsEditor.label": "Etiqueta",
   "impactsEditor.amount": "Importe (€M)",
   "impactsEditor.oneOff": "Puntual",
+  "impactsEditor.workingCapitalBadge": "Capital circulante — tesorería, fuera de los ahorros",
+  "impactsEditor.workingCapitalHint":
+    "Impacto en capital circulante (tesorería): no se cuenta en los ahorros (bruto, neto, realizado, curva, P&L).",
   "impactsEditor.untitled": "Impacto sin título",
   "impactsEditor.statusPlanned": "Planificado",
   "impactsEditor.statusDone": "Realizado",
@@ -3138,6 +3161,8 @@ const es: Record<string, string> = {
   "leverDetail.trajectory.detailOpexOneOff": "OPEX puntual",
   "leverDetail.trajectory.detailOpexRec": "OPEX recurrente",
   "leverDetail.trajectory.detailEmpty": "Ningún impacto en este periodo.",
+  "leverDetail.workingCapitalNote":
+    "Impacto en capital circulante (tesorería, fuera de los ahorros): {amount}",
   "leverDetail.oneOff": "OPEX puntual",
   "chart.waterfall.realized": "Realizado",
   "chart.waterfall.remaining": "Pendiente",

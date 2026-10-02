@@ -484,6 +484,25 @@ function recomputeLeverProgress(lever: Lever): Lever {
   return nextStatus !== base.status ? applyPlanLock(next) : next;
 }
 
+/** Clé de comparaison d'un nom d'action : sans casse, accents ni espaces superflus — même règle que
+ *  le rapprochement des actions à l'import Excel (lib/leverExcelImport.ts). */
+function actionNameKey(name: string): string {
+  return name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** Le nom `name` est-il déjà porté par une AUTRE action du levier (`excludeId` = action en cours
+ *  d'édition) ? Deux actions de même nom sont interdites dans un levier (audit lot 4, point 3) :
+ *  l'aller-retour Excel les rapproche par nom et en perdait une. */
+export function isActionNameTaken(
+  actions: Pick<LeverAction, "id" | "name">[],
+  name: string,
+  excludeId?: string
+): boolean {
+  const key = actionNameKey(name);
+  if (!key) return false;
+  return actions.some((a) => a.id !== excludeId && actionNameKey(a.name) === key);
+}
+
 /** Règle avancement → statut d'une action (pur). `pct` est borné à 0-100. 100 → "done"
  *  (Réalisé) ; >0 sur une action "todo" → "in_progress" ; quitter 100 → repasse "in_progress". */
 export function applyActionProgress(action: LeverAction, pct: number): LeverAction {
