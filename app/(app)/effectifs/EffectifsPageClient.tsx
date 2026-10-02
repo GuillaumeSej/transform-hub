@@ -400,6 +400,7 @@ export function EffectifsPageClient() {
             chantierActions={chantierActions}
             staffing={staffing}
             knownDepartments={Object.keys(fteByDept)}
+            fteByDept={fteByDept}
             onImport={async (entries) => {
               for (const entry of entries) await saveChantierStaffing(entry);
             }}

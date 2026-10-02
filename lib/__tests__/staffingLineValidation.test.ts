@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   STAFFING_LINE_MESSAGES,
-  STAFFING_MAX_FTE,
+  checkStaffingLine,
   isIsoDate,
   isStaffingLineMissingDates,
   parseFte,
@@ -78,11 +78,58 @@ describe("validateStaffingLine", () => {
     expect(validateStaffingLine({ ...valid, fte: "abc" }).errors.fte).toBe("fteInvalid");
   });
 
-  it(`caps a line at STAFFING_MAX_FTE (${STAFFING_MAX_FTE}) ETP — same rule as both imports`, () => {
-    expect(validateStaffingLine({ ...valid, fte: "5" }).valid).toBe(true);
-    expect(validateStaffingLine({ ...valid, fte: "5,5" }).errors.fte).toBe("fteTooHigh");
-    expect(validateStaffingLine({ ...valid, fte: "8" }).errors.fte).toBe("fteTooHigh");
-    expect(validateStaffingLine({ ...valid, fte: "8" }).fte).toBeNull();
+  it("no fixed cap any more: 8 ETP is accepted (same rule as both imports)", () => {
+    const r = validateStaffingLine({ ...valid, fte: "8" });
+    expect(r.valid).toBe(true);
+    expect(r.errors).toEqual({});
+    expect(r.fte).toBe(8);
+    expect(r.warnings).toEqual([]);
+    // Équipe de 14 ETP : 8 ETP reste en deçà, aucun avertissement.
+    expect(
+      validateStaffingLine({ ...valid, fte: "8" }, { teamAvailableFte: { Data: 14 } }).warnings
+    ).toEqual([]);
+  });
+
+  it("warns (non-blocking) when the line exceeds the team's available FTE in the FTE base", () => {
+    const rules = { knownTeams: ["Data", "RH"], teamAvailableFte: { Data: 14, RH: 0 } };
+    const over = validateStaffingLine({ ...valid, fte: "50" }, rules);
+    expect(over.valid).toBe(true);
+    expect(over.errors).toEqual({});
+    expect(over.fte).toBe(50);
+    expect(over.warnings).toEqual(["fteAboveTeam"]);
+    expect(over.teamAvailableFte).toBe(14);
+    // Pile l'effectif : pas d'avertissement ; équipe saisie avec une autre casse : même équipe.
+    expect(validateStaffingLine({ ...valid, fte: "14" }, rules).warnings).toEqual([]);
+    expect(validateStaffingLine({ ...valid, team: " data ", fte: "14,5" }, rules).warnings).toEqual(
+      ["fteAboveTeam"]
+    );
+    // Disponible inconnu (0, équipe absente du référentiel chiffré, base non chargée) : silence.
+    expect(validateStaffingLine({ ...valid, team: "RH", fte: "50" }, rules).warnings).toEqual([]);
+    expect(
+      validateStaffingLine({ ...valid, fte: "50" }, { knownTeams: ["Data"], teamAvailableFte: {} })
+        .warnings
+    ).toEqual([]);
+    expect(
+      validateStaffingLine({ ...valid, fte: "50" }, { knownTeams: ["Data"] }).warnings
+    ).toEqual([]);
+    // Valeur illisible, nulle ou négative : toujours BLOQUANTE, jamais un simple avertissement.
+    for (const [fte, code] of [
+      ["-1", "fteNotPositive"],
+      ["0", "fteNotPositive"],
+      ["abc", "fteInvalid"],
+    ] as const) {
+      const r = validateStaffingLine({ ...valid, fte }, rules);
+      expect(r.valid, fte).toBe(false);
+      expect(r.errors.fte, fte).toBe(code);
+      expect(r.warnings, fte).toEqual([]);
+    }
+    // Même règle sur des valeurs déjà lues (imports Excel).
+    expect(
+      checkStaffingLine(
+        { team: "Data", fte: 50, startDate: "2026-01-01", endDate: "2026-06-30" },
+        rules
+      ).warnings
+    ).toEqual(["fteAboveTeam"]);
   });
 
   it("checks the team against the FTE base when it is provided", () => {
@@ -102,10 +149,14 @@ describe("validateStaffingLine", () => {
     expect(validateStaffingLine({ ...valid, team: "Astrologie" }).valid).toBe(true);
   });
 
-  it("renders exact translated messages with the cap filled in", () => {
+  it("renders exact translated messages with the line, team and available FTE filled in", () => {
     const t = (_key: string, fallback?: string) => fallback ?? "";
-    expect(staffingLineMessage(t, "fteTooHigh")).toBe(
-      "Au plus 5 ETP par ligne : répartissez un besoin plus important sur plusieurs lignes."
+    const over = validateStaffingLine(
+      { ...valid, fte: "50" },
+      { knownTeams: ["Data"], teamAvailableFte: { Data: 14 } }
+    );
+    expect(staffingLineMessage(t, "fteAboveTeam", over)).toBe(
+      "50 ETP sur cette ligne, au-delà de l'effectif de l'équipe Data dans la base ETP (14 ETP) — vérifiez la saisie."
     );
     expect(staffingLineMessage(t, "fteInvalid")).toBe(
       "Le nombre d'ETP doit être un nombre (ex. 0,5)."

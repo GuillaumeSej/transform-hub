@@ -1,5 +1,6 @@
 import type { ChantierStaffing } from "@/types";
 import { normalizeHeaderKey } from "@/lib/excelParse";
+import { formatFte } from "@/lib/format";
 
 /**
  * Validation PURE d'une ligne de staffing (« ETP mobilisés ») — RÈGLE UNIQUE partagée par :
@@ -9,32 +10,27 @@ import { normalizeHeaderKey } from "@/lib/excelParse";
  *   du plan stratégique (`lib/strategicExcelImport.ts`), via `checkStaffingLine` (valeurs déjà lues
  *   dans les cellules par `lib/excelParse.ts`).
  * Une même ligne obéit ainsi aux mêmes règles quel que soit l'endroit où elle est saisie (audit
- * lot 4 : l'écran acceptait 8 ETP, l'import Effectifs refusait > 5, l'import du plan acceptait 7 ETP
- * et n'importe quelle équipe).
+ * lot 4 : l'écran, l'import Effectifs et l'import du plan appliquaient chacun leurs propres bornes
+ * et l'import du plan acceptait n'importe quelle équipe).
  *
  * Règles :
  * - équipe OBLIGATOIRE — jamais pré-remplie à l'écran ; elle doit exister dans la base ETP
  *   (`knownTeams`, comparaison insensible à la casse/aux accents/aux espaces). Exception : une
  *   ligne EXISTANTE dont l'équipe a quitté la base ETP depuis la saisie reste modifiable (simple
  *   avertissement `teamLeftBase`) ;
- * - nombre d'ETP OBLIGATOIRE, nombre (virgule décimale acceptée), strictement positif et au plus
- *   `STAFFING_MAX_FTE` par ligne ;
+ * - nombre d'ETP OBLIGATOIRE, nombre (virgule décimale acceptée), strictement positif — AUCUN
+ *   plafond fixe (décision PO : l'ancien plafond de 5 ETP par ligne n'était qu'un garde-fou
+ *   anti-faute de frappe, pas une règle métier) ;
+ * - nombre d'ETP SUPÉRIEUR à l'effectif disponible de l'équipe dans la base ETP : simple
+ *   AVERTISSEMENT `fteAboveTeam`, non bloquant (même « disponible » que le taux de staffing,
+ *   `availableForTeam` de `lib/staffingRate.ts`) ; disponible inconnu (0 ou non chargé) = pas
+ *   d'avertissement ;
  * - dates de début ET de fin OBLIGATOIRES, fin ≥ début ;
  * - dates hors de la période du projet de rattachement : simple AVERTISSEMENT, non bloquant.
  *
  * Retourne des CODES (pas de libellés) : la traduction reste l'affaire de l'appelant (`t()` pour
  * l'écran, gabarits d'anomalie pour les imports).
  */
-
-/**
- * Plafond d'ETP d'UNE ligne de staffing (écran ET imports). Une ligne = une équipe sur un
- * chantier/projet pendant une période : au-delà de 5 ETP, la valeur est presque toujours une faute
- * de frappe (« 80 » pour 0,8, « 50 » pour 50 %), et un besoin réellement plus important se saisit
- * en plusieurs lignes (par projet ou par période), ce qui rend aussi le plan de charge lisible.
- * Valeur déjà appliquée par l'import Effectifs depuis l'audit du 24/09/2026 : aucune ligne
- * importée n'est rendue invalide par l'alignement de l'écran.
- */
-export const STAFFING_MAX_FTE = 5;
 
 export type StaffingLineInput = {
   team: string;
@@ -49,14 +45,13 @@ export type StaffingLineError =
   | "fteRequired"
   | "fteInvalid"
   | "fteNotPositive"
-  | "fteTooHigh"
   | "startRequired"
   | "startInvalid"
   | "endRequired"
   | "endInvalid"
   | "endBeforeStart";
 
-export type StaffingLineWarning = "outsideProject" | "teamLeftBase";
+export type StaffingLineWarning = "outsideProject" | "teamLeftBase" | "fteAboveTeam";
 
 export type StaffingLineValidation = {
   valid: boolean;
@@ -66,6 +61,9 @@ export type StaffingLineValidation = {
   fte: number | null;
   /** Équipe retenue : orthographe de la base ETP quand elle y figure, sinon la saisie. */
   team: string;
+  /** Effectif disponible de l'équipe dans la base ETP (`teamAvailableFte`) quand il est connu
+   *  (> 0), `null` sinon — repris par le message de l'avertissement `fteAboveTeam`. */
+  teamAvailableFte: number | null;
 };
 
 /** Contexte de validation, commun à l'écran et aux imports. */
@@ -79,6 +77,11 @@ export type StaffingLineRules = {
   /** Équipe déjà enregistrée sur la ligne modifiée : acceptée même si elle a quitté la base ETP
    *  (avertissement `teamLeftBase` au lieu de l'erreur `teamUnknown`). */
   currentTeam?: string | null;
+  /** Effectif DISPONIBLE par équipe dans la base ETP (`useCompanyDepartments().fteByDept`, même
+   *  notion que le taux de staffing — voir `availableForTeam`, `lib/staffingRate.ts`). Une ligne
+   *  dont le nombre d'ETP le dépasse reçoit l'avertissement `fteAboveTeam` (non bloquant). Absent,
+   *  équipe absente ou disponible ≤ 0 = inconnu : pas d'avertissement. */
+  teamAvailableFte?: Readonly<Record<string, number>>;
 };
 
 /** Valeurs d'une ligne DÉJÀ LUES (cellules Excel ou champs de formulaire) :
@@ -92,8 +95,7 @@ export type StaffingLineValues = {
 };
 
 /** Saisie numérique tolérante à la virgule décimale. `null` = invalide (vide compris) : un ETP doit
- *  être strictement positif, une ligne à 0 ETP n'aurait aucun sens dans les agrégats. (Le plafond
- *  `STAFFING_MAX_FTE` est contrôlé par `validateStaffingLine`.) */
+ *  être strictement positif, une ligne à 0 ETP n'aurait aucun sens dans les agrégats. */
 export function parseFte(raw: string): number | null {
   const n = readFteText(raw);
   return typeof n === "number" && n > 0 ? n : null;
@@ -125,6 +127,21 @@ export function isStaffingLineMissingDates(line: {
 
 const teamKey = (v: string) => normalizeHeaderKey(v);
 
+/** Disponible de l'équipe dans la base ETP (orthographe exacte, comme `availableForTeam`, sinon
+ *  comparaison normalisée) ; `null` = inconnu (équipe absente, disponible nul ou négatif). */
+function teamAvailable(
+  byTeam: Readonly<Record<string, number>> | undefined,
+  team: string
+): number | null {
+  if (!byTeam || team === "") return null;
+  let value: number | undefined = byTeam[team];
+  if (value === undefined) {
+    const key = Object.keys(byTeam).find((k) => teamKey(k) === teamKey(team));
+    value = key === undefined ? undefined : byTeam[key];
+  }
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
 /**
  * Cœur de la règle, sur des valeurs déjà lues — utilisé tel quel par les imports Excel et, après
  * lecture des champs texte, par `validateStaffingLine` (écran).
@@ -152,7 +169,12 @@ export function checkStaffingLine(
   if (fte === undefined) errors.fte = "fteRequired";
   else if (fte === null || !Number.isFinite(fte)) errors.fte = "fteInvalid";
   else if (fte <= 0) errors.fte = "fteNotPositive";
-  else if (fte > STAFFING_MAX_FTE) errors.fte = "fteTooHigh";
+
+  // Plus de plafond fixe : au-delà de l'effectif de l'équipe dans la base ETP, simple
+  // avertissement (faute de frappe probable, « 80 » pour 0,8) — l'enregistrement reste possible.
+  const available = errors.team ? null : teamAvailable(rules.teamAvailableFte, team);
+  if (!errors.fte && available !== null && (fte as number) > available + 1e-9)
+    warnings.push("fteAboveTeam");
 
   const start = values.startDate;
   const end = values.endDate;
@@ -178,6 +200,7 @@ export function checkStaffingLine(
     warnings,
     fte: errors.fte ? null : (fte as number),
     team,
+    teamAvailableFte: available,
   };
 }
 
@@ -191,6 +214,7 @@ export function validateStaffingLine(
     projectRangeOrRules &&
     ("knownTeams" in projectRangeOrRules ||
       "currentTeam" in projectRangeOrRules ||
+      "teamAvailableFte" in projectRangeOrRules ||
       "projectRange" in projectRangeOrRules)
       ? (projectRangeOrRules as StaffingLineRules)
       : { projectRange: projectRangeOrRules as StaffingLineRules["projectRange"] };
@@ -210,8 +234,8 @@ export function validateStaffingLine(
   );
 }
 
-/** Clés i18n + libellé français de repli pour chaque code d'erreur/avertissement (`{max}` =
- *  `STAFFING_MAX_FTE`, à remplacer par l'appelant — voir `staffingLineMessage`). */
+/** Clés i18n + libellé français de repli pour chaque code d'erreur/avertissement (`{fte}`,
+ *  `{team}` et `{dispo}` remplis par `staffingLineMessage`). */
 export const STAFFING_LINE_MESSAGES: Record<
   StaffingLineError | StaffingLineWarning,
   [key: string, fallback: string]
@@ -228,9 +252,9 @@ export const STAFFING_LINE_MESSAGES: Record<
     "staffing.validation.fteNotPositive",
     "Le nombre d'ETP doit être strictement positif.",
   ],
-  fteTooHigh: [
-    "staffing.validation.fteTooHigh",
-    "Au plus {max} ETP par ligne : répartissez un besoin plus important sur plusieurs lignes.",
+  fteAboveTeam: [
+    "staffing.validation.fteAboveTeam",
+    "{fte} ETP sur cette ligne, au-delà de l'effectif de l'équipe {team} dans la base ETP ({dispo} ETP) — vérifiez la saisie.",
   ],
   startRequired: ["staffing.validation.startRequired", "La date de début est obligatoire."],
   startInvalid: ["staffing.validation.startInvalid", "Date de début invalide."],
@@ -341,11 +365,23 @@ export function matchStaffingRows<T extends StaffingMatchRow>(
   return { duplicateIds, unknownIds };
 }
 
-/** Message traduit d'un code (gabarit `{max}` rempli). */
+/** ETP affiché dans un message (2 décimales au plus, langue active). */
+export function formatStaffingFte(value: number): string {
+  return formatFte(value, { maximumFractionDigits: 2 });
+}
+
+/** Message traduit d'un code ; `{fte}`, `{team}` et `{dispo}` remplis depuis la validation. */
 export function staffingLineMessage(
   t: (key: string, fallback?: string) => string,
-  code: StaffingLineError | StaffingLineWarning
+  code: StaffingLineError | StaffingLineWarning,
+  validation?: Pick<StaffingLineValidation, "fte" | "team" | "teamAvailableFte">
 ): string {
   const [key, fallback] = STAFFING_LINE_MESSAGES[code];
-  return t(key, fallback).replace("{max}", String(STAFFING_MAX_FTE));
+  const vars: Record<string, string> = {
+    fte: validation?.fte != null ? formatStaffingFte(validation.fte) : "",
+    team: validation?.team ?? "",
+    dispo:
+      validation?.teamAvailableFte != null ? formatStaffingFte(validation.teamAvailableFte) : "",
+  };
+  return t(key, fallback).replace(/\{(fte|team|dispo)\}/g, (_m, name: string) => vars[name]);
 }

@@ -2036,7 +2036,7 @@ const en: Record<string, string> = {
   "strategicImport.staffingCountLabel": "staffing row(s) to create",
   "strategicImport.templateDownloadedTitle": "Template downloaded",
   "strategicImport.templateDownloadedBody":
-    'Read-me (guide) + 6 sheets: Axes (Code = key), Work packages (Axis Codes separated by ; = FK, accepts several axes), Projects (Work Package Code = FK, "Maturity stage" optional), Deliverables (Project Code = FK, optional), Indicators (Axis Code OR Work Package Code = FK, "Baseline value" optional). Staffing (optional, Work Package Code = FK). Delete the example rows before filling in.',
+    'Read-me (guide) + 6 sheets: Axes (Code = key), Work packages (Axis Codes separated by ; = FK, accepts several axes), Projects (Work Package Code = FK, "Maturity stage" optional), Deliverables (Project Code = FK, optional), Indicators (Axis Code OR Work Package Code = FK, "Baseline value" optional). Staffing (optional, Work Package Code = FK). Équipes tab = reference of the FTE base teams (ignored on import). Delete the example rows before filling in.',
   "strategicImport.ignoredRowsNote": "{n} row(s) ignored",
   "strategicImport.importDoneBody":
     "{axes} axis/axes · {chantiers} work package(s) · {actions} project(s) · {indicators} indicator(s) created",
@@ -2116,8 +2116,8 @@ const en: Record<string, string> = {
     "“{name}” matches no account: kept as text, with no effect on visibility or approvals ({count} reference(s))",
   "strategicImport.msg.personAmbiguous":
     "“{name}” matches several accounts ({usernames}): not linked — enter the exact username",
-  "strategicImport.msg.staffingFteTooHigh":
-    '"{column}" ({value}) exceeds the cap of {max} FTEs per line — split the need across several lines',
+  "strategicImport.msg.staffingFteAboveTeam":
+    "{fte} FTE on this line, above the headcount of team {team} in the FTE base ({dispo} FTE) — check the entry",
   "strategicImport.msg.staffingUnknownTeam":
     'Team "{value}" not in the FTE base (expected: {expected})',
   "strategicImport.msg.staffingNoTeams": "no team in the FTE base",
@@ -2401,8 +2401,8 @@ const en: Record<string, string> = {
   "staffing.validation.endBeforeStart": "End date must be on or after the start date.",
   "staffing.validation.outsideProject": "Warning: these dates fall outside the project period.",
   "staffing.validation.fteNotPositive": "The number of FTEs must be strictly positive.",
-  "staffing.validation.fteTooHigh":
-    "At most {max} FTEs per line: split a larger need across several lines.",
+  "staffing.validation.fteAboveTeam":
+    "{fte} FTE on this line, above the headcount of team {team} in the FTE base ({dispo} FTE) — check the entry.",
   "staffing.validation.teamUnknown": "This team does not exist in the FTE base.",
   "staffing.validation.teamLeftBase": "Warning: this team is no longer in the FTE base.",
 
@@ -2562,7 +2562,7 @@ const en: Record<string, string> = {
   "staffingImport.lineLabel": "Row",
   "staffingImport.templateDownloadedTitle": "Template downloaded",
   "staffingImport.templateDownloadedBody":
-    "Columns: Work package (exact name), Function (team from the FTE base), FTE (at most 5 per line), Start date and End date (required), Lever (optional, exact name), Note (optional), Line ID (filled in by the export, leave empty for a new line). An existing line is found by its line ID (otherwise work package + function + dates + lever) and updated rather than duplicated. Empty cell = value kept; a dash “-” in Note clears it.",
+    "Columns: Work package (exact name), Function (exact name of a team from the Équipes tab — teams are created only in the FTE base), FTE (> 0; above the team's available headcount, warning only), Start date and End date (required), Lever (optional, exact name), Note (optional), Line ID (filled in by the export, leave empty for a new line). An existing line is found by its line ID (otherwise work package + function + dates + lever) and updated rather than duplicated. Empty cell = value kept; a dash “-” in Note clears it. The Équipes tab (FTE base teams and available headcount) is ignored on import.",
   "staffingImport.successMessage": "Import complete",
   "staffingImport.importDoneBody": "{created} line(s) created · {updated} line(s) updated",
   "staffingImport.errorTitle": "Import failed",
@@ -3475,8 +3475,8 @@ const en: Record<string, string> = {
   "staffingImport.issue.missingFunction": '"Fonction" is required (team from the FTE base)',
   "staffingImport.issue.missingFte": '"ETP" is required',
   "staffingImport.issue.fteNotPositive": '"ETP" must be strictly positive (read: {value})',
-  "staffingImport.issue.fteTooHigh":
-    '"ETP" ({value}) exceeds the cap of {max} FTEs per line — split the need across several lines',
+  "staffingImport.issue.fteAboveTeam":
+    "{fte} FTE on this line, above the headcount of team {team} in the FTE base ({dispo} FTE) — check the entry",
   "staffingImport.issue.missingDate": '"{column}" is required (date DD/MM/YYYY)',
   "staffingImport.issue.datesMissing":
     "Existing line without a start or end date — dates to be completed",

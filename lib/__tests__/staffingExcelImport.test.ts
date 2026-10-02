@@ -4,9 +4,14 @@ import {
   STAFFING_IMPORT_HEADERS,
   STAFFING_IMPORT_ISSUES,
   STAFFING_IMPORT_SHEET_NAME,
+  STAFFING_TEAMS_EMPTY_TEXT,
+  STAFFING_TEAMS_RULE,
+  STAFFING_TEAMS_SHEET_NAME,
   buildStaffingExportWorkbook,
+  buildStaffingTeamsRows,
   buildStaffingTemplateRows,
   buildStaffingTemplateWorkbook,
+  readStaffingImportSheet,
   staffingToExcelRows,
   validateStaffingImportRows,
 } from "@/lib/staffingExcelImport";
@@ -23,6 +28,8 @@ const programId = "P1";
 // Round 13 : la colonne "Fonction" matche désormais une équipe RÉELLE de la base ETP entreprise
 // (plus l'ancienne union fermée à 9 valeurs) — voir `validateStaffingImportRows`.
 const knownDepartments = ["RH", "IT / SI"];
+/** Effectif disponible par équipe (base ETP) — feuille "Équipes" et avertissement ETP > effectif. */
+const fteByTeam: Record<string, number> = { RH: 14, "IT / SI": 3.456 };
 
 function baseChantier(overrides: Partial<Chantier> = {}): Chantier {
   return {
@@ -234,7 +241,8 @@ describe("validateStaffingImportRows — contrôles de l'audit du 24/09/2026", (
       [baseChantier()],
       [baseAction()],
       existing,
-      knownDepartments
+      knownDepartments,
+      fteByTeam
     );
 
   it("date illisible ou impossible = erreur (plus de repli silencieux sur une date vide)", () => {
@@ -257,27 +265,64 @@ describe("validateStaffingImportRows — contrôles de l'audit du 24/09/2026", (
     expect(ko.errors.map((e) => e.code)).toEqual(["startAfterEnd"]);
   });
 
-  it("ETP borné : 0 < ETP ≤ 5, messages distincts (illisible / non positif / plafond)", () => {
+  it("ETP > 0 sans plafond fixe ; au-delà de l'effectif de l'équipe = avertissement, ligne importée", () => {
     const result = run([
       baseRow({ ETP: 0 }),
-      baseRow({ ETP: "6", Fonction: "IT / SI" }),
+      baseRow({ ETP: "8", Fonction: "IT / SI" }),
       baseRow({ ETP: "abc", "Date fin": "2026-07-31" }),
-      baseRow({ ETP: 5, "Date début": "2026-02-01" }),
+      baseRow({ ETP: 8, "Date début": "2026-02-01" }),
       baseRow({ ETP: "", "Date début": "2026-03-01" }),
+      baseRow({ ETP: 50, "Date début": "2026-04-01" }),
+      baseRow({ ETP: -1, "Date début": "2026-05-01" }),
     ]);
     expect(result.errors.map((e) => [e.rowNumber, e.code])).toEqual([
       [2, "fteNotPositive"],
-      [3, "fteTooHigh"],
       [4, "invalidFte"],
       [6, "missingFte"],
+      [8, "fteNotPositive"],
     ]);
     expect(result.errors.map((e) => e.reason)).toEqual([
       '"ETP" doit être strictement positif (lu : 0)',
-      '"ETP" (6) dépasse le plafond de 5 ETP par ligne — répartissez le besoin sur plusieurs lignes',
       '"ETP" doit être un nombre, ex. 0,5 (lu : "abc")',
       '"ETP" est obligatoire',
+      '"ETP" doit être strictement positif (lu : -1)',
     ]);
-    expect(result.rows).toHaveLength(1);
+    // 8 ETP pour IT / SI (3,46 ETP) et 50 ETP pour RH (14 ETP) : avertis mais importés ; 8 ETP
+    // pour RH reste sous l'effectif de l'équipe.
+    expect(result.warnings.map((w) => [w.rowNumber, w.code])).toEqual([
+      [3, "fteAboveTeam"],
+      [7, "fteAboveTeam"],
+    ]);
+    expect(result.warnings.map((w) => w.reason)).toEqual([
+      "8 ETP sur cette ligne, au-delà de l'effectif de l'équipe IT / SI dans la base ETP (3,46 ETP) — vérifiez la saisie",
+      "50 ETP sur cette ligne, au-delà de l'effectif de l'équipe RH dans la base ETP (14 ETP) — vérifiez la saisie",
+    ]);
+    expect(result.rows.map((r) => [r.rowNumber, r.entry.fte])).toEqual([
+      [3, 8],
+      [5, 8],
+      [7, 50],
+    ]);
+  });
+
+  it("effectif de l'équipe inconnu (0 ou base non chiffrée) : aucun avertissement", () => {
+    const rows = [baseRow({ ETP: 50 })];
+    const none = (byTeam?: Record<string, number>) =>
+      validateStaffingImportRows(
+        rows,
+        companyId,
+        programId,
+        [baseChantier()],
+        [baseAction()],
+        [],
+        knownDepartments,
+        byTeam
+      );
+    for (const byTeam of [undefined, {}, { RH: 0 }] as (Record<string, number> | undefined)[]) {
+      const r = none(byTeam);
+      expect(r.errors).toEqual([]);
+      expect(r.warnings).toEqual([]);
+      expect(r.rows).toHaveLength(1);
+    }
   });
 
   it("même règle que l'écran : dates obligatoires à la création, équipe de la base ETP", () => {
@@ -287,12 +332,12 @@ describe("validateStaffingImportRows — contrôles de l'audit du 24/09/2026", (
       baseRow({ Fonction: "" }),
       baseRow({ ETP: 7, Fonction: "Astrologie" }),
     ]);
+    // Équipe inconnue de la base ETP = toujours une ERREUR (7 ETP, en revanche, n'en est plus une).
     expect(result.errors.map((e) => [e.rowNumber, e.code])).toEqual([
       [2, "missingDate"],
       [3, "missingDate"],
       [4, "missingFunction"],
       [5, "unknownFunction"],
-      [5, "fteTooHigh"],
     ]);
     expect(result.errors[0].reason).toBe('"Date fin" est obligatoire (date JJ/MM/AAAA)');
     expect(result.rows).toEqual([]);
@@ -477,18 +522,23 @@ describe(`Effectifs — vrai classeur .xlsx, rapprochement par ID ligne (fuseau 
     },
   ];
 
-  /** Export réel → octets .xlsx → relecture comme l'appli (readSpreadsheet). */
+  const exportWorkbook = () =>
+    buildStaffingExportWorkbook(XLSX, existing, chantiers, actions, knownDepartments, fteByTeam);
+
+  /** Classeur → octets .xlsx → relecture comme l'appli (readSpreadsheet). */
+  async function writeAndRead(wb: XLSX.WorkBook, name = "effectifs.xlsx") {
+    const bytes = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    return readSpreadsheet(bytes, name);
+  }
+
+  /** Export réel → octets .xlsx → relecture et lecture de la feuille comme l'appli
+   *  (`readStaffingImportSheet`, utilisé par `StaffingImportButton`). */
   async function exportAndRead(
     edit?: (ws: XLSX.WorkSheet) => void
   ): Promise<Record<string, unknown>[]> {
-    const wb = buildStaffingExportWorkbook(XLSX, existing, chantiers, actions);
+    const wb = exportWorkbook();
     if (edit) edit(wb.Sheets[STAFFING_IMPORT_SHEET_NAME]);
-    const bytes = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
-    const read = await readSpreadsheet(bytes, "effectifs.xlsx");
-    return XLSX.utils.sheet_to_json<Record<string, unknown>>(
-      read.Sheets[STAFFING_IMPORT_SHEET_NAME],
-      { defval: "" }
-    );
+    return readStaffingImportSheet(XLSX, await writeAndRead(wb));
   }
   const run = (rows: Record<string, unknown>[], current = existing) =>
     validateStaffingImportRows(
@@ -498,16 +548,73 @@ describe(`Effectifs — vrai classeur .xlsx, rapprochement par ID ligne (fuseau 
       chantiers,
       actions,
       current,
-      knownDepartments
+      knownDepartments,
+      fteByTeam
     );
 
   it("l'export écrit de vraies cellules date JJ/MM/AAAA et une colonne ID ligne", () => {
-    const wb = buildStaffingExportWorkbook(XLSX, existing, chantiers, actions);
+    const wb = exportWorkbook();
     const ws = wb.Sheets[STAFFING_IMPORT_SHEET_NAME];
     expect(ws["H1"].v).toBe("ID ligne");
     // Ligne 2 = "IT / SI" (tri par fonction) : date début 01/03/2026.
     expect(ws["D2"]).toMatchObject({ t: "n", v: 46082, z: "dd/mm/yyyy" });
     expect(ws["H2"].v).toBe("ST-B");
+  });
+
+  it("l'export et le modèle contiennent l'onglet Équipes (base ETP + effectif disponible)", async () => {
+    const template = buildStaffingTemplateWorkbook(
+      XLSX,
+      chantiers,
+      actions,
+      knownDepartments,
+      fteByTeam
+    );
+    for (const wb of [exportWorkbook(), template]) {
+      const read = await writeAndRead(wb);
+      // Feuille de données d'abord (repli « 1re feuille » d'un fichier renommé), Équipes ensuite.
+      expect(read.SheetNames).toEqual([STAFFING_IMPORT_SHEET_NAME, STAFFING_TEAMS_SHEET_NAME]);
+      expect(
+        XLSX.utils.sheet_to_json<unknown[]>(read.Sheets[STAFFING_TEAMS_SHEET_NAME], { header: 1 })
+      ).toEqual([
+        ["Équipe", "Effectif disponible (ETP)"],
+        ["IT / SI", 3.46],
+        ["RH", 14],
+      ]);
+    }
+    // Base ETP vide : une ligne explicative.
+    expect(buildStaffingTeamsRows([], {})).toEqual([
+      ["Équipe", "Effectif disponible (ETP)"],
+      [STAFFING_TEAMS_EMPTY_TEXT],
+    ]);
+    expect(STAFFING_TEAMS_EMPTY_TEXT).toBe("Aucune équipe : importez d'abord la base ETP");
+  });
+
+  it("l'onglet Équipes est ignoré à l'import (même seul, même en 1re position)", async () => {
+    const read = await writeAndRead(exportWorkbook());
+    // Seule la feuille ETP est lue : les deux lignes exportées, aucune ligne d'équipe.
+    expect(readStaffingImportSheet(XLSX, read).map((r) => r["ID ligne"])).toEqual(["ST-B", "ST-A"]);
+    // Classeur réduit à l'onglet Équipes : rien à importer, aucune erreur, aucune donnée créée.
+    const teamsOnly = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      teamsOnly,
+      read.Sheets[STAFFING_TEAMS_SHEET_NAME],
+      STAFFING_TEAMS_SHEET_NAME
+    );
+    const onlyTeams = run(readStaffingImportSheet(XLSX, teamsOnly));
+    expect(onlyTeams).toEqual({ rows: [], unchanged: 0, errors: [], warnings: [] });
+    // Feuille ETP renommée ("Feuil1") derrière l'onglet Équipes : le repli prend la feuille de
+    // données, jamais l'onglet Équipes.
+    const renamed = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      renamed,
+      read.Sheets[STAFFING_TEAMS_SHEET_NAME],
+      STAFFING_TEAMS_SHEET_NAME
+    );
+    XLSX.utils.book_append_sheet(renamed, read.Sheets[STAFFING_IMPORT_SHEET_NAME], "Feuil1");
+    const viaFallback = run(readStaffingImportSheet(XLSX, renamed));
+    expect(viaFallback.errors).toEqual([]);
+    expect(viaFallback.rows).toEqual([]);
+    expect(viaFallback.unchanged).toBe(2);
   });
 
   it("aller-retour .xlsx sans modification : 0 création, 0 mise à jour, aucune anomalie", async () => {
@@ -587,14 +694,19 @@ describe(`Effectifs — vrai classeur .xlsx, rapprochement par ID ligne (fuseau 
   });
 
   it("le modèle (exemples commentés, vraies dates) ne produit aucune ligne", async () => {
-    const wb = buildStaffingTemplateWorkbook(XLSX, chantiers, actions, knownDepartments);
-    const bytes = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
-    const read = await readSpreadsheet(bytes, "modele.xlsx");
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(read.Sheets["ETP"], {
-      defval: "",
-    });
+    const wb = buildStaffingTemplateWorkbook(XLSX, chantiers, actions, knownDepartments, fteByTeam);
+    const read = await writeAndRead(wb, "modele.xlsx");
+    const rows = readStaffingImportSheet(XLSX, read);
+    // Règles rappelées en tête du modèle : plus de plafond « au plus 5 », onglet Équipes.
+    const comments = rows.map((r) => String(r.Chantier)).filter((c) => c.startsWith("#"));
+    expect(comments).toContain(`# ${STAFFING_TEAMS_RULE}`);
+    expect(comments.join(" ")).not.toMatch(/au plus/);
+    expect(STAFFING_TEAMS_RULE).toBe(
+      "La colonne Fonction doit reprendre exactement un nom de l'onglet Équipes ; une équipe se crée uniquement dans la base ETP."
+    );
     const result = run(rows);
     expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
     expect(result.rows).toEqual([]);
     // Retirer le "#" d'un exemple suffit à l'importer.
     const example = rows.find((r) => String(r.Chantier).startsWith("# Refonte"))!;

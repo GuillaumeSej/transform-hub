@@ -66,7 +66,7 @@ export function StaffingLineFields({
   const errorFor = (field: keyof StaffingLineInput): string | null => {
     const code = validation.errors[field];
     if (!code || !(showAllErrors || touched[field])) return null;
-    return staffingLineMessage(t, code);
+    return staffingLineMessage(t, code, validation);
   };
 
   const inputClass = (field: keyof StaffingLineInput) =>
@@ -88,8 +88,13 @@ export function StaffingLineFields({
     </span>
   );
 
-  // Avertissements non bloquants (hors période du projet, équipe sortie de la base ETP).
-  const warnings = validation.warnings;
+  // Avertissements non bloquants (hors période du projet, équipe sortie de la base ETP) en pied
+  // de formulaire ; « ETP au-delà de l'effectif de l'équipe » juste sous le champ ETP. Aucun
+  // n'empêche d'enregistrer.
+  const warnings = validation.warnings.filter((w) => w !== "fteAboveTeam");
+  const fteWarning = validation.warnings.includes("fteAboveTeam")
+    ? staffingLineMessage(t, "fteAboveTeam", validation)
+    : null;
 
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -138,6 +143,15 @@ export function StaffingLineFields({
           className={inputClass("fte")}
         />
         {errorNode("fte")}
+        {fteWarning && (
+          <span
+            role="status"
+            className="mt-0.5 flex items-start gap-1 text-[11px] font-normal text-rag-amber"
+          >
+            <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+            {fteWarning}
+          </span>
+        )}
       </label>
       <label className="block text-[11px] font-medium text-secondary">
         {t("staffing.note")}
@@ -179,7 +193,7 @@ export function StaffingLineFields({
       {warnings.map((w) => (
         <p key={w} className="flex items-start gap-1.5 text-[11px] text-rag-amber sm:col-span-3">
           <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-          {staffingLineMessage(t, w)}
+          {staffingLineMessage(t, w, validation)}
         </p>
       ))}
     </div>

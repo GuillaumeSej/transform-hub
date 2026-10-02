@@ -150,7 +150,11 @@ export function ChantierStaffingEditor({
   const baseReadOnly = isReadOnlyUser(user, programId, "strategic") || scoped;
   const focusActionId = !scoped ? focusRequest?.actionId : undefined;
 
-  const { departmentNames } = useCompanyDepartments(companyId);
+  // Effectif ACTUEL par équipe (base + mouvements réalisés) : même « disponible » que le taux de
+  // staffing — sert à l'avertissement non bloquant « ETP au-delà de l'effectif de l'équipe ».
+  const { departmentNames, fteByDept } = useCompanyDepartments(companyId, {
+    withRealizedMovements: true,
+  });
 
   const [all, setAll] = useState<ChantierStaffing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -253,12 +257,13 @@ export function ChantierStaffingEditor({
 
   const selectedAction = actionDraft ? actionById.get(actionDraft) : undefined;
   // Règle partagée avec les imports Excel (lib/staffingLineValidation.ts) : équipe de la base ETP
-  // (celle d'une ligne existante sortie de la base reste acceptée, avec avertissement), plafond
-  // d'ETP par ligne, dates obligatoires.
+  // (celle d'une ligne existante sortie de la base reste acceptée, avec avertissement), ETP > 0
+  // (avertissement non bloquant au-delà de l'effectif de l'équipe), dates obligatoires.
   const validation = validateStaffingLine(form, {
     projectRange: selectedAction ? { start: selectedAction.start, end: selectedAction.end } : null,
     knownTeams: departmentNames.length > 0 ? departmentNames : undefined,
     currentTeam: editing?.function,
+    teamAvailableFte: fteByDept,
   });
 
   const resetForm = () => {

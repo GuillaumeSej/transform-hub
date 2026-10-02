@@ -2062,7 +2062,7 @@ const es: Record<string, string> = {
   "strategicImport.staffingCountLabel": "línea(s) de dotación a crear",
   "strategicImport.templateDownloadedTitle": "Plantilla descargada",
   "strategicImport.templateDownloadedBody":
-    'Léame (guía) + 6 hojas: Ejes (Código = clave), Proyectos (Códigos de ejes separados por ; = FK, admite varios ejes), Iniciativas (Código de proyecto = FK, "Etapa de madurez" opcional), Entregables (Código de iniciativa = FK, opcional), Indicadores (Código de eje O Código de proyecto = FK, "Valor inicial" opcional). Dotación (opcional, Código de proyecto = FK). Elimine las filas de ejemplo antes de completar.',
+    'Léame (guía) + 6 hojas: Ejes (Código = clave), Proyectos (Códigos de ejes separados por ; = FK, admite varios ejes), Iniciativas (Código de proyecto = FK, "Etapa de madurez" opcional), Entregables (Código de iniciativa = FK, opcional), Indicadores (Código de eje O Código de proyecto = FK, "Valor inicial" opcional). Dotación (opcional, Código de proyecto = FK). Pestaña «Équipes» = referencia de los equipos de la base de FTE (ignorada en la importación). Elimine las filas de ejemplo antes de completar.',
   "strategicImport.ignoredRowsNote": "{n} línea(s) ignorada(s)",
   "strategicImport.importDoneBody":
     "{axes} eje(s) · {chantiers} proyecto(s) · {actions} iniciativa(s) · {indicators} indicador(es) creado(s)",
@@ -2146,8 +2146,8 @@ const es: Record<string, string> = {
     "«{name}» no corresponde a ninguna cuenta: se conserva como texto, sin efecto en la visibilidad ni en las validaciones ({count} referencia(s))",
   "strategicImport.msg.personAmbiguous":
     "«{name}» corresponde a varias cuentas ({usernames}): no vinculado — indique el identificador exacto",
-  "strategicImport.msg.staffingFteTooHigh":
-    "«{column}» ({value}) supera el límite de {max} ETC por línea — reparta la necesidad en varias líneas",
+  "strategicImport.msg.staffingFteAboveTeam":
+    "{fte} ETC en esta línea, por encima de la plantilla del equipo {team} en la base de FTE ({dispo} ETC) — verifique el dato",
   "strategicImport.msg.staffingUnknownTeam":
     "Equipo «{value}» ausente de la base de FTE (esperado: {expected})",
   "strategicImport.msg.staffingNoTeams": "ningún equipo en la base de FTE",
@@ -2434,8 +2434,8 @@ const es: Record<string, string> = {
   "staffing.validation.outsideProject":
     "Atención: estas fechas quedan fuera del periodo del proyecto.",
   "staffing.validation.fteNotPositive": "El número de ETC debe ser estrictamente positivo.",
-  "staffing.validation.fteTooHigh":
-    "Como máximo {max} ETC por línea: reparta una necesidad mayor en varias líneas.",
+  "staffing.validation.fteAboveTeam":
+    "{fte} ETC en esta línea, por encima de la plantilla del equipo {team} en la base de FTE ({dispo} ETC) — verifique el dato.",
   "staffing.validation.teamUnknown": "Este equipo no existe en la base de FTE.",
   "staffing.validation.teamLeftBase": "Atención: este equipo ya no figura en la base de FTE.",
 
@@ -2602,7 +2602,7 @@ const es: Record<string, string> = {
   "staffingImport.lineLabel": "Línea",
   "staffingImport.templateDownloadedTitle": "Plantilla descargada",
   "staffingImport.templateDownloadedBody":
-    "Columnas: Proyecto (nombre exacto), Función (equipo de la base de FTE), ETC (como máximo 5 por línea), Fecha inicio y Fecha fin (obligatorias), Palanca (opcional, nombre exacto), Nota (opcional), ID de línea (rellenado por la exportación, déjelo vacío para una línea nueva). Una línea existente se encuentra por su ID de línea (si no, proyecto + función + fechas + palanca) y se actualiza en lugar de duplicarse. Celda vacía = valor conservado; un guion «-» en Nota la borra.",
+    "Columnas: Proyecto (nombre exacto), Función (nombre exacto de un equipo de la pestaña «Équipes» — un equipo solo se crea en la base de FTE), ETC (> 0; por encima de la plantilla disponible del equipo, solo aviso), Fecha inicio y Fecha fin (obligatorias), Palanca (opcional, nombre exacto), Nota (opcional), ID de línea (rellenado por la exportación, déjelo vacío para una línea nueva). Una línea existente se encuentra por su ID de línea (si no, proyecto + función + fechas + palanca) y se actualiza en lugar de duplicarse. Celda vacía = valor conservado; un guion «-» en Nota la borra. La pestaña «Équipes» (equipos de la base de FTE y plantilla disponible) se ignora en la importación.",
   "staffingImport.successMessage": "Importación completada",
   "staffingImport.importDoneBody":
     "{created} línea(s) creada(s) · {updated} línea(s) actualizada(s)",
@@ -3542,8 +3542,8 @@ const es: Record<string, string> = {
   "staffingImport.issue.missingFunction": "«Fonction» es obligatorio (equipo de la base de FTE)",
   "staffingImport.issue.missingFte": "«ETP» es obligatorio",
   "staffingImport.issue.fteNotPositive": "«ETP» debe ser estrictamente positivo (leído: {value})",
-  "staffingImport.issue.fteTooHigh":
-    "«ETP» ({value}) supera el límite de {max} ETC por línea — reparta la necesidad en varias líneas",
+  "staffingImport.issue.fteAboveTeam":
+    "{fte} ETC en esta línea, por encima de la plantilla del equipo {team} en la base de FTE ({dispo} ETC) — verifique el dato",
   "staffingImport.issue.missingDate": "«{column}» es obligatoria (fecha DD/MM/AAAA)",
   "staffingImport.issue.datesMissing":
     "Línea existente sin fecha de inicio o de fin — fechas por completar",

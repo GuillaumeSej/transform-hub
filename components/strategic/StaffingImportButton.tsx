@@ -1,13 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { WorkBook } from "xlsx";
 import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import {
   STAFFING_IMPORT_ISSUES,
-  STAFFING_IMPORT_SHEET_NAME,
   buildStaffingExportWorkbook,
   buildStaffingTemplateWorkbook,
+  readStaffingImportSheet,
   validateStaffingImportRows,
   type StaffingImportError,
   type StaffingImportPreview,
@@ -21,25 +20,6 @@ import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { isPilotOrAdmin } from "@/lib/strategicApprovals";
 import type { Chantier, ChantierAction, ChantierStaffing } from "@/types";
-
-/** Trouve la feuille "ETP" insensible à la casse, avec repli sur la PREMIÈRE feuille du classeur —
- *  contrairement à `StrategicImportButton.findSheet` (plusieurs feuilles optionnelles, un nom qui
- *  ne matche renvoie simplement une liste vide), cet import n'a qu'UNE feuille attendue : un CSV
- *  importé porte presque toujours un nom de feuille arbitraire ("Sheet1"), le repli évite de
- *  bloquer un fichier valide pour un simple renommage d'onglet. */
-function findStaffingSheet(
-  XLSX: Pick<typeof import("xlsx"), "utils">,
-  workbook: WorkBook
-): Record<string, unknown>[] {
-  const wanted = workbook.SheetNames.find(
-    (n) => n.toLowerCase() === STAFFING_IMPORT_SHEET_NAME.toLowerCase()
-  );
-  const sheetName = wanted ?? workbook.SheetNames[0];
-  if (!sheetName) return [];
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
-    defval: "",
-  });
-}
 
 /**
  * Bouton "Modèle Excel" + bouton "Importer un fichier" (aperçu/confirmation) pour l'import Excel
@@ -62,6 +42,7 @@ export function StaffingImportButton({
   chantierActions,
   staffing,
   knownDepartments,
+  fteByDept,
   onImport,
 }: {
   companyId?: string | null;
@@ -77,6 +58,10 @@ export function StaffingImportButton({
   /** Noms d'équipe réels de la base ETP entreprise (round 13 — remplace l'ancienne union fermée à
    *  9 valeurs) : la colonne "Fonction" de l'import doit matcher l'un de ces noms. */
   knownDepartments: string[];
+  /** Effectif disponible par équipe dans la base ETP (même notion que le taux de staffing) :
+   *  feuille de référence "Équipes" du modèle et de l'export, avertissement non bloquant à
+   *  l'import quand une ligne le dépasse. */
+  fteByDept: Record<string, number>;
   /** Écrit les entrées prêtes à upserter (appelant = `saveChantierStaffing` en boucle). Peut
    *  lever : les erreurs d'écriture sont laissées à la charge de l'appelant. */
   onImport: (entries: ChantierStaffing[]) => Promise<void>;
@@ -95,7 +80,13 @@ export function StaffingImportButton({
     const XLSX = await import("xlsx");
     // Exemples construits avec un chantier/une équipe RÉELS mais commentés ("#") : ignorés à
     // l'import tant que l'utilisateur ne les active pas (voir buildStaffingTemplateRows).
-    const wb = buildStaffingTemplateWorkbook(XLSX, chantiers, chantierActions, knownDepartments);
+    const wb = buildStaffingTemplateWorkbook(
+      XLSX,
+      chantiers,
+      chantierActions,
+      knownDepartments,
+      fteByDept
+    );
     XLSX.writeFile(wb, "modele_effectifs.xlsx");
     showToast(
       t("staffingImport.templateDownloadedTitle"),
@@ -108,7 +99,14 @@ export function StaffingImportButton({
    *  dates en vraies cellules date Excel, colonne technique "ID ligne" pour le rapprochement. */
   const exportStaffing = async () => {
     const XLSX = await import("xlsx");
-    const wb = buildStaffingExportWorkbook(XLSX, staffing, chantiers, chantierActions);
+    const wb = buildStaffingExportWorkbook(
+      XLSX,
+      staffing,
+      chantiers,
+      chantierActions,
+      knownDepartments,
+      fteByDept
+    );
     const d = new Date();
     const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     XLSX.writeFile(wb, `effectifs_${stamp}.xlsx`);
@@ -127,7 +125,8 @@ export function StaffingImportButton({
       // CSV décodé UTF-8 / Windows-1252 + raw : accents corrects, "0,5" et "01/03/2026" gardés
       // en texte puis lus au format français (lib/excelFileRead.ts, lib/excelParse.ts).
       const [workbook, XLSX] = await Promise.all([readSpreadsheetFile(file), import("xlsx")]);
-      const rawRows = findStaffingSheet(XLSX, workbook);
+      // Feuille "ETP" seule : la feuille de référence "Équipes" est ignorée.
+      const rawRows = readStaffingImportSheet(XLSX, workbook);
       const result = validateStaffingImportRows(
         rawRows,
         companyId,
@@ -135,7 +134,8 @@ export function StaffingImportButton({
         chantiers,
         chantierActions,
         staffing,
-        knownDepartments
+        knownDepartments,
+        fteByDept
       );
       setFileName(file.name);
       setPreview(result);

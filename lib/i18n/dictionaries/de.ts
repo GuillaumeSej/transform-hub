@@ -2064,7 +2064,7 @@ const de: Record<string, string> = {
   "strategicImport.staffingCountLabel": "Personalzeile(n) zu erstellen",
   "strategicImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "strategicImport.templateDownloadedBody":
-    'Lies-mich (Anleitung) + 6 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencodes getrennt durch ; = FK, mehrere Achsen möglich), Projekte (Arbeitspaketcode = FK, "Reifegrad" optional), Ergebnisse (Projektcode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK, "Ausgangswert" optional). Personal (optional, Arbeitspaketcode = FK). Löschen Sie die Beispielzeilen vor dem Ausfüllen.',
+    'Lies-mich (Anleitung) + 6 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencodes getrennt durch ; = FK, mehrere Achsen möglich), Projekte (Arbeitspaketcode = FK, "Reifegrad" optional), Ergebnisse (Projektcode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK, "Ausgangswert" optional). Personal (optional, Arbeitspaketcode = FK). Tabellenblatt „Équipes“ = Referenz der Teams der FTE-Basis (beim Import ignoriert). Löschen Sie die Beispielzeilen vor dem Ausfüllen.',
   "strategicImport.ignoredRowsNote": "{n} Zeile(n) ignoriert",
   "strategicImport.importDoneBody":
     "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Projekt(e) · {indicators} Indikator(en) erstellt",
@@ -2150,8 +2150,8 @@ const de: Record<string, string> = {
     "„{name}“ entspricht keinem Konto: als Text beibehalten, ohne Wirkung auf Sichtbarkeit und Freigaben ({count} Verweis(e))",
   "strategicImport.msg.personAmbiguous":
     "„{name}“ entspricht mehreren Konten ({usernames}): nicht zugeordnet — geben Sie den genauen Benutzernamen an",
-  "strategicImport.msg.staffingFteTooHigh":
-    "„{column}“ ({value}) überschreitet die Obergrenze von {max} VZÄ pro Zeile — verteilen Sie den Bedarf auf mehrere Zeilen",
+  "strategicImport.msg.staffingFteAboveTeam":
+    "{fte} VZÄ in dieser Zeile, mehr als der Bestand des Teams {team} in der FTE-Basis ({dispo} VZÄ) — bitte Eingabe prüfen",
   "strategicImport.msg.staffingUnknownTeam":
     "Team „{value}“ nicht in der FTE-Basis (erwartet: {expected})",
   "strategicImport.msg.staffingNoTeams": "kein Team in der FTE-Basis",
@@ -2439,8 +2439,8 @@ const de: Record<string, string> = {
   "staffing.validation.outsideProject":
     "Achtung: Diese Daten liegen außerhalb des Projektzeitraums.",
   "staffing.validation.fteNotPositive": "Die Anzahl der VZÄ muss strikt positiv sein.",
-  "staffing.validation.fteTooHigh":
-    "Höchstens {max} VZÄ pro Zeile: Verteilen Sie einen größeren Bedarf auf mehrere Zeilen.",
+  "staffing.validation.fteAboveTeam":
+    "{fte} VZÄ in dieser Zeile, mehr als der Bestand des Teams {team} in der FTE-Basis ({dispo} VZÄ) — bitte Eingabe prüfen.",
   "staffing.validation.teamUnknown": "Dieses Team existiert nicht in der FTE-Basis.",
   "staffing.validation.teamLeftBase": "Achtung: Dieses Team ist nicht mehr in der FTE-Basis.",
 
@@ -2609,7 +2609,7 @@ const de: Record<string, string> = {
   "staffingImport.lineLabel": "Zeile",
   "staffingImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "staffingImport.templateDownloadedBody":
-    "Spalten: Arbeitspaket (exakter Name), Funktion (Team aus der FTE-Basis), VZÄ (höchstens 5 pro Zeile), Startdatum und Enddatum (Pflicht), Hebel (optional, exakter Name), Bemerkung (optional), Zeilen-ID (vom Export ausgefüllt, für eine neue Zeile leer lassen). Eine bestehende Zeile wird über ihre Zeilen-ID gefunden (sonst Arbeitspaket + Funktion + Daten + Hebel) und aktualisiert statt dupliziert. Leere Zelle = Wert bleibt erhalten; ein Bindestrich „-“ in der Bemerkung löscht sie.",
+    "Spalten: Arbeitspaket (exakter Name), Funktion (exakter Name eines Teams aus dem Tabellenblatt „Équipes“ — Teams werden nur in der FTE-Basis angelegt), VZÄ (> 0; über dem verfügbaren Bestand des Teams nur Warnung), Startdatum und Enddatum (Pflicht), Hebel (optional, exakter Name), Bemerkung (optional), Zeilen-ID (vom Export ausgefüllt, für eine neue Zeile leer lassen). Eine bestehende Zeile wird über ihre Zeilen-ID gefunden (sonst Arbeitspaket + Funktion + Daten + Hebel) und aktualisiert statt dupliziert. Leere Zelle = Wert bleibt erhalten; ein Bindestrich „-“ in der Bemerkung löscht sie. Das Tabellenblatt „Équipes“ (Teams der FTE-Basis und verfügbarer Bestand) wird beim Import ignoriert.",
   "staffingImport.successMessage": "Import abgeschlossen",
   "staffingImport.importDoneBody": "{created} Zeile(n) erstellt · {updated} Zeile(n) aktualisiert",
   "staffingImport.errorTitle": "Import fehlgeschlagen",
@@ -3553,8 +3553,8 @@ const de: Record<string, string> = {
   "staffingImport.issue.missingFunction": "„Fonction“ ist Pflicht (Team aus der FTE-Basis)",
   "staffingImport.issue.missingFte": "„ETP“ ist Pflicht",
   "staffingImport.issue.fteNotPositive": "„ETP“ muss strikt positiv sein (gelesen: {value})",
-  "staffingImport.issue.fteTooHigh":
-    "„ETP“ ({value}) überschreitet die Obergrenze von {max} VZÄ pro Zeile — verteilen Sie den Bedarf auf mehrere Zeilen",
+  "staffingImport.issue.fteAboveTeam":
+    "{fte} VZÄ in dieser Zeile, mehr als der Bestand des Teams {team} in der FTE-Basis ({dispo} VZÄ) — bitte Eingabe prüfen",
   "staffingImport.issue.missingDate": "„{column}“ ist Pflicht (Datum TT/MM/JJJJ)",
   "staffingImport.issue.datesMissing":
     "Bestehende Zeile ohne Beginn- oder Enddatum — Daten ergänzen",

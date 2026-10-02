@@ -17,12 +17,13 @@ import {
 } from "@/lib/excelParse";
 import { applyExcelDateColumns, readOptionalTextCell } from "@/lib/excelCells";
 import {
-  STAFFING_MAX_FTE,
   checkStaffingLine,
+  formatStaffingFte,
   matchStaffingRows,
   type StaffingLineError,
   type StaffingMatchRow,
 } from "@/lib/staffingLineValidation";
+import { STAFFING_TEAMS_RULE, appendStaffingTeamsSheet } from "@/lib/staffingExcelImport";
 import { currentPeriod } from "@/lib/kpiHistory";
 import type {
   Chantier,
@@ -59,6 +60,9 @@ import type {
  *    Livrable = ÉCHÉANCE (colonne "Échéance" ; ancien "Fin" accepté, "Début" ignoré).
  *  - "Indicateurs" : `Code` FACULTATIF (clé de ré-import), rattachés à UN axe OU UN chantier.
  *  - "ETP" (facultative) : `ChantierStaffing`.
+ *  - "Équipes" (référence, modèle ET export) : équipes de la base ETP et leur effectif disponible
+ *    (`appendStaffingTeamsSheet`, partagé avec l'import Effectifs) — IGNORÉE à l'import (seules
+ *    les feuilles de `SHEET_SPECS` sont lues).
  *
  * Ré-import (UPSERT) : chaque ligne est rapprochée d'une entité existante du programme, d'abord par
  * son `Code` (champ `importCode` stocké à la création, ou `id` BeTrack — c'est ce que produit
@@ -298,8 +302,8 @@ export const STRATEGIC_IMPORT_MESSAGES = {
   personAmbiguous:
     "« {name} » correspond à plusieurs comptes ({usernames}) : non rattaché — indiquez l'identifiant exact",
   // Feuille ETP — même règle que l'écran et l'import Effectifs (lib/staffingLineValidation.ts).
-  staffingFteTooHigh:
-    '"{column}" ({value}) dépasse le plafond de {max} ETP par ligne — répartissez le besoin sur plusieurs lignes',
+  staffingFteAboveTeam:
+    "{fte} ETP sur cette ligne, au-delà de l'effectif de l'équipe {team} dans la base ETP ({dispo} ETP) — vérifiez la saisie",
   staffingUnknownTeam: 'Équipe "{value}" absente de la base ETP (attendu : {expected})',
   staffingNoTeams: "aucune équipe dans la base ETP",
   staffingTeamLeftBase:
@@ -433,6 +437,9 @@ export type StrategicImportOptions = {
   /** Équipes de la base ETP de l'entreprise (feuille ETP : la "Fonction" doit en faire partie).
    *  Absent = référentiel indisponible, équipe non contrôlée. */
   knownDepartments?: string[];
+  /** Effectif disponible par équipe dans la base ETP (même notion que le taux de staffing) : une
+   *  ligne ETP qui le dépasse est importée avec un avertissement. Absent = pas de contrôle. */
+  teamAvailableFte?: Record<string, number>;
 };
 
 // ---------- Utilitaires ----------
@@ -2057,6 +2064,7 @@ export function validateStrategicImportRows(
         knownTeams: options.knownDepartments,
         currentTeam: matched?.function,
         projectRange: action ? { start: action.start, end: action.end } : null,
+        teamAvailableFte: options.teamAvailableFte,
       }
     );
     let rowFailed = false;
@@ -2085,13 +2093,6 @@ export function validateStrategicImportRows(
         case "fteNotPositive":
           err(sheet, rowNumber, "notPositive", { column: "Nombre d'ETP" });
           break;
-        case "fteTooHigh":
-          err(sheet, rowNumber, "staffingFteTooHigh", {
-            column: "Nombre d'ETP",
-            value: r.fteRaw,
-            max: STAFFING_MAX_FTE,
-          });
-          break;
         case "startRequired":
         case "endRequired":
           err(sheet, rowNumber, "requiredDate", {
@@ -2113,6 +2114,12 @@ export function validateStrategicImportRows(
     if (legacyUndated) warn(sheet, rowNumber, "staffingDatesMissing");
     if (check.warnings.includes("teamLeftBase"))
       warn(sheet, rowNumber, "staffingTeamLeftBase", { value: r.fn });
+    if (check.warnings.includes("fteAboveTeam") && check.fte !== null)
+      warn(sheet, rowNumber, "staffingFteAboveTeam", {
+        fte: formatStaffingFte(check.fte),
+        team: check.team,
+        dispo: formatStaffingFte(check.teamAvailableFte ?? 0),
+      });
     if (check.warnings.includes("outsideProject") && action)
       warn(sheet, rowNumber, "staffingOutsideProject", {
         code: r.actionCode,
@@ -2308,6 +2315,9 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
   [""],
   ["1. Ordre des feuilles"],
   ["Axes -> Chantiers -> Projets -> Livrables (facultative) -> Indicateurs -> ETP (facultative)."],
+  [
+    "Onglet \"Équipes\" (référence) : équipes de la base ETP de l'entreprise et leur effectif disponible en ETP. Il est ignoré à l'import.",
+  ],
   [""],
   ['2. Clé de liaison "Code"'],
   [
@@ -2346,8 +2356,9 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
     "Exportez le plan (bouton « Exporter le plan »), modifiez le fichier puis réimportez-le : l'aperçu indique ce qui sera créé, mis à jour ou inchangé. Une cellule vide ne remplace jamais une valeur existante.",
   ],
   [
-    `Feuille ETP : une ligne = une équipe de la base ETP ("Fonction") sur un chantier ou un projet ; "Nombre d'ETP" > 0 et au plus ${STAFFING_MAX_FTE} par ligne (répartissez un besoin plus important sur plusieurs lignes) ; "Date début" et "Date fin" obligatoires (fin >= début). "ID ligne" (rempli par l'export) identifie la ligne : ne le modifiez pas, laissez-le vide pour une nouvelle ligne. "Précision" vide = précision conservée ; un tiret "-" l'efface.`,
+    `Feuille ETP : une ligne = une équipe de la base ETP ("Fonction") sur un chantier ou un projet ; "Nombre d'ETP" > 0 (au-delà de l'effectif disponible de l'équipe, simple avertissement) ; "Date début" et "Date fin" obligatoires (fin >= début). "ID ligne" (rempli par l'export) identifie la ligne : ne le modifiez pas, laissez-le vide pour une nouvelle ligne. "Précision" vide = précision conservée ; un tiret "-" l'efface.`,
   ],
+  [STAFFING_TEAMS_RULE],
   [
     "Poids dans le chantier (%) : saisissez 40 ou 40 % (une cellule au format pourcentage d'Excel est bien lue 40) ; une valeur hors de 0 à 100 est refusée.",
   ],
@@ -2560,8 +2571,19 @@ type SheetRows = Record<SheetKey, unknown[][]>;
  *  exactement par l'import (`readXlsxWorkbook`). */
 const DATE_HEADERS = ["Date début", "Date fin", "Échéance"] as const;
 
-/** Compose un classeur au format d'import (feuille "Lisez-moi" + 6 feuilles). */
-function buildWorkbook(rows: SheetRows, XLSX: XlsxModule): WorkBook {
+/** Équipes de la base ETP (noms + effectif disponible) — feuille de référence "Équipes". */
+export type StrategicTeamsReference = {
+  knownDepartments: readonly string[];
+  fteByTeam: Readonly<Record<string, number>>;
+};
+
+/** Compose un classeur au format d'import (feuille "Lisez-moi" + 6 feuilles + feuille de
+ *  référence "Équipes", à côté de la feuille ETP — ignorée à l'import). */
+function buildWorkbook(
+  rows: SheetRows,
+  XLSX: XlsxModule,
+  teams: StrategicTeamsReference
+): WorkBook {
   const wb = XLSX.utils.book_new();
   const guideSheet = XLSX.utils.aoa_to_sheet(STRATEGIC_IMPORT_GUIDE_ROWS);
   guideSheet["!cols"] = [{ wch: 110 }];
@@ -2573,11 +2595,15 @@ function buildWorkbook(rows: SheetRows, XLSX: XlsxModule): WorkBook {
     sheet["!cols"] = headers.map((h) => ({ wch: Math.max(14, Math.min(48, h.length + 2)) }));
     XLSX.utils.book_append_sheet(wb, sheet, STRATEGIC_IMPORT_SHEET_NAMES[key]);
   }
+  appendStaffingTeamsSheet(XLSX, wb, teams.knownDepartments, teams.fteByTeam);
   return wb;
 }
 
-/** Modèle vierge avec lignes d'exemple. */
-export function buildStrategicImportTemplateWorkbook(XLSX: XlsxModule): WorkBook {
+/** Modèle vierge avec lignes d'exemple (+ feuille "Équipes" de la base ETP de l'entreprise). */
+export function buildStrategicImportTemplateWorkbook(
+  XLSX: XlsxModule,
+  teams: StrategicTeamsReference
+): WorkBook {
   return buildWorkbook(
     {
       axes: STRATEGIC_AXIS_EXAMPLE_ROWS,
@@ -2587,7 +2613,8 @@ export function buildStrategicImportTemplateWorkbook(XLSX: XlsxModule): WorkBook
       indicateurs: STRATEGIC_INDICATOR_EXAMPLE_ROWS,
       etp: STRATEGIC_STAFFING_EXAMPLE_ROWS,
     },
-    XLSX
+    XLSX,
+    teams
   );
 }
 
@@ -2599,7 +2626,9 @@ export function buildStrategicImportTemplateWorkbook(XLSX: XlsxModule): WorkBook
 export function buildStrategicPlanExportWorkbook(
   data: StrategicImportExistingData,
   stages: MaturityStageConfig[],
-  XLSX: XlsxModule
+  XLSX: XlsxModule,
+  /** Équipes de la base ETP — feuille de référence "Équipes", ignorée à l'import. */
+  teams: StrategicTeamsReference
 ): WorkBook {
   const codeOf = (e: { id: string }) => importCodeOf(e) ?? e.id;
   const axisCode = new Map(data.axes.map((a) => [a.id, codeOf(a)]));
@@ -2678,6 +2707,7 @@ export function buildStrategicPlanExportWorkbook(
         s.id,
       ]),
     },
-    XLSX
+    XLSX,
+    teams
   );
 }

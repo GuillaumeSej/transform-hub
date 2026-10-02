@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as XLSX from "xlsx";
 import { readXlsxWorkbook } from "@/lib/excelParse";
 import {
+  STRATEGIC_IMPORT_GUIDE_ROWS,
   STRATEGIC_IMPORT_MESSAGES,
   buildStrategicImportTemplateWorkbook,
   buildStrategicPlanExportWorkbook,
@@ -10,6 +11,11 @@ import {
   type StrategicImportExistingData,
   type StrategicImportRawSheets,
 } from "@/lib/strategicExcelImport";
+import {
+  STAFFING_TEAMS_EMPTY_TEXT,
+  STAFFING_TEAMS_RULE,
+  STAFFING_TEAMS_SHEET_NAME,
+} from "@/lib/staffingExcelImport";
 import fr from "@/lib/i18n/dictionaries/fr";
 import en from "@/lib/i18n/dictionaries/en";
 import de from "@/lib/i18n/dictionaries/de";
@@ -38,6 +44,9 @@ const stages: MaturityStageConfig[] = [
 ];
 const NOW = new Date(2026, 0, 15);
 const knownDepartments = ["Data & Analytics", "Ressources Humaines"];
+/** Effectif disponible par équipe (base ETP) : feuille "Équipes" et avertissement ETP > effectif. */
+const fteByTeam: Record<string, number> = { "Data & Analytics": 14, "Ressources Humaines": 2.5 };
+const teams = { knownDepartments, fteByTeam };
 
 const axisEntity: StrategicAxis = {
   id: "AX-1",
@@ -129,6 +138,7 @@ const run = (s: StrategicImportRawSheets, data = existing(), departments = known
   validateStrategicImportRows(s, data, companyId, programId, stages, "admin", {
     now: NOW,
     knownDepartments: departments,
+    teamAvailableFte: fteByTeam,
   });
 
 /** Écrit le classeur en .xlsx puis le relit comme l'appli. */
@@ -138,7 +148,7 @@ function roundTrip(wb: XLSX.WorkBook): XLSX.WorkBook {
 }
 
 describe("feuille ETP — même règle que l'écran et l'import Effectifs", () => {
-  it("refuse 7 ETP, une équipe hors base ETP, des dates manquantes ; « abc » = nombre illisible", () => {
+  it("accepte 7 ETP (plus de plafond) ; refuse une équipe hors base ETP, des dates manquantes, « abc », 0 et -1", () => {
     const result = run(
       sheets({
         etp: [
@@ -147,26 +157,75 @@ describe("feuille ETP — même règle que l'écran et l'import Effectifs", () =
           etpRow({ "Date fin": "" }),
           etpRow({ "Nombre d'ETP": "abc" }),
           etpRow({ "Nombre d'ETP": 0 }),
+          etpRow({ "Nombre d'ETP": -1 }),
         ],
       })
     );
     // (Lecture des cellules puis règle commune : on trie par ligne pour comparer.)
     const errors = [...result.errors].sort((a, b) => a.rowNumber - b.rowNumber);
     expect(errors.map((e) => [e.rowNumber, e.code])).toEqual([
-      [2, "staffingFteTooHigh"],
       [3, "staffingUnknownTeam"],
       [4, "requiredDate"],
       [5, "notNumber"],
       [6, "notPositive"],
+      [7, "notPositive"],
     ]);
     expect(errors.map((e) => e.reason)).toEqual([
-      '"Nombre d\'ETP" (7) dépasse le plafond de 5 ETP par ligne — répartissez le besoin sur plusieurs lignes',
       'Équipe "Astrologie" absente de la base ETP (attendu : Data & Analytics, Ressources Humaines)',
       '"Date fin" est obligatoire (date JJ/MM/AAAA ou AAAA-MM-JJ)',
       '"Nombre d\'ETP" doit être un nombre (valeur lue : "abc")',
       '"Nombre d\'ETP" doit être un nombre strictement positif',
+      '"Nombre d\'ETP" doit être un nombre strictement positif',
     ]);
-    expect(result.toCreate.staffing).toEqual([]);
+    // 7 ETP pour une équipe de 14 : créé, sans avertissement.
+    expect(result.toCreate.staffing.map((s) => s.fte)).toEqual([7]);
+    expect(result.warnings.filter((w) => w.sheet === "ETP")).toEqual([]);
+  });
+
+  it("au-delà de l'effectif de l'équipe dans la base ETP : avertissement, ligne importée", () => {
+    const result = run(
+      sheets({
+        etp: [
+          etpRow({ "Nombre d'ETP": 50 }),
+          etpRow({
+            "Fonction (équipe, base ETP)": "Ressources Humaines",
+            "Nombre d'ETP": "2,5",
+          }),
+          etpRow({
+            "Fonction (équipe, base ETP)": "Ressources Humaines",
+            "Nombre d'ETP": 3,
+            "Date début": "2026-08-01",
+          }),
+        ],
+      })
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.toCreate.staffing.map((s) => [s.function, s.fte])).toEqual([
+      ["Data & Analytics", 50],
+      ["Ressources Humaines", 2.5],
+      ["Ressources Humaines", 3],
+    ]);
+    const etpWarnings = result.warnings.filter((w) => w.sheet === "ETP");
+    expect(etpWarnings.map((w) => [w.rowNumber, w.code])).toEqual([
+      [2, "staffingFteAboveTeam"],
+      [4, "staffingFteAboveTeam"],
+    ]);
+    expect(etpWarnings[0].reason).toBe(
+      "50 ETP sur cette ligne, au-delà de l'effectif de l'équipe Data & Analytics dans la base ETP (14 ETP) — vérifiez la saisie"
+    );
+    // Effectif inconnu (base non chargée) : aucun avertissement.
+    const unknown = validateStrategicImportRows(
+      sheets({ etp: [etpRow({ "Nombre d'ETP": 50 })] }),
+      existing(),
+      companyId,
+      programId,
+      stages,
+      "admin",
+      { now: NOW, knownDepartments }
+    );
+    expect(unknown.errors).toEqual([]);
+    expect(unknown.warnings.filter((w) => w.sheet === "ETP")).toEqual([]);
+    expect(unknown.toCreate.staffing).toHaveLength(1);
   });
 
   it("équipe : orthographe de la base ETP retenue ; aucune base ETP = toute équipe inconnue", () => {
@@ -256,7 +315,7 @@ describe("feuille ETP — même règle que l'écran et l'import Effectifs", () =
 
 describe(`export / réimport .xlsx réel (fuseau ${process.env.TZ ?? "(système)"})`, () => {
   it("dates écrites en vraies cellules date JJ/MM/AAAA, ID ligne exporté", () => {
-    const wb = buildStrategicPlanExportWorkbook(existing(), stages, XLSX);
+    const wb = buildStrategicPlanExportWorkbook(existing(), stages, XLSX, teams);
     const projets = wb.Sheets["Projets"];
     const etp = wb.Sheets["ETP"];
     // Projets : F2 = Date début, G2 = Date fin.
@@ -267,17 +326,30 @@ describe(`export / réimport .xlsx réel (fuseau ${process.env.TZ ?? "(système)
     expect(etp["F2"]).toMatchObject({ t: "n", v: 46023, z: "dd/mm/yyyy" });
   });
 
-  it("aller-retour sans modification = 0 création, 0 mise à jour", () => {
-    const read = roundTrip(buildStrategicPlanExportWorkbook(existing(), stages, XLSX));
-    const result = run(parseStrategicImportWorkbook(read, XLSX));
+  it("aller-retour sans modification = 0 création, 0 mise à jour ; onglet Équipes présent et ignoré", () => {
+    const read = roundTrip(buildStrategicPlanExportWorkbook(existing(), stages, XLSX, teams));
+    // Onglet Équipes à côté de la feuille ETP : équipes de la base ETP + effectif disponible.
+    expect(read.SheetNames.slice(-2)).toEqual(["ETP", STAFFING_TEAMS_SHEET_NAME]);
+    expect(
+      XLSX.utils.sheet_to_json<unknown[]>(read.Sheets[STAFFING_TEAMS_SHEET_NAME], { header: 1 })
+    ).toEqual([
+      ["Équipe", "Effectif disponible (ETP)"],
+      ["Data & Analytics", 14],
+      ["Ressources Humaines", 2.5],
+    ]);
+    const raw = parseStrategicImportWorkbook(read, XLSX);
+    expect(raw.missingSheets).toEqual([]);
+    expect(Object.keys(raw)).not.toContain(STAFFING_TEAMS_SHEET_NAME);
+    const result = run(raw);
     expect(result.errors).toEqual([]);
+    expect(result.warnings.filter((w) => w.sheet === "ETP")).toEqual([]);
     expect(Object.values(result.toCreate).every((l) => l.length === 0)).toBe(true);
     expect(Object.values(result.toUpdate).every((l) => l.length === 0)).toBe(true);
     expect(result.unchanged.staffing).toBe(2);
   });
 
   it("date de fin d'une ligne ETP modifiée dans Excel = 1 mise à jour, 0 création", () => {
-    const wb = buildStrategicPlanExportWorkbook(existing(), stages, XLSX);
+    const wb = buildStrategicPlanExportWorkbook(existing(), stages, XLSX, teams);
     // ST-A : fin 31/03/2026 → 15/04/2026 (cellule date, comme une saisie Excel).
     wb.Sheets["ETP"]["G2"] = { t: "n", v: 46127, z: "dd/mm/yyyy" };
     const result = run(parseStrategicImportWorkbook(roundTrip(wb), XLSX));
@@ -286,8 +358,25 @@ describe(`export / réimport .xlsx réel (fuseau ${process.env.TZ ?? "(système)
     expect(result.toUpdate.staffing).toEqual([{ ...lineA, endDate: "2026-04-15" }]);
   });
 
+  it("le modèle : onglet Équipes (ligne explicative si la base ETP est vide), règle dans le Lisez-moi", () => {
+    const read = roundTrip(buildStrategicImportTemplateWorkbook(XLSX, teams));
+    expect(read.SheetNames).toContain(STAFFING_TEAMS_SHEET_NAME);
+    expect(
+      XLSX.utils.sheet_to_json<unknown[]>(read.Sheets[STAFFING_TEAMS_SHEET_NAME], { header: 1 })
+    ).toHaveLength(3);
+    const empty = roundTrip(
+      buildStrategicImportTemplateWorkbook(XLSX, { knownDepartments: [], fteByTeam: {} })
+    );
+    expect(
+      XLSX.utils.sheet_to_json<unknown[]>(empty.Sheets[STAFFING_TEAMS_SHEET_NAME], { header: 1 })
+    ).toEqual([["Équipe", "Effectif disponible (ETP)"], [STAFFING_TEAMS_EMPTY_TEXT]]);
+    const guide = STRATEGIC_IMPORT_GUIDE_ROWS.flat().join("\n");
+    expect(guide).toContain(STAFFING_TEAMS_RULE);
+    expect(guide).not.toMatch(/au plus \d/);
+  });
+
   it("le modèle relu garde ses dates d'exemple au jour près", () => {
-    const read = roundTrip(buildStrategicImportTemplateWorkbook(XLSX));
+    const read = roundTrip(buildStrategicImportTemplateWorkbook(XLSX, teams));
     const raw = parseStrategicImportWorkbook(read, XLSX);
     const result = validateStrategicImportRows(
       raw,

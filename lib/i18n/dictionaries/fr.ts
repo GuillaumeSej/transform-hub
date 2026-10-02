@@ -2140,7 +2140,7 @@ const fr: Record<string, string> = {
   "strategicImport.staffingCountLabel": "ligne(s) d'ETP à créer",
   "strategicImport.templateDownloadedTitle": "Modèle téléchargé",
   "strategicImport.templateDownloadedBody":
-    'Lisez-moi (guide) + 6 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK, "Étape de maturité" facultative), Livrables (Code Projet = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK, "Valeur initiale" facultative). ETP (optionnelle, Code Chantier = FK). Supprimez les lignes d\'exemple avant de remplir.',
+    'Lisez-moi (guide) + 6 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK, "Étape de maturité" facultative), Livrables (Code Projet = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK, "Valeur initiale" facultative). ETP (optionnelle, Code Chantier = FK). Onglet Équipes = référence des équipes de la base ETP (ignoré à l\'import). Supprimez les lignes d\'exemple avant de remplir.',
   "strategicImport.ignoredRowsNote": "{n} ligne(s) ignorée(s)",
   "strategicImport.importDoneBody":
     "{axes} axe(s) · {chantiers} chantier(s) · {actions} projet(s) · {indicators} indicateur(s) créé(s)",
@@ -2223,8 +2223,8 @@ const fr: Record<string, string> = {
     "« {name} » ne correspond à aucun compte : conservé en texte, sans effet sur la visibilité ni sur les validations ({count} référence(s))",
   "strategicImport.msg.personAmbiguous":
     "« {name} » correspond à plusieurs comptes ({usernames}) : non rattaché — indiquez l'identifiant exact",
-  "strategicImport.msg.staffingFteTooHigh":
-    '"{column}" ({value}) dépasse le plafond de {max} ETP par ligne — répartissez le besoin sur plusieurs lignes',
+  "strategicImport.msg.staffingFteAboveTeam":
+    "{fte} ETP sur cette ligne, au-delà de l'effectif de l'équipe {team} dans la base ETP ({dispo} ETP) — vérifiez la saisie",
   "strategicImport.msg.staffingUnknownTeam":
     'Équipe "{value}" absente de la base ETP (attendu : {expected})',
   "strategicImport.msg.staffingNoTeams": "aucune équipe dans la base ETP",
@@ -2519,8 +2519,8 @@ const fr: Record<string, string> = {
     "La date de fin doit être postérieure ou égale à la date de début.",
   "staffing.validation.outsideProject": "Attention : ces dates sortent de la période du projet.",
   "staffing.validation.fteNotPositive": "Le nombre d'ETP doit être strictement positif.",
-  "staffing.validation.fteTooHigh":
-    "Au plus {max} ETP par ligne : répartissez un besoin plus important sur plusieurs lignes.",
+  "staffing.validation.fteAboveTeam":
+    "{fte} ETP sur cette ligne, au-delà de l'effectif de l'équipe {team} dans la base ETP ({dispo} ETP) — vérifiez la saisie.",
   "staffing.validation.teamUnknown": "Cette équipe n'existe pas dans la base ETP.",
   "staffing.validation.teamLeftBase": "Attention : cette équipe ne figure plus dans la base ETP.",
 
@@ -2703,7 +2703,7 @@ const fr: Record<string, string> = {
   "staffingImport.lineLabel": "Ligne",
   "staffingImport.templateDownloadedTitle": "Modèle téléchargé",
   "staffingImport.templateDownloadedBody":
-    "Colonnes : Chantier (nom exact), Fonction (équipe de la base ETP), ETP (au plus 5 par ligne), Date début et Date fin (obligatoires), Levier (optionnel, nom exact), Note (optionnel), ID ligne (rempli par l'export, à laisser vide pour une nouvelle ligne). Une ligne existante est retrouvée par son ID ligne (à défaut chantier + fonction + dates + levier) et mise à jour plutôt que dupliquée. Cellule vide = valeur conservée ; un tiret « - » dans Note l'efface.",
+    "Colonnes : Chantier (nom exact), Fonction (nom exact d'une équipe de l'onglet Équipes — une équipe se crée uniquement dans la base ETP), ETP (> 0 ; au-delà de l'effectif disponible de l'équipe, simple avertissement), Date début et Date fin (obligatoires), Levier (optionnel, nom exact), Note (optionnel), ID ligne (rempli par l'export, à laisser vide pour une nouvelle ligne). Une ligne existante est retrouvée par son ID ligne (à défaut chantier + fonction + dates + levier) et mise à jour plutôt que dupliquée. Cellule vide = valeur conservée ; un tiret « - » dans Note l'efface. L'onglet Équipes (équipes de la base ETP et effectif disponible) est ignoré à l'import.",
   "staffingImport.successMessage": "Import terminé",
   "staffingImport.importDoneBody":
     "{created} ligne(s) créée(s) · {updated} ligne(s) mise(s) à jour",
@@ -3632,8 +3632,8 @@ const fr: Record<string, string> = {
   "staffingImport.issue.missingFunction": '"Fonction" est obligatoire (équipe de la base ETP)',
   "staffingImport.issue.missingFte": '"ETP" est obligatoire',
   "staffingImport.issue.fteNotPositive": '"ETP" doit être strictement positif (lu : {value})',
-  "staffingImport.issue.fteTooHigh":
-    '"ETP" ({value}) dépasse le plafond de {max} ETP par ligne — répartissez le besoin sur plusieurs lignes',
+  "staffingImport.issue.fteAboveTeam":
+    "{fte} ETP sur cette ligne, au-delà de l'effectif de l'équipe {team} dans la base ETP ({dispo} ETP) — vérifiez la saisie",
   "staffingImport.issue.missingDate": '"{column}" est obligatoire (date JJ/MM/AAAA)',
   "staffingImport.issue.datesMissing":
     "Ligne existante sans date de début ou de fin — dates à compléter",

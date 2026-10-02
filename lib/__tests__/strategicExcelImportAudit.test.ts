@@ -251,7 +251,10 @@ describe("en-têtes alignés sur l'UI + rôle proposé à la création de compte
   });
 
   it("l'export et le modèle n'ont plus de colonne « Sponsor » de projet", () => {
-    const wb = buildStrategicPlanExportWorkbook(empty(), stages, XLSX);
+    const wb = buildStrategicPlanExportWorkbook(empty(), stages, XLSX, {
+      knownDepartments: [],
+      fteByTeam: {},
+    });
     const projets = wb.Sheets["Projets"];
     const header = XLSX.utils.sheet_to_json<unknown[]>(projets, { header: 1 })[0] as string[];
     expect(header).toContain("Responsable projet");
@@ -277,7 +280,10 @@ describe("#3 ré-import idempotent (upsert) + export aller-retour", () => {
     const first = run(parseStrategicImportWorkbook(loadFixture(), XLSX));
     const existing = applyToExisting(empty(), first);
 
-    const exported = buildStrategicPlanExportWorkbook(existing, stages, XLSX);
+    const exported = buildStrategicPlanExportWorkbook(existing, stages, XLSX, {
+      knownDepartments: [],
+      fteByTeam: {},
+    });
     const reread = () =>
       readXlsxWorkbook(XLSX, XLSX.write(exported, { type: "array", bookType: "xlsx" }));
 

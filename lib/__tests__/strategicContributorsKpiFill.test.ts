@@ -415,7 +415,10 @@ describe("strategic Excel import — Contributeurs / Responsables saisie", () =>
       indicators: first.toCreate.indicators,
       measurements: first.toCreate.measurements,
     };
-    const wb = buildStrategicPlanExportWorkbook(existing, stages, XLSX);
+    const wb = buildStrategicPlanExportWorkbook(existing, stages, XLSX, {
+      knownDepartments: [],
+      fteByTeam: {},
+    });
     const second = run(parseStrategicImportWorkbook(wb, XLSX), existing);
     expect(second.errors).toEqual([]);
     expect(second.toCreate.actions).toHaveLength(0);

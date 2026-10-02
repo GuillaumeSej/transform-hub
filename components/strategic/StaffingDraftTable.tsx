@@ -30,8 +30,9 @@ import { validateStaffingLine } from "@/lib/staffingLineValidation";
  * une fois le projet effectivement créé/approuvé.
  *
  * Mêmes règles de saisie que l'éditeur réel (`lib/staffingLineValidation.ts`) : équipe jamais
- * pré-remplie, ETP vide et obligatoire, dates de début/fin obligatoires (fin ≥ début), avertissement
- * non bloquant si hors des dates saisies pour le projet (`projectDates`).
+ * pré-remplie, ETP vide et obligatoire, dates de début/fin obligatoires (fin ≥ début),
+ * avertissements non bloquants si hors des dates saisies pour le projet (`projectDates`) ou si le
+ * nombre d'ETP dépasse l'effectif de l'équipe dans la base ETP.
  */
 
 /** Ligne de brouillon — mêmes champs significatifs qu'une `ChantierStaffing`, moins tout ce qui
@@ -73,7 +74,11 @@ export function StaffingDraftTable({
   approvalHint?: string;
 }) {
   const { t } = useTranslation();
-  const { departmentNames } = useCompanyDepartments(companyId);
+  // Effectif ACTUEL par équipe (même « disponible » que le taux de staffing) : avertissement non
+  // bloquant quand une ligne le dépasse.
+  const { departmentNames, fteByDept } = useCompanyDepartments(companyId, {
+    withRealizedMovements: true,
+  });
 
   const [form, setForm] = useState<StaffingLineFormValue>(EMPTY_STAFFING_LINE);
   const [formKey, setFormKey] = useState(0);
@@ -82,6 +87,7 @@ export function StaffingDraftTable({
   const validation = validateStaffingLine(form, {
     projectRange: projectDates ?? null,
     knownTeams: departmentNames.length > 0 ? departmentNames : undefined,
+    teamAvailableFte: fteByDept,
   });
 
   const add = () => {

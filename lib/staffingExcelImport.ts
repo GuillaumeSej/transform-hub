@@ -1,3 +1,4 @@
+import type { WorkBook } from "xlsx";
 import type { Chantier, ChantierAction, ChantierStaffing } from "@/types";
 import {
   canonicalizeRowKeys,
@@ -9,9 +10,10 @@ import {
 } from "@/lib/excelParse";
 import { applyExcelDateColumns, readOptionalTextCell } from "@/lib/excelCells";
 import { makeIssue, type ImportIssue } from "@/lib/importIssue";
+import { availableForTeam } from "@/lib/staffingRate";
 import {
-  STAFFING_MAX_FTE,
   checkStaffingLine,
+  formatStaffingFte,
   matchStaffingRows,
   staffingBusinessKey,
   type StaffingLineError,
@@ -23,14 +25,20 @@ import {
  * `StaffingImportButton` (même idiome `validate*Rows` -> aperçu + anomalies ligne par ligne, aucun
  * appel Firestore dans ce fichier — l'écriture reste à la charge de l'appelant).
  *
- * Format : UNE feuille, une ligne par entrée de staffing — colonnes Chantier / Fonction / ETP /
- * Date début / Date fin / Levier (optionnel) / Note (optionnel) / ID ligne (technique, rempli par
- * l'export). `Chantier`, `Fonction` et `Levier` sont résolus par NOM (insensible à la casse, aux
- * accents et aux espaces multiples). Les lignes dont la 1re cellule commence par "#" sont des
- * commentaires (ignorées) — c'est ainsi que le modèle présente ses exemples. L'export
- * (`buildStaffingExportWorkbook`) produit exactement ce format, dates en vraies cellules date
- * Excel : un fichier exporté puis ré-importé sans modification ne crée rien, ne met rien à jour et
- * ne produit aucune erreur.
+ * Format : UNE feuille de données "ETP", une ligne par entrée de staffing — colonnes Chantier /
+ * Fonction / ETP / Date début / Date fin / Levier (optionnel) / Note (optionnel) / ID ligne
+ * (technique, rempli par l'export). `Chantier`, `Fonction` et `Levier` sont résolus par NOM
+ * (insensible à la casse, aux accents et aux espaces multiples). Les lignes dont la 1re cellule
+ * commence par "#" sont des commentaires (ignorées) — c'est ainsi que le modèle présente ses
+ * exemples. L'export (`buildStaffingExportWorkbook`) produit exactement ce format, dates en vraies
+ * cellules date Excel : un fichier exporté puis ré-importé sans modification ne crée rien, ne met
+ * rien à jour et ne produit aucune erreur.
+ *
+ * Feuille de RÉFÉRENCE "Équipes" (modèle ET export, décision PO) : équipes de la base ETP de
+ * l'entreprise (nom exact à recopier dans "Fonction") avec leur effectif disponible — voir
+ * `appendStaffingTeamsSheet`, partagé avec le classeur du plan stratégique. Elle est IGNORÉE à
+ * l'import (`readStaffingImportSheet` ne lit que la feuille "ETP") : une équipe se crée uniquement
+ * dans la base ETP.
  *
  * **Rapprochement d'une ligne du fichier avec une entrée existante** (audit lot 4 — auparavant par
  * clé métier seule, si bien que modifier une date dans l'export créait un doublon) :
@@ -44,10 +52,10 @@ import {
  *
  * Contrôles : règle UNIQUE de `lib/staffingLineValidation.ts::checkStaffingLine` (la même que
  * l'écran et que la feuille ETP du plan stratégique) — équipe de la base ETP (une ligne existante
- * dont l'équipe a quitté la base reste modifiable, avec avertissement), 0 < ETP ≤
- * `STAFFING_MAX_FTE`, dates de début et de fin obligatoires (fin ≥ début), avertissement si les
- * dates sortent de la période du levier. Dates lues via `lib/excelParse.ts` (date illisible ou
- * impossible = erreur). Mise à jour d'une ligne historique sans dates : cellules de date vides
+ * dont l'équipe a quitté la base reste modifiable, avec avertissement), ETP > 0 (avertissement non
+ * bloquant au-delà de l'effectif disponible de l'équipe), dates de début et de fin obligatoires
+ * (fin ≥ début), avertissement si les dates sortent de la période du levier. Dates lues via
+ * `lib/excelParse.ts` (date illisible ou impossible = erreur). Mise à jour d'une ligne historique sans dates : cellules de date vides
  * acceptées (avertissement « dates à compléter »), comme le badge de l'écran.
  *
  * Cellule vide / tiret (règle commune aux imports, `lib/excelCells.ts`) : sur une mise à jour, une
@@ -74,9 +82,18 @@ export const STAFFING_IMPORT_HEADERS = [
 
 const STAFFING_DATE_HEADERS = ["Date début", "Date fin"] as const;
 
-/** Ré-export (compat) : le plafond vit dans `lib/staffingLineValidation.ts`, partagé avec l'écran
- *  et l'import du plan stratégique. */
-export { STAFFING_MAX_FTE };
+/** Feuille de référence des équipes (modèle + export des deux classeurs de staffing), ignorée à
+ *  l'import. */
+export const STAFFING_TEAMS_SHEET_NAME = "Équipes";
+
+export const STAFFING_TEAMS_HEADERS = ["Équipe", "Effectif disponible (ETP)"] as const;
+
+/** Ligne unique de la feuille "Équipes" quand la base ETP est vide. */
+export const STAFFING_TEAMS_EMPTY_TEXT = "Aucune équipe : importez d'abord la base ETP";
+
+/** Règle rappelée dans le modèle Effectifs et le Lisez-moi du plan stratégique. */
+export const STAFFING_TEAMS_RULE =
+  "La colonne Fonction doit reprendre exactement un nom de l'onglet Équipes ; une équipe se crée uniquement dans la base ETP.";
 
 /** Modèles français des anomalies — recopiés dans fr.ts sous `staffingImport.issue.*`. */
 export const STAFFING_IMPORT_ISSUES: Record<string, string> = {
@@ -90,8 +107,8 @@ export const STAFFING_IMPORT_ISSUES: Record<string, string> = {
   missingFte: '"ETP" est obligatoire',
   invalidFte: '"ETP" doit être un nombre, ex. 0,5 (lu : "{value}")',
   fteNotPositive: '"ETP" doit être strictement positif (lu : {value})',
-  fteTooHigh:
-    '"ETP" ({value}) dépasse le plafond de {max} ETP par ligne — répartissez le besoin sur plusieurs lignes',
+  fteAboveTeam:
+    "{fte} ETP sur cette ligne, au-delà de l'effectif de l'équipe {team} dans la base ETP ({dispo} ETP) — vérifiez la saisie",
   invalidDate: '{column} "{value}" illisible ou impossible (attendu JJ/MM/AAAA ou AAAA-MM-JJ)',
   missingDate: '"{column}" est obligatoire (date JJ/MM/AAAA)',
   datesMissing: "Ligne existante sans date de début ou de fin — dates à compléter",
@@ -129,8 +146,9 @@ export function buildStaffingTemplateRows(
       "# Les lignes commençant par # sont ignorées. Retirez le # d'un exemple pour l'importer."
     ),
     comment(
-      `# Règles : Fonction = équipe de la base ETP ; ETP > 0 et au plus ${STAFFING_MAX_FTE} par ligne ; Date début et Date fin obligatoires (fin ≥ début).`
+      "# Règles : Fonction = équipe de la base ETP ; ETP > 0 (au-delà de l'effectif disponible de l'équipe, simple avertissement) ; Date début et Date fin obligatoires (fin ≥ début)."
     ),
+    comment(`# ${STAFFING_TEAMS_RULE}`),
     comment(
       '# Mise à jour : "ID ligne" (rempli par l\'export) identifie la ligne — ne le modifiez pas, laissez-le vide pour une nouvelle ligne. Une cellule vide conserve la valeur existante ; un tiret "-" dans Note efface la note.'
     ),
@@ -146,18 +164,77 @@ export function buildStaffingTemplateRows(
 type XlsxUtilsModule = Pick<typeof import("xlsx"), "utils">;
 type StaffingWorkbook = ReturnType<XlsxUtilsModule["utils"]["book_new"]>;
 
+/**
+ * Lignes de la feuille "Équipes" : en-têtes puis une ligne par équipe de la base ETP (triées par
+ * nom) avec son effectif DISPONIBLE (`availableForTeam`, même notion que le taux de staffing),
+ * arrondi au centième. Base ETP vide = une ligne explicative.
+ */
+export function buildStaffingTeamsRows(
+  knownDepartments: readonly string[],
+  fteByTeam: Readonly<Record<string, number>>
+): (string | number)[][] {
+  const names = Array.from(new Set(knownDepartments.filter((n) => n.trim() !== ""))).sort((a, b) =>
+    a.localeCompare(b)
+  );
+  const rows: (string | number)[][] =
+    names.length > 0
+      ? names.map((name) => [
+          name,
+          Math.round(availableForTeam(fteByTeam as Record<string, number>, name) * 100) / 100,
+        ])
+      : [[STAFFING_TEAMS_EMPTY_TEXT]];
+  return [[...STAFFING_TEAMS_HEADERS], ...rows];
+}
+
+/** Ajoute la feuille de référence "Équipes" (ignorée à l'import) — modèle et export de la page
+ *  Budget & effectifs, modèle et export du plan stratégique (`lib/strategicExcelImport.ts`). */
+export function appendStaffingTeamsSheet(
+  XLSX: XlsxUtilsModule,
+  wb: StaffingWorkbook,
+  knownDepartments: readonly string[],
+  fteByTeam: Readonly<Record<string, number>>
+): void {
+  const sheet = XLSX.utils.aoa_to_sheet(buildStaffingTeamsRows(knownDepartments, fteByTeam));
+  sheet["!cols"] = [{ wch: 44 }, { wch: 26 }];
+  XLSX.utils.book_append_sheet(wb, sheet, STAFFING_TEAMS_SHEET_NAME);
+}
+
+const sheetKey = (name: string) => normalizeHeaderKey(name);
+
+/** Lignes brutes de la feuille "ETP" (insensible à la casse/aux accents), avec repli sur la
+ *  PREMIÈRE feuille de DONNÉES du classeur — cet import n'a qu'une feuille attendue : un CSV
+ *  importé porte presque toujours un nom de feuille arbitraire ("Sheet1"). La feuille de
+ *  référence "Équipes" n'est JAMAIS lue (ni comme feuille ETP, ni en repli). */
+export function readStaffingImportSheet(
+  XLSX: XlsxUtilsModule,
+  workbook: WorkBook
+): Record<string, unknown>[] {
+  const wanted = workbook.SheetNames.find(
+    (n) => sheetKey(n) === sheetKey(STAFFING_IMPORT_SHEET_NAME)
+  );
+  const sheetName =
+    wanted ?? workbook.SheetNames.find((n) => sheetKey(n) !== sheetKey(STAFFING_TEAMS_SHEET_NAME));
+  if (!sheetName) return [];
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
+    defval: "",
+  });
+}
+
 function staffingSheetColumns() {
   return STAFFING_IMPORT_HEADERS.map((h) => ({
     wch: h === STAFFING_LINE_ID_HEADER ? 12 : h === "Chantier" || h === "Levier" ? 36 : 14,
   }));
 }
 
-/** Modèle (en-têtes + exemples commentés), dates en vraies cellules date. */
+/** Modèle (en-têtes + exemples commentés, puis feuille de référence "Équipes"), dates en vraies
+ *  cellules date. */
 export function buildStaffingTemplateWorkbook(
   XLSX: XlsxUtilsModule,
   chantiers: Chantier[],
   chantierActions: ChantierAction[],
-  knownDepartments: string[]
+  knownDepartments: string[],
+  /** Effectif disponible par équipe (base ETP) — colonne de la feuille "Équipes". */
+  fteByTeam: Readonly<Record<string, number>>
 ): StaffingWorkbook {
   const wb = XLSX.utils.book_new();
   const sheet = XLSX.utils.aoa_to_sheet([
@@ -167,6 +244,7 @@ export function buildStaffingTemplateWorkbook(
   applyExcelDateColumns(XLSX, sheet, STAFFING_DATE_HEADERS);
   sheet["!cols"] = staffingSheetColumns();
   XLSX.utils.book_append_sheet(wb, sheet, STAFFING_IMPORT_SHEET_NAME);
+  appendStaffingTeamsSheet(XLSX, wb, knownDepartments, fteByTeam);
   return wb;
 }
 
@@ -197,12 +275,16 @@ export function staffingToExcelRows(
     );
 }
 
-/** Classeur d'export (une feuille "ETP") : dates en vraies cellules date Excel (JJ/MM/AAAA). */
+/** Classeur d'export (feuille "ETP" + feuille de référence "Équipes") : dates en vraies cellules
+ *  date Excel (JJ/MM/AAAA). */
 export function buildStaffingExportWorkbook(
   XLSX: XlsxUtilsModule,
   staffing: ChantierStaffing[],
   chantiers: Chantier[],
-  chantierActions: ChantierAction[]
+  chantierActions: ChantierAction[],
+  /** Équipes de la base ETP et leur effectif disponible — feuille "Équipes". */
+  knownDepartments: string[],
+  fteByTeam: Readonly<Record<string, number>>
 ): StaffingWorkbook {
   const rows = staffingToExcelRows(staffing, chantiers, chantierActions);
   const wb = XLSX.utils.book_new();
@@ -213,6 +295,7 @@ export function buildStaffingExportWorkbook(
   applyExcelDateColumns(XLSX, sheet, STAFFING_DATE_HEADERS);
   sheet["!cols"] = staffingSheetColumns();
   XLSX.utils.book_append_sheet(wb, sheet, STAFFING_IMPORT_SHEET_NAME);
+  appendStaffingTeamsSheet(XLSX, wb, knownDepartments, fteByTeam);
   return wb;
 }
 
@@ -296,7 +379,10 @@ export function validateStaffingImportRows(
   existingStaffing: ChantierStaffing[],
   /** Noms d'équipe réels de la base ETP entreprise — la colonne "Fonction" doit matcher l'un
    *  d'eux (ou, pour une ligne existante, l'équipe déjà enregistrée). */
-  knownDepartments: string[]
+  knownDepartments: string[],
+  /** Effectif disponible par équipe (base ETP) : au-delà, avertissement `fteAboveTeam` (la ligne
+   *  est importée). Absent = pas de contrôle. */
+  fteByTeam?: Readonly<Record<string, number>>
 ): StaffingImportPreview {
   const errors: StaffingImportError[] = [];
   const warnings: StaffingImportError[] = [];
@@ -409,6 +495,7 @@ export function validateStaffingImportRows(
         knownTeams: knownDepartments,
         currentTeam: matched?.function,
         projectRange: p.action ? { start: p.action.start, end: p.action.end } : null,
+        teamAvailableFte: fteByTeam,
       }
     );
     let rowFailed = false;
@@ -438,9 +525,6 @@ export function validateStaffingImportRows(
         case "fteNotPositive":
           error(rowNumber, "fteNotPositive", { value: str(p.fteRaw) });
           break;
-        case "fteTooHigh":
-          error(rowNumber, "fteTooHigh", { value: str(p.fteRaw), max: STAFFING_MAX_FTE });
-          break;
         case "startRequired":
         case "endRequired":
           error(rowNumber, "missingDate", {
@@ -462,6 +546,12 @@ export function validateStaffingImportRows(
     if (legacyUndated) warning(rowNumber, "datesMissing");
     if (check.warnings.includes("teamLeftBase"))
       warning(rowNumber, "functionLeftBase", { value: p.fn });
+    if (check.warnings.includes("fteAboveTeam") && check.fte !== null)
+      warning(rowNumber, "fteAboveTeam", {
+        fte: formatStaffingFte(check.fte),
+        team: check.team,
+        dispo: formatStaffingFte(check.teamAvailableFte ?? 0),
+      });
     if (check.warnings.includes("outsideProject") && p.action)
       warning(rowNumber, "outsideProject", {
         project: p.action.name,

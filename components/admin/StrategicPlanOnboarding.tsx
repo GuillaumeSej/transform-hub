@@ -16,6 +16,7 @@ import {
   ensureDefaultMaturityStages,
 } from "@/lib/firestore/maturityStageConfigs";
 import { writeStrategicImport } from "@/lib/firestore/strategicImportWrite";
+import { useCompanyDepartments } from "@/lib/hooks/useCompanyDepartments";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
 /**
@@ -54,6 +55,11 @@ export function StrategicPlanOnboarding({
   onDismiss: () => void;
 }) {
   const { t } = useTranslation();
+  // Feuille de référence "Équipes" du modèle : base ETP de l'entreprise (souvent encore vide juste
+  // après sa création — la feuille l'indique alors).
+  const { departmentNames, fteByDept } = useCompanyDepartments(companyId, {
+    withRealizedMovements: true,
+  });
   // Id alloué une fois pour toutes (même format que `ProgramsPanel.save`) : les entités prévisualisées
   // portent déjà ce `programId`, qui doit donc rester stable entre l'aperçu et la confirmation.
   const [programId] = useState(() => program?.id ?? `p${Date.now()}`);
@@ -220,7 +226,12 @@ export function StrategicPlanOnboarding({
         {!imported && (
           <button
             type="button"
-            onClick={() => void downloadStrategicImportTemplate()}
+            onClick={() =>
+              void downloadStrategicImportTemplate({
+                knownDepartments: departmentNames,
+                fteByTeam: fteByDept,
+              })
+            }
             className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary underline-offset-2 hover:text-bp-coral hover:underline"
           >
             <FileSpreadsheet size={13} />

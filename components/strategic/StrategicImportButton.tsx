@@ -16,6 +16,7 @@ import {
   type StrategicImportExistingData,
   type StrategicImportPreview,
   type StrategicImportWrites,
+  type StrategicTeamsReference,
 } from "@/lib/strategicExcelImport";
 import { readSpreadsheetFile } from "@/lib/excelFileRead";
 import type { AuthUser, MaturityStageConfig, Role } from "@/types";
@@ -31,12 +32,15 @@ import { useRole } from "@/lib/hooks/useRole";
 import { useToast } from "@/lib/hooks/useToast";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 
-/** Génère et télécharge le modèle Excel vierge (feuille "Lisez-moi" + 6 feuilles d'exemple) —
- *  réutilisé par `components/admin/StrategicPlanOnboarding.tsx`. SheetJS chargé au clic
- *  (`await import("xlsx")`), jamais importé statiquement par ce composant ni par la librairie. */
-export async function downloadStrategicImportTemplate(): Promise<void> {
+/** Génère et télécharge le modèle Excel vierge (feuille "Lisez-moi" + 6 feuilles d'exemple +
+ *  feuille de référence "Équipes" de la base ETP) — réutilisé par
+ *  `components/admin/StrategicPlanOnboarding.tsx`. SheetJS chargé au clic (`await import("xlsx")`),
+ *  jamais importé statiquement par ce composant ni par la librairie. */
+export async function downloadStrategicImportTemplate(
+  teams: StrategicTeamsReference
+): Promise<void> {
   const XLSX = await import("xlsx");
-  XLSX.writeFile(buildStrategicImportTemplateWorkbook(XLSX), "modele_plan_strategique.xlsx");
+  XLSX.writeFile(buildStrategicImportTemplateWorkbook(XLSX, teams), "modele_plan_strategique.xlsx");
 }
 
 /** Personne référencée dans le fichier, sans compte, proposée à la création (voir
@@ -174,7 +178,17 @@ export function StrategicImportButton({
   const { t } = useTranslation();
   const { user, isGlobalAdmin, isCompanyAdmin } = useRole();
   const companyUsers = useCompanyUsers(companyId ?? null);
-  const { departmentNames, loading: departmentsLoading } = useCompanyDepartments(companyId);
+  // Effectif ACTUEL par équipe (base + mouvements réalisés) : même « disponible » que le taux de
+  // staffing de la page Budget & effectifs (feuille "Équipes", avertissement ETP > disponible).
+  const {
+    departmentNames,
+    fteByDept,
+    loading: departmentsLoading,
+  } = useCompanyDepartments(companyId, { withRealizedMovements: true });
+  const teams: StrategicTeamsReference = {
+    knownDepartments: departmentNames,
+    fteByTeam: fteByDept,
+  };
   const canCreateAccounts = isGlobalAdmin || isCompanyAdmin;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<StrategicImportPreview | null>(null);
@@ -238,12 +252,12 @@ export function StrategicImportButton({
   }
 
   const downloadTemplate = async () => {
-    await downloadStrategicImportTemplate();
+    await downloadStrategicImportTemplate(teams);
     showToast(
       t("strategicImport.templateDownloadedTitle", "Modèle téléchargé"),
       t(
         "strategicImport.templateDownloadedBody",
-        'Lisez-moi (guide) + 6 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK, "Étape de maturité" facultative), Livrables (Code Projet = FK, facultative), Indicateurs (Code Axe OU Code Chantier = FK, "Valeur initiale" facultative), ETP (facultative, Code Chantier = FK). Supprimez les lignes d\'exemple avant de remplir.'
+        'Lisez-moi (guide) + 6 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK, "Étape de maturité" facultative), Livrables (Code Projet = FK, facultative), Indicateurs (Code Axe OU Code Chantier = FK, "Valeur initiale" facultative), ETP (facultative, Code Chantier = FK). Onglet Équipes = référence des équipes de la base ETP (ignoré à l\'import). Supprimez les lignes d\'exemple avant de remplir.'
       ),
       "success"
     );
@@ -251,7 +265,7 @@ export function StrategicImportButton({
 
   const exportPlan = async () => {
     const XLSX = await import("xlsx");
-    const wb = buildStrategicPlanExportWorkbook(data, maturityStages, XLSX);
+    const wb = buildStrategicPlanExportWorkbook(data, maturityStages, XLSX, teams);
     const d = new Date();
     const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     XLSX.writeFile(wb, `plan_strategique_${stamp}.xlsx`);
@@ -293,6 +307,8 @@ export function StrategicImportButton({
           // Feuille ETP : équipes de la base ETP (même règle que l'écran) — non contrôlées tant
           // que la base n'est pas chargée.
           knownDepartments: departmentsLoading ? undefined : departmentNames,
+          // Avertissement (non bloquant) quand une ligne dépasse l'effectif de son équipe.
+          teamAvailableFte: departmentsLoading ? undefined : fteByDept,
         }
       );
     } catch (err) {
