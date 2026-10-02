@@ -825,6 +825,8 @@ const de: Record<string, string> = {
   "hr.fteCard.planned": "Geplant (Bewegungen)",
   "hr.fteCard.levers": "Angestrebt (Hebel)",
   "hr.fteCard.coveragePct": "{pct} % der Hebel-Ambition abgedeckt",
+  "hr.fteCard.coverageBasis":
+    "Abdeckung berechnet auf den {n} VZÄ der Bewegungen, die Hebeln des Perimeters zugeordnet sind.",
   "hr.fteCard.headcount": "Personalbestand",
   "hr.fteCard.targetShort": "Ziel",
   "hr.kpi.targetLabel": "Ziel {v}",

@@ -3,8 +3,11 @@ import {
   buildMyWorkspace,
   isPilotProfile,
   missingMeasurementPeriod,
+  performanceProgramProgressPct,
   type MyWorkspaceStrategicInput,
 } from "@/lib/myWorkspace";
+import { leverProgressPct, workstreamProgressPct } from "@/lib/engine";
+import { computeLeverHealth } from "@/lib/leverHealth";
 import { EMPTY_WORKSPACE } from "@/lib/myWorkspaceTypes";
 import { programSwitchForLink } from "@/lib/activeProgramSelection";
 import { itemsOfCategory } from "@/components/workspace/workspaceView";
@@ -603,6 +606,80 @@ describe("buildMyWorkspace — avancement = même définition que le reste de l'
       programProgressPct(strategic.axes, strategic.chantiers, actions, projetProgress)
     );
     expect(row?.progressPct).toBe(55); // AX2 (sans chantier) n'entre pas dans la moyenne
+  });
+});
+
+describe("buildMyWorkspace — leviers : avancement et santé = mêmes fonctions que les autres écrans (lot 2)", () => {
+  // L1 : sans action, champ stocké `progress` 60 (périmé) ; Leviers/fiche/Kanban/export affichent
+  // `leverProgressPct` = 0 %. Alerte ORANGE de 600 k€ : risque « Critique » partout ailleurs.
+  // L2 : réalisé, sans action → 100 %.
+  const owner = makeUser("olivia", [{ role: "lever", programId: "p1" }]);
+  const bigAmber: Alert = {
+    id: "MAN-AMBER",
+    type: "amber",
+    ts: TODAY,
+    scope: "L1",
+    title: "Dérive",
+    desc: "",
+    actorRole: "lever",
+    companyId: "c1",
+    source: "manual",
+    impactEur: -600_000,
+  };
+  const l1 = makeLever({
+    id: "L1",
+    status: "in_progress",
+    progress: 60,
+    netSavings: 3,
+    ownerUsername: "olivia",
+    owner: "olivia Test",
+  });
+  const l2 = makeLever({
+    id: "L2",
+    code: "L2",
+    name: "Levier 2",
+    status: "delivered",
+    progress: 40,
+    netSavings: 1,
+  });
+  const data = makeData({ levers: [l1, l2], alerts: [bigAmber] });
+
+  it("ligne levier : avancement = leverProgressPct (0 %, pas le champ stocké 60 %)", () => {
+    const ws = buildMyWorkspace(
+      { user: owner, performance: data, users: [owner], today: TODAY },
+      t
+    );
+    const row = ws.perimeter.find((p) => p.id === "lever:L1");
+    expect(l1.progress).toBe(60); // avant : valeur affichée
+    expect(row?.progressPct).toBe(leverProgressPct(l1));
+    expect(row?.progressPct).toBe(0);
+  });
+
+  it("ligne levier : santé = computeLeverHealth (Critique → rouge, plus « orange »)", () => {
+    const ws = buildMyWorkspace(
+      { user: owner, performance: data, users: [owner], today: TODAY },
+      t
+    );
+    const row = ws.perimeter.find((p) => p.id === "lever:L1");
+    // Avant : pire couleur d'alerte ouverte = orange. Ailleurs : Critique.
+    expect(computeLeverHealth(l1, generateAlerts(data)).health).toBe("critical");
+    expect(row?.health).toBe("red");
+  });
+
+  it("ligne programme : avancement pondéré par la valeur, comme workstreamProgressPct", () => {
+    const cto = makeUser("carl", [{ role: "cto", programId: "p1" }]);
+    const ws = buildMyWorkspace(
+      { user: cto, performance: data, programs, users: [cto], today: TODAY },
+      t
+    );
+    const row = ws.perimeter.find((p) => p.id === "program:p1");
+    // Avant : moyenne simple des champs stockés (60 + 40) / 2 = 50. Après : (0 × 3 + 100 × 1) / 4.
+    expect(row?.progressPct).toBe(performanceProgramProgressPct([l1, l2]));
+    // Les deux leviers sont sur WS1 : même valeur que l'avancement du chantier (page Chantiers,
+    // Kanban, bibliothèque).
+    expect(row?.progressPct).toBe(workstreamProgressPct([l1, l2], "WS1"));
+    expect(row?.progressPct).toBe(25);
+    expect(row?.health).toBe("red");
   });
 });
 

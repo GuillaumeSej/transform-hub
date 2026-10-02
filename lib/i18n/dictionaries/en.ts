@@ -821,6 +821,8 @@ const en: Record<string, string> = {
   "hr.fteCard.planned": "Planned (movements)",
   "hr.fteCard.levers": "Targeted (levers)",
   "hr.fteCard.coveragePct": "{pct}% of the levers' ambition covered",
+  "hr.fteCard.coverageBasis":
+    "Coverage computed on the {n} FTE of movements linked to the levers in scope.",
   "hr.fteCard.headcount": "Headcount",
   "hr.fteCard.targetShort": "target",
   "hr.kpi.targetLabel": "Target {v}",

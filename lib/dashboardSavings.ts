@@ -4,6 +4,7 @@ import {
   displayedReforecastNet,
   leverImpactsOf,
   plannedInitialNet,
+  realizationPct,
   realizedSavings,
 } from "@/lib/engine";
 
@@ -17,17 +18,24 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Planifié initial / réactualisé / réalisé (€M) d'un groupe de leviers. Passer le groupe COMPLET
  *  (abandonnés compris) : le planifié initial les inclut (`plannedInitialNet`, décision audit C2),
- *  le réactualisé et le réalisé ne portent que sur les leviers actifs. */
+ *  le réactualisé et le réalisé ne portent que sur les leviers actifs. `realizationPct` = taux de
+ *  réalisation (`engine.realizationPct`) calculé sur les montants NON arrondis — même valeur que
+ *  `programSummary`/`workstreamSummary.progressPct` pour le même groupe de leviers (le recalculer
+ *  depuis `realized`/`reforecast`, arrondis au dixième, peut décaler d'un point). */
 export function savingsTriple(levers: Lever[]): {
   planned: number;
   reforecast: number;
   realized: number;
+  realizationPct: number;
 } {
   const active = levers.filter((l) => l.status !== "cancelled");
+  const reforecast = active.reduce((s, l) => s + displayedReforecastNet(l).value, 0);
+  const realized = active.reduce((s, l) => s + realizedSavings(l), 0);
   return {
     planned: r1(plannedInitialNet(levers)),
-    reforecast: r1(active.reduce((s, l) => s + displayedReforecastNet(l).value, 0)),
-    realized: r1(active.reduce((s, l) => s + realizedSavings(l), 0)),
+    reforecast: r1(reforecast),
+    realized: r1(realized),
+    realizationPct: realizationPct(realized, reforecast),
   };
 }
 
@@ -38,6 +46,8 @@ export type ProgramSavingsBar = {
   planned: number;
   target: number;
   realized: number;
+  /** Taux de réalisation non arrondi en amont (voir `savingsTriple`). */
+  realizationPct: number;
 };
 
 /** Barres « par programme » (vue consolidée) : planifié initial / cible réactualisée / réalisé par
@@ -70,6 +80,7 @@ export function programSavingsBars(
         planned: t.planned,
         target: t.reforecast,
         realized: t.realized,
+        realizationPct: t.realizationPct,
       };
     });
   if (unassigned.length > 0) {
@@ -80,6 +91,7 @@ export function programSavingsBars(
       planned: t.planned,
       target: t.reforecast,
       realized: t.realized,
+      realizationPct: t.realizationPct,
     });
   }
   return bars;

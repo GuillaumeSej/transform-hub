@@ -33,8 +33,8 @@ import {
 } from "@/lib/hrTimeSeries";
 import { hrProgramSummary, targetFteFromBaseline, type HrKpi } from "@/lib/hrProgramSummary";
 import { etpMovementDeepLink, etpMovementFilterLink } from "@/lib/hrMovementLink";
-import { fmtCurr, leverTargetFte } from "@/lib/engine";
-import { fteCoverage } from "@/lib/fteCoverage";
+import { fmtCurr } from "@/lib/engine";
+import { leverFteCoverage } from "@/lib/fteCoverage";
 import { filterAggregateVisibleLevers, filterProgramScopedLevers } from "@/lib/leversLogic";
 import { HrFteCard, type HrFteDetailTab } from "@/components/shared/HrFteCard";
 import { HrKpiDetailModal } from "@/components/shared/HrKpiDetailModal";
@@ -646,7 +646,7 @@ export default function HrDashboardPage() {
   // « Visés par les leviers » = MÊME calcul que le KPI du dashboard Performance
   // (`leverTargetFte`, via `programSummary`), sur le MÊME périmètre de leviers (visibilité
   // d'agrégation + scope programme partagés, voir DashboardPagePerformance) ; « couverts par des
-  // mouvements » = cible de l'Impact ETP ci-dessous. Seuls les filtres ayant un équivalent sur le
+  // mouvements » = impact ETP cible des mouvements RATTACHÉS à ces leviers (voir `coverage`). Seuls les filtres ayant un équivalent sur le
   // levier (chantier, fonction, pays, arborescences) s'appliquent aux leviers — les autres sont
   // signalés dans une note.
   const leverFilterGetters = useMemo(() => {
@@ -709,9 +709,13 @@ export default function HrDashboardPage() {
     activeFilters,
     leverFilterGetters,
   ]);
+  // « Couverts par des mouvements » = mouvements (filtrés) RATTACHÉS aux leviers du périmètre,
+  // abandonnés compris (`leverFteCoverage`, même sélecteur que le KPI du dashboard Performance et
+  // que l'onglet « Couverture leviers » de la fiche) — et non plus TOUS les mouvements filtrés : les
+  // mouvements sans levier gonflaient la couverture (7 couverts ici contre 3 côté Performance).
   const coverage = useMemo(
-    () => fteCoverage(leverTargetFte(coverageLevers), summary.fte.target),
-    [coverageLevers, summary.fte.target]
+    () => leverFteCoverage(coverageLevers, filteredMovements),
+    [coverageLevers, filteredMovements]
   );
   // Fiche KPI : mêmes mouvements (filtrés) que les cartes, mêmes leviers que la couverture.
   const kpiDetailData = useMemo(

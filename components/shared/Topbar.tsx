@@ -1,6 +1,6 @@
 "use client";
 
-import { fmtCurr } from "@/lib/engine";
+import { formatImpactSignedAmount } from "@/lib/impactAmountSign";
 
 import { useDismissable } from "@/lib/hooks/useDismissable";
 import { usePathname, useRouter } from "next/navigation";
@@ -336,7 +336,7 @@ export function Topbar({
                           {t(
                             "shared.topbar.realizedPending",
                             "Réalisé à valider · {amount}"
-                          ).replace("{amount}", fmtCurr(impact.amount))}
+                          ).replace("{amount}", formatImpactSignedAmount(impact))}
                         </span>
                       </button>
                     ))}

@@ -122,7 +122,7 @@ import {
 } from "@/lib/dashboardWidgets";
 import { formatMillions, formatDateShort } from "@/lib/format";
 import { formatFteValue } from "@/lib/hrEngine";
-import { hrProgramSummary } from "@/lib/hrProgramSummary";
+import { leverFteCoverage } from "@/lib/fteCoverage";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
 import { onActivateKey } from "@/lib/a11y";
 
@@ -416,15 +416,13 @@ export function DashboardPagePerformance() {
   }, [visibleData, filteredLevers, effectiveFyStart]);
 
   const summary = engine.programSummary(filteredData);
-  // « dont X couverts par des mouvements RH » (KPI ETP visés par les leviers) : cible ETP des
-  // mouvements RH rattachés aux leviers actifs du périmètre affiché — même agrégat que l'« Impact
-  // ETP » cible du Dashboard RH (`hrProgramSummary`). `null` sans aucun mouvement rattaché.
+  // « dont X couverts par des mouvements RH » (KPI ETP visés par les leviers) : MÊME calcul que la
+  // carte ETP du Dashboard RH (`leverFteCoverage` : mouvements rattachés aux leviers du périmètre
+  // affiché, abandonnés compris — lot 2 cohérence A ; avant, seuls les leviers actifs comptaient :
+  // « 3 couverts » ici contre 7 côté RH). `null` sans aucun mouvement rattaché.
   const movementCoveredFte = useMemo(() => {
-    const leverIds = new Set(
-      filteredData.levers.filter((l) => l.status !== "cancelled").map((l) => l.id)
-    );
-    const linked = (filteredData.workforce?.movements ?? []).filter((m) => leverIds.has(m.leverId));
-    return linked.length > 0 ? hrProgramSummary(linked).fte.target : null;
+    const coverage = leverFteCoverage(filteredData.levers, filteredData.workforce?.movements ?? []);
+    return coverage.linkedCount > 0 ? coverage.movementFte : null;
   }, [filteredData]);
   const underperformingLevers = useMemo(() => engine.underperformers(filteredData), [filteredData]);
 
@@ -767,12 +765,13 @@ export function DashboardPagePerformance() {
     // `Program.target`, voir le commentaire plus bas sur l'ambition programme).
     // `target` = cible RÉACTUALISÉE (barre de fond) ; `planned` = planifié initial (contour
     // pointillé, abandonnés compris — `plannedInitialNet`) ; `realized` = réalisé (actifs).
-    const { planned, reforecast, realized } = savingsTriple(wsAllLevers);
+    const { planned, reforecast, realized, realizationPct } = savingsTriple(wsAllLevers);
     return {
       label: w.name,
       target: reforecast,
       planned,
       realized,
+      realizationPct,
       leverBreakdown: {
         target: levers.map((l) => ({
           name: l.name,
@@ -795,13 +794,14 @@ export function DashboardPagePerformance() {
     });
     return Array.from(groups.entries())
       .map(([key, groupLevers]) => {
-        const { planned, reforecast, realized } = savingsTriple(groupLevers);
+        const { planned, reforecast, realized, realizationPct } = savingsTriple(groupLevers);
         const levers = groupLevers.filter((l) => l.status !== "cancelled");
         return {
           label: key,
           target: reforecast,
           planned,
           realized,
+          realizationPct,
           leverBreakdown: {
             target: levers.map((l) => ({
               name: l.name,

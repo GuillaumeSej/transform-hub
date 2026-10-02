@@ -224,6 +224,17 @@ export function HrFteCard({
             )}
           </div>
         )}
+        {/* La couverture ne compte que les mouvements RATTACHÉS aux leviers du périmètre
+            (`leverFteCoverage`, même chiffre que le dashboard Performance) : quand des mouvements
+            sans levier existent, le « Planifié (mouvements) » diffère — on l'explicite. */}
+        {hasLevers && fmt(coverage.movementFte) !== fmt(planned) && (
+          <div className="mt-0.5">
+            {t(
+              "hr.fteCard.coverageBasis",
+              "Couverture calculée sur les {n} ETP des seuls mouvements rattachés aux leviers du périmètre."
+            ).replace("{n}", signed(coverage.movementFte))}
+          </div>
+        )}
         {note && <div className="mt-0.5">{note}</div>}
       </div>
     </div>
