@@ -20,10 +20,10 @@ import {
 import { coerceImpactStatus } from "@/lib/impactStatus";
 import { CHARTER_CATEGORICAL } from "@/lib/charterColors";
 import {
-  displayedReforecastNet,
   displayedReforecastSnapshot,
   leverImpactsOf,
   leverProgressPct,
+  leverReforecastNetValue,
 } from "@/lib/engine";
 import { leverImportPatch, normalizeLeverCode } from "@/lib/leversLogic";
 import type {
@@ -1804,7 +1804,10 @@ export function validateLeverImportRows(
       // affiché (`displayedReforecastSnapshot`), qui diffère alors des champs courants. Une valeur
       // modifiée dans le fichier est signalée (point 2), jamais ignorée en silence.
       const hasImpacts = (values.impacts ?? []).length > 0;
-      if (hasImpacts || existing.lockedPlan || existing.reforecast) {
+      // Levier abandonné : l'export écrit son net RETENU (0, `leverReforecastNetValue`) — ses
+      // montants stockés (base du « Planifié initial ») sont conservés, jamais écrasés par ce 0.
+      const isCancelled = existing.status === "cancelled";
+      if (hasImpacts || existing.lockedPlan || existing.reforecast || isCancelled) {
         values.grossSavings = existing.grossSavings;
         values.netSavings = existing.netSavings;
         values.opexOneOff = existing.opexOneOff;
@@ -1813,7 +1816,7 @@ export function validateLeverImportRows(
         const source = hasImpacts ? "computedFromImpacts" : "computedFromPlan";
         const refo = displayedReforecastSnapshot(existing);
         flagIgnored("Impact estimé brut (€M)", refo.grossSavings, source);
-        flagIgnored("Impact estimé net (€M)", displayedReforecastNet(existing).value, source);
+        flagIgnored("Impact estimé net (€M)", leverReforecastNetValue(existing), source);
         flagIgnored("CAPEX (€M)", refo.capex, source);
         flagIgnored("OPEX one-off (€M)", refo.opexOneOff, source);
         flagIgnored("OPEX récurrent (€M/an)", refo.opexRec, source);

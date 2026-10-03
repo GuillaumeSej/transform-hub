@@ -46,6 +46,7 @@ import {
   MISSING_VALUE,
 } from "@/lib/format";
 import { workstreamDeclaredProgress } from "@/lib/workstreamLogic";
+import { fiscalYearLabel } from "@/lib/fiscalYear";
 
 /**
  * Portage fidèle du moteur de calcul `ENGINE` du prototype HTML historique de Guillaume
@@ -337,6 +338,15 @@ export function displayedReforecastNet(lever: Lever): { value: number; isReforec
   return { value: lever.lockedPlan?.netSavings ?? lever.netSavings, isReforecast: false };
 }
 
+/** Net réactualisé RETENU par le moteur pour un levier — SEULE valeur à afficher sous
+ *  « Réactualisé (net) » dans les listes et exports : `displayedReforecastNet`, mais 0 pour un
+ *  levier ABANDONNÉ (comme le P&L, le tableau Finance, la cascade et la courbe en S, où l'abandon
+ *  se lit dans le réactualisé). Avant, la liste et l'export affichaient 1,5 pour un abandonné que
+ *  tous les totaux comptaient à 0. */
+export function leverReforecastNetValue(lever: Lever): number {
+  return lever.status === "cancelled" ? 0 : displayedReforecastNet(lever).value;
+}
+
 /** Snapshot financier « réactualisé » COMPLET d'un levier (brut, net, OPEX, CAPEX) — même chaîne que
  *  `displayedReforecastNet` : impacts si le levier en porte, sinon reforecast enregistré, sinon plan
  *  figé, sinon champs courants. À utiliser pour toute ventilation qui doit se recouper avec la valeur
@@ -467,7 +477,7 @@ export function isInvestCostEngaged(
 
 /** Coûts Invest (CAPEX + OPEX one-off, €M) ENGAGÉS d'un levier à `today` — somme datée de ses
  *  lignes de coût (`isInvestCostEngaged`). Levier sans ligne de coût détaillée (saisie macro) :
- *  coûts d'implémentation × avancement affiché (`leverProgressPct`, jamais le champ stocké et
+ *  coûts d'implémentation RÉACTUALISÉS (`displayedReforecastSnapshot`) × avancement affiché (`leverProgressPct`, jamais le champ stocké et
  *  périmé `lever.progress`). */
 export function leverEngagedInvestCost(lever: Lever, today: Date = new Date()): number {
   const { capex, opexOneOff } = leverEngagedInvestCostByNature(lever, today);
@@ -493,7 +503,11 @@ export function leverEngagedInvestCostByNature(
   }
   if (!isLeverLaunched(lever.status)) return { capex: 0, opexOneOff: 0 };
   const f = leverProgressPct(lever) / 100;
-  return { capex: lever.capex * f, opexOneOff: lever.opexOneOff * f };
+  // Base = coûts RÉACTUALISÉS (`displayedReforecastSnapshot`), comme le total du KPI / du donut
+  // (`reforecastCosts`) : avant, les champs courants (`lever.capex`) — un levier macro réactualisé
+  // de 4 → 6 M€ à 50 % affichait 2 engagé sur 6 réactualisé (33 % au lieu de 50 %).
+  const snap = displayedReforecastSnapshot(lever);
+  return { capex: snap.capex * f, opexOneOff: snap.opexOneOff * f };
 }
 
 /** ETP visés par les leviers (KPI « ETP visés par les leviers » du dashboard) : somme signée des
@@ -563,6 +577,9 @@ export function programSummary(data: BeTrackData): ProgramSummary {
     plannedCosts: Math.round(plannedCosts * 10) / 10,
     engagedCosts: Math.round(engagedCosts * 10) / 10,
     reforecastCosts: Math.round(reforecastCosts * 10) / 10,
+    // % engagé / réactualisé calculé sur les montants NON arrondis (comme `progressPct`) : avant,
+    // le KPI le recalculait sur les valeurs arrondies au dixième (52 % contre 50 % dans le donut).
+    engagedCostsPct: realizationPct(engagedCosts, reforecastCosts),
     suppressionsPlanned: Math.round(suppressionsPlanned * 10) / 10,
     suppressionsRealized: Math.round(suppressionsRealized * 10) / 10,
   };
@@ -709,6 +726,22 @@ function realizedMonthRange(range: [number, number] | null, today: Date): [numbe
   const cur = today.getFullYear() * 12 + today.getMonth();
   if (range[0] > cur) return null;
   return [range[0], Math.min(range[1], cur)];
+}
+
+/** Plage du réalisé d'une ligne effectivement RÉALISÉE (impact coché « Réalisé » et validé) :
+ *  `realizedMonthRange`, mais une ligne réalisée AVANT sa date (début futur) est ramenée au MOIS
+ *  COURANT — même règle que la courbe en S (`leverRealizedByDate` : réalisé daté à aujourd'hui).
+ *  Avant (régression du lot 1), un gain de 0,7 coché réalisé au 01/02/2027 comptait dans le
+ *  réalisé total (KPI, courbe) mais dans AUCUN exercice du P&L / tableau Finance ; désormais la
+ *  somme des exercices égale le total. */
+function realizedLineMonthRange(
+  range: [number, number] | null,
+  today: Date
+): [number, number] | null {
+  if (!range) return null;
+  const cur = today.getFullYear() * 12 + today.getMonth();
+  if (range[0] > cur) return [cur, cur];
+  return realizedMonthRange(range, today);
 }
 
 /** Montant signé d'une ligne d'impact dans le NET annualisé (règle « net = brut − OPEX récurrent »,
@@ -863,7 +896,7 @@ export function pnlImpactDetailed(
   for (const lever of data.levers) {
     const isCancelled = lever.status === "cancelled";
     const plan = displayedLockedPlanNet(lever).value;
-    const refo = isCancelled ? 0 : displayedReforecastNet(lever).value;
+    const refo = leverReforecastNetValue(lever);
     const leverAccount = accountOfLeaf(lever.hierarchyLeafId);
     const lines = leverNetLines(lever, today);
 
@@ -873,12 +906,13 @@ export function pnlImpactDetailed(
       const account = leverAccount ?? (lever.pnlMap || undefined) ?? UNALLOCATED_ACCOUNT_ID;
       const range = leverMonthRange(lever);
       const w = shareIn(range, true);
-      if (w === 0) continue;
+      const real = isCancelled ? 0 : realizedSavings(lever);
+      // Réalisé avant le début du levier : ramené au mois courant (`realizedLineMonthRange`).
+      const wReal = real !== 0 ? shareIn(realizedLineMonthRange(range, today), true) : 0;
+      if (w === 0 && wReal === 0) continue;
       entry(account).plan += plan * w;
       entry(account).reforecast += refo * w;
-      const real = isCancelled ? 0 : realizedSavings(lever);
-      if (real !== 0)
-        entry(account).realized += real * shareIn(realizedMonthRange(range, today), true);
+      if (wReal !== 0) entry(account).realized += real * wReal;
       continue;
     }
 
@@ -894,14 +928,14 @@ export function pnlImpactDetailed(
       const recurring = isRecurringImpact(line.imp);
       const range = netLineMonthRange(line, lever);
       const w = shareIn(range, recurring);
-      if (w === 0) return;
+      // Réalisé : même règle, sur la plage bornée au mois courant (jamais de mois futurs) ; une
+      // ligne cochée réalisée avant sa date compte au mois courant (`realizedLineMonthRange`),
+      // même si sa plage planifiée ne touche pas la période.
+      const wReal = line.realized ? shareIn(realizedLineMonthRange(range, today), recurring) : 0;
+      if (w === 0 && wReal === 0) return;
       entry(account).plan += planParts[i] * w;
       entry(account).reforecast += refoParts[i] * w;
-      // Réalisé : même règle, sur la plage bornée au mois courant (jamais de mois futurs).
-      if (line.realized) {
-        entry(account).realized +=
-          line.signed * shareIn(realizedMonthRange(range, today), recurring);
-      }
+      if (wReal !== 0) entry(account).realized += line.signed * wReal;
     });
   }
 
@@ -1217,15 +1251,21 @@ type ScheduleEntity = {
   dependencies: LeverDependency[];
 };
 
+/** Leviers PLANIFIABLES des dépendances : les leviers ABANDONNÉS sont exclus, en source comme en
+ *  cible — un levier abandonné ne bloque rien et n'est bloqué par rien (avant, il recevait une
+ *  alerte de dépendance de −1,5 M€ « à risque », d'où un risque « Critique » dans la liste et
+ *  l'export, alors que son réactualisé compte pour 0 partout ailleurs). */
 function toScheduleEntities(data: BeTrackData): ScheduleEntity[] {
-  return data.levers.map((l) => ({
-    id: l.id,
-    kind: "lever",
-    name: l.name,
-    start: l.start,
-    end: l.end,
-    dependencies: l.dependencies,
-  }));
+  return data.levers
+    .filter((l) => l.status !== "cancelled")
+    .map((l) => ({
+      id: l.id,
+      kind: "lever",
+      name: l.name,
+      start: l.start,
+      end: l.end,
+      dependencies: l.dependencies,
+    }));
 }
 
 export type CascadeShift = {
@@ -1260,6 +1300,10 @@ export function computeCascadeShift(
   const deltaDays = daysBetween(oldEnd, newEnd);
   if (deltaDays <= 0) return { shifts: [], impactedLevers: [] };
 
+  // Levier ABANDONNÉ qui glisse : il ne bloque plus rien (voir `toScheduleEntities`).
+  if (data.levers.some((l) => l.id === entityId && l.status === "cancelled")) {
+    return { shifts: [], impactedLevers: [] };
+  }
   const entities = toScheduleEntities(data);
   const impactedLevers: CascadeResult["impactedLevers"] = entities
     .filter((e) => e.id !== entityId && e.dependencies.some((d) => d.targetId === entityId))
@@ -1303,10 +1347,12 @@ export function dependencyAlerts(data: BeTrackData): DependencyAlert[] {
   const alerts: DependencyAlert[] = [];
 
   // Résoudre les savings NON RÉALISÉS d'une entité — c'est le montant réellement à risque
-  // (les savings déjà réalisés sont acquis et ne peuvent plus être bloqués).
+  // (les savings déjà réalisés sont acquis et ne peuvent plus être bloqués). Base = net
+  // RÉACTUALISÉ (`displayedReforecastNet`, même valeur que la liste / le P&L), plus le net stocké
+  // `netSavings` (périmé dès que les impacts ont été revus).
   const entityUnrealizedSavings = (id: string): number => {
     const lever = data.levers.find((l) => l.id === id);
-    if (lever) return Math.max(0, lever.netSavings - realizedSavings(lever));
+    if (lever) return Math.max(0, displayedReforecastNet(lever).value - realizedSavings(lever));
     return 0;
   };
 
@@ -1629,13 +1675,14 @@ export function fiscalMonthLabels(fyStart: Date): string[] {
   });
 }
 
-/** Libellés des 4 trimestres de l'exercice : trimestre CIVIL du premier mois de chaque trimestre
- *  fiscal (« Q2 2026 » pour avril-juin), même format « Qn AAAA » que le reste de l'app. */
+/** Libellés des 4 trimestres FISCAUX de l'exercice commençant à `fyStart` — même convention que
+ *  la page Finance (`fiscalYearLabel`, lib/fiscalYear.ts) : exercice décalé → « Q1 FY26/27 » …
+ *  « Q4 FY26/27 » ; exercice civil → « Q1 2026 » … « Q4 2026 » (inchangé). Avant, chaque
+ *  trimestre fiscal portait le libellé du trimestre CIVIL de son premier mois (« Q4 2026 » pour
+ *  octobre-décembre d'un exercice avril-mars), alors que la Finance affichait « Q3 FY26/27 ». */
 export function fiscalQuarterLabels(fyStart: Date): string[] {
-  return [0, 3, 6, 9].map((offset) => {
-    const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + offset, 1);
-    return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
-  });
+  const fy = fiscalYearLabel(fyStart.getFullYear(), fyStart.getMonth());
+  return [1, 2, 3, 4].map((q) => `Q${q} ${fy}`);
 }
 
 /**
@@ -2796,7 +2843,7 @@ export function financeByHierarchyLevel(
     // Même définition que `plannedInitialNet` (KPI / cascade du dashboard).
     const locked = displayedLockedPlanNet(l).value;
     const isCancelled = l.status === "cancelled";
-    const refo = isCancelled ? 0 : displayedReforecastNet(l).value;
+    const refo = leverReforecastNetValue(l);
     const late = !isCancelled && isLeverLate(l, today);
     const lines = leverNetLines(l, today);
 
@@ -2804,10 +2851,15 @@ export function financeByHierarchyLevel(
       // Bloc macro : récurrent sans fin depuis le début du levier (`leverMonthRange`), comme le P&L.
       const range = leverMonthRange(l);
       const w = shareIn(range, true);
-      if (w === 0) continue;
-      // Réalisé et part « due » du réactualisé (base du retard) : plage bornée au mois courant.
-      const wDue = shareIn(realizedMonthRange(range, today), true);
-      const real = (isCancelled ? 0 : realizedSavings(l)) * wDue;
+      const realTotal = isCancelled ? 0 : realizedSavings(l);
+      // Réalisé et part « due » du réactualisé (base du retard) : plage bornée au mois courant ;
+      // réalisé avant le début du levier → mois courant (`realizedLineMonthRange`, comme le P&L).
+      const wDue = shareIn(
+        realTotal !== 0 ? realizedLineMonthRange(range, today) : realizedMonthRange(range, today),
+        true
+      );
+      if (w === 0 && wDue === 0) continue;
+      const real = realTotal * wDue;
       const row = rowForLeaf(l.hierarchyLeafId);
       row.planned += locked * w;
       row.reforecast += refo * w;
@@ -2824,10 +2876,17 @@ export function financeByHierarchyLevel(
     const weights = lines.map((x, i) => shareIn(ranges[i], isRecurringImpact(x.imp)));
     // Coefficient de la plage bornée au mois courant (`realizedMonthRange`) : réalisé, et part
     // ÉCHUE du réactualisé pour le retard (rien n'est « en retard » sur des mois non écoulés).
+    // Ligne réalisée avant sa date : ramenée au mois courant (`realizedLineMonthRange`, comme le
+    // P&L) — elle est alors retenue dans la période du mois courant même si sa plage n'y est pas.
     const dueWeights = lines.map((x, i) =>
-      shareIn(realizedMonthRange(ranges[i], today), isRecurringImpact(x.imp))
+      shareIn(
+        x.realized
+          ? realizedLineMonthRange(ranges[i], today)
+          : realizedMonthRange(ranges[i], today),
+        isRecurringImpact(x.imp)
+      )
     );
-    const kept = weights.map((w) => w > 0);
+    const kept = weights.map((w, i) => w > 0 || (lines[i].realized && dueWeights[i] > 0));
     if (!kept.some(Boolean)) continue;
     const refoAlloc = isCancelled ? signed.map(() => 0) : allocateLeverTotal(refo, signed);
     const planParts = allocateLeverTotal(locked, signed).map((v, i) => v * weights[i]);

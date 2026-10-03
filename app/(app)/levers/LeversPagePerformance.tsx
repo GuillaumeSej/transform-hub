@@ -55,7 +55,8 @@ import { formatAmountM } from "@/lib/format";
 
 type LeverRow = Lever & {
   realized: number;
-  /** Économie nette RÉACTUALISÉE (`engine.displayedReforecastNet`) — montant affiché dans la
+  /** Économie nette RÉACTUALISÉE retenue par le moteur (`engine.leverReforecastNetValue` : 0 pour
+   *  un levier abandonné, comme le P&L / la Finance / la cascade) — montant affiché dans la
    *  colonne « Économies nettes réactualisées » (décision audit C2 : plus le net courant). */
   reforecastNet: number;
   /** « Avancement » — `engine.leverProgressPct(l)` (plan d'action ; sans action, selon le
@@ -560,7 +561,7 @@ export function LeversPagePerformance() {
       riskReason: leverRiskReasonText(t, riskAssessment),
       riskLabel: riskLevelLabel(t, riskAssessment.level),
       realized: engine.realizedSavings(l),
-      reforecastNet: engine.displayedReforecastNet(l).value,
+      reforecastNet: engine.leverReforecastNetValue(l),
       progressPct: engine.leverProgressPct(l),
       wsName: data.workstreams.find((w) => w.id === l.ws)?.name ?? l.ws,
       programName: showProgramColumn ? programLabel(l) : "",

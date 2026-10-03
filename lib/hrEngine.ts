@@ -207,9 +207,12 @@ export function etpRowBreakdown(
   return { total: rows.length, employees, departed, recruitments: rows.length - employees };
 }
 
-/** Valeur ETP localisée, arrondie au dixième (fr `99,7`, en `99.7`) — formateur de l'app. */
+/** Valeur ETP localisée, arrondie au dixième (fr `99,7`, en `99.7`) — formateur de l'app. Valeur
+ *  non numérique (NaN, ±Infinity : donnée manquante ou ratio indéfini) → « — » : avant, elle
+ *  s'affichait « 0 », indiscernable d'un vrai zéro ETP. */
 export function formatFteValue(value: number, locale?: Locale): string {
-  const v = Number.isFinite(value) ? Math.round(value * 10) / 10 : 0;
+  if (!Number.isFinite(value)) return "—";
+  const v = Math.round(value * 10) / 10;
   return formatNumber(v || 0, { maximumFractionDigits: 1 }, locale);
 }
 

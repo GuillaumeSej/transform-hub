@@ -504,6 +504,7 @@ function recurringFlows(data: BeTrackData): RecurringFlow[] {
   const out: RecurringFlow[] = [];
   for (const lever of data.levers) {
     if (lever.status === "cancelled") continue;
+    let hasRecurringLine = false;
     for (const imp of leverImpactsOf(lever)) {
       let kind: RecurringFlow["kind"] | null = null;
       // Impact BFR (trésorerie) : hors économies.
@@ -512,6 +513,7 @@ function recurringFlows(data: BeTrackData): RecurringFlow[] {
       else if (imp.type === "fte") kind = isFteHire(imp) ? "opexRec" : "gain";
       else if (imp.nature === "opex_rec") kind = "opexRec";
       if (!kind || !imp.amount) continue;
+      hasRecurringLine = true;
       const { start, end } = impactDatesOf(imp);
       const fromMi = monthIndexOf(start ?? (kind === "gain" ? lever.end : lever.start));
       if (!Number.isFinite(fromMi)) continue;
@@ -522,6 +524,28 @@ function recurringFlows(data: BeTrackData): RecurringFlow[] {
         annual: imp.amount,
         fromMi,
         toMi: Number.isFinite(endMi) ? Math.max(fromMi, endMi) : Infinity,
+      });
+    }
+    if (hasRecurringLine) continue;
+    // Levier SANS ligne récurrente (saisie macro) : même règle que le P&L
+    // (`engine.pnlImpactDetailed`, bloc `leverMonthRange`) — RÉCURRENT SANS FIN depuis son début
+    // (repli : sa fin), pour son réactualisé (`displayedReforecastSnapshot`). Avant, il était
+    // absent d'« Invest vs Savings » alors qu'il comptait dans le P&L. OPEX récurrent = celui du
+    // snapshot ; gain = net + OPEX récurrent (règle « net = brut − OPEX récurrent »), pour que le
+    // net de ces flux égale EXACTEMENT le réactualisé net retenu par le P&L.
+    const fromMi = monthIndexOf(lever.start);
+    const leverFromMi = Number.isFinite(fromMi) ? fromMi : monthIndexOf(lever.end);
+    if (!Number.isFinite(leverFromMi)) continue;
+    const snap = displayedReforecastSnapshot(lever);
+    const gain = snap.netSavings + snap.opexRec;
+    if (gain) out.push({ lever, kind: "gain", annual: gain, fromMi: leverFromMi, toMi: Infinity });
+    if (snap.opexRec) {
+      out.push({
+        lever,
+        kind: "opexRec",
+        annual: snap.opexRec,
+        fromMi: leverFromMi,
+        toMi: Infinity,
       });
     }
   }

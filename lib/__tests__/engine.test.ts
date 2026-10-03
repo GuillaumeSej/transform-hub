@@ -955,7 +955,10 @@ describe("engine — programSummary (reforecast, coûts, risques, suppressions)"
     });
     const s = programSummary(data);
     expect(s.plannedCosts).toBe(6); // lockedPlan: 4 + 2
-    expect(s.engagedCosts).toBe(2); // courant (3+1) × 50 % (avancement affiché)
+    // Réactualisé (repli : plan figé 4 + 2) × 50 % (avancement affiché) — lot 5 : avant, champs
+    // courants (3 + 1) × 50 % = 2, incohérent avec le total réactualisé de 6 (33 % au lieu de 50 %).
+    expect(s.engagedCosts).toBe(3);
+    expect(s.engagedCostsPct).toBe(50);
   });
 
   it("engagedCosts is DATE-based for detailed cost lines (same rule as the Finance donut)", () => {
