@@ -95,7 +95,7 @@ export function HrExcelButtons({
       t("shared.excelIO.templateDownloadedTitle", "Modèle téléchargé"),
       t(
         "shared.hrExcelButtons.templateDownloadedBody",
-        "Remplissez les colonnes puis importez le fichier. En mise à jour, une cellule vide conserve la valeur existante ; un tiret « - » l'efface."
+        "Remplissez les colonnes puis importez le fichier. En mise à jour, une cellule vide conserve la valeur existante ; un tiret « - » efface une colonne facultative. Sur une colonne obligatoire (Matricule, Nom, Département, Niveau, ETP ; ID mouvement, Employé / Poste, Type, Département, Date planifiée, Statut), le tiret est refusé : erreur bloquante, rien n'est importé."
       ),
       "success"
     );

@@ -28,7 +28,17 @@ const toggleBtn = (active: boolean) =>
 /** « Trajectoire des gains » d'un levier : barres par période (gains au-dessus de l'axe, coûts
  *  en dessous ; montants annualisés lissés mois par mois) + cumul net, curseur « Aujourd'hui ».
  *  Pas de tooltip : un clic sur une période ouvre le détail des impacts sources. */
-export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; height?: number }) {
+export function ImpactTrajectoryChart({
+  lever,
+  height = 320,
+  fyStartMonth = 0,
+}: {
+  lever: Lever;
+  height?: number;
+  /** Mois (0-11) de début d'exercice du programme : trimestres / années FISCAUX (« Q3 FY26/27 »),
+   *  comme la courbe en S. 0 = calendrier civil. */
+  fyStartMonth?: number;
+}) {
   const { t } = useTranslation();
   const [view, setView] = useState<"financial" | "fte">("financial");
   const [detail, setDetail] = useState<ImpactTrajectoryPoint | null>(null);
@@ -42,8 +52,15 @@ export function ImpactTrajectoryChart({ lever, height = 320 }: { lever: Lever; h
   const setGranularity = setPicked;
 
   const traj = useMemo(
-    () => impactTrajectory(lever, { view, granularity, today: new Date(), smoothRecurring: true }),
-    [lever, view, granularity]
+    () =>
+      impactTrajectory(lever, {
+        view,
+        granularity,
+        today: new Date(),
+        smoothRecurring: true,
+        fyStartMonth,
+      }),
+    [lever, view, granularity, fyStartMonth]
   );
 
   // Clé d'axe = début de période (unique, triable) ; libellé affiché via tickFormatter : une même

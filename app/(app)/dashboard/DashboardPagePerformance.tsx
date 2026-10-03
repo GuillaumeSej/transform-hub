@@ -418,8 +418,8 @@ export function DashboardPagePerformance() {
   const summary = engine.programSummary(filteredData);
   // « dont X couverts par des mouvements RH » (KPI ETP visés par les leviers) : MÊME calcul que la
   // carte ETP du Dashboard RH (`leverFteCoverage` : mouvements rattachés aux leviers du périmètre
-  // affiché, abandonnés compris — lot 2 cohérence A ; avant, seuls les leviers actifs comptaient :
-  // « 3 couverts » ici contre 7 côté RH). `null` sans aucun mouvement rattaché.
+  // affiché — lot 2 cohérence A : « 3 couverts » ici contre 7 côté RH ; leviers abandonnés exclus
+  // comme la cible, audit lot 6). `null` sans aucun mouvement rattaché.
   const movementCoveredFte = useMemo(() => {
     const coverage = leverFteCoverage(filteredData.levers, filteredData.workforce?.movements ?? []);
     return coverage.linkedCount > 0 ? coverage.movementFte : null;

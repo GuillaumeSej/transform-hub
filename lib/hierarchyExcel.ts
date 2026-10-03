@@ -6,6 +6,7 @@ import {
   normalizeHeaderKey,
   parseCellNumber,
 } from "@/lib/excelParse";
+import { EXCEL_NOT_CLEARABLE_MESSAGE, isClearMarker } from "@/lib/excelCells";
 import { makeIssue, type ImportIssue } from "@/lib/importIssue";
 
 /**
@@ -28,6 +29,11 @@ import { makeIssue, type ImportIssue } from "@/lib/importIssue";
  * - `Code parent` : vide pour le niveau macro (order 0), sinon code d'un nœud (existant OU créé
  *   plus haut dans le même import) du niveau immédiatement parent. Les lignes sont traitées niveau
  *   par niveau, du plus macro au plus fin, quel que soit leur ordre dans le fichier.
+ * - Tiret « - » (règle commune aux imports, `lib/excelCells.ts`) : dans une colonne OBLIGATOIRE
+ *   (`Niveau`, `Code`, `Libellé`, `Code parent` d'un niveau non macro), ERREUR BLOQUANTE
+ *   `notClearable` (décision PO du 03/10 — auparavant un nœud « - » était créé ou renommé). Dans une
+ *   colonne facultative, il efface : `Code parent` d'un niveau macro (aucun parent), `Baseline`
+ *   (0), `Calculé` (Non), `Sélectionnable` (Oui) — valeurs par défaut d'une ligne P&L.
  */
 
 export const HIERARCHY_EXCEL_HEADERS = ["Niveau", "Code", "Libellé", "Code parent"] as const;
@@ -49,6 +55,8 @@ export const HIERARCHY_IMPORT_ISSUES: Record<string, string> = {
   invalidBoolean: '{column} "{value}" non reconnu (attendu Oui/Non)',
   financialIgnored:
     'Données financières ignorées : le niveau "{level}" n\'est pas un niveau de lignes P&L',
+  // Tiret sur une colonne obligatoire : erreur bloquante, modèle commun à tous les imports.
+  notClearable: EXCEL_NOT_CLEARABLE_MESSAGE,
 };
 
 export type HierarchyImportError = ImportIssue;
@@ -229,11 +237,23 @@ export function validateHierarchyImportRows(
     const levelRaw = str(row["Niveau"]);
     const code = str(row["Code"]);
     const label = str(row["Libellé"]);
-    const parentCode = str(row["Code parent"]);
+    const parentDashed = isClearMarker(row["Code parent"]);
+    const parentCode = parentDashed ? "" : str(row["Code parent"]);
 
-    if (!levelRaw && !code && !label && !parentCode) continue; // ligne vide, ignorée
+    if (!levelRaw && !code && !label && !parentCode && !parentDashed) continue; // ligne vide
 
     const level = levelByLabelOrKey.get(normalizeHeaderKey(levelRaw));
+    // Tiret refusé AVANT toute résolution dans les colonnes obligatoires (« Code parent » ne l'est
+    // pas pour le niveau macro : le tiret y vaut « aucun parent »).
+    const isMacro = !!level && !sortedLevels.some((pl) => pl.order === level.order - 1);
+    const dashed = [
+      ...(["Niveau", "Code", "Libellé"] as const).filter((c) => isClearMarker(row[c])),
+      ...(parentDashed && !isMacro ? ["Code parent"] : []),
+    ];
+    if (dashed.length > 0) {
+      for (const column of dashed) error(rowNumber, "notClearable", { column });
+      continue;
+    }
     if (!level) {
       error(rowNumber, "unknownLevel", { value: levelRaw });
       continue;
@@ -252,7 +272,10 @@ export function validateHierarchyImportRows(
       } else {
         financial = {};
         let bad = false;
-        const b = parseCellNumber(row["Baseline"]);
+        // Facultatives : tiret = valeur par défaut (baseline 0, non calculé, sélectionnable).
+        const b = isClearMarker(row["Baseline"])
+          ? ({ ok: true, value: 0 } as const)
+          : parseCellNumber(row["Baseline"]);
         if (b && !b.ok) {
           error(rowNumber, "invalidBaseline", { value: b.raw });
           bad = true;
@@ -262,7 +285,9 @@ export function validateHierarchyImportRows(
           ["Sélectionnable", "selectable"],
         ] as const) {
           if (!(col in row) || isBlankCell(row[col])) continue;
-          const v = BOOL[normalizeHeaderKey(str(row[col]))];
+          const v = isClearMarker(row[col])
+            ? key === "selectable"
+            : BOOL[normalizeHeaderKey(str(row[col]))];
           if (v === undefined) {
             error(rowNumber, "invalidBoolean", { column: col, value: str(row[col]) });
             bad = true;

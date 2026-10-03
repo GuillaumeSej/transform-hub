@@ -347,6 +347,23 @@ export function leverReforecastNetValue(lever: Lever): number {
   return lever.status === "cancelled" ? 0 : displayedReforecastNet(lever).value;
 }
 
+/** Snapshot réactualisé RETENU (brut, net, CAPEX, OPEX) — pendant complet de
+ *  `leverReforecastNetValue` : `displayedReforecastSnapshot`, mais TOUT à 0 pour un levier
+ *  abandonné (audit lot 6 : l'export d'un abandonné écrivait brut 2,4 / OPEX 0,3 pour un net 0 —
+ *  la ligne ne bouclait plus). Base des montants de l'export Excel (`leverToExcelRow`). */
+export function leverReforecastSnapshotValue(lever: Lever): FinancialSnapshot {
+  if (lever.status === "cancelled") {
+    return { grossSavings: 0, netSavings: 0, opexOneOff: 0, opexRec: 0, capex: 0 };
+  }
+  return displayedReforecastSnapshot(lever);
+}
+
+/** Impact ETP RETENU d'un levier : `fteImpact`, 0 pour un abandonné — même règle que la cible ETP
+ *  du programme (`leverTargetFte`) et que `leverReforecastSnapshotValue` (colonne ETP de l'export). */
+export function leverFteImpactValue(lever: Pick<Lever, "status" | "fteImpact">): number {
+  return lever.status === "cancelled" ? 0 : lever.fteImpact;
+}
+
 /** Snapshot financier « réactualisé » COMPLET d'un levier (brut, net, OPEX, CAPEX) — même chaîne que
  *  `displayedReforecastNet` : impacts si le levier en porte, sinon reforecast enregistré, sinon plan
  *  figé, sinon champs courants. À utiliser pour toute ventilation qui doit se recouper avec la valeur
@@ -1628,17 +1645,28 @@ export const MONTH_LABELS = [
 ];
 
 /** Libellé "Mois Année" (ex: "Jun 2026") de la date de fin d'un levier — sert de valeur de filtre
- * pour le drill-down depuis la S-curve de l'Executive Dashboard. */
+ * pour le drill-down depuis la S-curve de l'Executive Dashboard (mêmes libellés de mois que
+ * `fiscalMonthLabels`). Date lue en calendrier LOCAL (`parseLocalDate`, audit lot 6 : `new Date`
+ * lisait « 2026-10-01 » en UTC — « Sep 2026 » à l'ouest de Greenwich). */
 export function leverEndMonthLabel(lever: Lever): string {
-  const d = new Date(lever.end);
+  const d = parseLocalDate(lever.end);
   return `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/** Libellé "Qn Année" (ex: "Q2 2026") de la date de fin d'un levier — même regroupement que
- * quarterlyBridge, sert de valeur de filtre pour son drill-down. */
-export function leverEndQuarterLabel(lever: Lever): string {
-  const d = new Date(lever.end);
-  return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
+/** Libellé du trimestre FISCAL contenant `d`, pour un exercice débutant au mois `fyStartMonth`
+ *  (0-11) — même convention que la courbe en S (`fiscalQuarterLabels`) et la page Finance :
+ *  exercice décalé → « Q3 FY26/27 » ; exercice civil (0, défaut) → « Q4 2026 ». */
+export function fiscalQuarterLabelOf(d: Date, fyStartMonth = 0): string {
+  const fiscalMonth = (d.getMonth() - fyStartMonth + 12) % 12; // 0 = 1er mois de l'exercice
+  const fiscalYear = d.getMonth() >= fyStartMonth ? d.getFullYear() : d.getFullYear() - 1;
+  return `Q${Math.floor(fiscalMonth / 3) + 1} ${fiscalYearLabel(fiscalYear, fyStartMonth)}`;
+}
+
+/** Libellé du trimestre FISCAL (ex: "Q3 FY26/27", ou "Q4 2026" en exercice civil) de la date de
+ * fin d'un levier — mêmes libellés que la courbe en S (`fiscalQuarterLabels`), sert de valeur de
+ * filtre « Trimestre de fin » de la liste. Avant (audit lot 6) : trimestre CIVIL, date lue en UTC. */
+export function leverEndQuarterLabel(lever: Lever, fyStartMonth = 0): string {
+  return fiscalQuarterLabelOf(parseLocalDate(lever.end), fyStartMonth);
 }
 
 /** Index de mois fiscal (0-11) correspondant à `dateStr`, relatif à `fyStart` — clampé aux bornes
@@ -2231,9 +2259,14 @@ export function impactTrajectory(
     /** Lisse les montants annualisés (gains, OPEX récurrent) : annuel / 12 par mois écoulé depuis
      *  la date de début, au lieu du montant complet à la date de début puis à chaque anniversaire. */
     smoothRecurring?: boolean;
+    /** Mois (0-11) de début d'exercice du programme : trimestres et années = EXERCICES FISCAUX
+     *  (« Q3 FY26/27 », « FY26/27 »), comme la courbe en S et la page Finance (audit lot 6 — la
+     *  fiche levier affichait « Q4 2026 »). 0 (défaut) = calendrier civil (« Q4 2026 », « 2026 »). */
+    fyStartMonth?: number;
   } = {}
 ): ImpactTrajectory {
   const granularity = opts.granularity ?? "month";
+  const fyStartMonth = opts.fyStartMonth ?? 0;
   const view = opts.view ?? "financial";
   const today = opts.today ?? new Date();
   const levers = (Array.isArray(input) ? input : [input]).filter(
@@ -2372,8 +2405,11 @@ export function impactTrajectory(
   if (marks.length === 0) return { points: [], todayIndex: 0 };
   let startMi = Math.min(...marks);
   const step = granularity === "year" ? 12 : granularity === "quarter" ? 3 : 1;
-  if (granularity === "year") startMi = Math.floor(startMi / 12) * 12;
-  if (granularity === "quarter") startMi = Math.floor(startMi / 3) * 3;
+  // Périodes alignées sur l'EXERCICE (début au mois `fyStartMonth`) : un trimestre / une année
+  // commence à fyStartMonth + 3k (mod 12).
+  if (granularity !== "month") {
+    startMi -= (((startMi - fyStartMonth) % step) + step) % step;
+  }
   // Fenêtre : ≥ 36 mois pour montrer au moins 2 dates anniversaires des impacts récurrents.
   const endMi = Math.max(Math.max(...marks) + 12, startMi + 35);
 
@@ -2475,11 +2511,13 @@ export function impactTrajectory(
     if (todayMi >= ps && todayMi <= pe) todayIndex = points.length;
     else if (todayMi > pe) todayIndex = points.length;
     points.push({
+      // Trimestre / année : libellés FISCAUX (`fiscalQuarterLabelOf` / `fiscalYearLabel`), mois :
+      // mois civils — mêmes conventions que la courbe en S.
       period:
         granularity === "year"
-          ? String(Math.floor(ps / 12))
+          ? fiscalYearLabel(Math.floor(ps / 12), fyStartMonth)
           : granularity === "quarter"
-            ? `Q${Math.floor((ps % 12) / 3) + 1} ${Math.floor(ps / 12)}`
+            ? fiscalQuarterLabelOf(new Date(Math.floor(ps / 12), ps % 12, 1), fyStartMonth)
             : `${MONTH_LABELS[ps % 12]} ${Math.floor(ps / 12)}`,
       periodStart: isoOfMonthIndex(ps),
       items,

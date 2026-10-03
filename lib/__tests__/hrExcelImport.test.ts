@@ -494,17 +494,29 @@ describe("Base ETP — contrôles de grandeur", () => {
 });
 
 describe("Base ETP — cellule vide = conservée, tiret = effacé", () => {
-  it("fiche employé : tiret efface un champ facultatif, refusé sur un champ obligatoire", () => {
+  it("fiche employé : tiret efface un champ facultatif", () => {
     const plan = buildHrImportPlan(
       {
         employeeRows: [
-          { Matricule: "00042", Nom: "-", Direction: "-", Équipe: "", "Départ retraite": "-" },
+          { Matricule: "00042", Nom: "", Direction: "-", Équipe: "", "Départ retraite": "-" },
         ],
       },
       makeData()
     );
     expect(plan.employees).toEqual([{ ...alice, direction: "", retirement: "" }]);
-    expect(plan.issues.map((i) => [i.code, i.vars.column])).toEqual([["clearNotAllowed", "Nom"]]);
+    expect(plan.issues).toEqual([]);
+  });
+
+  it("fiche employé : tiret sur un champ obligatoire = erreur bloquante, ligne rejetée (lot 6)", () => {
+    const plan = buildHrImportPlan(
+      { employeeRows: [{ Matricule: "00042", Nom: "-", Direction: "-" }] },
+      makeData()
+    );
+    expect(plan.employees).toEqual([]);
+    expect(plan.rejectedRows).toBe(1);
+    expect(plan.issues.map((i) => [i.severity, i.code, i.vars.column])).toEqual([
+      ["error", "notClearable", "Nom"],
+    ]);
   });
 
   it("mouvement : commentaire, date réalisée et dispositif social effacés par un tiret", () => {

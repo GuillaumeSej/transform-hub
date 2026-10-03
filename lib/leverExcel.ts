@@ -42,7 +42,6 @@ export function truncateForExcel(text: string): { value: string; truncated: bool
  *  les codes internes anglais (`high`, `low`…). */
 const frenchRiskLabel = (level: RiskLevel) =>
   riskLevelLabel((_key, fallback) => fallback ?? "", level);
-
 export function leverToExcelRow(
   lever: Lever,
   data: BeTrackData,
@@ -69,7 +68,13 @@ export function leverToExcelRow(
   // les champs courants et le net le réactualisé : incohérent pour un levier macro réactualisé.
   // Ré-import : un levier sans impact ni plan figé a par construction snapshot = champs courants
   // (round-trip inchangé) ; sinon l'import conserve ses montants calculés (lib/leverExcelImport.ts).
-  const refo = engine.displayedReforecastSnapshot(lever);
+  // Levier ABANDONNÉ (audit lot 6) : la ligne boucle sur la même base que son net retenu (0,
+  // `leverReforecastNetValue`) — brut, CAPEX, OPEX (`leverReforecastSnapshotValue`), ETP
+  // (`leverFteImpactValue`), gains one-off et BFR à 0 (avant : brut 2,4, OPEX 0,3, net 0,
+  // ETP −2). Son plan initial reste dans « Planifié initial ».
+  const isCancelled = lever.status === "cancelled";
+  const refo = engine.leverReforecastSnapshotValue(lever);
+  const totals = engine.leverImpactTotals(lever);
   return {
     Code: lever.code,
     "Type de levier": lever.type,
@@ -104,11 +109,11 @@ export function leverToExcelRow(
     // Même valeur que l'écran (fiche, tableau Finance) — colonne informative, ignorée à l'import.
     "Planifié initial": engine.displayedLockedPlanNet(lever).value,
     "Réalisé à date (€M)": engine.realizedSavings(lever),
-    "Impact estimé (ETP)": lever.fteImpact,
+    "Impact estimé (ETP)": engine.leverFteImpactValue(lever),
     "Réalisé à date (ETP)": engine.realizedFte(lever),
-    "Gains one-off (€M)": engine.leverImpactTotals(lever).oneOffGains,
+    "Gains one-off (€M)": isCancelled ? 0 : totals.oneOffGains,
     // Impact BFR : trésorerie, jamais dans les économies (`isWorkingCapitalImpact`) — informatif.
-    [WORKING_CAPITAL_EXPORT_HEADER]: engine.leverImpactTotals(lever).workingCapital,
+    [WORKING_CAPITAL_EXPORT_HEADER]: isCancelled ? 0 : totals.workingCapital,
     "Population impactée": typeof lever.popImpacted === "number" ? lever.popImpacted : "",
     "CAPEX (€M)": refo.capex,
     "OPEX one-off (€M)": refo.opexOneOff,

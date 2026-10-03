@@ -8,7 +8,12 @@ import {
   parseCellDate,
   parseCellNumber,
 } from "@/lib/excelParse";
-import { applyExcelDateColumns, readOptionalTextCell } from "@/lib/excelCells";
+import {
+  applyExcelDateColumns,
+  EXCEL_NOT_CLEARABLE_MESSAGE,
+  isClearMarker,
+  readOptionalTextCell,
+} from "@/lib/excelCells";
 import { makeIssue, type ImportIssue } from "@/lib/importIssue";
 import { availableForTeam } from "@/lib/staffingRate";
 import {
@@ -61,7 +66,10 @@ import {
  * Cellule vide / tiret (règle commune aux imports, `lib/excelCells.ts`) : sur une mise à jour, une
  * cellule « Note », « Levier » ou de date VIDE conserve la valeur existante ; un tiret « - » efface
  * la note ou retire le rattachement au levier (lot 5 : auparavant une cellule « Levier » vidée
- * retirait le rattachement et « - » était lu comme un nom de levier introuvable).
+ * retirait le rattachement et « - » était lu comme un nom de levier introuvable). Dans une colonne
+ * OBLIGATOIRE ou l'identifiant (`STAFFING_NOT_CLEARABLE` : Chantier, Fonction, ETP, dates, ID
+ * ligne), le tiret est une ERREUR BLOQUANTE `notClearable` (décision PO du 03/10 — auparavant lu
+ * comme un chantier/une équipe introuvable, un nombre ou une date illisible, ou un ID inconnu).
  *
  * Création identique à une ligne existante (lot 5) : une ligne copiée dont on a vidé l'« ID ligne »
  * et qui reprend exactement la clé métier d'une ligne existante (après application des mises à
@@ -88,6 +96,16 @@ export const STAFFING_IMPORT_HEADERS = [
 ] as const;
 
 const STAFFING_DATE_HEADERS = ["Date début", "Date fin"] as const;
+
+/** Colonnes où le tiret « - » est REFUSÉ (obligatoires ou identifiant de ligne). */
+export const STAFFING_NOT_CLEARABLE = [
+  "Chantier",
+  "Fonction",
+  "ETP",
+  "Date début",
+  "Date fin",
+  STAFFING_LINE_ID_HEADER,
+] as const;
 
 /** Feuille de référence des équipes (modèle + export des deux classeurs de staffing), ignorée à
  *  l'import. */
@@ -129,6 +147,8 @@ export const STAFFING_IMPORT_ISSUES: Record<string, string> = {
   noDepartments: "aucune équipe dans la base ETP",
   duplicateExisting:
     'Nouvelle ligne identique à une ligne existante (même chantier, fonction, dates et levier — ID ligne "{id}") : modifiez la ligne existante plutôt que d\'en créer une copie',
+  // Tiret sur une colonne obligatoire : erreur bloquante, modèle commun à tous les imports.
+  notClearable: EXCEL_NOT_CLEARABLE_MESSAGE,
 };
 
 /** Clé de comparaison des noms : casse, accents et espaces multiples ignorés. */
@@ -160,6 +180,9 @@ export function buildStaffingTemplateRows(
     comment(`# ${STAFFING_TEAMS_RULE}`),
     comment(
       '# Mise à jour : "ID ligne" (rempli par l\'export) identifie la ligne — ne le modifiez pas, laissez-le vide pour une nouvelle ligne. Une cellule vide conserve la valeur existante ; un tiret "-" efface la note ou retire le levier.'
+    ),
+    comment(
+      '# Tiret refusé : dans Chantier, Fonction, ETP, Date début, Date fin et ID ligne (colonnes obligatoires ou identifiant), un tiret "-" ne peut pas effacer la valeur — erreur bloquante, rien n\'est importé.'
     ),
   ];
   if (chantier && team) {
@@ -426,6 +449,12 @@ export function validateStaffingImportRows(
 
     const chantierRaw = str(row["Chantier"]);
     if (chantierRaw.startsWith("#")) continue; // ligne de commentaire (exemples du modèle)
+    // Tiret dans une colonne obligatoire / l'ID ligne : refusé AVANT toute résolution.
+    const dashed = STAFFING_NOT_CLEARABLE.filter((c) => isClearMarker(row[c]));
+    if (dashed.length > 0) {
+      for (const column of dashed) error(rowNumber, "notClearable", { column });
+      continue;
+    }
     if (!chantierRaw) {
       error(rowNumber, "missingChantier");
       continue;

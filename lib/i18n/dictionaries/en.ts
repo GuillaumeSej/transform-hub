@@ -827,7 +827,7 @@ const en: Record<string, string> = {
   "hr.fteCard.levers": "Targeted (levers)",
   "hr.fteCard.coveragePct": "{pct}% of the levers' ambition covered",
   "hr.fteCard.coverageBasis":
-    "Coverage computed on the {n} FTE of movements linked to the levers in scope.",
+    "Coverage computed on the {n} FTE of movements linked to the levers in scope, excluding cancelled levers.",
   "hr.fteCard.headcount": "Headcount",
   "hr.fteCard.targetShort": "target",
   "hr.kpi.targetLabel": "Target {v}",
@@ -1315,7 +1315,7 @@ const en: Record<string, string> = {
   "shared.hrExcelButtons.importButton": "Import Excel",
   "shared.hrExcelButtons.exportSuccessBody": "{emp} employees · {mov} movements",
   "shared.hrExcelButtons.templateDownloadedBody":
-    "Fill in the columns, then import the file. When updating, an empty cell keeps the existing value; a dash “-” clears it.",
+    "Fill in the columns, then import the file. When updating, an empty cell keeps the existing value; a dash “-” clears an optional column. In a required column (Employee ID, Name, Department, Level, FTE; Movement ID, Employee / Position, Type, Department, Planned date, Status), the dash is rejected: blocking error, nothing is imported.",
   "shared.hrExcelButtons.importDoneBody":
     "{emp} employee(s) · {created} movement(s) created, {updated} updated",
   "shared.hrExcelButtons.employeesUnit": "employee(s)",
@@ -1349,7 +1349,7 @@ const en: Record<string, string> = {
   "shared.leverImportButton.impactsRemovedBody":
     "because they are missing from the file's Impacts tab: {list}.",
   "shared.leverImportButton.emptyCellRule":
-    'Empty cell = current value kept; "-" = field cleared. "Progression (%)" and the amounts of an initiative with impacts are calculated: changes to them are ignored.',
+    'Empty cell = current value kept; "-" = optional field cleared (rejected in a required column: blocking error). "Progression (%)" and the amounts of an initiative with impacts are calculated: changes to them are ignored.',
   "shared.leverImportButton.fixErrorsFirst":
     "Import is not possible while the file contains errors: fix the rows below, then reload the file.",
   "shared.leverImportButton.confirmLargeValues":
@@ -1372,11 +1372,11 @@ const en: Record<string, string> = {
     'Code "{code}" is duplicated in the file (already used on row {row})',
   "shared.leverImport.msg.unknownStatus": 'Unknown status "{value}" (expected: {expected})',
   "shared.leverImport.msg.statusNewLever":
-    "A new initiative can only be imported at the “{idea}” maturity (or abandoned): the “{target}” maturity requires approval. Import it at “{idea}”, then request approval from its page.",
+    "A new initiative can only be imported with the “{idea}” status (or abandoned): the “{target}” status requires approval. Import it with the “{idea}” status, then request approval from its page.",
   "shared.leverImport.msg.statusGated":
-    "Maturity change “{current}” → “{target}” rejected: the “{target}” maturity requires approval (request it from the initiative page). Put the current maturity back in the file to import the other changes.",
+    "Status change “{current}” → “{target}” rejected: the “{target}” status requires approval (request it from the initiative page). Put the current status back in the file to import the other changes.",
   "shared.leverImport.msg.statusBackward":
-    "Maturity change “{current}” → “{target}” rejected: an import can neither skip a maturity level nor go backward. Put the current maturity back in the file to import the other changes.",
+    "Status change “{current}” → “{target}” rejected: an import can neither skip a step nor go backward in the lifecycle. Put the current status back in the file to import the other changes.",
   "shared.leverImport.msg.unknownPnl": 'P&L account "{value}" not found (expected: {expected})',
   "shared.leverImport.msg.requiredDate":
     '"{field}" is required and must be a valid date (DD/MM/YYYY or YYYY-MM-DD)',
@@ -1429,6 +1429,8 @@ const en: Record<string, string> = {
     '"{field}" = {value} {unit}: unusually high value (above {threshold}) — check the unit before confirming',
   "shared.leverImport.msg.formulaNoValue":
     "Cell {cell}: formula without a calculated value (workbook not recalculated) — open and save the file in Excel before importing.",
+  "shared.leverImport.msg.notClearable":
+    '"{field}" is a required column (or an identifier): the dash “-” cannot clear it — leave the cell empty to keep the value',
 
   // ─── adminHierarchy ─────────────────────────────────────────────────────────
   "adminHierarchy.semantic.pnl": "P&L Line",
@@ -2139,7 +2141,7 @@ const en: Record<string, string> = {
   "strategicImport.msg.staffingDuplicateRow":
     "Duplicate FTE line (same work package, project, team and dates as row {line})",
   "strategicImport.msg.notClearable":
-    '"{column}" cannot be cleared: the dash “-” is only accepted in an optional column (leave the cell empty to keep the value)',
+    '"{column}" is a required column (or an identifier): the dash “-” cannot clear it — leave the cell empty to keep the value',
   "strategicImport.msg.staffingDuplicateExisting":
     'New FTE row identical to an existing row (same work package, project, team and dates — row ID "{id}"): edit the existing row instead of creating a copy',
   "strategicImport.accountStatusOrphan":
@@ -2571,7 +2573,7 @@ const en: Record<string, string> = {
   "staffingImport.lineLabel": "Row",
   "staffingImport.templateDownloadedTitle": "Template downloaded",
   "staffingImport.templateDownloadedBody":
-    "Columns: Work package (exact name), Function (exact name of a team from the Équipes tab — teams are created only in the FTE base), FTE (> 0; above the team's available headcount, warning only), Start date and End date (required), Lever (optional, exact name), Note (optional), Line ID (filled in by the export, leave empty for a new line). An existing line is found by its line ID (otherwise work package + function + dates + lever) and updated rather than duplicated. Empty cell = value kept; a dash “-” in Note clears it. The Équipes tab (FTE base teams and available headcount) is ignored on import.",
+    "Columns: Work package (exact name), Function (exact name of a team from the Équipes tab — teams are created only in the FTE base), FTE (> 0; above the team's available headcount, warning only), Start date and End date (required), Lever (optional, exact name), Note (optional), Line ID (filled in by the export, leave empty for a new line). An existing line is found by its line ID (otherwise work package + function + dates + lever) and updated rather than duplicated. Empty cell = value kept; a dash “-” clears the Note or removes the Lever, but it is rejected (blocking error) in Work package, Function, FTE, the dates and Line ID. The Équipes tab (FTE base teams and available headcount) is ignored on import.",
   "staffingImport.successMessage": "Import complete",
   "staffingImport.importDoneBody": "{created} line(s) created · {updated} line(s) updated",
   "staffingImport.errorTitle": "Import failed",
@@ -2826,6 +2828,9 @@ const en: Record<string, string> = {
   "finance.calc.formula.roi": "ROI = Net result ÷ Investment cost",
   "finance.calc.formula.payback":
     "First period where the cumulative net turns ≥ 0 after being negative (full horizon)",
+  // Audit lot 6: macro levers (costs entered at lever level) cannot be split by cost center.
+  "finance.chart.hierarchyUndetailedNote":
+    "{count} lever(s) without detailed cost lines ({amount}): included in one-off costs and Invest vs Savings, but not split by P&L account / cost center.",
 
   // ─── levers library: swimlanes, declared progress, tree view ───────────────
   "leverForm.workstreamWeightPct": "Weight in work package progress (%)",
@@ -3506,8 +3511,8 @@ const en: Record<string, string> = {
     "{column} = {value}: unusually high amount (more than {max}) — please check",
   "hrImport.issue.movementFteHigh":
     "{column} = {value}: more than {max} FTE for a single movement — please check (one movement = one person or position)",
-  "hrImport.issue.clearNotAllowed":
-    '{column}: the dash "-" cannot clear a required value — existing value kept',
+  "hrImport.issue.notClearable":
+    '"{column}" is a required column (or an identifier): the dash “-” cannot clear it — leave the cell empty to keep the value',
   "hrImport.rowPrefix": "{sheet} · row {row}:",
   "hrImport.filePrefix": "{sheet}:",
   "hrImport.createdUnit": "created",
@@ -3551,6 +3556,8 @@ const en: Record<string, string> = {
     'Line ID "{id}" appears several times in the file (rows {rows}) — clear the "ID ligne" cell of copied rows',
   "staffingImport.issue.duplicateExisting":
     'New row identical to an existing row (same work package, function, dates and initiative — row ID "{id}"): edit the existing row instead of creating a copy',
+  "staffingImport.issue.notClearable":
+    '"{column}" is a required column (or an identifier): the dash “-” cannot clear it — leave the cell empty to keep the value',
   "staffingImport.exportButton": "Export",
   "staffingImport.exportDoneBody": "{n} staffing line(s) exported",
   "adminHierarchy.issue.missingColumns": "Missing required columns: {columns}",
@@ -3569,6 +3576,8 @@ const en: Record<string, string> = {
   "adminHierarchy.issue.invalidBoolean": '{column} "{value}" not recognised (expected Yes/No)',
   "adminHierarchy.issue.financialIgnored":
     'Financial data ignored: level "{level}" is not a P&L line level',
+  "adminHierarchy.issue.notClearable":
+    '"{column}" is a required column (or an identifier): the dash “-” cannot clear it — leave the cell empty to keep the value',
   "adminHierarchy.exportOrphansSuffix": " · {n} orphan value(s) not exported",
   "adminHierarchy.toastImportReadFailedTitle": "Unreadable file",
   "adminHierarchy.toastImportDoneCreatedUpdated": "{created} node(s) created · {updated} updated",
