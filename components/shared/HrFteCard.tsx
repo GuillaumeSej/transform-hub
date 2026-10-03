@@ -231,7 +231,7 @@ export function HrFteCard({
           <div className="mt-0.5">
             {t(
               "hr.fteCard.coverageBasis",
-              "Couverture calculée sur les {n} ETP des seuls mouvements rattachés aux leviers du périmètre."
+              "Couverture calculée sur les {n} ETP des seuls mouvements rattachés aux leviers du périmètre, hors leviers abandonnés."
             ).replace("{n}", signed(coverage.movementFte))}
           </div>
         )}

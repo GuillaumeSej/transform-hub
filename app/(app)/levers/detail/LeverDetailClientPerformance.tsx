@@ -160,6 +160,13 @@ export function LeverDetailClientPerformance() {
   }, [lever?.status]);
   const actionPlanEnabled =
     programs.find((p) => p.id === lever?.programId)?.actionPlanEnabled ?? true;
+  // Mois (0-11) de début d'exercice du programme DU levier : trajectoire en trimestres / années
+  // FISCAUX, comme la courbe en S et la page Finance (audit lot 6).
+  const fyStartMonth = engine
+    .resolveFiscalYearStart(
+      programs.find((p) => p.id === lever?.programId)?.fyStart || data.program.fyStart
+    )
+    .getMonth();
   // Détail levier scopé au programme DU levier — le cycle de vie est désormais une config par
   // programme (lib/firestore/admin.ts).
   const lifecycle = useLifecycleLabels(lever?.programId);
@@ -285,7 +292,14 @@ export function LeverDetailClientPerformance() {
   // Gains « Impact BFR » : trésorerie, hors économies — affichés à part (audit lot 4, point 4).
   const workingCapital = engine.leverImpactTotals(lever).workingCapital;
   const lockedPlanDisplay = engine.displayedLockedPlanNet(lever);
-  const reforecastDisplay = engine.displayedReforecastNet(lever);
+  // « Réactualisé (net) » : valeur RETENUE par le moteur (`leverReforecastNetValue`) — 0 pour un
+  // levier abandonné, comme la liste, l'export, le P&L et la Finance (audit lot 6 : la fiche
+  // affichait 2,1). L'abandon est définitif : la valeur n'est plus « non réactualisée ».
+  const reforecastNetRaw = engine.displayedReforecastNet(lever);
+  const reforecastDisplay = {
+    value: engine.leverReforecastNetValue(lever),
+    isReforecast: reforecastNetRaw.isReforecast || lever.status === "cancelled",
+  };
   // Réconciliation ETP levier ↔ mouvements RH (audit issues #1, #2, #6) — voir
   // lib/leverMovementReconciliation.ts. `realFte` sert de référence "Réalisé à date (ETP)" pour
   // ne jamais diverger de ce qui est déjà affiché juste au-dessus du panneau de réconciliation.
@@ -331,10 +345,15 @@ export function LeverDetailClientPerformance() {
   // CAPEX / OPEX one-off / OPEX récurrent affichés sous les 3 chiffres clés du bandeau exécutif —
   // même source et même repli que le détail "Impact financier" plus bas (`consolidatedKPIs`, voir
   // lib/leverConsolidate.ts::consolidateLeverFromActions) : consolidé depuis les impacts d'actions
-  // quand le levier en a, sinon repli sur les champs legacy saisis manuellement sur le levier.
-  const capexTotal = consolidatedKPIs?.capex ?? lever.capex;
-  const opexOneOffTotal = consolidatedKPIs?.opexOneOff ?? lever.opexOneOff;
-  const opexRecTotal = consolidatedKPIs?.opexRec ?? lever.opexRec;
+  // quand le levier en a, sinon repli sur le RÉACTUALISÉ (`displayedReforecastSnapshot` :
+  // réactualisation enregistrée, sinon plan figé, sinon champs courants) — même base que l'export,
+  // le KPI « CAPEX & coûts ponctuels », le tableau des chantiers et les alertes de dépassement.
+  // Audit lot 6 : un levier macro réactualisé affichait ici ses champs courants (= plan figé,
+  // 2,0 / 0,5 / 0,4) au lieu du réactualisé (3,0 / 0,5 / 0,5).
+  const reforecastSnap = engine.displayedReforecastSnapshot(lever);
+  const capexTotal = consolidatedKPIs?.capex ?? reforecastSnap.capex;
+  const opexOneOffTotal = consolidatedKPIs?.opexOneOff ?? reforecastSnap.opexOneOff;
+  const opexRecTotal = consolidatedKPIs?.opexRec ?? reforecastSnap.opexRec;
   const actionScope = { leverId: lever.id };
   /** Round 25 (gate d'édition COMEX) : ouvre le formulaire d'action en mode édition — un utilisateur
    *  en lecture seule ne doit JAMAIS l'atteindre, y compris via un clic sur une carte Kanban ou une
@@ -1113,8 +1132,8 @@ export function LeverDetailClientPerformance() {
               </div>
               {/* Détail CAPEX / OPEX one-off / OPEX récurrent des 3 chiffres ci-dessus — mêmes
                   totaux consolidés depuis actions/impacts (`consolidateLeverFromActions`) que ceux
-                  affichés dans l'onglet Impact, avec repli sur les champs legacy du levier
-                  (`lever.capex`/`opexOneOff`/`opexRec`) uniquement si aucune action n'a d'impacts
+                  affichés dans l'onglet Impact, avec repli sur le réactualisé du levier
+                  (`engine.displayedReforecastSnapshot`) uniquement si aucune action n'a d'impacts
                   chiffrés (mêmes conventions que `hasActionImpacts`/`consolidateLeverFromActions`,
                   voir lib/leverConsolidate.ts). Rendu "muted" : continuation visuelle du bandeau,
                   pas un second bloc de titres concurrents. */}
@@ -1223,7 +1242,9 @@ export function LeverDetailClientPerformance() {
                   "Trajectoire des gains et chronologie des actions"
                 )}
               >
-                {engine.hasLeverImpacts(lever) && <ImpactTrajectoryChart lever={lever} />}
+                {engine.hasLeverImpacts(lever) && (
+                  <ImpactTrajectoryChart lever={lever} fyStartMonth={fyStartMonth} />
+                )}
                 {(lever.actions ?? []).length > 0 && (
                   <>
                     <SectionTitle>
@@ -1520,14 +1541,13 @@ export function LeverDetailClientPerformance() {
               >
                 {engine.fmtCurr(real)}
               </Stat>
-              <Stat label={t("leverForm.capex", "CAPEX")}>
-                {engine.fmtCurr(consolidatedKPIs?.capex ?? lever.capex)}
-              </Stat>
+              {/* Mêmes montants que le bandeau (repli sur le réactualisé, audit lot 6). */}
+              <Stat label={t("leverForm.capex", "CAPEX")}>{engine.fmtCurr(capexTotal)}</Stat>
               <Stat label={t("leverDetail.oneOff", "OPEX ponctuel")}>
-                {engine.fmtCurr(consolidatedKPIs?.opexOneOff ?? lever.opexOneOff)}
+                {engine.fmtCurr(opexOneOffTotal)}
               </Stat>
               <Stat label={t("leverDetail.opexRecYear", "OPEX récurrent /an")}>
-                {engine.fmtCurr(consolidatedKPIs?.opexRec ?? lever.opexRec)}
+                {engine.fmtCurr(opexRecTotal)}
               </Stat>
             </div>
             {workingCapital !== 0 && (

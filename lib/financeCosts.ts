@@ -91,24 +91,67 @@ export function flattenOneOffGainImpacts(data: BeTrackData): SavingImpactRow[] {
     );
 }
 
-/** Leviers actifs qui portent un coût CAPEX/OPEX chiffré au niveau du levier (champs cachés
- *  `capex`/`opexOneOff`/`opexRec`, saisie manuelle sans plan d'action détaillé) mais dont AUCUN
- *  impact "cost" n'apparaît dans `flattenCostImpacts` — parce qu'ils n'ont pas d'`actions`, ou que
- *  leurs actions n'ont aucun impact de type "cost". Les graphiques datés / ventilés de
- *  `financeCosts.ts` (répartition par centre de coût, timeline...) sont construits exclusivement à
- *  partir de `flattenCostImpacts` (source de vérité "plan d'action"), donc CES leviers n'y
- *  contribuent pas — seul le donut engagé / à venir les compte (`engagedVsUpcomingRows`, aligné
- *  sur le KPI du dashboard). Sert à afficher une note explicite ("N leviers sans plan d'action détaillé, non inclus")
- *  plutôt qu'un silence trompeur ("aucun coût saisi") quand ces leviers existent bel et bien avec
- *  un CAPEX/OPEX renseigné. */
+/** Leviers actifs qui portent un coût CAPEX/OPEX RÉACTUALISÉ (`displayedReforecastSnapshot`,
+ *  saisie macro au niveau du levier, sans plan de coûts détaillé) mais dont AUCUN impact "cost"
+ *  n'apparaît dans `flattenCostImpacts`. Leurs coûts Invest (CAPEX + OPEX ponctuel) sont comptés
+ *  dans le donut engagé / à venir, l'engagement des coûts et « Invest vs Savings » (lignes
+ *  synthétiques `undetailedInvestCostRows`, audit lot 6), mais la répartition par compte P&L /
+ *  centre de coût (`costsByHierarchyNode`) ne peut pas les ventiler : sert à l'écrire dans la note
+ *  de périmètre de ce donut plutôt qu'un silence trompeur. */
 export function leversWithUndetailedCosts(data: BeTrackData): Lever[] {
   const leversWithCostImpacts = new Set(flattenCostImpacts(data).map((row) => row.lever.id));
-  return data.levers.filter(
-    (lever) =>
-      lever.status !== "cancelled" &&
-      !leversWithCostImpacts.has(lever.id) &&
-      (lever.capex > 0 || lever.opexOneOff > 0 || lever.opexRec > 0)
-  );
+  return data.levers.filter((lever) => {
+    if (lever.status === "cancelled" || leversWithCostImpacts.has(lever.id)) return false;
+    const snap = displayedReforecastSnapshot(lever);
+    return snap.capex > 0 || snap.opexOneOff > 0 || snap.opexRec > 0;
+  });
+}
+
+/** Lignes de coût Invest SYNTHÉTIQUES des leviers SANS ligne de coût Invest (saisie macro) — même
+ *  règle que le donut engagé / à venir (`engagedVsUpcomingRows`) et le KPI « CAPEX & coûts
+ *  ponctuels » (`programSummary.reforecastCosts`) : CAPEX et OPEX ponctuel RÉACTUALISÉS
+ *  (`displayedReforecastSnapshot`), datés au DÉBUT du levier (repli : sa fin). Audit lot 6 : depuis
+ *  le lot 5, les GAINS de ces leviers comptaient dans « Invest vs Savings » mais pas leurs COÛTS
+ *  (coût d'investissement 2,5 au lieu de 6,0, ROI ≈ 900 % au lieu de ≈ 316 %). Leviers abandonnés
+ *  exclus (comme le KPI). Utilisées UNIQUEMENT par les vues datées Invest (engagement des coûts,
+ *  Invest vs Savings) — jamais par la ventilation par centre de coût. */
+export function undetailedInvestCostRows(data: BeTrackData): CostImpactRow[] {
+  const out: CostImpactRow[] = [];
+  for (const lever of data.levers) {
+    if (lever.status === "cancelled") continue;
+    const hasInvestLine = leverImpactsOf(lever).some(
+      (impact) => impact.type === "cost" && isInvestNature(impact.nature)
+    );
+    if (hasInvestLine) continue;
+    const snap = displayedReforecastSnapshot(lever);
+    const date = lever.start || lever.end;
+    const parts: [ActionImpact["nature"], number][] = [
+      ["capex", snap.capex],
+      ["oneoff", snap.opexOneOff],
+    ];
+    for (const [nature, amount] of parts) {
+      if (!amount) continue;
+      out.push({
+        lever,
+        impact: {
+          id: `${lever.id}__macro_${nature}`,
+          label: lever.name,
+          type: "cost",
+          nature,
+          amount,
+          // Date propre = début du levier (`referenceDate` la lit en priorité).
+          capexDeploymentDate: date,
+        },
+      });
+    }
+  }
+  return out;
+}
+
+/** Lignes de coût des vues DATÉES Invest : lignes détaillées (`flattenCostImpacts`) + lignes
+ *  synthétiques des leviers macro (`undetailedInvestCostRows`). Total Invest = KPI = donut. */
+function datedCostRows(data: BeTrackData): CostImpactRow[] {
+  return [...flattenCostImpacts(data), ...undetailedInvestCostRows(data)];
 }
 
 /** Un coût "Invest" = CAPEX ou OPEX one-off, à l'exclusion de l'OPEX récurrent — périmètre commun
@@ -437,6 +480,9 @@ function granularityHintFromKey(key: string): FinanceGranularity {
  *  — `isInvestNature` — pour `CostCommitmentTimelineChart` et la série "Coûts (Invest)" du
  *  graphique Invest vs Savings). Omis = tous les coûts (comportement historique).
  *
+ *  Leviers SANS ligne de coût Invest (saisie macro) : leur CAPEX et OPEX ponctuel réactualisés
+ *  sont datés à leur début (`undetailedInvestCostRows`, audit lot 6) — total Invest = KPI = donut.
+ *
  *  `fyStartMonth` (0-11) : années / trimestres = exercices fiscaux du programme (voir
  *  `periodSortKey`) — la page Finance passe le même que son P&L et son tableau. */
 export function bucketCostsByPeriod(
@@ -445,7 +491,7 @@ export function bucketCostsByPeriod(
   natureFilter?: (nature: ActionImpact["nature"]) => boolean,
   fyStartMonth = 0
 ): CostPeriodPoint[] {
-  let rows = flattenCostImpacts(data);
+  let rows = datedCostRows(data);
   if (natureFilter) rows = rows.filter(({ impact }) => natureFilter(impact.nature));
   const attributed = attributeCostRowsToPeriods(rows, granularity, fyStartMonth);
   const byPeriod = new Map<string, number>();
@@ -467,7 +513,7 @@ export function costRowsForPeriod(
   natureFilter?: (nature: ActionImpact["nature"]) => boolean,
   fyStartMonth = 0
 ): { lever: Lever; amount: number }[] {
-  let rows = flattenCostImpacts(data);
+  let rows = datedCostRows(data);
   if (natureFilter) rows = rows.filter(({ impact }) => natureFilter(impact.nature));
   return attributeCostRowsToPeriods(rows, granularity, fyStartMonth)
     .filter((row) => row.periodKey === periodKey)
@@ -565,8 +611,11 @@ function investVsSavingsEntries(
   granularity: FinanceGranularity,
   fyStartMonth = 0
 ): { entries: InvestVsSavingsEntry[]; periodKeys: string[] } {
+  // Coûts Invest : lignes détaillées ET leviers macro (`datedCostRows`, audit lot 6 — leurs gains y
+  // étaient comptés, pas leurs coûts) ; total sur l'horizon = KPI « CAPEX & coûts ponctuels » =
+  // donut engagé / à venir.
   const investRows = attributeCostRowsToPeriods(
-    flattenCostImpacts(data).filter(({ impact }) => isInvestNature(impact.nature)),
+    datedCostRows(data).filter(({ impact }) => isInvestNature(impact.nature)),
     "month"
   );
   const flows = recurringFlows(data);

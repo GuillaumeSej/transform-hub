@@ -710,7 +710,7 @@ export default function HrDashboardPage() {
     leverFilterGetters,
   ]);
   // « Couverts par des mouvements » = mouvements (filtrés) RATTACHÉS aux leviers du périmètre,
-  // abandonnés compris (`leverFteCoverage`, même sélecteur que le KPI du dashboard Performance et
+  // abandonnés EXCLUS comme la cible (audit lot 6) (`leverFteCoverage`, même sélecteur que le KPI du dashboard Performance et
   // que l'onglet « Couverture leviers » de la fiche) — et non plus TOUS les mouvements filtrés : les
   // mouvements sans levier gonflaient la couverture (7 couverts ici contre 3 côté Performance).
   const coverage = useMemo(

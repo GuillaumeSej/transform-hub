@@ -6,7 +6,7 @@ import { Avatar } from "@/components/shared/Avatar";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { DeclaredProgressBadge } from "@/components/shared/DeclaredProgressBadge";
 import {
-  displayedReforecastNet,
+  leverReforecastNetValue,
   leverProgressPct,
   workstreamProgressPct,
   fmtCurr,
@@ -73,7 +73,7 @@ function StatusColumns({
                   </Tooltip>
                   <Tooltip text={t("shared.kanban.tip.amount", "Gain net réactualisé")}>
                     <span className="text-[12.5px] font-bold text-primary">
-                      {fmtCurr(displayedReforecastNet(l).value)}
+                      {fmtCurr(leverReforecastNetValue(l))}
                     </span>
                   </Tooltip>
                 </div>
@@ -134,8 +134,10 @@ function CancelledLeversStrip({
               <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-semibold text-tertiary">
                 {l.code}
               </span>
+              {/* Net réactualisé RETENU : 0 pour un abandonné (`leverReforecastNetValue`, audit
+                  lot 6 — la carte affichait 2,1 alors que tous les totaux le comptent à 0). */}
               <span className="text-[12.5px] font-bold text-tertiary">
-                {fmtCurr(displayedReforecastNet(l).value)}
+                {fmtCurr(leverReforecastNetValue(l))}
               </span>
             </div>
           </button>

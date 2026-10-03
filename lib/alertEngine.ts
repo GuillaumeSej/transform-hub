@@ -5,10 +5,9 @@ import {
   displayedReforecastNet,
   displayedReforecastSnapshot,
   leverActionWeighting,
-  leverImpactsOf,
+  realizedSavings,
 } from "@/lib/engine";
 import { formatAmountM } from "@/lib/format";
-import { isWorkingCapitalImpact } from "@/lib/impactKinds";
 import { parseLocalDate } from "@/lib/impactStatus";
 
 /**
@@ -123,22 +122,23 @@ export function generateAlerts(
     const { weights } = leverActionWeighting(u);
     const lateRatio =
       totalActions > 0 ? u.lateActions.reduce((s, a) => s + (weights[a.id] ?? 0), 0) / 100 : 0;
-    // Impact = montant RÉEL des actions en retard (somme des ActionImpact.amount de type "saving"
-    // des actions en retard), pas netSavings du levier × ratio d'actions en retard — c'est le gain
-    // potentiellement perdu si ces actions en retard ne se réalisent pas, pas une estimation
-    // proportionnelle déconnectée des impacts réellement saisis.
-    // Impacts désormais portés par le levier : on prend les gains récurrents du levier au prorata
-    // des actions en retard (les gains one-off restent hors périmètre).
-    const leverSavings = leverImpactsOf(u)
-      .filter(
-        (i) => i.type === "saving" && i.gainRecurrence !== "oneoff" && !isWorkingCapitalImpact(i)
-      )
-      .reduce((s, i) => s + i.amount, 0);
-    const lateSavingsImpact = lateRatio * leverSavings;
-    const impact = -lateSavingsImpact;
+    // Impact = gain ENCORE À RÉALISER au prorata des actions en retard :
+    // (réactualisé net − réalisé net) × part en retard (audit lot 6). Avant : tous les gains
+    // récurrents du levier × part en retard, gains DÉJÀ réalisés compris (L1 : −1,9 M€ alors qu'il
+    // ne restait que 0,6 ; un levier entièrement réalisé recevait une alerte rouge −0,8). Levier
+    // ENTIÈREMENT réalisé (réalisé > 0 et ≥ réactualisé) : rien n'est à risque — l'alerte reste
+    // visible mais en information (bleu, comme une dépendance sans montant à risque), non chiffrée,
+    // et ne fait pas monter le risque du levier. Un levier sans gain positif (coûts seuls) garde
+    // sa sévérité rouge / orange.
+    const reforecastNet = displayedReforecastNet(u).value;
+    const realizedNet = realizedSavings(u);
+    const fullyRealized = realizedNet > 0 && realizedNet >= reforecastNet;
+    const remaining = Math.max(0, reforecastNet - realizedNet);
+    const lateSavingsImpact = Math.round(lateRatio * remaining * 1e6) / 1e6;
+    const impact = lateSavingsImpact > 0 ? -lateSavingsImpact : 0;
     auto.push({
       id: `AUTO-DELAY-${u.id}`,
-      type: lateRatio > 0.5 ? "red" : "amber",
+      type: fullyRealized ? "blue" : lateRatio > 0.5 ? "red" : "amber",
       // Date de l'événement : entrée en retard de la 1re action en retard (pas `lastUpdate`).
       ts: delayDetectedAt(u, u.lateActions, now),
       scope: u.id,
@@ -201,8 +201,12 @@ export function generateAlerts(
   // Date des alertes 3 / 3bis / 4 : `lastUpdate` du levier — l'écart réactualisé vs plan figé ne
   // dépend QUE des données du levier lui-même, il naît donc d'une de ses modifications (la
   // dernière est la date la plus récente possible de l'événement déclencheur).
+  // Décision PO (audit lot 6) : alertes 3 / 3bis / 4 dès la VALIDATION — seule condition, un plan
+  // figé (`lockedPlan`). Avant, `!l.reforecast` les réservait aux leviers « Exécutés » alors que le
+  // réactualisé suit les impacts dès la validation (L5 : plan figé 1,0, réactualisé 0,8, sans
+  // alerte). Sans impact ni réactualisation, le réactualisé retombe sur le plan figé : pas d'écart.
   for (const l of financialAlertsEnabled ? active : []) {
-    if (!l.reforecast || !l.lockedPlan) continue;
+    if (!l.lockedPlan) continue;
     // Réactualisé EFFECTIF (recalculé depuis les impacts, règle C3) — même source que le KPI coûts.
     // Le snapshot `l.reforecast` stocké peut être périmé (applyPlanLock l'initialise au plan figé).
     const planCost = implCosts(l.lockedPlan);
@@ -239,7 +243,7 @@ export function generateAlerts(
 
   // ── 3bis. Dépassement OPEX récurrent (dès le 1er €) — Plan Performance uniquement ─
   for (const l of financialAlertsEnabled ? active : []) {
-    if (!l.reforecast || !l.lockedPlan) continue;
+    if (!l.lockedPlan) continue;
     // Réactualisé EFFECTIF (recalculé depuis les impacts, règle C3) — voir § 3.
     const refOpexRec = displayedReforecastSnapshot(l).opexRec;
     if (refOpexRec > l.lockedPlan.opexRec) {
@@ -274,7 +278,7 @@ export function generateAlerts(
 
   // ── 4. Savings réduits (dès le 1er €) — Plan Performance uniquement ─────────
   for (const l of financialAlertsEnabled ? active : []) {
-    if (!l.reforecast || !l.lockedPlan) continue;
+    if (!l.lockedPlan) continue;
     // Réactualisé EFFECTIF (recalculé depuis les impacts — `reforecastSnapshotOf`), comme partout.
     const refoNet = displayedReforecastNet(l).value;
     if (refoNet < l.lockedPlan.netSavings) {
