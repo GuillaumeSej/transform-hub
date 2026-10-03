@@ -20,10 +20,11 @@ import {
 import { coerceImpactStatus } from "@/lib/impactStatus";
 import { CHARTER_CATEGORICAL } from "@/lib/charterColors";
 import {
-  displayedReforecastSnapshot,
+  leverFteImpactValue,
   leverImpactsOf,
   leverProgressPct,
   leverReforecastNetValue,
+  leverReforecastSnapshotValue,
 } from "@/lib/engine";
 import { leverImportPatch, normalizeLeverCode } from "@/lib/leversLogic";
 import type {
@@ -1880,11 +1881,13 @@ export function validateLeverImportRows(
     if (existing) {
       // Champs dérivés : les montants suivent les impacts (ou le plan figé / le réactualisé) — les
       // valeurs du fichier ne s'appliquent donc pas dans ces cas : l'export écrit le réactualisé
-      // affiché (`displayedReforecastSnapshot`), qui diffère alors des champs courants. Une valeur
+      // RETENU (`leverReforecastSnapshotValue`), qui diffère alors des champs courants. Une valeur
       // modifiée dans le fichier est signalée (point 2), jamais ignorée en silence.
       const hasImpacts = (values.impacts ?? []).length > 0;
-      // Levier abandonné : l'export écrit son net RETENU (0, `leverReforecastNetValue`) — ses
-      // montants stockés (base du « Planifié initial ») sont conservés, jamais écrasés par ce 0.
+      // Levier abandonné : l'export écrit des montants et un ETP RETENUS à 0
+      // (`leverReforecastSnapshotValue` / `leverFteImpactValue`, lot 6) — ses montants et son ETP
+      // stockés (base du « Planifié initial ») sont conservés, jamais écrasés par ces 0, et un
+      // export non modifié ne lève aucun avertissement.
       const isCancelled = existing.status === "cancelled";
       if (hasImpacts || existing.lockedPlan || existing.reforecast || isCancelled) {
         values.grossSavings = existing.grossSavings;
@@ -1893,16 +1896,20 @@ export function validateLeverImportRows(
         values.opexRec = existing.opexRec;
         values.capex = existing.capex;
         const source = hasImpacts ? "computedFromImpacts" : "computedFromPlan";
-        const refo = displayedReforecastSnapshot(existing);
+        const refo = leverReforecastSnapshotValue(existing);
         flagIgnored("Impact estimé brut (€M)", refo.grossSavings, source);
         flagIgnored("Impact estimé net (€M)", leverReforecastNetValue(existing), source);
         flagIgnored("CAPEX (€M)", refo.capex, source);
         flagIgnored("OPEX one-off (€M)", refo.opexOneOff, source);
         flagIgnored("OPEX récurrent (€M/an)", refo.opexRec, source);
       }
-      if (hasImpacts) {
+      if (hasImpacts || isCancelled) {
         values.fteImpact = existing.fteImpact;
-        flagIgnored("Impact estimé (ETP)", existing.fteImpact, "computedFromImpacts");
+        flagIgnored(
+          "Impact estimé (ETP)",
+          leverFteImpactValue(existing),
+          hasImpacts ? "computedFromImpacts" : "computedFromPlan"
+        );
       }
 
       if (Object.keys(leverImportPatch(existing, values)).length === 0) {

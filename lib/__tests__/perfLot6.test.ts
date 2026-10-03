@@ -342,11 +342,51 @@ describe("5 — export d'un abandonné : brut, CAPEX, OPEX, ETP sur la base du n
     expect(upsert.capex).toBe(1);
   });
 
-  // Ajustement de lib/leverExcelImport.ts requis (hors périmètre de ce lot, voir le rendu) : pour
-  // un abandonné, conserver aussi `fteImpact` et comparer le fichier à
-  // `leverReforecastSnapshotValue` / `leverFteImpactValue` (0) — sinon le ré-import d'un export
-  // inchangé signale brut / CAPEX / OPEX « modifiés » et remplace l'ETP stocké (−2) par 0.
-  it.todo("ré-import d'un export inchangé d'un abandonné : aucune alerte, ETP stocké conservé");
+  // lib/leverExcelImport.ts (« Champs dérivés », lot 6 imports) : pour un abandonné, `fteImpact`
+  // est conservé et le fichier est comparé à `leverReforecastSnapshotValue` /
+  // `leverFteImpactValue` (0) — avant, le ré-import d'un export inchangé signalait brut / CAPEX /
+  // OPEX « modifiés » et remplaçait l'ETP stocké (−2) par 0.
+  it("ré-import d'un export inchangé d'un abandonné : aucune alerte, ETP stocké conservé", () => {
+    // `risk` renseigné comme sur un vrai levier (sinon l'import pose sa valeur de repli « low »).
+    const stored = { ...cancelled, risk: "low" } as Lever;
+    const programs = [{ id: "p1", name: "Programme 1" }];
+    const workstreams = [{ id: "WS", name: "WS", sponsor: "S", color: "#000", target: 0 }];
+    const row = leverToExcelRow(stored, data([stored]), [], undefined, undefined, programs);
+    const preview = validateLeverImportRows(
+      { leviers: [row], actions: null, impacts: null },
+      {
+        levers: [stored],
+        workstreams,
+        pnlAccounts: [{ id: "P1", name: "P1", baseline: 0, sign: -1 }],
+      },
+      "c1",
+      programs
+    );
+    expect(preview.errors).toEqual([]);
+    expect(preview.warnings).toEqual([]); // avant : 3 « valeur calculée — modification ignorée »
+    expect(preview.updateCount).toBe(0); // avant : 1 (fteImpact −2 → 0)
+    expect(preview.unchangedCount).toBe(1);
+    expect(preview.toUpsert).toEqual([]);
+
+    // Modification réelle d'un montant / de l'ETP dans le fichier : signalée, stocké conservé.
+    const edited = { ...row, "Impact estimé brut (€M)": 5, "Impact estimé (ETP)": -4 };
+    const p2 = validateLeverImportRows(
+      { leviers: [edited], actions: null, impacts: null },
+      {
+        levers: [stored],
+        workstreams,
+        pnlAccounts: [{ id: "P1", name: "P1", baseline: 0, sign: -1 }],
+      },
+      "c1",
+      programs
+    );
+    expect(p2.warnings.map((w) => [w.code, w.vars?.field])).toEqual([
+      ["computedFromPlan", "Impact estimé brut (€M)"],
+      ["computedFromPlan", "Impact estimé (ETP)"],
+    ]);
+    expect(p2.toUpsert).toEqual([]);
+    expect(p2.unchangedCount).toBe(1);
+  });
 });
 
 // ─── 6. Fiche d'un levier macro réactualisé : CAPEX / OPEX du réactualisé ─────────────────────
