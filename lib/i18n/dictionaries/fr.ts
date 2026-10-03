@@ -179,6 +179,10 @@ const fr: Record<string, string> = {
   "validation.sa.refuse": "Refuser",
   "validation.sa.emptyMine": "Vous n'avez émis aucune demande.",
   "validation.sa.emptyHistory": "Aucune décision pour le moment.",
+  "validation.deletion.title": "Suppressions à confirmer",
+  "validation.deletion.intro":
+    "Suppressions de leviers demandées par le CTO ou un responsable de chantier : elles ne sont effectives qu'après votre confirmation.",
+  "validation.deletion.review": "Examiner",
   "nav.sectionLabel": "Navigation",
   "nav.sectionDecision": "Mes actions",
   "nav.sectionReferenceData": "Données de référence",
@@ -1014,6 +1018,8 @@ const fr: Record<string, string> = {
   "adminHistory.action.approvalRequested": "Validation demandée",
   "adminHistory.action.approvalApproved": "Demande validée",
   "adminHistory.action.approvalRejected": "Validation rejetée",
+  "adminHistory.action.deletionRequested": "Suppression demandée",
+  "adminHistory.action.deletionCancelled": "Suppression refusée/annulée",
   "adminHistory.title": "Historique",
   "adminHistory.searchPlaceholder": "Rechercher...",
   "adminHistory.allActions": "Toutes les actions",
@@ -1359,8 +1365,8 @@ const fr: Record<string, string> = {
     "{emp} employé(s) · {created} mouvement(s) créé(s), {updated} mis à jour",
   "shared.hrExcelButtons.employeesUnit": "employé(s)",
   "shared.hrExcelButtons.movementsUnit": "mouvement(s)",
-  "shared.hrExcelButtons.ignoredRowsUnit": "ligne(s) ignorée(s)",
   "shared.hrExcelButtons.warningsUnit": "avertissement(s)",
+  "shared.hrExcelButtons.errorRowsUnit": "ligne(s) en erreur",
   "shared.leverImportButton.importButton": "Importer un fichier",
   "shared.leverImportButton.templateDownloadedBody":
     "3 feuilles : Leviers (Code = clé), Actions (Code Levier = FK), Impacts (Code Levier + Nom de l'action = FK). Supprimez la ligne d'exemple avant de remplir.",
@@ -2141,7 +2147,6 @@ const fr: Record<string, string> = {
   "strategicImport.templateDownloadedTitle": "Modèle téléchargé",
   "strategicImport.templateDownloadedBody":
     'Lisez-moi (guide) + 6 feuilles : Axes (Code = clé), Chantiers (Codes Axes séparés par ; = FK, accepte plusieurs axes), Projets (Code Chantier = FK, "Étape de maturité" facultative), Livrables (Code Projet = FK, optionnelle), Indicateurs (Code Axe OU Code Chantier = FK, "Valeur initiale" facultative). ETP (optionnelle, Code Chantier = FK). Onglet Équipes = référence des équipes de la base ETP (ignoré à l\'import). Supprimez les lignes d\'exemple avant de remplir.',
-  "strategicImport.ignoredRowsNote": "{n} ligne(s) ignorée(s)",
   "strategicImport.importDoneBody":
     "{axes} axe(s) · {chantiers} chantier(s) · {actions} projet(s) · {indicators} indicateur(s) créé(s)",
   "strategicImport.errorTitle": "Échec de l'import",
@@ -2240,6 +2245,10 @@ const fr: Record<string, string> = {
     'ID ligne "{id}" présent plusieurs fois dans la feuille (lignes {rows}) — videz la cellule "ID ligne" des lignes copiées',
   "strategicImport.msg.staffingDuplicateRow":
     "Ligne ETP en doublon (même chantier, projet, équipe et dates que la ligne {line})",
+  "strategicImport.msg.notClearable":
+    '"{column}" ne peut pas être effacé : le tiret « - » n\'est accepté que dans une colonne facultative (laissez la cellule vide pour conserver la valeur)',
+  "strategicImport.msg.staffingDuplicateExisting":
+    'Nouvelle ligne ETP identique à une ligne existante (même chantier, projet, équipe et dates — ID ligne "{id}") : modifiez la ligne existante plutôt que d\'en créer une copie',
   "strategicImport.accountStatusOrphan":
     "compte de connexion créé mais profil non enregistré — à compléter dans Admin > Utilisateurs",
   "strategicImport.readErrorTitle": "Fichier illisible",
@@ -3135,6 +3144,32 @@ const fr: Record<string, string> = {
   "levers.column.progress": "Avancement",
   "levers.column.fteImpact": "ETP impacté",
   "levers.column.opexOneOff": "OPEX ponctuel",
+  "levers.column.delete": "Supprimer",
+  "levers.deleteLever": "Supprimer le levier",
+  "levers.deletionPending": "Suppression en attente de validation",
+  "leverDeletion.title": "Supprimer le levier « {name} »",
+  "leverDeletion.approveIntro":
+    "Confirmer supprimera définitivement le levier, son plan d'action et ses impacts.",
+  "leverDeletion.requestIntro":
+    "La suppression est définitive. Elle doit être confirmée par {approver} avant d'être effective.",
+  "leverDeletion.roleCto": "le CTO",
+  "leverDeletion.roleSponsor": "le responsable de chantier",
+  "leverDeletion.reason": "Motif (facultatif)",
+  "leverDeletion.reasonLabel": "Motif",
+  "leverDeletion.request": "Demander la suppression",
+  "leverDeletion.cancelRequest": "Annuler la demande",
+  "leverDeletion.confirm": "Confirmer la suppression",
+  "leverDeletion.refuse": "Refuser",
+  "leverDeletion.deleted": "Levier supprimé",
+  "leverDeletion.cancelled": "Demande de suppression annulée",
+  "leverDeletion.refused": "Demande de suppression refusée",
+  "leverDeletion.error": "Action impossible",
+  "leverDeletion.notAllowed":
+    "Seuls le CTO et le responsable de chantier du levier peuvent en demander la suppression.",
+  "leverDeletion.pendingInfo": "Suppression demandée par {name} ({role}) le {date}.",
+  "leverDeletion.waiting": "En attente de la confirmation de {approver}.",
+  "leverDeletion.banner": "Suppression demandée par {name} le {date} — en attente de validation.",
+  "leverDeletion.viewRequest": "Voir la demande",
   "leverDetail.deliveredEtpWarning.title": "Levier passé « Réalisé » — ETP à vérifier",
   "leverDetail.deliveredEtpWarning.body":
     "{lever} vise {fte} ETP mais aucun mouvement RH n'y est rattaché.",
@@ -3302,6 +3337,12 @@ const fr: Record<string, string> = {
   "leverForm.sectionActions": "Actions",
   "leverForm.impactFinancialGroup": "Impact financier (hors ETP)",
   "leverForm.impactFteGroup": "Impact ETP",
+  "leverForm.endBeforeStart": "La date de fin ne peut pas être antérieure à la date de début",
+  "leverForm.fixErrors":
+    "Certains champs obligatoires sont manquants ou incorrects (en rouge ci-dessous).",
+  "leverForm.requiredField": "Champ obligatoire",
+  "leverForm.requiredLegend": "Champs obligatoires",
+  "leverForm.sectionSchedule": "Calendrier",
   "shared.leverOwnerReconciliation.acceptAllButton":
     "Répondre Oui partout ({n} correspondance(s) évidente(s))",
   "common.yes": "Oui",
@@ -3361,6 +3402,7 @@ const fr: Record<string, string> = {
   "shared.topbar.approvalPending": "En attente · responsable de chantier ou CTO · {stage}",
   "shared.topbar.milestoneApprovalPending":
     "En attente · pilote du plan stratégique · jalon {milestone}",
+  "shared.topbar.deletionPending": "Suppression demandée par {name}",
   "leverDetail.trajectory.financial": "Impact financier",
   "leverDetail.trajectory.fte": "Impact ETP",
   "leverDetail.trajectory.month": "Mois",
@@ -3550,17 +3592,16 @@ const fr: Record<string, string> = {
   // (lib/staffingExcelImport.ts) et HIERARCHY_IMPORT_ISSUES (lib/hierarchyExcel.ts) — vérifié par test.
   "hrImport.issue.missingColumns": "Colonnes obligatoires absentes : {columns}",
   "hrImport.issue.unknownColumn": 'Colonne "{column}" non reconnue — ignorée',
-  "hrImport.issue.missingIdOrName": '"Matricule" et "Nom" obligatoires — ligne ignorée',
+  "hrImport.issue.missingIdOrName": '"Matricule" et "Nom" obligatoires',
   "hrImport.issue.duplicateEmployeeId":
-    'Matricule "{id}" présent plusieurs fois dans le fichier (lignes {rows}) — lignes ignorées',
-  "hrImport.issue.missingLabel": '"Employé / Poste" obligatoire — ligne ignorée',
+    'Matricule "{id}" présent plusieurs fois dans le fichier (lignes {rows})',
+  "hrImport.issue.missingLabel": '"Employé / Poste" obligatoire',
   "hrImport.issue.duplicateMovementId":
-    'ID mouvement "{id}" présent plusieurs fois dans le fichier (lignes {rows}) — lignes ignorées',
-  "hrImport.issue.missingType": '"Type" obligatoire pour créer un mouvement — ligne ignorée',
-  "hrImport.issue.unknownType": 'Type "{value}" inconnu (attendu : {expected}) — ligne ignorée',
-  "hrImport.issue.missingRequiredDate":
-    '"{column}" obligatoire pour créer un mouvement — ligne ignorée',
-  "hrImport.issue.invalidRequiredDate": '{column} "{value}" illisible — ligne ignorée',
+    'ID mouvement "{id}" présent plusieurs fois dans le fichier (lignes {rows})',
+  "hrImport.issue.missingType": '"Type" obligatoire pour créer un mouvement',
+  "hrImport.issue.unknownType": 'Type "{value}" inconnu (attendu : {expected})',
+  "hrImport.issue.missingRequiredDate": '"{column}" obligatoire pour créer un mouvement',
+  "hrImport.issue.invalidRequiredDate": '{column} "{value}" illisible',
   "hrImport.issue.unknownDepartment": 'Département "{value}" inconnu (accepté tel quel)',
   "hrImport.issue.unknownEnumKept": '{column} "{value}" non reconnu — valeur existante conservée',
   "hrImport.issue.unknownEnumDefault": '{column} "{value}" non reconnu — "{fallback}" utilisé',
@@ -3643,6 +3684,8 @@ const fr: Record<string, string> = {
     'ID ligne "{id}" inconnu dans ce programme — ligne rapprochée sans identifiant',
   "staffingImport.issue.duplicateLineId":
     'ID ligne "{id}" présent plusieurs fois dans le fichier (lignes {rows}) — videz la cellule "ID ligne" des lignes copiées',
+  "staffingImport.issue.duplicateExisting":
+    'Nouvelle ligne identique à une ligne existante (même chantier, fonction, dates et levier — ID ligne "{id}") : modifiez la ligne existante plutôt que d\'en créer une copie',
   "staffingImport.exportButton": "Exporter",
   "staffingImport.exportDoneBody": "{n} ligne(s) de staffing exportée(s)",
   "adminHierarchy.issue.missingColumns": "Colonnes obligatoires absentes : {columns}",

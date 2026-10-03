@@ -15,7 +15,7 @@ import {
   leverToExcelRow,
 } from "@/lib/leverExcel";
 import { ACTION_IMPORT_HEADERS } from "@/lib/leverExcelImport";
-import type { BeTrackData, Company, Lever, LifecycleStage } from "@/types";
+import type { BeTrackData, Company, ImpactNatureDef, Lever, LifecycleStage } from "@/types";
 
 /** Segment de nom de fichier sûr (sans accents ni caractères spéciaux). */
 function fileSlug(s: string): string {
@@ -41,8 +41,11 @@ export function ExportButton({
   levers,
   lifecycleStages,
   selectedProgramId,
+  impactNatures,
 }: {
   data: BeTrackData;
+  /** Natures d'impact de l'entreprise : colonne « Nature de l'impact » exportée par libellé. */
+  impactNatures?: ImpactNatureDef[];
   /** Leviers à exporter — ceux réellement affichés à l'écran (programme, habilitation, filtres,
    *  recherche). Sans ce prop : tous les leviers de `data`. */
   levers?: Lever[];
@@ -77,9 +80,10 @@ export function ExportButton({
     XLSX.utils.book_append_sheet(workbook, actionsSheet, "Actions");
     // Feuille "Impacts" (libellé compris) : le ré-import rapproche chaque ligne de l'impact
     // existant et conserve id, commentaires et validation finance.
-    const impactsSheet = XLSX.utils.json_to_sheet(leversToExport.flatMap(leverImpactsToExcelRows), {
-      header: IMPACT_EXPORT_HEADERS,
-    });
+    const impactsSheet = XLSX.utils.json_to_sheet(
+      leversToExport.flatMap((l) => leverImpactsToExcelRows(l, impactNatures)),
+      { header: IMPACT_EXPORT_HEADERS }
+    );
     XLSX.utils.book_append_sheet(workbook, impactsSheet, "Impacts");
 
     const program = programs.find((p) => p.id === selectedProgramId);

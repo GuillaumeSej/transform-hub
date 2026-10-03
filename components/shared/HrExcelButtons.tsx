@@ -137,6 +137,7 @@ export function HrExcelButtons({
   const confirmImport = async () => {
     if (!preview) return;
     const { plan } = preview;
+    if (plan.issues.some((i) => i.severity === "error")) return;
     setImporting(true);
     try {
       await data.importWorkforce(plan.employees, plan.movements);
@@ -181,6 +182,10 @@ export function HrExcelButtons({
   const errors = plan?.issues.filter((i) => i.severity === "error") ?? [];
   const warnings = plan?.issues.filter((i) => i.severity === "warning") ?? [];
   const toWrite = (plan?.employees.length ?? 0) + (plan?.movements.length ?? 0);
+  /** Import bloqué tant que le fichier contient des erreurs (lot 5, point 1 — même règle que les
+   *  imports leviers et Effectifs) : avant, les lignes en erreur étaient « ignorées » et le reste
+   *  importé ; désormais on corrige le fichier, puis on importe. */
+  const blockedByErrors = errors.length > 0;
 
   const counts = (created: number, updated: number, unchanged: number) =>
     `${created} ${t("hrImport.createdUnit", "créé(s)")} · ${updated} ${t(
@@ -226,7 +231,7 @@ export function HrExcelButtons({
             </Button>
             <Button
               variant="primary"
-              disabled={importing || toWrite === 0}
+              disabled={importing || toWrite === 0 || blockedByErrors}
               onClick={() => void confirmImport()}
             >
               {importing
@@ -256,7 +261,7 @@ export function HrExcelButtons({
           <div className="flex flex-wrap gap-4">
             <span>
               <strong className="text-rag-red">{plan?.rejectedRows ?? 0}</strong>{" "}
-              {t("shared.hrExcelButtons.ignoredRowsUnit", "ligne(s) ignorée(s)")}
+              {t("shared.hrExcelButtons.errorRowsUnit", "ligne(s) en erreur")}
             </span>
             <span>
               <strong className="text-rag-amber">{warnings.length}</strong>{" "}
@@ -264,6 +269,14 @@ export function HrExcelButtons({
             </span>
           </div>
         </div>
+        {blockedByErrors && (
+          <div className="mb-3 rounded-md border border-rag-red/40 bg-rag-red/5 p-2.5 text-xs font-semibold text-rag-red">
+            {t(
+              "shared.leverImportButton.fixErrorsFirst",
+              "Import impossible tant que le fichier contient des erreurs : corrigez les lignes ci-dessous puis rechargez le fichier."
+            )}
+          </div>
+        )}
         <div className="max-h-[320px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
           {errors.length + warnings.length === 0 ? (
             <p className="text-tertiary">

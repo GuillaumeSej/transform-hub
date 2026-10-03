@@ -15,15 +15,20 @@ import {
   parseCellDate,
   parseCellNumber,
 } from "@/lib/excelParse";
-import { applyExcelDateColumns, readOptionalTextCell } from "@/lib/excelCells";
+import { applyExcelDateColumns, isClearMarker, readOptionalTextCell } from "@/lib/excelCells";
 import {
   checkStaffingLine,
   formatStaffingFte,
   matchStaffingRows,
+  staffingBusinessKey,
   type StaffingLineError,
   type StaffingMatchRow,
 } from "@/lib/staffingLineValidation";
-import { STAFFING_TEAMS_RULE, appendStaffingTeamsSheet } from "@/lib/staffingExcelImport";
+import {
+  STAFFING_TEAMS_EMPTY_TEXT,
+  STAFFING_TEAMS_RULE,
+  appendStaffingTeamsSheet,
+} from "@/lib/staffingExcelImport";
 import { currentPeriod } from "@/lib/kpiHistory";
 import type {
   Chantier,
@@ -316,6 +321,10 @@ export const STRATEGIC_IMPORT_MESSAGES = {
     'ID ligne "{id}" présent plusieurs fois dans la feuille (lignes {rows}) — videz la cellule "ID ligne" des lignes copiées',
   staffingDuplicateRow:
     "Ligne ETP en doublon (même chantier, projet, équipe et dates que la ligne {line})",
+  notClearable:
+    '"{column}" ne peut pas être effacé : le tiret « - » n\'est accepté que dans une colonne facultative (laissez la cellule vide pour conserver la valeur)',
+  staffingDuplicateExisting:
+    'Nouvelle ligne ETP identique à une ligne existante (même chantier, projet, équipe et dates — ID ligne "{id}") : modifiez la ligne existante plutôt que d\'en créer une copie',
 } as const;
 
 export type StrategicImportMessageCode = keyof typeof STRATEGIC_IMPORT_MESSAGES;
@@ -457,6 +466,32 @@ function str(v: unknown): string {
 
 function isRowEmpty(row: Record<string, unknown>): boolean {
   return Object.values(row).every((v) => isBlankCell(v));
+}
+
+/** Valeur lue d'une cellule facultative contenant le seul tiret « - » : le champ est EFFACÉ à la
+ *  mise à jour (règle commune aux imports, `lib/excelCells.ts`). Lot 5 : auparavant seul
+ *  « Précision » (ETP) suivait la règle ; ailleurs « - » était enregistré tel quel. */
+const CLEAR: Readonly<{ kind: "clear" }> = Object.freeze({ kind: "clear" });
+type Clear = typeof CLEAR;
+
+function isClear(v: unknown): v is Clear {
+  return v === CLEAR;
+}
+
+/** Champs renseignés d'un objet de lecture (ni vides, ni `CLEAR`). */
+type Defined<T> = { [K in keyof T]?: Exclude<T[K], Clear> };
+
+/** Noms des champs à effacer (`CLEAR`) d'un objet de lecture. */
+function clearedKeys(o: Record<string, unknown>): string[] {
+  return Object.keys(o).filter((k) => o[k] === CLEAR);
+}
+
+/** Copie de `o` sans les champs `keys` (fusion d'une mise à jour qui efface des champs). */
+function withoutCleared<T extends object>(o: T, keys: readonly string[]): T {
+  if (keys.length === 0) return o;
+  const copy = { ...(o as Record<string, unknown>) };
+  for (const k of keys) delete copy[k];
+  return copy as T;
 }
 
 function pad2(n: number): string {
@@ -931,6 +966,8 @@ type PreparedRow = { row: Record<string, unknown>; rowNumber: number };
 /** Ligne de la feuille ETP lue (avant rapprochement et règle commune de staffing). */
 type StaffingSheetRow = StaffingMatchRow & {
   actionCode: string;
+  /** Cellule « Code Projet » : vide = rattachement conservé (mise à jour), « - » = retiré. */
+  actionCell: ReturnType<typeof readOptionalTextCell>["kind"];
   /** Texte brut du nombre d'ETP (messages). */
   fteRaw: string;
   fte: number | undefined;
@@ -1078,11 +1115,28 @@ export function validateStrategicImportRows(
       }
       return "";
     }
+    // Codes, noms et autres colonnes non effaçables : le tiret est refusé (jamais un nom « - »).
+    if (isClearMarker(value)) {
+      err(sheet, rowNumber, "notClearable", { column });
+      return null;
+    }
     if (value.length > max) {
       err(sheet, rowNumber, "tooLong", { column, max, length: value.length });
       return null;
     }
     return value;
+  };
+
+  /** Texte FACULTATIF effaçable : "" si vide (conservé), `CLEAR` si tiret, sinon la valeur. */
+  const optText = (
+    sheet: StrategicImportSheet,
+    rowNumber: number,
+    row: Record<string, unknown>,
+    column: string,
+    { max = STRATEGIC_IMPORT_MAX_NAME_LENGTH } = {}
+  ): string | Clear | null => {
+    if (isClearMarker(row[column])) return CLEAR;
+    return text(sheet, rowNumber, row, column, { max });
   };
 
   const optNumber = (
@@ -1091,7 +1145,9 @@ export function validateStrategicImportRows(
     row: Record<string, unknown>,
     column: string,
     { min, max }: { min?: number; max?: number } = {}
-  ): number | undefined | null => {
+  ): number | Clear | undefined | null => {
+    // Nombre facultatif : tiret = valeur effacée.
+    if (isClearMarker(row[column])) return CLEAR;
     const parsed = parseCellNumber(row[column]);
     if (parsed === undefined) return undefined;
     if (!parsed.ok) {
@@ -1116,6 +1172,11 @@ export function validateStrategicImportRows(
     column: string,
     required = false
   ): string | undefined | null => {
+    // Date obligatoire (ou non effaçable) : le tiret est refusé — voir `optClearableDate`.
+    if (isClearMarker(row[column])) {
+      err(sheet, rowNumber, "notClearable", { column });
+      return null;
+    }
     const parsed = parseCellDate(row[column]);
     if (parsed === undefined) {
       if (required) {
@@ -1153,6 +1214,11 @@ export function validateStrategicImportRows(
   ): string | undefined | null => {
     const raw = str(row["Étape de maturité"]);
     if (!raw) return undefined;
+    // L'étape est toujours renseignée en base (vide = 1re étape à la création) : pas d'effacement.
+    if (isClearMarker(raw)) {
+      err(sheet, rowNumber, "notClearable", { column: "Étape de maturité" });
+      return null;
+    }
     const stage = resolveStage(raw, maturityStages);
     if (stage === undefined) {
       err(sheet, rowNumber, "unknownStage", { value: raw, expected: stageLabels(maturityStages) });
@@ -1167,9 +1233,9 @@ export function validateStrategicImportRows(
     row: Record<string, unknown>,
     column: string,
     role?: Role
-  ): string | undefined | null => {
-    const value = text(sheet, rowNumber, row, column);
-    if (value === null) return null;
+  ): string | Clear | undefined | null => {
+    const value = optText(sheet, rowNumber, row, column);
+    if (value === null || isClear(value)) return value;
     return value ? people.resolve(value, sheet, rowNumber, role) : undefined;
   };
 
@@ -1182,9 +1248,9 @@ export function validateStrategicImportRows(
     row: Record<string, unknown>,
     column: string,
     role?: Role
-  ): string[] | undefined | null => {
-    const value = text(sheet, rowNumber, row, column, { max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH });
-    if (value === null) return null;
+  ): string[] | Clear | undefined | null => {
+    const value = optText(sheet, rowNumber, row, column, { max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH });
+    if (value === null || isClear(value)) return value;
     if (!value) return undefined;
     const resolved = splitPersonList(value).map((v) => people.resolve(v, sheet, rowNumber, role));
     return resolved.length > 0 ? Array.from(new Set(resolved)) : undefined;
@@ -1204,11 +1270,12 @@ export function validateStrategicImportRows(
     return true;
   };
 
-  /** Ne garde que les champs renseignés (upsert non destructif). */
-  const defined = <T extends Record<string, unknown>>(o: T): Partial<T> =>
+  /** Ne garde que les champs renseignés (upsert non destructif) — les champs à effacer (`CLEAR`,
+   *  tiret « - ») sont exclus ici et retirés à la fusion par `withoutCleared`. */
+  const defined = <T extends Record<string, unknown>>(o: T): Defined<T> =>
     Object.fromEntries(
-      Object.entries(o).filter(([, v]) => v !== undefined && v !== "")
-    ) as Partial<T>;
+      Object.entries(o).filter(([, v]) => v !== undefined && v !== "" && v !== CLEAR)
+    ) as Defined<T>;
 
   // ---------- Feuille "Axes" ----------
   const axesToCreate: StrategicAxis[] = [];
@@ -1226,26 +1293,30 @@ export function validateStrategicImportRows(
     if (!dupCheck(sheet, rowNumber, axisCodeSeen, code)) continue;
     const name = text(sheet, rowNumber, row, "Nom", { required: true });
     if (name === null) continue;
-    const description = text(sheet, rowNumber, row, "Description", {
+    const description = optText(sheet, rowNumber, row, "Description", {
       max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
     });
     if (description === null) continue;
-    const color = text(sheet, rowNumber, row, "Couleur");
+    const color = optText(sheet, rowNumber, row, "Couleur");
     if (color === null) continue;
     const stage = stageOf(sheet, rowNumber, row);
     if (stage === null) continue;
     const owner = person(sheet, rowNumber, row, "Sponsor d'axe", "axis_sponsor");
     if (owner === null) continue;
 
-    const fields = defined({ name, description, owner, color, stage });
+    const read = { name, description, owner, color, stage };
+    const fields = defined(read);
     const match = matchExisting(exAxes, usedAxes, code, name, () => true);
     if (match) {
       usedAxes.add(match.entity.id);
-      const merged: StrategicAxis & StrategicImportRef = {
-        ...match.entity,
-        ...fields,
-        ...(match.by === "id" ? {} : { importCode: code }),
-      };
+      const merged: StrategicAxis & StrategicImportRef = withoutCleared(
+        {
+          ...match.entity,
+          ...fields,
+          ...(match.by === "id" ? {} : { importCode: code }),
+        },
+        clearedKeys(read)
+      );
       if (sameIgnoring(merged, match.entity, ["lastUpdate"])) axesUnchanged += 1;
       else axesToUpdate.push({ ...merged, lastUpdate: today });
       axisIdByCode.set(code.toLowerCase(), match.entity.id);
@@ -1277,6 +1348,8 @@ export function validateStrategicImportRows(
     id: string;
     depsRaw: string;
     fields: Partial<Chantier>;
+    /** Champs facultatifs effacés par un tiret « - ». */
+    cleared: string[];
     axisIds: string[];
     name: string;
     existing?: Chantier;
@@ -1317,7 +1390,7 @@ export function validateStrategicImportRows(
 
     const name = text(sheet, rowNumber, row, "Nom", { required: true });
     if (name === null) continue;
-    const description = text(sheet, rowNumber, row, "Description", {
+    const description = optText(sheet, rowNumber, row, "Description", {
       max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
     });
     if (description === null) continue;
@@ -1337,20 +1410,22 @@ export function validateStrategicImportRows(
     );
     if (match) usedChantiers.add(match.entity.id);
     const id = match?.entity.id ?? makeId("CH");
+    const read = {
+      name,
+      description,
+      pilote,
+      stage,
+      allocatedBudget,
+      consumedBudget,
+      consumedFte,
+    };
     parsedChantiers.push({
       rowNumber,
       code,
       id,
       depsRaw: str(row["Dépendances (Code:type, séparées par ;)"]),
-      fields: defined({
-        name,
-        description,
-        pilote,
-        stage,
-        allocatedBudget,
-        consumedBudget,
-        consumedFte,
-      }) as Partial<Chantier>,
+      fields: defined(read) as Partial<Chantier>,
+      cleared: clearedKeys(read),
       axisIds,
       name,
       existing: match?.entity,
@@ -1369,6 +1444,11 @@ export function validateStrategicImportRows(
   for (const p of parsedChantiers) {
     if (!p.depsRaw) {
       depsById.set(p.id, undefined);
+      continue;
+    }
+    // Tiret : dépendances (visibles) retirées.
+    if (isClearMarker(p.depsRaw)) {
+      depsById.set(p.id, []);
       continue;
     }
     const dependencies: ChantierDependency[] = [];
@@ -1492,6 +1572,10 @@ export function validateStrategicImportRows(
   let chantiersUnchanged = 0;
   const chantierAxesById = new Map<string, string[]>();
   for (const c of exChantiers) chantierAxesById.set(c.id, c.axisIds ?? []);
+  const visibleChantierIds = new Set([
+    ...existingData.chantiers.map((c) => c.id),
+    ...parsedChantiers.map((p) => p.id),
+  ]);
 
   for (const p of parsedChantiers) {
     if (excludedChantiers.has(p.id)) continue;
@@ -1507,13 +1591,28 @@ export function validateStrategicImportRows(
       deps = kept;
     }
     if (p.existing) {
-      const merged: Chantier & StrategicImportRef = {
-        ...p.existing,
-        ...p.fields,
-        axisIds: p.axisIds,
-        ...(deps ? { dependencies: deps } : {}),
-        ...(p.matchedBy === "id" ? {} : { importCode: p.code }),
-      };
+      const existingDeps = p.existing.dependencies ?? [];
+      // Dépendances vers un chantier que l'utilisateur ne voit pas (absent des données
+      // transmises) : jamais exportées, donc conservées telles quelles (lot 5) — ordre d'origine
+      // gardé quand la partie visible n'a pas changé (aucune mise à jour fantôme).
+      const hidden = existingDeps.filter((d) => !visibleChantierIds.has(d.targetId));
+      if (deps && hidden.length > 0) {
+        const visibleExisting = existingDeps.filter((d) => visibleChantierIds.has(d.targetId));
+        deps =
+          stableStringify(visibleExisting) === stableStringify(deps)
+            ? existingDeps
+            : [...deps, ...hidden];
+      }
+      const merged: Chantier & StrategicImportRef = withoutCleared(
+        {
+          ...p.existing,
+          ...p.fields,
+          axisIds: p.axisIds,
+          ...(deps ? { dependencies: deps } : {}),
+          ...(p.matchedBy === "id" ? {} : { importCode: p.code }),
+        },
+        p.cleared
+      );
       if (sameIgnoring(merged, p.existing, ["lastUpdate"])) chantiersUnchanged += 1;
       else chantiersToUpdate.push({ ...merged, lastUpdate: today });
     } else {
@@ -1568,7 +1667,7 @@ export function validateStrategicImportRows(
     }
     const name = text(sheet, rowNumber, row, "Nom", { required: true });
     if (name === null) continue;
-    const description = text(sheet, rowNumber, row, "Description", {
+    const description = optText(sheet, rowNumber, row, "Description", {
       max: STRATEGIC_IMPORT_MAX_TEXT_LENGTH,
     });
     if (description === null) continue;
@@ -1599,7 +1698,7 @@ export function validateStrategicImportRows(
     );
     if (contributors === null) continue;
 
-    const fields = defined({
+    const read = {
       name,
       description,
       owner,
@@ -1610,7 +1709,8 @@ export function validateStrategicImportRows(
       budget,
       consumedBudget,
       chantierWeightPct,
-    }) as Partial<ChantierAction>;
+    };
+    const fields = defined(read) as Partial<ChantierAction>;
     const match = matchExisting(
       exActions,
       usedActions,
@@ -1621,12 +1721,15 @@ export function validateStrategicImportRows(
     let action: ChantierAction & StrategicImportRef;
     if (match) {
       usedActions.add(match.entity.id);
-      action = {
-        ...match.entity,
-        ...fields,
-        chantierId,
-        ...(match.by === "id" ? {} : { importCode: code }),
-      };
+      action = withoutCleared(
+        {
+          ...match.entity,
+          ...fields,
+          chantierId,
+          ...(match.by === "id" ? {} : { importCode: code }),
+        },
+        clearedKeys(read)
+      );
     } else {
       action = {
         id: makeId("CA"),
@@ -1653,7 +1756,10 @@ export function validateStrategicImportRows(
     actionIdByCode.get(raw.toLowerCase()) ?? findExistingByRef(exActions, raw)?.id;
 
   // ---------- Feuille "Livrables" (embarqués dans un projet de CE fichier ; fusion par libellé) ----------
-  const deliverablesByActionCode = new Map<string, { label: string; dueDate?: string }[]>();
+  const deliverablesByActionCode = new Map<
+    string,
+    { label: string; dueDate?: string; dueCleared?: boolean }[]
+  >();
   for (const { row, rowNumber } of prepared.livrables) {
     if (isRowEmpty(row)) continue;
     const sheet = "Livrables";
@@ -1667,10 +1773,12 @@ export function validateStrategicImportRows(
     const label = text(sheet, rowNumber, row, "Label", { required: true });
     if (label === null) continue;
     const dueColumn = !isBlankCell(row["Échéance"]) ? "Échéance" : "Fin";
-    const dueDate = optDate(sheet, rowNumber, row, dueColumn);
+    // Échéance facultative : tiret = échéance effacée.
+    const dueCleared = isClearMarker(row[dueColumn]);
+    const dueDate = dueCleared ? undefined : optDate(sheet, rowNumber, row, dueColumn);
     if (dueDate === null) continue;
     const list = deliverablesByActionCode.get(lower) ?? [];
-    list.push({ label, ...(dueDate ? { dueDate } : {}) });
+    list.push({ label, ...(dueDate ? { dueDate } : {}), ...(dueCleared ? { dueCleared } : {}) });
     deliverablesByActionCode.set(lower, list);
   }
 
@@ -1691,6 +1799,8 @@ export function validateStrategicImportRows(
           usedDeliverables.add(current[i].id);
           if (d.dueDate && d.dueDate !== current[i].dueDate) {
             current[i] = { ...current[i], dueDate: d.dueDate };
+          } else if (d.dueCleared && current[i].dueDate !== undefined) {
+            current[i] = withoutCleared(current[i], ["dueDate"]);
           }
         } else {
           const created: Deliverable = {
@@ -1800,7 +1910,10 @@ export function validateStrategicImportRows(
       "Responsables saisie (séparés par ;)"
     );
     if (responsibleUsers === null) continue;
-    const roleTokens = str(row["Rôles responsables (séparés par ;)"])
+    const rolesRaw = str(row["Rôles responsables (séparés par ;)"]);
+    // Tiret : rôles responsables retirés (il faut alors au moins une personne nommée).
+    const rolesCleared = isClearMarker(rolesRaw);
+    const roleTokens = (rolesCleared ? "" : rolesRaw)
       .split(";")
       .map((r) => r.trim())
       .filter(Boolean);
@@ -1823,8 +1936,9 @@ export function validateStrategicImportRows(
     const objectiveValue = optNumber(sheet, rowNumber, row, "Valeur cible");
     if (objectiveValue === null) continue;
     const directionRaw = str(row["Sens"]);
-    let direction: IndicatorDirection | undefined;
-    if (directionRaw) {
+    let direction: IndicatorDirection | Clear | undefined;
+    if (isClearMarker(directionRaw)) direction = CLEAR;
+    else if (directionRaw) {
       direction = resolveSynonym(directionRaw, DIRECTION_SYNONYMS);
       if (!direction) {
         err(sheet, rowNumber, "unknownValue", {
@@ -1835,11 +1949,14 @@ export function validateStrategicImportRows(
         continue;
       }
     }
-    const unit = text(sheet, rowNumber, row, "Unité");
+    const unit = optText(sheet, rowNumber, row, "Unité");
     if (unit === null) continue;
 
-    // Valeur initiale illisible = avertissement (pas de mesure), jamais une erreur de ligne.
-    const baselineParsed = parseCellNumber(row["Valeur initiale"]);
+    // Valeur initiale illisible = avertissement (pas de mesure), jamais une erreur de ligne. Un
+    // tiret vaut une cellule vide : la mesure de référence n'est pas un champ effaçable.
+    const baselineParsed = isClearMarker(row["Valeur initiale"])
+      ? undefined
+      : parseCellNumber(row["Valeur initiale"]);
     let baselineValue: number | undefined;
     if (baselineParsed && !baselineParsed.ok) {
       warn(sheet, rowNumber, "baselineNotNumber", { value: baselineParsed.raw });
@@ -1854,18 +1971,29 @@ export function validateStrategicImportRows(
       name,
       (e) => e.axisId === axisId && (e.chantierId ?? undefined) === chantierId
     );
-    // Au moins une personne nommée OU un rôle (legacy) — dans le fichier ou déjà sur l'existant.
+    const usersCleared = isClear(responsibleUsers);
+    const fileUsers = Array.isArray(responsibleUsers) ? responsibleUsers : undefined;
+    // Au moins une personne nommée OU un rôle (legacy) — dans le fichier ou déjà sur l'existant
+    // (sauf si le fichier l'efface par un tiret).
     const hasResponsible =
-      (responsibleUsers?.length ?? 0) > 0 ||
+      (fileUsers?.length ?? 0) > 0 ||
       responsibleRoles.length > 0 ||
-      (match?.entity.additionalAuthorizedUserIds?.length ?? 0) > 0 ||
-      (match?.entity.responsibleRoles?.length ?? 0) > 0;
+      (!usersCleared && (match?.entity.additionalAuthorizedUserIds?.length ?? 0) > 0) ||
+      (!rolesCleared && (match?.entity.responsibleRoles?.length ?? 0) > 0);
     if (!hasResponsible) {
       err(sheet, rowNumber, "responsibleRequired");
       continue;
     }
 
-    const fields = defined({ name, kind, frequency, objective, objectiveValue, direction, unit });
+    const read = { name, kind, frequency, objective, objectiveValue, direction, unit };
+    const fields = defined(read);
+    const cleared = [
+      ...clearedKeys(read),
+      ...(usersCleared ? ["additionalAuthorizedUserIds"] : []),
+    ];
+    const targetValue = isClear(objectiveValue) ? undefined : objectiveValue;
+    const directionValue = isClear(direction) ? undefined : direction;
+    const unitValue = isClear(unit) ? "" : unit;
     const newBaseline = (indicatorId: string): IndicatorMeasurement | undefined =>
       baselineValue === undefined
         ? undefined
@@ -1885,17 +2013,24 @@ export function validateStrategicImportRows(
       // Un indicateur de chantier garde son axe s'il reste l'un des axes du chantier.
       const keepAxis =
         chantierId && (chantierAxesById.get(chantierId) ?? []).includes(existing.axisId);
-      let merged: Indicator & StrategicImportRef = {
-        ...existing,
-        ...fields,
-        axisId: keepAxis ? existing.axisId : axisId,
-        ...(chantierId ? { chantierId } : {}),
-        // Cellule vide = valeur existante conservée (upsert non destructif).
-        responsibleRoles:
-          responsibleRoles.length > 0 ? responsibleRoles : existing.responsibleRoles,
-        ...(responsibleUsers ? { additionalAuthorizedUserIds: responsibleUsers } : {}),
-        ...(match.by === "id" ? {} : { importCode: code || undefined }),
-      };
+      let merged: Indicator & StrategicImportRef = withoutCleared(
+        {
+          ...existing,
+          ...fields,
+          axisId: keepAxis ? existing.axisId : axisId,
+          ...(chantierId ? { chantierId } : {}),
+          // Cellule vide = valeur existante conservée (upsert non destructif) ; tiret = effacée.
+          responsibleRoles:
+            responsibleRoles.length > 0
+              ? responsibleRoles
+              : rolesCleared
+                ? []
+                : existing.responsibleRoles,
+          ...(fileUsers ? { additionalAuthorizedUserIds: fileUsers } : {}),
+          ...(match.by === "id" ? {} : { importCode: code || undefined }),
+        },
+        cleared
+      );
       if (!chantierId && merged.chantierId) {
         const { chantierId: _drop, ...rest } = merged;
         void _drop;
@@ -1946,14 +2081,14 @@ export function validateStrategicImportRows(
         kind,
         frequency,
         objective,
-        ...(objectiveValue !== undefined
-          ? { objectiveValue, direction: direction ?? "up" }
-          : direction
-            ? { direction }
+        ...(targetValue !== undefined
+          ? { objectiveValue: targetValue, direction: directionValue ?? "up" }
+          : directionValue
+            ? { direction: directionValue }
             : {}),
-        ...(unit ? { unit } : {}),
+        ...(unitValue ? { unit: unitValue } : {}),
         responsibleRoles,
-        ...(responsibleUsers ? { additionalAuthorizedUserIds: responsibleUsers } : {}),
+        ...(fileUsers ? { additionalAuthorizedUserIds: fileUsers } : {}),
         status: "on_track",
         ...(code ? { importCode: code } : {}),
         createdAt: today,
@@ -1981,6 +2116,8 @@ export function validateStrategicImportRows(
 
   for (const { row, rowNumber } of prepared.etp) {
     if (isRowEmpty(row)) continue;
+    // Ligne de commentaire (exemples du modèle, "# " devant le code chantier) : ignorée.
+    if (str(row["Code Chantier"]).startsWith("#")) continue;
     const sheet = "ETP";
     const chantierCode = text(sheet, rowNumber, row, "Code Chantier", { required: true });
     if (chantierCode === null) continue;
@@ -1989,7 +2126,11 @@ export function validateStrategicImportRows(
       err(sheet, rowNumber, "chantierNotFound", { code: chantierCode });
       continue;
     }
-    const actionCode = str(row["Code Projet"]);
+    // "Code Projet" : vide = rattachement conservé, "-" = retiré (lot 5 — auparavant une cellule
+    // vidée retirait le rattachement et "-" était lu comme un code introuvable). Pour le
+    // rapprochement sans "ID ligne", vide et "-" valent « sans projet ».
+    const actionCell = readOptionalTextCell(row["Code Projet"]);
+    const actionCode = actionCell.kind === "set" ? actionCell.value : "";
     let actionId: string | undefined;
     if (actionCode) {
       actionId = resolveActionCode(actionCode);
@@ -2024,6 +2165,7 @@ export function validateStrategicImportRows(
       chantierId,
       actionId,
       actionCode,
+      actionCell: actionCell.kind,
       fn,
       fteRaw: str(row["Nombre d'ETP"]),
       fte: fteParsed?.ok ? fteParsed.value : undefined,
@@ -2047,6 +2189,8 @@ export function validateStrategicImportRows(
   const firstEtpRowByKey = new Map<string, number>();
   const duplicatedFirstEtpRows = new Map<number, number>();
   const etpCreations = new Map<number, ChantierStaffing>();
+  const etpCreationKeys = new Map<number, string>();
+  const etpFinalById = new Map<string, ChantierStaffing>();
   const actionOf = (id: string) =>
     parsedActions.find((p) => p.action.id === id)?.action ?? exActions.find((a) => a.id === id);
   for (const r of etpRows) {
@@ -2057,7 +2201,14 @@ export function validateStrategicImportRows(
     const startDate = r.startDate ?? matched?.startDate;
     const endDate = r.endDate ?? matched?.endDate;
     const legacyUndated = matched !== undefined && (!startDate || !endDate);
-    const action = r.actionId ? actionOf(r.actionId) : undefined;
+    // "Code Projet" vide sur une mise à jour = rattachement existant conservé ("-" le retire).
+    const actionId = r.actionCell === "keep" && matched?.actionId ? matched.actionId : r.actionId;
+    const action = actionId ? actionOf(actionId) : undefined;
+    if (r.actionCell === "keep" && action && action.chantierId !== r.chantierId) {
+      // Chantier changé dans le fichier : le projet conservé n'appartient plus au chantier.
+      err(sheet, rowNumber, "projectNotFound", { code: importCodeOf(action) ?? action.name });
+      continue;
+    }
     const check = checkStaffingLine(
       { team: r.fn, fte: r.fte, startDate, endDate },
       {
@@ -2122,7 +2273,7 @@ export function validateStrategicImportRows(
       });
     if (check.warnings.includes("outsideProject") && action)
       warn(sheet, rowNumber, "staffingOutsideProject", {
-        code: r.actionCode,
+        code: r.actionCode || (importCodeOf(action) ?? action.name),
         start: action.start ?? "",
         end: action.end ?? "",
       });
@@ -2140,18 +2291,19 @@ export function validateStrategicImportRows(
       ...(note ? { note } : {}),
       ...(startDate ? { startDate } : {}),
       ...(endDate ? { endDate } : {}),
-      ...(r.actionId ? { actionId: r.actionId } : {}),
+      ...(actionId ? { actionId } : {}),
     };
     if (matched) {
-      // Champs facultatifs retirés quand la fusion les efface ("-" en Précision, projet retiré).
+      // Champs facultatifs retirés quand la fusion les efface ("-" en Précision ou Code Projet).
       const merged: ChantierStaffing = { ...matched, ...fields };
       if (!note) delete merged.note;
-      if (!r.actionId) delete merged.actionId;
+      if (!actionId) delete merged.actionId;
+      etpFinalById.set(matched.id, merged);
       if (sameIgnoring(merged, matched, [])) staffingUnchanged += 1;
       else staffingToUpdate.push(merged);
       continue;
     }
-    const key = [r.chantierId, r.actionId ?? "", norm(check.team), startDate, endDate].join("|");
+    const key = staffingBusinessKey(r.chantierId, check.team, startDate, endDate, actionId);
     const first = firstEtpRowByKey.get(key);
     if (first !== undefined) {
       err(sheet, rowNumber, "staffingDuplicateRow", { line: first });
@@ -2159,6 +2311,7 @@ export function validateStrategicImportRows(
       continue;
     }
     firstEtpRowByKey.set(key, rowNumber);
+    etpCreationKeys.set(rowNumber, key);
     etpCreations.set(rowNumber, {
       id: makeId("ST"),
       companyId: resolvedCompanyId,
@@ -2171,8 +2324,27 @@ export function validateStrategicImportRows(
   duplicatedFirstEtpRows.forEach((dup, first) =>
     err("ETP", first, "staffingDuplicateRow", { line: dup })
   );
+  // Création reprenant exactement la clé d'une ligne existante (lot 5 — ligne copiée dont l'« ID
+  // ligne » a été vidé) : erreur, comme un doublon interne au fichier. Comparée à l'état APRÈS les
+  // mises à jour du fichier (une ligne existante dont les dates changent libère son ancienne clé).
+  const existingEtpByKey = new Map<string, ChantierStaffing>();
+  for (const s of exStaffing) {
+    const f = etpFinalById.get(s.id) ?? s;
+    existingEtpByKey.set(
+      staffingBusinessKey(f.chantierId, f.function, f.startDate, f.endDate, f.actionId),
+      f
+    );
+  }
+  const etpCopiesOfExisting = new Set<number>();
+  etpCreationKeys.forEach((key, rowNumber) => {
+    const existing = existingEtpByKey.get(key);
+    if (!existing) return;
+    etpCopiesOfExisting.add(rowNumber);
+    err("ETP", rowNumber, "staffingDuplicateExisting", { id: existing.id });
+  });
   etpCreations.forEach((entry, rowNumber) => {
-    if (!duplicatedFirstEtpRows.has(rowNumber)) staffingToCreate.push(entry);
+    if (!duplicatedFirstEtpRows.has(rowNumber) && !etpCopiesOfExisting.has(rowNumber))
+      staffingToCreate.push(entry);
   });
 
   const peopleList = people.finish(warn);
@@ -2356,9 +2528,18 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
     "Exportez le plan (bouton « Exporter le plan »), modifiez le fichier puis réimportez-le : l'aperçu indique ce qui sera créé, mis à jour ou inchangé. Une cellule vide ne remplace jamais une valeur existante.",
   ],
   [
-    `Feuille ETP : une ligne = une équipe de la base ETP ("Fonction") sur un chantier ou un projet ; "Nombre d'ETP" > 0 (au-delà de l'effectif disponible de l'équipe, simple avertissement) ; "Date début" et "Date fin" obligatoires (fin >= début). "ID ligne" (rempli par l'export) identifie la ligne : ne le modifiez pas, laissez-le vide pour une nouvelle ligne. "Précision" vide = précision conservée ; un tiret "-" l'efface.`,
+    'Effacer une valeur : saisissez un tiret « - » seul dans la cellule. Accepté dans toutes les colonnes facultatives (Description, Couleur, sponsors, "Responsable projet", "Contributeurs", budgets, "ETP consommés", poids, "Dépendances", "Échéance" des Livrables, "Valeur cible", "Sens", "Unité", "Responsables saisie", "Rôles responsables", "Code Projet" et "Précision" de la feuille ETP). Refusé (erreur) dans une colonne obligatoire, dans un "Code" et dans "Étape de maturité".',
+  ],
+  [
+    "Dépendances vers un chantier que vous ne voyez pas : elles ne figurent pas dans l'export et sont conservées telles quelles au ré-import.",
+  ],
+  [
+    `Feuille ETP : une ligne = une équipe de la base ETP ("Fonction") sur un chantier ou un projet ; "Nombre d'ETP" > 0 (au-delà de l'effectif disponible de l'équipe, simple avertissement) ; "Date début" et "Date fin" obligatoires (fin >= début). "ID ligne" (rempli par l'export) identifie la ligne : ne le modifiez pas, laissez-le vide pour une nouvelle ligne (une copie exacte d'une ligne existante est refusée). "Précision" ou "Code Projet" vide = valeur conservée ; un tiret "-" efface la précision ou retire le rattachement au projet.`,
   ],
   [STAFFING_TEAMS_RULE],
+  [
+    'Feuille ETP du modèle : les exemples reprennent les équipes réelles de la base ETP mais sont commentés ("#" devant le code chantier) — une ligne commençant par "#" est ignorée à l\'import ; retirez le "#" pour importer un exemple.',
+  ],
   [
     "Poids dans le chantier (%) : saisissez 40 ou 40 % (une cellule au format pourcentage d'Excel est bien lue 40) ; une valeur hors de 0 à 100 est refusée.",
   ],
@@ -2373,7 +2554,7 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
   [""],
   ["6. En cas d'erreur"],
   [
-    "Une ligne en erreur n'invalide qu'elle-même : l'aperçu avant import liste chaque anomalie (feuille + numéro de ligne + raison). Corrigez et réimportez.",
+    "L'aperçu avant import liste chaque anomalie (feuille + numéro de ligne + raison). Tant que le fichier contient une erreur, l'import est impossible : corrigez le fichier puis réimportez-le. Les avertissements n'empêchent pas l'import.",
   ],
 ];
 
@@ -2543,27 +2724,37 @@ export const STRATEGIC_INDICATOR_EXAMPLE_ROWS = [
   ],
 ];
 
-export const STRATEGIC_STAFFING_EXAMPLE_ROWS = [
-  [
-    "CH1",
-    "ACT1",
-    "Data & Analytics",
-    2.5,
-    "Squad data dédiée à la cartographie",
-    "2026-01-15",
-    "2026-03-31",
-  ],
-  [
-    "CH2",
-    "",
-    "Ressources Humaines",
-    1,
-    "Cheffe de projet RH à mi-temps",
-    "2026-02-01",
-    "2026-12-31",
-  ],
-  ["CH3", "", "Cybersécurité", 1.5, "", "2026-01-01", "2026-06-30"],
-];
+/** Ligne de commentaire de la feuille ETP (1re cellule commençant par "#", ignorée à l'import). */
+const etpComment = (text: string) => [text, "", "", "", "", "", ""];
+
+/**
+ * Lignes d'exemple de la feuille ETP du modèle (lot 5, comme le modèle Effectifs) : construites
+ * avec les VRAIES équipes de la base ETP de l'entreprise, mais COMMENTÉES ("# " devant le code
+ * chantier) — ignorées à l'import tant que l'utilisateur ne retire pas le "#". Auparavant des
+ * équipes fictives (« Data & Analytics »…) faisaient échouer l'import du modèle. Base ETP vide =
+ * une ligne explicative.
+ */
+export function buildStrategicStaffingExampleRows(
+  knownDepartments: readonly string[]
+): (string | number)[][] {
+  const teams = Array.from(new Set(knownDepartments.filter((n) => n.trim() !== "")));
+  const rows: (string | number)[][] = [
+    etpComment(
+      "# Les lignes commençant par # sont ignorées. Retirez le # d'un exemple pour l'importer."
+    ),
+  ];
+  if (teams.length === 0) {
+    rows.push(etpComment(`# ${STAFFING_TEAMS_EMPTY_TEXT}.`));
+    return rows;
+  }
+  const team = (i: number) => teams[i % teams.length];
+  rows.push(
+    ["# CH1", "ACT1", team(0), 2.5, "Squad dédiée à la cartographie", "2026-01-15", "2026-03-31"],
+    ["# CH2", "", team(1), 1, "Cheffe de projet à mi-temps", "2026-02-01", "2026-12-31"],
+    ["# CH3", "", team(2), 1.5, "", "2026-01-01", "2026-06-30"]
+  );
+  return rows;
+}
 
 type SheetRows = Record<SheetKey, unknown[][]>;
 
@@ -2611,7 +2802,7 @@ export function buildStrategicImportTemplateWorkbook(
       actions: STRATEGIC_ACTION_EXAMPLE_ROWS,
       livrables: STRATEGIC_DELIVERABLE_EXAMPLE_ROWS,
       indicateurs: STRATEGIC_INDICATOR_EXAMPLE_ROWS,
-      etp: STRATEGIC_STAFFING_EXAMPLE_ROWS,
+      etp: buildStrategicStaffingExampleRows(teams.knownDepartments),
     },
     XLSX,
     teams
@@ -2660,8 +2851,11 @@ export function buildStrategicPlanExportWorkbook(
         num(c.allocatedBudget),
         num(c.consumedBudget),
         num(c.consumedFte),
+        // Dépendance vers un chantier non visible par l'utilisateur qui exporte : non exportée
+        // (jamais son id Firestore) — le ré-import la conserve telle quelle en base (lot 5).
         (c.dependencies ?? [])
-          .map((d) => `${chantierCode.get(d.targetId) ?? d.targetId}:${d.type}`)
+          .filter((d) => chantierCode.has(d.targetId))
+          .map((d) => `${chantierCode.get(d.targetId)}:${d.type}`)
           .join(";"),
       ]),
       actions: data.actions.map((a) => [

@@ -151,6 +151,10 @@ const de: Record<string, string> = {
   "validation.sa.refuse": "Ablehnen",
   "validation.sa.emptyMine": "Sie haben keine Anträge gestellt.",
   "validation.sa.emptyHistory": "Noch keine Entscheidung.",
+  "validation.deletion.title": "Zu bestätigende Löschungen",
+  "validation.deletion.intro":
+    "Vom CTO oder einem Arbeitspaket-Leiter beantragte Löschungen von Hebeln: Sie werden erst nach Ihrer Bestätigung wirksam.",
+  "validation.deletion.review": "Prüfen",
   "nav.sectionLabel": "Navigation",
   "nav.sectionDecision": "Meine Aufgaben",
   "nav.sectionReferenceData": "Referenzdaten",
@@ -975,6 +979,8 @@ const de: Record<string, string> = {
   "adminHistory.action.approvalRequested": "Freigabe angefragt",
   "adminHistory.action.approvalApproved": "Antrag freigegeben",
   "adminHistory.action.approvalRejected": "Freigabe abgelehnt",
+  "adminHistory.action.deletionRequested": "Löschung beantragt",
+  "adminHistory.action.deletionCancelled": "Löschung abgelehnt/storniert",
   "adminHistory.title": "Verlauf",
   "adminHistory.searchPlaceholder": "Suchen...",
   "adminHistory.allActions": "Alle Aktionen",
@@ -1322,8 +1328,8 @@ const de: Record<string, string> = {
     "{emp} Mitarbeiter · {created} Bewegung(en) erstellt, {updated} aktualisiert",
   "shared.hrExcelButtons.employeesUnit": "Mitarbeiter",
   "shared.hrExcelButtons.movementsUnit": "Bewegung(en)",
-  "shared.hrExcelButtons.ignoredRowsUnit": "Zeile(n) ignoriert",
   "shared.hrExcelButtons.warningsUnit": "Warnung(en)",
+  "shared.hrExcelButtons.errorRowsUnit": "fehlerhafte Zeile(n)",
   "shared.leverImportButton.importButton": "Datei importieren",
   "shared.leverImportButton.templateDownloadedBody":
     "3 Arbeitsblätter: Hebel (Code = Schlüssel), Maßnahmen (Hebel-Code = FK), Auswirkungen (Hebel-Code + Maßnahmenname = FK). Löschen Sie die Beispielzeile, bevor Sie die Datei ausfüllen.",
@@ -2065,7 +2071,6 @@ const de: Record<string, string> = {
   "strategicImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "strategicImport.templateDownloadedBody":
     'Lies-mich (Anleitung) + 6 Tabellenblätter: Achsen (Code = Schlüssel), Arbeitspakete (Achsencodes getrennt durch ; = FK, mehrere Achsen möglich), Projekte (Arbeitspaketcode = FK, "Reifegrad" optional), Ergebnisse (Projektcode = FK, optional), Indikatoren (Achsencode ODER Arbeitspaketcode = FK, "Ausgangswert" optional). Personal (optional, Arbeitspaketcode = FK). Tabellenblatt „Équipes“ = Referenz der Teams der FTE-Basis (beim Import ignoriert). Löschen Sie die Beispielzeilen vor dem Ausfüllen.',
-  "strategicImport.ignoredRowsNote": "{n} Zeile(n) ignoriert",
   "strategicImport.importDoneBody":
     "{axes} Achse(n) · {chantiers} Arbeitspaket(e) · {actions} Projekt(e) · {indicators} Indikator(en) erstellt",
   "strategicImport.errorTitle": "Import fehlgeschlagen",
@@ -2167,6 +2172,10 @@ const de: Record<string, string> = {
     "Zeilen-ID „{id}“ mehrfach im Blatt (Zeilen {rows}) — leeren Sie die Zelle „ID ligne“ kopierter Zeilen",
   "strategicImport.msg.staffingDuplicateRow":
     "Doppelte FTE-Zeile (gleiches Arbeitspaket, Projekt, Team und gleiche Daten wie Zeile {line})",
+  "strategicImport.msg.notClearable":
+    "„{column}“ kann nicht gelöscht werden: Der Bindestrich „-“ ist nur in einer optionalen Spalte zulässig (lassen Sie die Zelle leer, um den Wert beizubehalten)",
+  "strategicImport.msg.staffingDuplicateExisting":
+    "Neue VZÄ-Zeile identisch mit einer bestehenden Zeile (gleiches Arbeitspaket, Projekt, Team und gleiche Daten — Zeilen-ID „{id}“): Ändern Sie die bestehende Zeile, statt eine Kopie anzulegen",
   "strategicImport.accountStatusOrphan":
     "Anmeldekonto angelegt, aber Profil nicht gespeichert — unter Admin > Benutzer vervollständigen",
   "strategicImport.readErrorTitle": "Datei nicht lesbar",
@@ -3096,6 +3105,11 @@ const de: Record<string, string> = {
   "leverForm.sectionActions": "Aktionen",
   "leverForm.impactFinancialGroup": "Finanzielle Auswirkung (ohne VZÄ)",
   "leverForm.impactFteGroup": "VZÄ-Auswirkung",
+  "leverForm.endBeforeStart": "Das Enddatum darf nicht vor dem Startdatum liegen",
+  "leverForm.fixErrors": "Einige Pflichtfelder fehlen oder sind fehlerhaft (unten rot markiert).",
+  "leverForm.requiredField": "Pflichtfeld",
+  "leverForm.requiredLegend": "Pflichtfelder",
+  "leverForm.sectionSchedule": "Zeitplan",
   "levers.tree.wsLead": "Arbeitspaket-Leiter",
   "levers.tree.wsLeadEmpty": "Arbeitspaket-Leiter nicht angegeben",
   "levers.tree.leverOwner": "Hebel-Verantwortlicher",
@@ -3106,6 +3120,32 @@ const de: Record<string, string> = {
   "levers.column.progress": "Fortschritt",
   "levers.column.fteImpact": "Betroffene VZÄ",
   "levers.column.opexOneOff": "Einmaliges OPEX",
+  "levers.column.delete": "Löschen",
+  "levers.deleteLever": "Hebel löschen",
+  "levers.deletionPending": "Löschung wartet auf Freigabe",
+  "leverDeletion.title": "Hebel „{name}“ löschen",
+  "leverDeletion.approveIntro":
+    "Mit der Bestätigung werden der Hebel, sein Maßnahmenplan und seine Auswirkungen endgültig gelöscht.",
+  "leverDeletion.requestIntro":
+    "Die Löschung ist endgültig. Sie muss vor dem Inkrafttreten durch {approver} bestätigt werden.",
+  "leverDeletion.roleCto": "den CTO",
+  "leverDeletion.roleSponsor": "den Arbeitspaket-Leiter",
+  "leverDeletion.reason": "Grund (optional)",
+  "leverDeletion.reasonLabel": "Grund",
+  "leverDeletion.request": "Löschung beantragen",
+  "leverDeletion.cancelRequest": "Antrag zurückziehen",
+  "leverDeletion.confirm": "Löschung bestätigen",
+  "leverDeletion.refuse": "Ablehnen",
+  "leverDeletion.deleted": "Hebel gelöscht",
+  "leverDeletion.cancelled": "Löschantrag zurückgezogen",
+  "leverDeletion.refused": "Löschantrag abgelehnt",
+  "leverDeletion.error": "Aktion nicht möglich",
+  "leverDeletion.notAllowed":
+    "Nur der CTO und der Arbeitspaket-Leiter des Hebels können seine Löschung beantragen.",
+  "leverDeletion.pendingInfo": "Löschung beantragt von {name} ({role}) am {date}.",
+  "leverDeletion.waiting": "Warten auf die Bestätigung durch {approver}.",
+  "leverDeletion.banner": "Löschung beantragt von {name} am {date} — wartet auf Freigabe.",
+  "leverDeletion.viewRequest": "Antrag ansehen",
   "shared.leverOwnerReconciliation.pickUser": "Konto auswählen…",
   "shared.leverOwnerReconciliation.title": "Bestätigung der Hebel-Verantwortlichen",
   "shared.leverOwnerReconciliation.confirmButton": "Bestätigen und importieren",
@@ -3177,6 +3217,7 @@ const de: Record<string, string> = {
   "shared.topbar.approvalPending": "Ausstehend · Arbeitspaket-Leiter oder CTO · {stage}",
   "shared.topbar.milestoneApprovalPending":
     "Ausstehend · Leiter des Strategieplans · Meilenstein {milestone}",
+  "shared.topbar.deletionPending": "Löschung beantragt von {name}",
   "leverDetail.trajectory.financial": "Finanzielle Auswirkung",
   "leverDetail.trajectory.fte": "VZÄ-Auswirkung",
   "leverDetail.trajectory.month": "Monat",
@@ -3466,18 +3507,16 @@ const de: Record<string, string> = {
   // ── Excel-Importe (HR / Staffing / Hierarchie): übersetzbare Meldungen (Audit 24.09.2026) ──
   "hrImport.issue.missingColumns": "Pflichtspalten fehlen: {columns}",
   "hrImport.issue.unknownColumn": "Spalte „{column}“ nicht erkannt — ignoriert",
-  "hrImport.issue.missingIdOrName": "„Matricule“ und „Nom“ sind Pflicht — Zeile ignoriert",
+  "hrImport.issue.missingIdOrName": "„Matricule“ und „Nom“ sind Pflicht",
   "hrImport.issue.duplicateEmployeeId":
-    "Personalnummer „{id}“ kommt mehrfach in der Datei vor (Zeilen {rows}) — Zeilen ignoriert",
-  "hrImport.issue.missingLabel": "„Employé / Poste“ ist Pflicht — Zeile ignoriert",
+    "Personalnummer „{id}“ kommt mehrfach in der Datei vor (Zeilen {rows})",
+  "hrImport.issue.missingLabel": "„Employé / Poste“ ist Pflicht",
   "hrImport.issue.duplicateMovementId":
-    "Bewegungs-ID „{id}“ kommt mehrfach in der Datei vor (Zeilen {rows}) — Zeilen ignoriert",
-  "hrImport.issue.missingType": "„Type“ ist für eine neue Bewegung Pflicht — Zeile ignoriert",
-  "hrImport.issue.unknownType":
-    "Unbekannter Typ „{value}“ (erwartet: {expected}) — Zeile ignoriert",
-  "hrImport.issue.missingRequiredDate":
-    "„{column}“ ist für eine neue Bewegung Pflicht — Zeile ignoriert",
-  "hrImport.issue.invalidRequiredDate": "{column} „{value}“ nicht lesbar — Zeile ignoriert",
+    "Bewegungs-ID „{id}“ kommt mehrfach in der Datei vor (Zeilen {rows})",
+  "hrImport.issue.missingType": "„Type“ ist für eine neue Bewegung Pflicht",
+  "hrImport.issue.unknownType": "Unbekannter Typ „{value}“ (erwartet: {expected})",
+  "hrImport.issue.missingRequiredDate": "„{column}“ ist für eine neue Bewegung Pflicht",
+  "hrImport.issue.invalidRequiredDate": "{column} „{value}“ nicht lesbar",
   "hrImport.issue.unknownDepartment": "Unbekannte Abteilung „{value}“ (unverändert übernommen)",
   "hrImport.issue.unknownEnumKept":
     "{column} „{value}“ nicht erkannt — bestehender Wert beibehalten",
@@ -3564,6 +3603,8 @@ const de: Record<string, string> = {
     "Zeilen-ID „{id}“ in diesem Programm unbekannt — Zeile ohne ID zugeordnet",
   "staffingImport.issue.duplicateLineId":
     "Zeilen-ID „{id}“ mehrfach in der Datei (Zeilen {rows}) — leeren Sie die Zelle „ID ligne“ kopierter Zeilen",
+  "staffingImport.issue.duplicateExisting":
+    "Neue Zeile identisch mit einer bestehenden Zeile (gleiches Arbeitspaket, gleiche Funktion, gleiche Daten und gleicher Hebel — Zeilen-ID „{id}“): Ändern Sie die bestehende Zeile, statt eine Kopie anzulegen",
   "staffingImport.exportButton": "Exportieren",
   "staffingImport.exportDoneBody": "{n} Staffing-Zeile(n) exportiert",
   "adminHierarchy.issue.missingColumns": "Pflichtspalten fehlen: {columns}",

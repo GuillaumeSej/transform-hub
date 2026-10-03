@@ -8,8 +8,16 @@ import {
 } from "@/lib/leverExcelImport";
 import { DEFAULT_LIFECYCLE_STAGES, resolveStatusLabel } from "@/lib/status-config";
 import { isFteHire } from "@/lib/impactKinds";
+import { getImpactNatures } from "@/lib/impactConfig";
 import { riskLevelLabel } from "@/lib/leverRiskText";
-import type { Alert, BeTrackData, Lever, LifecycleStage, RiskLevel } from "@/types";
+import type {
+  Alert,
+  BeTrackData,
+  ImpactNatureDef,
+  Lever,
+  LifecycleStage,
+  RiskLevel,
+} from "@/types";
 
 /**
  * Mapping Lever -> ligne Excel, utilisé par `ExportButton` (type="excel") pour générer
@@ -123,8 +131,16 @@ const IMPACT_NATURE_EXPORT = {
 /** Lignes de la feuille "Impacts" (impacts portés par le levier) — mêmes colonnes que
  *  `IMPACT_IMPORT_HEADERS` (lib/leverExcelImport.ts) ; "Nom de l'action" reste vide. Le libellé
  *  est exporté : c'est la clé de rapprochement qui permet au ré-import de conserver l'id, les
- *  commentaires et la validation finance de chaque ligne. */
-export function leverImpactsToExcelRows(lever: Lever): Record<string, string | number>[] {
+ *  commentaires et la validation finance de chaque ligne. « Nature de l'impact » est exportée par
+ *  son LIBELLÉ dans les natures de l'entreprise (`impactNatures`, natures par défaut à défaut —
+ *  lot 5), relu par l'import ; une nature disparue du paramétrage garde son id. */
+export function leverImpactsToExcelRows(
+  lever: Lever,
+  impactNatures?: ImpactNatureDef[]
+): Record<string, string | number>[] {
+  const natures = getImpactNatures({ impactNatures });
+  const natureLabel = (id: string | undefined) =>
+    id ? (natures.find((n) => n.id === id)?.label ?? id) : "";
   return engine.leverImpactsOf(lever).map((imp) => ({
     "Code Levier": lever.code,
     "Nom de l'action": "",
@@ -146,7 +162,7 @@ export function leverImpactsToExcelRows(lever: Lever): Record<string, string | n
           ? "Gain one-off"
           : "Gain annuel"
         : "",
-    "Nature de l'impact": imp.natureId ?? "",
+    "Nature de l'impact": natureLabel(imp.natureId),
     Technologie: imp.technology ?? "",
     Sens: imp.type === "fte" ? (isFteHire(imp) ? "Recrutement" : "Départ") : "",
     "Statut impact": imp.status

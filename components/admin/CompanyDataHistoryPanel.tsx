@@ -1,7 +1,7 @@
 "use client";
 
 import { MultiSelect } from "@/components/shared/MultiSelect";
-import { displayAuditValue } from "@/lib/auditFormat";
+import { compareAuditTsDesc, displayAuditValue, formatAuditTimestamp } from "@/lib/auditFormat";
 import { useEffect, useState } from "react";
 import { Users, Target, Briefcase, FileSpreadsheet, Activity, History } from "lucide-react";
 import type { Company, AuthUser, Program, Lever, AuditEntry } from "@/types";
@@ -32,19 +32,10 @@ function actionLabels(t: (key: string, fallback?: string) => string): Record<str
   };
 }
 
+/** Horodatage d'audit affiché dans le fuseau du navigateur — ISO avec « Z », et anciennes entrées
+ *  « AAAA-MM-JJ HH:MM » relues en UTC (lot 5 : elles étaient relues comme heure locale). */
 function formatTimestamp(ts: string): string {
-  try {
-    const d = new Date(ts);
-    return d.toLocaleDateString(intlTag(), {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return ts;
-  }
+  return formatAuditTimestamp(ts, intlTag());
 }
 
 /**
@@ -136,7 +127,7 @@ export function CompanyDataHistoryPanel({ company }: { company: Company }) {
     }
     return true;
   });
-  const sorted = [...filtered].sort((a, b) => b.ts.localeCompare(a.ts));
+  const sorted = [...filtered].sort(compareAuditTsDesc);
 
   return (
     <div className="space-y-6">

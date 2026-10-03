@@ -156,8 +156,13 @@ export function StaffingImportButton({
   const updateCount = (p: StaffingImportPreview | null) =>
     p ? p.rows.filter((r) => r.isUpdate).length : 0;
 
+  /** Import bloqué tant que le fichier contient des erreurs (lot 5, point 1 — même règle que
+   *  l'import leviers) : avant, la confirmation restait possible et les lignes en erreur étaient
+   *  abandonnées sans le dire. */
+  const blockedByErrors = (preview?.errors.length ?? 0) > 0;
+
   const confirmImport = async () => {
-    if (!allowed || !preview || preview.rows.length === 0) return;
+    if (!allowed || !preview || preview.rows.length === 0 || blockedByErrors) return;
     setImporting(true);
     try {
       await onImport(preview.rows.map((r) => r.entry));
@@ -217,7 +222,7 @@ export function StaffingImportButton({
             </Button>
             <Button
               variant="primary"
-              disabled={importing || !preview || preview.rows.length === 0}
+              disabled={importing || !preview || preview.rows.length === 0 || blockedByErrors}
               onClick={() => void confirmImport()}
             >
               {t("staffingImport.confirmButton")}
@@ -247,6 +252,14 @@ export function StaffingImportButton({
             {t("shared.hrExcelButtons.warningsUnit", "avertissement(s)")}
           </span>
         </div>
+        {blockedByErrors && (
+          <div className="mb-3 rounded-md border border-rag-red/40 bg-rag-red/5 p-2.5 text-xs font-semibold text-rag-red">
+            {t(
+              "shared.leverImportButton.fixErrorsFirst",
+              "Import impossible tant que le fichier contient des erreurs : corrigez les lignes ci-dessous puis rechargez le fichier."
+            )}
+          </div>
+        )}
         <div className="max-h-[360px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
           {(preview?.errors.length ?? 0) + (preview?.warnings.length ?? 0) === 0 ? (
             <p className="text-tertiary">{t("shared.excelIO.noAnomalies")}</p>

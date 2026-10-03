@@ -1,6 +1,6 @@
 import { todayISO } from "@/lib/dateUtils";
 import * as engine from "@/lib/engine";
-import { formatAuditValue } from "@/lib/auditFormat";
+import { auditTimestamp, formatAuditValue } from "@/lib/auditFormat";
 import { consolidateLeverFromActions } from "@/lib/leverConsolidate";
 import { migrateLeverImpacts } from "@/lib/leverImpactMigration";
 import type { CascadeShift } from "@/lib/engine";
@@ -401,8 +401,9 @@ function nowDate(): string {
   return todayISO();
 }
 
+/** Horodatage d'audit ISO UTC avec « Z » (lot 5, voir `auditTimestamp`). */
 function nowTs(): string {
-  return new Date().toISOString().slice(0, 16).replace("T", " ");
+  return auditTimestamp();
 }
 
 function nextEntityId(prefix: string, existingIds: string[]): string {

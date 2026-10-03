@@ -32,6 +32,7 @@ import type {
   AuthUser,
   BeTrackData,
   DependencyType,
+  ImpactNatureDef,
   Lever,
   LeverAction,
   LeverDependency,
@@ -776,6 +777,11 @@ export type LeverImportRawSheets = {
 export type LeverImportOptions = {
   /** Utilisateur qui importe : décide du statut de validation finance des impacts « Réalisé ». */
   importer?: (Pick<AuthUser, "name" | "profiles"> & Partial<Pick<AuthUser, "username">>) | null;
+  /** Natures d'impact de l'entreprise (`Company.impactNatures`, voir lib/impactConfig.ts) : la
+   *  colonne « Nature de l'impact » est résolue contre elles (libellé ou id). Absent ou vide =
+   *  natures par défaut (lot 5 : auparavant toujours les natures par défaut, si bien que les
+   *  natures personnalisées de l'entreprise étaient signalées « inconnues »). */
+  impactNatures?: ImpactNatureDef[];
 };
 
 const LEVER_REQUIRED_FOR_NEW: LeverHeader[] = [
@@ -1421,7 +1427,7 @@ export function validateLeverImportRows(
   };
   const impactsByLeverCode = new Map<string, ParsedImpact[]>();
   let impactHeaders = new Set<string>();
-  const natures = getImpactNatures(undefined);
+  const natures = getImpactNatures({ impactNatures: options.impactNatures });
 
   if (sheets.impacts !== null) {
     const impactSheet = canonicalizeSheet(sheets.impacts, IMPACT_IMPORT_HEADERS);
@@ -1719,7 +1725,10 @@ export function validateLeverImportRows(
               requestedAt: now,
             };
           }
-        } else if (st === "planned") {
+        } else if (st === "planned" && prev?.status !== "planned") {
+          // Validation retirée seulement quand le statut CHANGE (lot 5) : un « Réalisé » refusé
+          // par la finance est repassé « Planifié » avec la trace du refus — le ré-importer tel
+          // quel ne doit ni effacer cette trace ni produire une mise à jour fantôme.
           delete imp.realizedApproval;
         }
       }

@@ -152,6 +152,10 @@ const es: Record<string, string> = {
   "validation.sa.refuse": "Rechazar",
   "validation.sa.emptyMine": "No ha enviado ninguna solicitud.",
   "validation.sa.emptyHistory": "Ninguna decisión por ahora.",
+  "validation.deletion.title": "Eliminaciones por confirmar",
+  "validation.deletion.intro":
+    "Eliminaciones de palancas solicitadas por el CTO o un responsable de frente de trabajo: solo son efectivas tras su confirmación.",
+  "validation.deletion.review": "Revisar",
   "nav.sectionLabel": "Navegación",
   "nav.sectionDecision": "Mis acciones",
   "nav.sectionReferenceData": "Datos de referencia",
@@ -976,6 +980,8 @@ const es: Record<string, string> = {
   "adminHistory.action.approvalRequested": "Validación solicitada",
   "adminHistory.action.approvalApproved": "Solicitud aprobada",
   "adminHistory.action.approvalRejected": "Validación rechazada",
+  "adminHistory.action.deletionRequested": "Eliminación solicitada",
+  "adminHistory.action.deletionCancelled": "Eliminación rechazada/cancelada",
   "adminHistory.title": "Historial",
   "adminHistory.searchPlaceholder": "Buscar...",
   "adminHistory.allActions": "Todas las acciones",
@@ -1321,8 +1327,8 @@ const es: Record<string, string> = {
     "{emp} empleado(s) · {created} movimiento(s) creado(s), {updated} actualizado(s)",
   "shared.hrExcelButtons.employeesUnit": "empleado(s)",
   "shared.hrExcelButtons.movementsUnit": "movimiento(s)",
-  "shared.hrExcelButtons.ignoredRowsUnit": "fila(s) ignorada(s)",
   "shared.hrExcelButtons.warningsUnit": "advertencia(s)",
+  "shared.hrExcelButtons.errorRowsUnit": "fila(s) con errores",
   "shared.leverImportButton.importButton": "Importar un archivo",
   "shared.leverImportButton.templateDownloadedBody":
     "3 hojas: Palancas (Código = clave), Acciones (Código Palanca = FK), Impactos (Código Palanca + Nombre de la acción = FK). Elimine la fila de ejemplo antes de completar el archivo.",
@@ -2063,7 +2069,6 @@ const es: Record<string, string> = {
   "strategicImport.templateDownloadedTitle": "Plantilla descargada",
   "strategicImport.templateDownloadedBody":
     'Léame (guía) + 6 hojas: Ejes (Código = clave), Proyectos (Códigos de ejes separados por ; = FK, admite varios ejes), Iniciativas (Código de proyecto = FK, "Etapa de madurez" opcional), Entregables (Código de iniciativa = FK, opcional), Indicadores (Código de eje O Código de proyecto = FK, "Valor inicial" opcional). Dotación (opcional, Código de proyecto = FK). Pestaña «Équipes» = referencia de los equipos de la base de FTE (ignorada en la importación). Elimine las filas de ejemplo antes de completar.',
-  "strategicImport.ignoredRowsNote": "{n} línea(s) ignorada(s)",
   "strategicImport.importDoneBody":
     "{axes} eje(s) · {chantiers} proyecto(s) · {actions} iniciativa(s) · {indicators} indicador(es) creado(s)",
   "strategicImport.errorTitle": "Fallo en la importación",
@@ -2163,6 +2168,10 @@ const es: Record<string, string> = {
     "ID de línea «{id}» presente varias veces en la hoja (filas {rows}) — vacíe la celda «ID ligne» de las filas copiadas",
   "strategicImport.msg.staffingDuplicateRow":
     "Línea de FTE duplicada (mismo frente, proyecto, equipo y fechas que la fila {line})",
+  "strategicImport.msg.notClearable":
+    "«{column}» no se puede borrar: el guion «-» solo se acepta en una columna opcional (deje la celda vacía para conservar el valor)",
+  "strategicImport.msg.staffingDuplicateExisting":
+    "Nueva fila de ETC idéntica a una fila existente (mismo frente de trabajo, proyecto, equipo y fechas — ID de fila «{id}»): modifique la fila existente en lugar de crear una copia",
   "strategicImport.accountStatusOrphan":
     "cuenta de acceso creada pero perfil no guardado — complételo en Admin > Usuarios",
   "strategicImport.readErrorTitle": "Archivo ilegible",
@@ -3086,6 +3095,12 @@ const es: Record<string, string> = {
   "leverForm.sectionActions": "Acciones",
   "leverForm.impactFinancialGroup": "Impacto financiero (sin ETC)",
   "leverForm.impactFteGroup": "Impacto en ETC",
+  "leverForm.endBeforeStart": "La fecha de fin no puede ser anterior a la fecha de inicio",
+  "leverForm.fixErrors":
+    "Faltan algunos campos obligatorios o son incorrectos (en rojo a continuación).",
+  "leverForm.requiredField": "Campo obligatorio",
+  "leverForm.requiredLegend": "Campos obligatorios",
+  "leverForm.sectionSchedule": "Calendario",
   "levers.tree.wsLead": "Líder de proyecto",
   "levers.tree.wsLeadEmpty": "Líder de proyecto no indicado",
   "levers.tree.leverOwner": "Responsable de palanca",
@@ -3096,6 +3111,32 @@ const es: Record<string, string> = {
   "levers.column.progress": "Avance",
   "levers.column.fteImpact": "ETC afectados",
   "levers.column.opexOneOff": "OPEX puntual",
+  "levers.column.delete": "Eliminar",
+  "levers.deleteLever": "Eliminar palanca",
+  "levers.deletionPending": "Eliminación pendiente de validación",
+  "leverDeletion.title": "Eliminar la palanca «{name}»",
+  "leverDeletion.approveIntro":
+    "Al confirmar se eliminarán definitivamente la palanca, su plan de acción y sus impactos.",
+  "leverDeletion.requestIntro":
+    "La eliminación es definitiva. Debe confirmarla {approver} antes de que sea efectiva.",
+  "leverDeletion.roleCto": "el CTO",
+  "leverDeletion.roleSponsor": "el responsable de frente de trabajo",
+  "leverDeletion.reason": "Motivo (opcional)",
+  "leverDeletion.reasonLabel": "Motivo",
+  "leverDeletion.request": "Solicitar la eliminación",
+  "leverDeletion.cancelRequest": "Cancelar la solicitud",
+  "leverDeletion.confirm": "Confirmar la eliminación",
+  "leverDeletion.refuse": "Rechazar",
+  "leverDeletion.deleted": "Palanca eliminada",
+  "leverDeletion.cancelled": "Solicitud de eliminación cancelada",
+  "leverDeletion.refused": "Solicitud de eliminación rechazada",
+  "leverDeletion.error": "Acción imposible",
+  "leverDeletion.notAllowed":
+    "Solo el CTO y el responsable de frente de trabajo de la palanca pueden solicitar su eliminación.",
+  "leverDeletion.pendingInfo": "Eliminación solicitada por {name} ({role}) el {date}.",
+  "leverDeletion.waiting": "Pendiente de que {approver} la confirme.",
+  "leverDeletion.banner": "Eliminación solicitada por {name} el {date} — pendiente de validación.",
+  "leverDeletion.viewRequest": "Ver la solicitud",
   "shared.leverOwnerReconciliation.pickUser": "Elegir una cuenta…",
   "shared.leverOwnerReconciliation.title": "Confirmación de los responsables de palanca",
   "shared.leverOwnerReconciliation.confirmButton": "Validar e importar",
@@ -3168,6 +3209,7 @@ const es: Record<string, string> = {
   "shared.topbar.approvalPending": "Pendiente · responsable de frente de trabajo o CTO · {stage}",
   "shared.topbar.milestoneApprovalPending":
     "Pendiente · responsable del plan estratégico · hito {milestone}",
+  "shared.topbar.deletionPending": "Eliminación solicitada por {name}",
   "leverDetail.trajectory.financial": "Impacto financiero",
   "leverDetail.trajectory.fte": "Impacto FTE",
   "leverDetail.trajectory.month": "Mes",
@@ -3457,17 +3499,16 @@ const es: Record<string, string> = {
   // ── Importaciones Excel (RR. HH. / staffing / jerarquía): avisos traducibles (auditoría 24/09/2026) ──
   "hrImport.issue.missingColumns": "Faltan columnas obligatorias: {columns}",
   "hrImport.issue.unknownColumn": "Columna «{column}» no reconocida — ignorada",
-  "hrImport.issue.missingIdOrName": "«Matricule» y «Nom» son obligatorios — fila ignorada",
+  "hrImport.issue.missingIdOrName": "«Matricule» y «Nom» son obligatorios",
   "hrImport.issue.duplicateEmployeeId":
-    "La matrícula «{id}» aparece varias veces en el archivo (filas {rows}) — filas ignoradas",
-  "hrImport.issue.missingLabel": "«Employé / Poste» es obligatorio — fila ignorada",
+    "La matrícula «{id}» aparece varias veces en el archivo (filas {rows})",
+  "hrImport.issue.missingLabel": "«Employé / Poste» es obligatorio",
   "hrImport.issue.duplicateMovementId":
-    "El ID de movimiento «{id}» aparece varias veces en el archivo (filas {rows}) — filas ignoradas",
-  "hrImport.issue.missingType": "«Type» es obligatorio para crear un movimiento — fila ignorada",
-  "hrImport.issue.unknownType": "Tipo «{value}» desconocido (esperado: {expected}) — fila ignorada",
-  "hrImport.issue.missingRequiredDate":
-    "«{column}» es obligatorio para crear un movimiento — fila ignorada",
-  "hrImport.issue.invalidRequiredDate": "{column} «{value}» ilegible — fila ignorada",
+    "El ID de movimiento «{id}» aparece varias veces en el archivo (filas {rows})",
+  "hrImport.issue.missingType": "«Type» es obligatorio para crear un movimiento",
+  "hrImport.issue.unknownType": "Tipo «{value}» desconocido (esperado: {expected})",
+  "hrImport.issue.missingRequiredDate": "«{column}» es obligatorio para crear un movimiento",
+  "hrImport.issue.invalidRequiredDate": "{column} «{value}» ilegible",
   "hrImport.issue.unknownDepartment": "Departamento «{value}» desconocido (aceptado tal cual)",
   "hrImport.issue.unknownEnumKept":
     "{column} «{value}» no reconocido — se conserva el valor existente",
@@ -3553,6 +3594,8 @@ const es: Record<string, string> = {
     "ID de línea «{id}» desconocido en este programa — línea vinculada sin identificador",
   "staffingImport.issue.duplicateLineId":
     "ID de línea «{id}» presente varias veces en el archivo (filas {rows}) — vacíe la celda «ID ligne» de las filas copiadas",
+  "staffingImport.issue.duplicateExisting":
+    "Nueva fila idéntica a una fila existente (mismo frente de trabajo, función, fechas y palanca — ID de fila «{id}»): modifique la fila existente en lugar de crear una copia",
   "staffingImport.exportButton": "Exportar",
   "staffingImport.exportDoneBody": "{n} línea(s) de staffing exportada(s)",
   "adminHierarchy.issue.missingColumns": "Faltan columnas obligatorias: {columns}",

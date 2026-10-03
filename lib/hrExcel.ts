@@ -95,16 +95,16 @@ export const HR_MOVEMENT_HEADERS = [
 export const HR_IMPORT_ISSUES: Record<string, string> = {
   missingColumns: "Colonnes obligatoires absentes : {columns}",
   unknownColumn: 'Colonne "{column}" non reconnue — ignorée',
-  missingIdOrName: '"Matricule" et "Nom" obligatoires — ligne ignorée',
-  duplicateEmployeeId:
-    'Matricule "{id}" présent plusieurs fois dans le fichier (lignes {rows}) — lignes ignorées',
-  missingLabel: '"Employé / Poste" obligatoire — ligne ignorée',
-  duplicateMovementId:
-    'ID mouvement "{id}" présent plusieurs fois dans le fichier (lignes {rows}) — lignes ignorées',
-  missingType: '"Type" obligatoire pour créer un mouvement — ligne ignorée',
-  unknownType: 'Type "{value}" inconnu (attendu : {expected}) — ligne ignorée',
-  missingRequiredDate: '"{column}" obligatoire pour créer un mouvement — ligne ignorée',
-  invalidRequiredDate: '{column} "{value}" illisible — ligne ignorée',
+  // Erreurs bloquantes (lot 5) : l'import est refusé tant qu'elles subsistent — plus de mention
+  // « ligne ignorée ».
+  missingIdOrName: '"Matricule" et "Nom" obligatoires',
+  duplicateEmployeeId: 'Matricule "{id}" présent plusieurs fois dans le fichier (lignes {rows})',
+  missingLabel: '"Employé / Poste" obligatoire',
+  duplicateMovementId: 'ID mouvement "{id}" présent plusieurs fois dans le fichier (lignes {rows})',
+  missingType: '"Type" obligatoire pour créer un mouvement',
+  unknownType: 'Type "{value}" inconnu (attendu : {expected})',
+  missingRequiredDate: '"{column}" obligatoire pour créer un mouvement',
+  invalidRequiredDate: '{column} "{value}" illisible',
   unknownDepartment: 'Département "{value}" inconnu (accepté tel quel)',
   unknownEnumKept: '{column} "{value}" non reconnu — valeur existante conservée',
   unknownEnumDefault: '{column} "{value}" non reconnu — "{fallback}" utilisé',
@@ -791,9 +791,15 @@ function parseMovement(
   if (hrValidated !== undefined) patch.hrValidated = hrValidated;
 
   // Dispositif social (le booléen "PSE" historique n'est lu qu'en l'absence de dispositif).
+  // L'indicateur `inPSE` n'est recalculé que si le dispositif change, et posé seulement s'il
+  // change de sens (lot 5) : un ancien mouvement avec dispositif mais SANS indicateur PSE (`inPSE`
+  // absent) produisait sinon une mise à jour fantôme (absent → false) à chaque ré-import.
+  const setInPSE = (inPSE: boolean) => {
+    if (!existing || !!existing.inPSE !== inPSE) patch.inPSE = inPSE;
+  };
   if (has(row, "Dispositif social") && isClearMarker(row["Dispositif social"])) {
     patch.socialScheme = undefined;
-    patch.inPSE = false;
+    setInPSE(false);
   } else if (has(row, "Dispositif social")) {
     const raw = text(row["Dispositif social"]);
     let scheme = SOCIAL_SCHEME_SYNONYMS[enumKey(raw)];
@@ -802,7 +808,8 @@ function parseMovement(
       scheme = "Autre";
     }
     patch.socialScheme = scheme;
-    patch.inPSE = scheme === "PSE";
+    // Dispositif inchangé : indicateur stocké conservé tel quel (0 changement sans modification).
+    if (!existing || existing.socialScheme !== scheme) setInPSE(scheme === "PSE");
   } else if (boolField(row, "PSE", s) === true && !existing?.inPSE) {
     // Mouvement déjà marqué PSE (sans dispositif) : rien à changer — l'export ne porte plus
     // "PSE" dans "Dispositif social" pour ce cas (plus de mise à jour fantôme).

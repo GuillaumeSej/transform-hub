@@ -375,24 +375,50 @@ describe(`export / réimport .xlsx réel (fuseau ${process.env.TZ ?? "(système)
     expect(guide).not.toMatch(/au plus \d/);
   });
 
-  it("le modèle relu garde ses dates d'exemple au jour près", () => {
+  it("lot 5 — modèle : exemples ETP commentés, avec les VRAIES équipes de la base ETP ; décommentés, ils s'importent sans erreur et gardent leurs dates", () => {
     const read = roundTrip(buildStrategicImportTemplateWorkbook(XLSX, teams));
     const raw = parseStrategicImportWorkbook(read, XLSX);
-    const result = validateStrategicImportRows(
-      raw,
-      { axes: [], chantiers: [], actions: [], indicators: [] },
-      companyId,
-      programId,
-      stages,
-      "admin",
-      { now: NOW }
-    );
-    expect(result.errors.filter((e) => e.sheet === "ETP")).toEqual([]);
-    expect(result.toCreate.staffing.map((s) => [s.startDate, s.endDate])).toEqual([
-      ["2026-01-15", "2026-03-31"],
-      ["2026-02-01", "2026-12-31"],
-      ["2026-01-01", "2026-06-30"],
+    const empty = { axes: [], chantiers: [], actions: [], indicators: [] };
+    const validate = (s: StrategicImportRawSheets) =>
+      validateStrategicImportRows(s, empty, companyId, programId, stages, "admin", {
+        now: NOW,
+        knownDepartments,
+        teamAvailableFte: fteByTeam,
+      });
+    // Tel quel : lignes ETP commentées = ignorées (avant : équipes fictives → erreurs).
+    const asIs = validate(raw);
+    expect(asIs.errors).toEqual([]);
+    expect(asIs.toCreate.staffing).toEqual([]);
+    const examples = raw.etp.filter((r) => /^# CH\d$/.test(String(r["Code Chantier"])));
+    expect(examples.map((r) => r["Fonction (équipe, base ETP)"])).toEqual([
+      "Data & Analytics",
+      "Ressources Humaines",
+      "Data & Analytics",
     ]);
+    // « # » retiré : importés, dates au jour près.
+    const uncommented = validate({
+      ...raw,
+      etp: raw.etp.map((r) =>
+        /^# CH\d$/.test(String(r["Code Chantier"]))
+          ? { ...r, "Code Chantier": String(r["Code Chantier"]).slice(2) }
+          : r
+      ),
+    });
+    expect(uncommented.errors).toEqual([]);
+    expect(uncommented.toCreate.staffing.map((s) => [s.function, s.startDate, s.endDate])).toEqual([
+      ["Data & Analytics", "2026-01-15", "2026-03-31"],
+      ["Ressources Humaines", "2026-02-01", "2026-12-31"],
+      ["Data & Analytics", "2026-01-01", "2026-06-30"],
+    ]);
+    // Base ETP vide : une ligne explicative commentée, aucune équipe inventée.
+    const none = parseStrategicImportWorkbook(
+      roundTrip(
+        buildStrategicImportTemplateWorkbook(XLSX, { knownDepartments: [], fteByTeam: {} })
+      ),
+      XLSX
+    );
+    expect(none.etp.every((r) => String(r["Code Chantier"]).startsWith("#"))).toBe(true);
+    expect(validate(none).errors).toEqual([]);
   });
 });
 

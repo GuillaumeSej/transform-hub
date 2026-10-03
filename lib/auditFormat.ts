@@ -33,3 +33,42 @@ export function displayAuditValue(value: unknown): string {
   const text = formatAuditValue(value);
   return text.includes("[object Object]") ? "(détail non enregistré)" : text;
 }
+
+/**
+ * Horodatage d'une entrée d'audit (`AuditEntry.ts`) : ISO 8601 UTC complet, avec « Z » (lot 5).
+ * Auparavant « AAAA-MM-JJ HH:MM » — heure UTC SANS fuseau, que `new Date()` relisait comme une
+ * heure LOCALE (décalage de 1 à 2 h en Europe/Paris dans l'historique admin).
+ */
+export function auditTimestamp(now: Date = new Date()): string {
+  return now.toISOString();
+}
+
+/** Ancien format « AAAA-MM-JJ HH:MM[:SS] » (UTC implicite, sans « Z »). */
+const LEGACY_AUDIT_TS = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)$/;
+
+/** Instant d'un horodatage d'audit — nouveau format ISO avec « Z » comme anciennes entrées sans
+ *  fuseau (lues en UTC, comme elles ont été écrites). `null` si illisible. */
+export function parseAuditTimestamp(ts: string | undefined | null): Date | null {
+  if (!ts) return null;
+  const legacy = LEGACY_AUDIT_TS.exec(ts.trim());
+  const d = new Date(legacy ? `${legacy[1]}T${legacy[2]}Z` : ts);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Tri antichronologique (plus récent d'abord) d'entrées d'audit aux deux formats d'horodatage. */
+export function compareAuditTsDesc(a: { ts: string }, b: { ts: string }): number {
+  return (parseAuditTimestamp(b.ts)?.getTime() ?? 0) - (parseAuditTimestamp(a.ts)?.getTime() ?? 0);
+}
+
+/** « 03/10/2026 16:05 » dans la langue et le fuseau du navigateur ; texte brut si illisible. */
+export function formatAuditTimestamp(ts: string, locale: string): string {
+  const d = parseAuditTimestamp(ts);
+  if (!d) return ts;
+  return d.toLocaleDateString(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

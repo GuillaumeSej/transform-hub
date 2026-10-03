@@ -381,8 +381,13 @@ export function StrategicImportButton({
     return message;
   };
 
+  /** Import bloqué tant que le fichier contient des erreurs (lot 5, point 1 — une seule règle dans
+   *  l'appli, celle de l'import leviers) : avant, les lignes en erreur étaient ignorées et le reste
+   *  importé (« ligne(s) ignorée(s) ») ; désormais on corrige le fichier, puis on importe. */
+  const blockedByErrors = (preview?.errors.length ?? 0) > 0;
+
   const confirmImport = async () => {
-    if (!preview || totalWrites(preview) === 0) return;
+    if (!preview || totalWrites(preview) === 0 || preview.errors.length > 0) return;
     setImporting(true);
     const accounts: PersonCreationResult[] = [];
     let importError: string | undefined;
@@ -401,10 +406,6 @@ export function StrategicImportButton({
 
       const created = countStrategicImportWrites(preview.toCreate);
       const updated = countStrategicImportWrites(preview.toUpdate);
-      const errNote =
-        preview.errors.length > 0
-          ? ` · ${t("strategicImport.ignoredRowsNote", "{n} ligne(s) ignorée(s)").replace("{n}", String(preview.errors.length))}`
-          : "";
       showToast(
         t("strategicImport.successMessage", "Import terminé"),
         t(
@@ -412,7 +413,7 @@ export function StrategicImportButton({
           "{created} élément(s) créé(s) · {updated} mis à jour"
         )
           .replace("{created}", String(created))
-          .replace("{updated}", String(updated)) + errNote,
+          .replace("{updated}", String(updated)),
         "success"
       );
     } catch (err) {
@@ -534,7 +535,7 @@ export function StrategicImportButton({
               </Button>
               <Button
                 variant="primary"
-                disabled={importing || totalWrites(preview) === 0}
+                disabled={importing || totalWrites(preview) === 0 || blockedByErrors}
                 onClick={() => void confirmImport()}
               >
                 {t("strategicImport.confirmButton", "Confirmer l'import")}
@@ -620,6 +621,14 @@ export function StrategicImportButton({
               <strong className="text-rag-red">{preview?.errors.length ?? 0}</strong>{" "}
               {t("strategicImport.errorRow", "ligne(s) en erreur")}
             </p>
+            {blockedByErrors && (
+              <div className="mb-1.5 rounded-md border border-rag-red/40 bg-rag-red/5 p-2.5 text-xs font-semibold text-rag-red">
+                {t(
+                  "shared.leverImportButton.fixErrorsFirst",
+                  "Import impossible tant que le fichier contient des erreurs : corrigez les lignes ci-dessous puis rechargez le fichier."
+                )}
+              </div>
+            )}
             <div className="max-h-[200px] space-y-1.5 overflow-y-auto rounded-md border border-border bg-neutral-50 p-3 text-xs">
               {preview?.errors.length === 0 ? (
                 <p className="text-tertiary">
@@ -627,7 +636,7 @@ export function StrategicImportButton({
                 </p>
               ) : (
                 preview?.errors.map((e, i) => (
-                  <div key={i} className="text-secondary">
+                  <div key={i} className="text-rag-red">
                     [{e.sheet}] {t("strategicImport.lineLabel", "Ligne")} {e.rowNumber} :{" "}
                     {formatIssue(e)}
                   </div>

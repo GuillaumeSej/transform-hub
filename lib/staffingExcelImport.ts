@@ -59,7 +59,14 @@ import {
  * acceptées (avertissement « dates à compléter »), comme le badge de l'écran.
  *
  * Cellule vide / tiret (règle commune aux imports, `lib/excelCells.ts`) : sur une mise à jour, une
- * cellule « Note » ou de date VIDE conserve la valeur existante ; un tiret « - » efface la note.
+ * cellule « Note », « Levier » ou de date VIDE conserve la valeur existante ; un tiret « - » efface
+ * la note ou retire le rattachement au levier (lot 5 : auparavant une cellule « Levier » vidée
+ * retirait le rattachement et « - » était lu comme un nom de levier introuvable).
+ *
+ * Création identique à une ligne existante (lot 5) : une ligne copiée dont on a vidé l'« ID ligne »
+ * et qui reprend exactement la clé métier d'une ligne existante (après application des mises à
+ * jour du fichier) est une ERREUR `duplicateExisting` — même traitement que deux créations
+ * identiques dans le fichier (`duplicateRow`).
  */
 
 // ---------- En-têtes / modèle ----------
@@ -120,6 +127,8 @@ export const STAFFING_IMPORT_ISSUES: Record<string, string> = {
     'ID ligne "{id}" présent plusieurs fois dans le fichier (lignes {rows}) — videz la cellule "ID ligne" des lignes copiées',
   duplicateRow: "Ligne en doublon (même chantier, fonction, dates et levier que la ligne {other})",
   noDepartments: "aucune équipe dans la base ETP",
+  duplicateExisting:
+    'Nouvelle ligne identique à une ligne existante (même chantier, fonction, dates et levier — ID ligne "{id}") : modifiez la ligne existante plutôt que d\'en créer une copie',
 };
 
 /** Clé de comparaison des noms : casse, accents et espaces multiples ignorés. */
@@ -150,7 +159,7 @@ export function buildStaffingTemplateRows(
     ),
     comment(`# ${STAFFING_TEAMS_RULE}`),
     comment(
-      '# Mise à jour : "ID ligne" (rempli par l\'export) identifie la ligne — ne le modifiez pas, laissez-le vide pour une nouvelle ligne. Une cellule vide conserve la valeur existante ; un tiret "-" dans Note efface la note.'
+      '# Mise à jour : "ID ligne" (rempli par l\'export) identifie la ligne — ne le modifiez pas, laissez-le vide pour une nouvelle ligne. Une cellule vide conserve la valeur existante ; un tiret "-" efface la note ou retire le levier.'
     ),
   ];
   if (chantier && team) {
@@ -361,6 +370,8 @@ export type StaffingImportPreview = {
 type ParsedRow = StaffingMatchRow & {
   chantier: Chantier;
   action?: ChantierAction;
+  /** Cellule « Levier » : vide = rattachement conservé (mise à jour), « - » = retiré. */
+  actionCell: ReturnType<typeof readOptionalTextCell>["kind"];
   fteRaw: unknown;
   fte: number | null | undefined;
   note: ReturnType<typeof readOptionalTextCell>;
@@ -438,9 +449,12 @@ export function validateStaffingImportRows(
     const endDate = readDate("Date fin");
     if (dateError) continue;
 
-    const actionRaw = str(row["Levier"]);
+    // Levier : vide = conservé, "-" = rattachement retiré, sinon nom résolu sur le chantier. Pour
+    // le rapprochement sans "ID ligne", vide et "-" valent « sans levier ».
+    const actionCell = readOptionalTextCell(row["Levier"]);
     let action: ChantierAction | undefined;
-    if (actionRaw) {
+    if (actionCell.kind === "set") {
+      const actionRaw = actionCell.value;
       action = chantierActions.find(
         (a) => a.chantierId === chantier.id && nameKey(a.name) === nameKey(actionRaw)
       );
@@ -457,6 +471,7 @@ export function validateStaffingImportRows(
       chantierId: chantier.id,
       action,
       actionId: action?.id,
+      actionCell: actionCell.kind,
       fn: str(row["Fonction"]),
       fteRaw: row["ETP"],
       fte: fteParsed === undefined ? undefined : fteParsed.ok ? fteParsed.value : null,
@@ -482,6 +497,10 @@ export function validateStaffingImportRows(
   // ---- 3. Règle commune (écran = imports), puis fusion ----
   const firstRowByKey = new Map<string, number>();
   const duplicatedFirstRows = new Map<number, number>();
+  /** Clé métier de chaque création (contrôle `duplicateExisting` après la boucle). */
+  const creationKeys = new Map<number, string>();
+  /** État final des lignes existantes rapprochées (mises à jour ou inchangées). */
+  const finalById = new Map<string, ChantierStaffing>();
   for (const p of candidates) {
     const { rowNumber, matched } = p;
     // Cellule de date vide sur une mise à jour = date existante conservée.
@@ -489,12 +508,24 @@ export function validateStaffingImportRows(
     const endDate = p.endDate ?? matched?.endDate;
     // Date encore absente après fusion = absente du fichier ET de la ligne existante (historique).
     const legacyUndated = matched !== undefined && (!startDate || !endDate);
+    // Levier vide sur une mise à jour = rattachement existant conservé ("-" le retire).
+    let action = p.action;
+    let actionId = p.actionId;
+    if (p.actionCell === "keep" && matched?.actionId) {
+      actionId = matched.actionId;
+      action = chantierActions.find((a) => a.id === actionId);
+      // Chantier changé dans le fichier : le levier conservé n'appartient plus au chantier.
+      if (action && action.chantierId !== p.chantierId) {
+        error(rowNumber, "unknownAction", { value: action.name, chantier: p.chantier.name });
+        continue;
+      }
+    }
     const check = checkStaffingLine(
       { team: p.fn, fte: p.fte, startDate, endDate },
       {
         knownTeams: knownDepartments,
         currentTeam: matched?.function,
-        projectRange: p.action ? { start: p.action.start, end: p.action.end } : null,
+        projectRange: action ? { start: action.start, end: action.end } : null,
         teamAvailableFte: fteByTeam,
       }
     );
@@ -552,15 +583,15 @@ export function validateStaffingImportRows(
         team: check.team,
         dispo: formatStaffingFte(check.teamAvailableFte ?? 0),
       });
-    if (check.warnings.includes("outsideProject") && p.action)
+    if (check.warnings.includes("outsideProject") && action)
       warning(rowNumber, "outsideProject", {
-        project: p.action.name,
-        start: p.action.start ?? "",
-        end: p.action.end ?? "",
+        project: action.name,
+        start: action.start ?? "",
+        end: action.end ?? "",
       });
 
     if (!matched) {
-      const key = staffingBusinessKey(p.chantierId, check.team, startDate, endDate, p.actionId);
+      const key = staffingBusinessKey(p.chantierId, check.team, startDate, endDate, actionId);
       const first = firstRowByKey.get(key);
       if (first !== undefined) {
         error(rowNumber, "duplicateRow", { other: first });
@@ -568,6 +599,7 @@ export function validateStaffingImportRows(
         continue;
       }
       firstRowByKey.set(key, rowNumber);
+      creationKeys.set(rowNumber, key);
     }
 
     // Note : vide = conservée, "-" = effacée.
@@ -583,9 +615,10 @@ export function validateStaffingImportRows(
       ...(note ? { note } : {}),
       ...(startDate ? { startDate } : {}),
       ...(endDate ? { endDate } : {}),
-      ...(p.action ? { actionId: p.action.id } : {}),
+      ...(actionId ? { actionId } : {}),
       createdAt: matched?.createdAt ?? nowDate(),
     };
+    if (matched) finalById.set(matched.id, entry);
     if (matched && sameEntry(entry, matched)) {
       unchanged += 1;
       continue;
@@ -593,8 +626,28 @@ export function validateStaffingImportRows(
     rows.push({ rowNumber, entry, isUpdate: matched !== undefined });
   }
 
+  // Création reprenant exactement la clé d'une ligne existante (état APRÈS les mises à jour du
+  // fichier : une ligne existante dont on change les dates libère son ancienne clé).
+  const existingByKey = new Map<string, ChantierStaffing>();
+  for (const s of existingStaffing) {
+    const f = finalById.get(s.id) ?? s;
+    existingByKey.set(
+      staffingBusinessKey(f.chantierId, f.function, f.startDate, f.endDate, f.actionId),
+      f
+    );
+  }
+  const copiesOfExisting = new Set<number>();
+  creationKeys.forEach((key, rowNumber) => {
+    const existing = existingByKey.get(key);
+    if (!existing) return;
+    copiesOfExisting.add(rowNumber);
+    error(rowNumber, "duplicateExisting", { id: existing.id });
+  });
+
   // Une ligne en doublon invalide aussi la 1re occurrence (on ne sait pas laquelle est juste).
-  const kept = rows.filter((r) => !duplicatedFirstRows.has(r.rowNumber));
+  const kept = rows.filter(
+    (r) => !duplicatedFirstRows.has(r.rowNumber) && !copiesOfExisting.has(r.rowNumber)
+  );
   duplicatedFirstRows.forEach((dupRow, first) => error(first, "duplicateRow", { other: dupRow }));
   errors.sort((a, b) => a.rowNumber - b.rowNumber);
   warnings.sort((a, b) => a.rowNumber - b.rowNumber);

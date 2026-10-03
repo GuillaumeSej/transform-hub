@@ -406,6 +406,31 @@ describe(`Base ETP — export en vraies dates, aller-retour .xlsx (fuseau ${proc
     expect(plan.movements).toEqual([]);
     expect(plan.unchangedMovements).toBe(1);
   });
+
+  it("lot 5 — ancien mouvement avec dispositif social SANS indicateur PSE : aucune mise à jour fantôme", () => {
+    // `inPSE` absent (données antérieures à l'indicateur) : l'export écrit « PSE = Non », le
+    // ré-import posait `inPSE: false` → « 1 mis à jour » à chaque aller-retour.
+    const legacy = { ...mv, socialScheme: "RC" } as WorkforceMovement;
+    delete (legacy as Partial<WorkforceMovement>).inPSE;
+    const legacyPse = { ...mv, id: "MV002", socialScheme: "PSE" } as WorkforceMovement;
+    delete (legacyPse as Partial<WorkforceMovement>).inPSE;
+    const data = makeData([alice], [legacy, legacyPse]);
+    const plan = buildHrImportPlan(
+      exportAndRead([alice], [legacy, legacyPse], data),
+      data,
+      programs
+    );
+    expect(errorsOf(plan)).toEqual([]);
+    expect(plan.movements).toEqual([]);
+    expect(plan.unchangedMovements).toBe(2);
+
+    // Dispositif réellement changé (RC → PSE) : l'indicateur suit.
+    const sheets = exportAndRead([alice], [legacy], makeData([alice], [legacy]));
+    sheets.movementRows = sheets.movementRows.map((r) => ({ ...r, "Dispositif social": "PSE" }));
+    const changed = buildHrImportPlan(sheets, makeData([alice], [legacy]), programs);
+    expect(changed.movements).toHaveLength(1);
+    expect(changed.movements[0]).toMatchObject({ socialScheme: "PSE", inPSE: true });
+  });
 });
 
 describe("Base ETP — contrôles de grandeur", () => {

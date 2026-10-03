@@ -6,7 +6,7 @@ import type {
   SocialScheme,
   WorkforceMovement,
 } from "@/types";
-import { formatAuditValue } from "@/lib/auditFormat";
+import { auditTimestamp, formatAuditValue } from "@/lib/auditFormat";
 import type { WorkforceMeta } from "@/lib/firestore/workforce";
 
 /**
@@ -16,8 +16,9 @@ import type { WorkforceMeta } from "@/lib/firestore/workforce";
  * puis écrit dans Firestore en tâche de fond.
  */
 
+/** Horodatage d'audit ISO UTC avec « Z » (lot 5, voir `auditTimestamp`). */
 function nowTs(): string {
-  return new Date().toISOString().slice(0, 16).replace("T", " ");
+  return auditTimestamp();
 }
 
 /** Date métier du jour : LOCALE (`todayISO`), jamais `toISOString()` (UTC, veille avant 2h à Paris). */

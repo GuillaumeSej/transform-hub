@@ -1,5 +1,5 @@
 import type { AuditEntry } from "@/types";
-import { formatAuditValue } from "@/lib/auditFormat";
+import { auditTimestamp, formatAuditValue } from "@/lib/auditFormat";
 
 /**
  * Logique pure de construction des entrées d'audit du Plan Stratégique (axes/chantiers/projets/
@@ -22,8 +22,9 @@ import { formatAuditValue } from "@/lib/auditFormat";
  *     `Object.keys(safePatch)` et non `Object.keys(after)`.
  */
 
+/** Horodatage d'audit ISO UTC avec « Z » (lot 5, voir `auditTimestamp`). */
 function nowTs(): string {
-  return new Date().toISOString().slice(0, 16).replace("T", " ");
+  return auditTimestamp();
 }
 
 export function makeAuditEntry(entry: Omit<AuditEntry, "ts">): AuditEntry {

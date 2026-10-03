@@ -122,9 +122,10 @@ function exportThenRead(levers: Lever[]): LeverImportRawSheets {
   );
   XLSX.utils.book_append_sheet(
     wb,
-    XLSX.utils.json_to_sheet(levers.flatMap(leverImpactsToExcelRows), {
-      header: IMPACT_EXPORT_HEADERS,
-    }),
+    XLSX.utils.json_to_sheet(
+      levers.flatMap((l) => leverImpactsToExcelRows(l)),
+      { header: IMPACT_EXPORT_HEADERS }
+    ),
     "Impacts"
   );
   return readBack(wb);

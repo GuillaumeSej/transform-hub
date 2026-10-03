@@ -49,7 +49,7 @@ import { useMultiFilterBarState } from "@/lib/hooks/useMultiFilterBarState";
 import { matchesFilter } from "@/lib/filterUtils";
 import { matchesLeverSearch } from "@/lib/leverSearch";
 import { leversPageTitleKey } from "@/lib/nav-config";
-import type { HierarchyLevelDef, HierarchyNode, Lever, RiskLevel } from "@/types";
+import type { HierarchyLevelDef, HierarchyNode, ImpactNatureDef, Lever, RiskLevel } from "@/types";
 import { leverRiskReasonText, RISK_SORT_RANK, riskLevelLabel } from "@/lib/leverRiskText";
 import { formatAmountM } from "@/lib/format";
 
@@ -175,10 +175,13 @@ export function LeversPagePerformance() {
   const [riskThresholds, setRiskThresholds] = useState<
     { level: RiskLevel; minAmount: number }[] | undefined
   >(undefined);
+  // Natures d'impact de l'entreprise : export/import Excel des impacts (lot 5).
+  const [impactNatures, setImpactNatures] = useState<ImpactNatureDef[] | undefined>(undefined);
 
   useEffect(() => {
     const unsub = subscribeCompanies((companies) => {
       const company = companies.find((c) => c.id === user?.companyId);
+      setImpactNatures(company?.impactNatures);
       setHierarchyLevels(company?.hierarchyLevels ?? []);
       setGeographyHierarchyLevels(company?.geographyHierarchyLevels ?? []);
       setClearance(
@@ -859,6 +862,7 @@ export function LeversPagePerformance() {
               riskThresholds={riskThresholds}
               lifecycleStages={lifecycle.stages}
               selectedProgramId={selectedProgramId}
+              impactNatures={impactNatures}
             />
             {!readOnly && (
               <LeverImportButton
@@ -870,6 +874,7 @@ export function LeversPagePerformance() {
                 programs={performancePrograms}
                 defaultProgramId={selectedProgramId}
                 lifecycleStages={lifecycle.stages}
+                impactNatures={impactNatures}
                 onImport={(rows) => data.importLevers(rows)}
                 onCreateWorkstreams={(workstreams) => data.addWorkstreams(workstreams)}
               />

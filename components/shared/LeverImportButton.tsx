@@ -19,7 +19,7 @@ import {
 import { convertExcelPercentCells, normalizeHeaderKey } from "@/lib/excelParse";
 import { readSpreadsheetFile } from "@/lib/excelFileRead";
 import { useRole } from "@/lib/hooks/useRole";
-import type { BeTrackData, LifecycleStage, Workstream } from "@/types";
+import type { BeTrackData, ImpactNatureDef, LifecycleStage, Workstream } from "@/types";
 import { Button } from "@/components/shared/Button";
 import { Modal } from "@/components/shared/Modal";
 import {
@@ -111,11 +111,15 @@ export function LeverImportButton({
   programs = [],
   defaultProgramId,
   lifecycleStages,
+  impactNatures,
   onImport,
   onCreateWorkstreams,
 }: {
   data: Pick<BeTrackData, "levers" | "workstreams" | "pnlAccounts">;
   companyId?: string | null;
+  /** Natures d'impact de l'entreprise (`Company.impactNatures`) : la colonne « Nature de
+   *  l'impact » est résolue contre elles (natures par défaut si absentes). */
+  impactNatures?: ImpactNatureDef[];
   /** Programmes de l'entreprise, pour résoudre la colonne optionnelle "Programme" — voir
    *  lib/leverExcelImport.ts (contrairement au Workstream, un Programme inconnu est une erreur de
    *  ligne, pas une auto-création : il doit déjà exister, créé dans Admin > Programmes). */
@@ -230,7 +234,7 @@ export function LeverImportButton({
       programs,
       lifecycleStages,
       defaultProgramId,
-      { importer: user }
+      { importer: user, impactNatures }
     );
     for (const f of formulaCellsWithoutValue(XLSX, workbook)) {
       const vars = { cell: `${f.sheet}!${f.cell}` };
