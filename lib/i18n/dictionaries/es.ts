@@ -1322,7 +1322,7 @@ const es: Record<string, string> = {
   "shared.hrExcelButtons.importButton": "Importar Excel",
   "shared.hrExcelButtons.exportSuccessBody": "{emp} empleados · {mov} movimientos",
   "shared.hrExcelButtons.templateDownloadedBody":
-    "Rellene las columnas y luego importe el archivo. En una actualización, una celda vacía conserva el valor existente; un guion «-» lo borra.",
+    "Rellene las columnas y luego importe el archivo. En una actualización, una celda vacía conserva el valor existente; un guion «-» borra una columna opcional. En una columna obligatoria (Matrícula, Nombre, Departamento, Nivel, ETC; ID de movimiento, Empleado / Puesto, Tipo, Departamento, Fecha prevista, Estado), el guion se rechaza: error bloqueante, no se importa nada.",
   "shared.hrExcelButtons.importDoneBody":
     "{emp} empleado(s) · {created} movimiento(s) creado(s), {updated} actualizado(s)",
   "shared.hrExcelButtons.employeesUnit": "empleado(s)",
@@ -1358,7 +1358,7 @@ const es: Record<string, string> = {
   "shared.leverImportButton.impactsRemovedBody":
     "porque no figuran en la pestaña Impacts del archivo: {list}.",
   "shared.leverImportButton.emptyCellRule":
-    "Celda vacía = se conserva el valor actual; «-» = se borra el campo. «Progression (%)» y los importes de una palanca con impactos se calculan: su modificación se ignora.",
+    "Celda vacía = se conserva el valor actual; «-» = se borra el campo opcional (rechazado en una columna obligatoria: error bloqueante). «Progression (%)» y los importes de una palanca con impactos se calculan: su modificación se ignora.",
   "shared.leverImportButton.fixErrorsFirst":
     "No se puede importar mientras el archivo contenga errores: corrija las filas siguientes y vuelva a cargar el archivo.",
   "shared.leverImportButton.confirmLargeValues":
@@ -1382,11 +1382,11 @@ const es: Record<string, string> = {
     'Código "{code}" duplicado en el archivo (ya usado en la fila {row})',
   "shared.leverImport.msg.unknownStatus": 'Estado "{value}" desconocido (esperado: {expected})',
   "shared.leverImport.msg.statusNewLever":
-    "Una palanca nueva solo puede importarse con la madurez «{idea}» (o abandonada): la madurez «{target}» requiere validación. Impórtela en «{idea}» y solicite la validación desde su ficha.",
+    "Una palanca nueva solo puede importarse con el estado «{idea}» (o abandonada): el estado «{target}» requiere validación. Impórtela con el estado «{idea}» y solicite la validación desde su ficha.",
   "shared.leverImport.msg.statusGated":
-    "Cambio de madurez «{current}» → «{target}» rechazado: la madurez «{target}» requiere validación (solicitud desde la ficha de la palanca). Vuelva a poner la madurez actual en el archivo para importar los demás cambios.",
+    "Cambio de estado «{current}» → «{target}» rechazado: el estado «{target}» requiere validación (solicitud desde la ficha de la palanca). Vuelva a poner el estado actual en el archivo para importar los demás cambios.",
   "shared.leverImport.msg.statusBackward":
-    "Cambio de madurez «{current}» → «{target}» rechazado: una importación no puede saltar niveles de madurez ni retroceder. Vuelva a poner la madurez actual en el archivo para importar los demás cambios.",
+    "Cambio de estado «{current}» → «{target}» rechazado: una importación no puede saltar etapas ni retroceder en el ciclo de vida. Vuelva a poner el estado actual en el archivo para importar los demás cambios.",
   "shared.leverImport.msg.unknownPnl":
     'Cuenta de P&L "{value}" no encontrada (esperado: {expected})',
   "shared.leverImport.msg.requiredDate":
@@ -1443,6 +1443,8 @@ const es: Record<string, string> = {
     '"{field}" = {value} {unit}: valor inusualmente alto (más de {threshold}) — compruebe la unidad antes de confirmar',
   "shared.leverImport.msg.formulaNoValue":
     "Celda {cell}: fórmula sin valor calculado (libro no recalculado) — abra y guarde el archivo en Excel antes de importar.",
+  "shared.leverImport.msg.notClearable":
+    "«{field}» es una columna obligatoria (o un identificador): el guion «-» no puede borrarla — deje la celda vacía para conservar el valor",
 
   // ─── shared charts (components/shared/charts) ──────────────────────────────
   "shared.actionGantt.noActions": "Ninguna acción definida.",
@@ -2169,7 +2171,7 @@ const es: Record<string, string> = {
   "strategicImport.msg.staffingDuplicateRow":
     "Línea de FTE duplicada (mismo frente, proyecto, equipo y fechas que la fila {line})",
   "strategicImport.msg.notClearable":
-    "«{column}» no se puede borrar: el guion «-» solo se acepta en una columna opcional (deje la celda vacía para conservar el valor)",
+    "«{column}» es una columna obligatoria (o un identificador): el guion «-» no puede borrarla — deje la celda vacía para conservar el valor",
   "strategicImport.msg.staffingDuplicateExisting":
     "Nueva fila de ETC idéntica a una fila existente (mismo frente de trabajo, proyecto, equipo y fechas — ID de fila «{id}»): modifique la fila existente en lugar de crear una copia",
   "strategicImport.accountStatusOrphan":
@@ -2611,7 +2613,7 @@ const es: Record<string, string> = {
   "staffingImport.lineLabel": "Línea",
   "staffingImport.templateDownloadedTitle": "Plantilla descargada",
   "staffingImport.templateDownloadedBody":
-    "Columnas: Proyecto (nombre exacto), Función (nombre exacto de un equipo de la pestaña «Équipes» — un equipo solo se crea en la base de FTE), ETC (> 0; por encima de la plantilla disponible del equipo, solo aviso), Fecha inicio y Fecha fin (obligatorias), Palanca (opcional, nombre exacto), Nota (opcional), ID de línea (rellenado por la exportación, déjelo vacío para una línea nueva). Una línea existente se encuentra por su ID de línea (si no, proyecto + función + fechas + palanca) y se actualiza en lugar de duplicarse. Celda vacía = valor conservado; un guion «-» en Nota la borra. La pestaña «Équipes» (equipos de la base de FTE y plantilla disponible) se ignora en la importación.",
+    "Columnas: Proyecto (nombre exacto), Función (nombre exacto de un equipo de la pestaña «Équipes» — un equipo solo se crea en la base de FTE), ETC (> 0; por encima de la plantilla disponible del equipo, solo aviso), Fecha inicio y Fecha fin (obligatorias), Palanca (opcional, nombre exacto), Nota (opcional), ID de línea (rellenado por la exportación, déjelo vacío para una línea nueva). Una línea existente se encuentra por su ID de línea (si no, proyecto + función + fechas + palanca) y se actualiza en lugar de duplicarse. Celda vacía = valor conservado; un guion «-» borra la Nota o quita la Palanca, pero se rechaza (error bloqueante) en Proyecto, Función, ETC, las fechas e ID de línea. La pestaña «Équipes» (equipos de la base de FTE y plantilla disponible) se ignora en la importación.",
   "staffingImport.successMessage": "Importación completada",
   "staffingImport.importDoneBody":
     "{created} línea(s) creada(s) · {updated} línea(s) actualizada(s)",
@@ -3576,8 +3578,8 @@ const es: Record<string, string> = {
     "{column} = {value}: importe inusualmente alto (más de {max}) — verifíquelo",
   "hrImport.issue.movementFteHigh":
     "{column} = {value}: más de {max} ETC para un solo movimiento — verifíquelo (un movimiento = una persona o un puesto)",
-  "hrImport.issue.clearNotAllowed":
-    "{column}: el guion «-» no puede borrar un valor obligatorio — se conserva el valor existente",
+  "hrImport.issue.notClearable":
+    "«{column}» es una columna obligatoria (o un identificador): el guion «-» no puede borrarla — deje la celda vacía para conservar el valor",
   "hrImport.rowPrefix": "{sheet} · fila {row}:",
   "hrImport.filePrefix": "{sheet}:",
   "hrImport.createdUnit": "creado(s)",
@@ -3623,6 +3625,8 @@ const es: Record<string, string> = {
     "ID de línea «{id}» presente varias veces en el archivo (filas {rows}) — vacíe la celda «ID ligne» de las filas copiadas",
   "staffingImport.issue.duplicateExisting":
     "Nueva fila idéntica a una fila existente (mismo frente de trabajo, función, fechas y palanca — ID de fila «{id}»): modifique la fila existente en lugar de crear una copia",
+  "staffingImport.issue.notClearable":
+    "«{column}» es una columna obligatoria (o un identificador): el guion «-» no puede borrarla — deje la celda vacía para conservar el valor",
   "staffingImport.exportButton": "Exportar",
   "staffingImport.exportDoneBody": "{n} línea(s) de staffing exportada(s)",
   "adminHierarchy.issue.missingColumns": "Faltan columnas obligatorias: {columns}",
@@ -3641,6 +3645,8 @@ const es: Record<string, string> = {
   "adminHierarchy.issue.invalidBoolean": "{column} «{value}» no reconocido (esperado Sí/No)",
   "adminHierarchy.issue.financialIgnored":
     "Datos financieros ignorados: el nivel «{level}» no es un nivel de líneas de P&L",
+  "adminHierarchy.issue.notClearable":
+    "«{column}» es una columna obligatoria (o un identificador): el guion «-» no puede borrarla — deje la celda vacía para conservar el valor",
   "adminHierarchy.exportOrphansSuffix": " · {n} valor(es) huérfano(s) no exportado(s)",
   "adminHierarchy.toastImportReadFailedTitle": "Archivo ilegible",
   "adminHierarchy.toastImportDoneCreatedUpdated":

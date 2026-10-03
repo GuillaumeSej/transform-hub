@@ -395,7 +395,7 @@ export function LeverImportButton({
         <p className="mb-3 text-[11.5px] text-tertiary">
           {t(
             "shared.leverImportButton.emptyCellRule",
-            "Cellule vide = valeur actuelle conservée ; « - » = champ effacé. « Progression (%) » et les montants d'un levier porteur d'impacts sont calculés : leur modification est ignorée."
+            "Cellule vide = valeur actuelle conservée ; « - » = champ facultatif effacé (refusé dans une colonne obligatoire : erreur bloquante). « Progression (%) » et les montants d'un levier porteur d'impacts sont calculés : leur modification est ignorée."
           )}
         </p>
         {blockedByErrors && (

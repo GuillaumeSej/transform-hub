@@ -321,8 +321,9 @@ export const STRATEGIC_IMPORT_MESSAGES = {
     'ID ligne "{id}" présent plusieurs fois dans la feuille (lignes {rows}) — videz la cellule "ID ligne" des lignes copiées',
   staffingDuplicateRow:
     "Ligne ETP en doublon (même chantier, projet, équipe et dates que la ligne {line})",
+  // Même modèle que tous les imports (`EXCEL_NOT_CLEARABLE_MESSAGE`, lib/excelCells.ts).
   notClearable:
-    '"{column}" ne peut pas être effacé : le tiret « - » n\'est accepté que dans une colonne facultative (laissez la cellule vide pour conserver la valeur)',
+    '"{column}" est une colonne obligatoire (ou un identifiant) : le tiret « - » ne peut pas l\'effacer — laissez la cellule vide pour conserver la valeur',
   staffingDuplicateExisting:
     'Nouvelle ligne ETP identique à une ligne existante (même chantier, projet, équipe et dates — ID ligne "{id}") : modifiez la ligne existante plutôt que d\'en créer une copie',
 } as const;
@@ -1372,6 +1373,12 @@ export function validateStrategicImportRows(
       .split(";")
       .map((s) => s.trim())
       .filter(Boolean);
+    // Rattachement obligatoire : un tiret (seul ou dans la liste) est refusé AVANT la résolution
+    // des axes — jamais « Axe(s) introuvable(s) : - ».
+    if (axisCodes.some(isClearMarker)) {
+      err(sheet, rowNumber, "notClearable", { column: "Codes Axes (séparés par ;)" });
+      continue;
+    }
     if (axisCodes.length === 0) {
       err(sheet, rowNumber, "required", { column: "Codes Axes (séparés par ;)" });
       continue;
@@ -1841,6 +1848,14 @@ export function validateStrategicImportRows(
 
     const axisCodeRaw = str(row["Code Axe"]);
     const chantierCodeRaw = str(row["Code Chantier"]);
+    // Rattachement obligatoire (l'un des deux) : le tiret ne le retire pas.
+    const dashedParent = (["Code Axe", "Code Chantier"] as const).find((c) =>
+      isClearMarker(row[c])
+    );
+    if (dashedParent) {
+      err(sheet, rowNumber, "notClearable", { column: dashedParent });
+      continue;
+    }
     if (!axisCodeRaw && !chantierCodeRaw) {
       err(sheet, rowNumber, "indicatorParentMissing");
       continue;
@@ -1873,6 +1888,12 @@ export function validateStrategicImportRows(
     const name = text(sheet, rowNumber, row, "Nom", { required: true });
     if (name === null) continue;
 
+    // Colonnes obligatoires : tiret refusé avant la résolution (jamais « Type "-" inconnu »).
+    const dashedEnum = (["Type", "Fréquence"] as const).find((c) => isClearMarker(row[c]));
+    if (dashedEnum) {
+      err(sheet, rowNumber, "notClearable", { column: dashedEnum });
+      continue;
+    }
     const kindRaw = str(row["Type"]);
     const kind = kindRaw ? resolveSynonym(kindRaw, KIND_SYNONYMS) : undefined;
     if (!kind) {
@@ -1981,7 +2002,14 @@ export function validateStrategicImportRows(
       (!usersCleared && (match?.entity.additionalAuthorizedUserIds?.length ?? 0) > 0) ||
       (!rolesCleared && (match?.entity.responsibleRoles?.length ?? 0) > 0);
     if (!hasResponsible) {
-      err(sheet, rowNumber, "responsibleRequired");
+      // Le tiret a retiré le dernier responsable : refus dédié (au moins une personne ou un rôle
+      // reste obligatoire), plutôt que le message générique « obligatoire ».
+      const dashed = [
+        ...(usersCleared ? ["Responsables saisie (séparés par ;)"] : []),
+        ...(rolesCleared ? ["Rôles responsables (séparés par ;)"] : []),
+      ];
+      if (dashed.length > 0) err(sheet, rowNumber, "notClearable", { column: dashed.join(" / ") });
+      else err(sheet, rowNumber, "responsibleRequired");
       continue;
     }
 
@@ -2141,6 +2169,13 @@ export function validateStrategicImportRows(
     }
     const fn = text(sheet, rowNumber, row, "Fonction (équipe, base ETP)", { required: true });
     if (fn === null) continue;
+    // "Nombre d'ETP" obligatoire et "ID ligne" (identifiant) : tiret refusé — jamais lu comme un
+    // nombre illisible ni comme un ID inconnu (simple avertissement auparavant).
+    const dashedEtp = (["Nombre d'ETP", "ID ligne"] as const).find((c) => isClearMarker(row[c]));
+    if (dashedEtp) {
+      err(sheet, rowNumber, "notClearable", { column: dashedEtp });
+      continue;
+    }
     const fteParsed = parseCellNumber(row["Nombre d'ETP"]);
     if (fteParsed && !fteParsed.ok) {
       err(sheet, rowNumber, "notNumber", { column: "Nombre d'ETP", value: fteParsed.raw });
@@ -2528,7 +2563,7 @@ export const STRATEGIC_IMPORT_GUIDE_ROWS: string[][] = [
     "Exportez le plan (bouton « Exporter le plan »), modifiez le fichier puis réimportez-le : l'aperçu indique ce qui sera créé, mis à jour ou inchangé. Une cellule vide ne remplace jamais une valeur existante.",
   ],
   [
-    'Effacer une valeur : saisissez un tiret « - » seul dans la cellule. Accepté dans toutes les colonnes facultatives (Description, Couleur, sponsors, "Responsable projet", "Contributeurs", budgets, "ETP consommés", poids, "Dépendances", "Échéance" des Livrables, "Valeur cible", "Sens", "Unité", "Responsables saisie", "Rôles responsables", "Code Projet" et "Précision" de la feuille ETP). Refusé (erreur) dans une colonne obligatoire, dans un "Code" et dans "Étape de maturité".',
+    'Effacer une valeur : saisissez un tiret « - » seul dans la cellule. Accepté dans toutes les colonnes facultatives (Description, Couleur, sponsors, "Responsable projet", "Contributeurs", budgets, "ETP consommés", poids, "Dépendances", "Échéance" des Livrables, "Valeur cible", "Sens", "Unité", "Responsables saisie", "Rôles responsables", "Code Projet" et "Précision" de la feuille ETP). Refusé (erreur bloquante, rien n\'est importé) dans une colonne obligatoire ou un identifiant : "Code", "Nom", "Codes Axes", "Code Chantier", "Code Axe", "Code Projet" des Projets et Livrables, "Label", dates des Projets, "Étape de maturité", "Type", "Fréquence", "Objectif", "Fonction", "Nombre d\'ETP", dates et "ID ligne" de la feuille ETP — ainsi que sur le dernier responsable d\'un indicateur ("Responsables saisie" / "Rôles responsables"). Message : « colonne obligatoire (ou identifiant) : le tiret « - » ne peut pas l\'effacer ».',
   ],
   [
     "Dépendances vers un chantier que vous ne voyez pas : elles ne figurent pas dans l'export et sont conservées telles quelles au ré-import.",

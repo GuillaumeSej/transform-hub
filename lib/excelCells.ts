@@ -7,7 +7,10 @@ import { isBlankCell, isoFromParts, normalizeHeaderKey } from "@/lib/excelParse"
  * 1. Cellule vide / tiret. Sur une ligne qui MET À JOUR une entité existante, une cellule VIDE
  *    conserve la valeur en base (upsert non destructif) ; un tiret seul « - » (ou « – », « — »)
  *    l'EFFACE. Seuls les champs facultatifs peuvent être effacés ; le tiret dans une colonne
- *    obligatoire est traité comme une valeur illisible par l'import concerné.
+ *    OBLIGATOIRE (ou un code / identifiant de ligne) est une ERREUR BLOQUANTE dans TOUS les imports
+ *    (décision PO du 03/10), avec le message dédié `EXCEL_NOT_CLEARABLE_MESSAGE` (code
+ *    `notClearable`) — jamais un « nom inconnu », un « nombre illisible » ni un simple
+ *    avertissement. Le contrôle passe AVANT toute résolution de la valeur (chantier, axe, type…).
  *
  * 2. Dates des exports. Les exports écrivent de VRAIES cellules date Excel (numéro de série +
  *    format « dd/mm/yyyy ») — et non plus du texte « JJ/MM/AAAA » ou « AAAA-MM-JJ » — pour que
@@ -24,6 +27,12 @@ export const EXCEL_CLEAR_MARKER = "-";
 export function isClearMarker(v: unknown): boolean {
   return typeof v === "string" && /^[-–—]$/.test(v.trim());
 }
+
+/** Modèle FRANÇAIS commun du refus « tiret sur une colonne obligatoire » (code `notClearable`
+ *  des imports leviers, plan stratégique, base ETP, Effectifs et arborescence ; variable
+ *  `{column}` — `{field}` côté leviers). Recopié à l'identique dans fr.ts (vérifié par test). */
+export const EXCEL_NOT_CLEARABLE_MESSAGE =
+  '"{column}" est une colonne obligatoire (ou un identifiant) : le tiret « - » ne peut pas l\'effacer — laissez la cellule vide pour conserver la valeur';
 
 /** Lecture d'une cellule texte FACULTATIVE selon la règle vide/tiret :
  *  `{ kind: "keep" }` (vide), `{ kind: "clear" }` (tiret) ou `{ kind: "set", value }`. */

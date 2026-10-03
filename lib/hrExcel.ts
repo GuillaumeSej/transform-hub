@@ -14,7 +14,11 @@ import {
   parseCellDate,
   parseCellNumber,
 } from "@/lib/excelParse";
-import { applyExcelDateColumns, isClearMarker } from "@/lib/excelCells";
+import {
+  applyExcelDateColumns,
+  EXCEL_NOT_CLEARABLE_MESSAGE,
+  isClearMarker,
+} from "@/lib/excelCells";
 import { makeIssue, type ImportIssue } from "@/lib/importIssue";
 import { nextMovementId } from "@/lib/workforceLogic";
 
@@ -29,8 +33,10 @@ import { nextMovementId } from "@/lib/workforceLogic";
  *   rattachements d'arborescence…) sont conservés. Un tiret « - » EFFACE un champ facultatif
  *   (règle commune aux imports, `lib/excelCells.ts`) : textes de la fiche employé, date d'entrée,
  *   départ retraite ; commentaire, département d'arrivée, pays, RH local, date réalisée et
- *   dispositif social d'un mouvement. Sur une valeur obligatoire (nom, département, libellé…), le
- *   tiret est refusé (avertissement, valeur conservée).
+ *   dispositif social, matricule, levier, programme, montants et Oui/Non d'un mouvement. Sur une
+ *   colonne OBLIGATOIRE ou un identifiant (`HR_EMPLOYEE_NOT_CLEARABLE`,
+ *   `HR_MOVEMENT_NOT_CLEARABLE`), le tiret est une ERREUR BLOQUANTE `notClearable` (décision PO du
+ *   03/10 — auparavant un simple avertissement, valeur conservée) : la ligne est rejetée.
  * - Bornes (audit lot 4) : ETP d'une personne entre 0 et `HR_MAX_PERSON_FTE` (« 80 » n'est plus lu
  *   80 ETP), montants de salaire/économies/coût ≥ 0 (l'impact masse salariale reste signé),
  *   avertissement au-delà de `HR_SALARY_WARNING_THRESHOLD` pour un salaire.
@@ -141,9 +147,29 @@ export const HR_IMPORT_ISSUES: Record<string, string> = {
   amountHigh: "{column} = {value} : montant inhabituellement élevé (plus de {max}) — à vérifier",
   movementFteHigh:
     "{column} = {value} : plus de {max} ETP pour un seul mouvement — à vérifier (un mouvement = une personne ou un poste)",
-  clearNotAllowed:
-    '{column} : le tiret "-" ne peut pas effacer une valeur obligatoire — valeur existante conservée',
+  // Tiret sur une colonne obligatoire : erreur bloquante, modèle commun à tous les imports.
+  notClearable: EXCEL_NOT_CLEARABLE_MESSAGE,
 };
+
+/** Colonnes de la feuille "Base ETP" où le tiret « - » est REFUSÉ (obligatoires ou identifiant). */
+export const HR_EMPLOYEE_NOT_CLEARABLE = [
+  "Matricule",
+  "Nom",
+  "Département",
+  "Niveau",
+  "ETP",
+] as const;
+
+/** Colonnes de la feuille "Mouvements" où le tiret « - » est REFUSÉ (obligatoires ou identifiant). */
+export const HR_MOVEMENT_NOT_CLEARABLE = [
+  "ID mouvement",
+  "Employé / Poste",
+  "Type",
+  "ETP concernés",
+  "Département",
+  "Date planifiée",
+  "Statut",
+] as const;
 
 /** ETP d'une personne (fiche employé) : entre 0 et 1,5 (au-delà : faute de frappe probable, ex.
  *  « 80 » pour un 80 %). Même seuil d'alerte pour l'ETP d'un mouvement (non bloquant). */
@@ -443,18 +469,36 @@ function optionalText(row: Record<string, unknown>, col: string): string | undef
   return isClearMarker(row[col]) ? "" : text(row[col]);
 }
 
-/** Texte obligatoire : le tiret d'effacement est refusé (avertissement, valeur conservée). */
-function requiredText(row: Record<string, unknown>, col: string, s: Sink): string | undefined {
+/** Texte obligatoire : le tiret d'effacement est refusé en amont (`dashRefused`). */
+function requiredText(row: Record<string, unknown>, col: string): string | undefined {
   if (!has(row, col)) return undefined;
-  if (isClearMarker(row[col])) {
-    warn(s, "clearNotAllowed", { column: col });
-    return undefined;
-  }
   return text(row[col]);
+}
+
+/** Tiret « - » dans une colonne obligatoire ou un identifiant : une erreur bloquante
+ *  `notClearable` par colonne concernée, AVANT toute lecture de la ligne. `true` = ligne rejetée. */
+function dashRefused(row: Record<string, unknown>, cols: readonly string[], s: Sink): boolean {
+  const dashed = cols.filter((c) => isClearMarker(row[c]));
+  for (const column of dashed) fail(s, "notClearable", { column });
+  return dashed.length > 0;
+}
+
+/** Nombre FACULTATIF : tiret = effacé (0), sinon `numberField`. */
+function optionalNumber(
+  row: Record<string, unknown>,
+  col: string,
+  s: Sink,
+  isNew: boolean,
+  bounds?: { min?: number; max?: number; code: "fteOutOfRange" | "negative" }
+): number | undefined {
+  if (isClearMarker(row[col])) return 0;
+  return numberField(row, col, s, isNew, 0, bounds);
 }
 
 function boolField(row: Record<string, unknown>, col: string, s: Sink): boolean | undefined {
   if (!has(row, col)) return undefined;
+  // Oui/Non facultatif : tiret = effacé (Non).
+  if (isClearMarker(row[col])) return false;
   const raw = text(row[col]);
   const b = BOOL_SYNONYMS[enumKey(raw)];
   if (b === undefined) warn(s, "unknownEnumKept", { column: col, value: raw });
@@ -509,6 +553,7 @@ function parseEmployee(
     warnings: s.issues.map((i) => i.reason),
     issues: s.issues,
   });
+  if (dashRefused(row, HR_EMPLOYEE_NOT_CLEARABLE, s)) return done(null, false, false);
 
   const id = readMatricule(
     row["Matricule"],
@@ -516,7 +561,7 @@ function parseEmployee(
     s
   );
   const existing = id ? ctx.employees.find((e) => e.id === id) : undefined;
-  const name = isClearMarker(row["Nom"]) ? "" : text(row["Nom"]);
+  const name = text(row["Nom"]);
   if (!id || (!existing && !name)) {
     fail(s, "missingIdOrName");
     return done(null, false, false);
@@ -524,7 +569,7 @@ function parseEmployee(
   const isNew = !existing;
   const patch: Partial<Employee> = {};
 
-  const nameValue = requiredText(row, "Nom", s);
+  const nameValue = requiredText(row, "Nom");
   if (nameValue !== undefined) patch.name = nameValue;
   // Champs texte facultatifs : vide = conservé, "-" = effacé.
   const textCols: [string, keyof Employee][] = [
@@ -542,7 +587,7 @@ function parseEmployee(
     if (value !== undefined) (patch as Record<string, unknown>)[key] = value;
   }
 
-  const department = requiredText(row, "Département", s);
+  const department = requiredText(row, "Département");
   if (department !== undefined) {
     const known = ctx.departments.find((d) => enumKey(d.name) === enumKey(department));
     if (!known) warn(s, "unknownDepartment", { value: department });
@@ -570,7 +615,7 @@ function parseEmployee(
   else if (isNew && readNumber(row, "ETP").kind === "empty")
     warn(s, "emptyDefault", { column: "ETP", fallback: 1 });
   const salaryCol = "Salaire brut annuel (€)";
-  const salary = numberField(row, salaryCol, s, isNew, 0, { min: 0, code: "negative" });
+  const salary = optionalNumber(row, salaryCol, s, isNew, { min: 0, code: "negative" });
   if (salary !== undefined) {
     patch.salary = salary;
     if (salary > HR_SALARY_WARNING_THRESHOLD)
@@ -672,18 +717,17 @@ function parseMovement(
     warnings: s.issues.map((i) => i.reason),
     issues: s.issues,
   });
+  if (dashRefused(row, HR_MOVEMENT_NOT_CLEARABLE, s)) return done(null, false, false);
 
   const id = text(row["ID mouvement"]);
   const existing = id ? ctx.movements.find((m) => m.id === id) : undefined;
   const isNew = !existing;
-  const labelCleared = isClearMarker(row["Employé / Poste"]);
-  const label = labelCleared ? "" : text(row["Employé / Poste"]);
+  const label = text(row["Employé / Poste"]);
   if (isNew && !label) {
     fail(s, "missingLabel");
     return done(null, true, false);
   }
   const patch: Partial<WorkforceMovement> = {};
-  if (labelCleared) warn(s, "clearNotAllowed", { column: "Employé / Poste" });
   if (label) patch.label = label;
 
   // Type — obligatoire à la création, jamais deviné.
@@ -768,14 +812,15 @@ function parseMovement(
       });
   } else if (isNew && readNumber(row, "ETP concernés").kind === "empty")
     warn(s, "emptyDefault", { column: "ETP concernés", fallback: 1 });
-  const salaryImpact = numberField(row, "Impact masse salariale (€/an)", s, isNew, 0);
+  // Montants facultatifs : tiret = effacé (0).
+  const salaryImpact = optionalNumber(row, "Impact masse salariale (€/an)", s, isNew);
   if (salaryImpact !== undefined) patch.salaryImpact = salaryImpact;
-  const savings = numberField(row, "Économies (€)", s, isNew, 0);
+  const savings = optionalNumber(row, "Économies (€)", s, isNew);
   if (savings !== undefined) patch.savings = savings;
-  const cost = numberField(row, "Coût one-off (€)", s, isNew, 0);
+  const cost = optionalNumber(row, "Coût one-off (€)", s, isNew);
   if (cost !== undefined) patch.cost = cost;
 
-  const department = requiredText(row, "Département", s);
+  const department = requiredText(row, "Département");
   if (department !== undefined) patch.department = department;
   // Facultatifs : vide = conservé, "-" = effacé.
   const toDepartment = optionalText(row, "Département d'arrivée");
@@ -822,7 +867,11 @@ function parseMovement(
   let leverProgramId: string | undefined = existing
     ? ctx.levers.find((l) => l.id === existing.leverId)?.programId
     : undefined;
-  if (has(row, "Levier (code)")) {
+  if (has(row, "Levier (code)") && isClearMarker(row["Levier (code)"])) {
+    // Rattachement levier FACULTATIF : tiret = retiré (chantier/fonction saisis conservés).
+    if (existing?.leverId) patch.leverId = "";
+    leverProgramId = undefined;
+  } else if (has(row, "Levier (code)")) {
     const raw = text(row["Levier (code)"]);
     const lever = ctx.levers.find((l) => enumKey(l.code) === enumKey(raw) || l.id === raw);
     if (!lever) warn(s, "unknownLever", { value: raw });
@@ -835,7 +884,11 @@ function parseMovement(
     }
   }
 
-  if (has(row, "Programme")) {
+  if (has(row, "Programme") && isClearMarker(row["Programme"])) {
+    // Programme FACULTATIF : tiret = retiré.
+    if (existing?.programId !== undefined || patch.programId !== undefined)
+      patch.programId = undefined;
+  } else if (has(row, "Programme")) {
     const raw = text(row["Programme"]);
     const programId = resolveProgram(raw, ctx);
     const effective = patch.programId ?? existing?.programId ?? leverProgramId;
@@ -844,7 +897,10 @@ function parseMovement(
   }
 
   const type = patch.type ?? existing?.type;
-  if (has(row, "Matricule")) {
+  if (has(row, "Matricule") && isClearMarker(row["Matricule"])) {
+    // Rattachement à un employé FACULTATIF (poste à pourvoir) : tiret = retiré.
+    patch.empId = null;
+  } else if (has(row, "Matricule")) {
     const empId = readMatricule(row["Matricule"], knownEmployeeIds, s);
     if (type === "Recrutement") {
       if (!existing || existing.empId !== null) warn(s, "recruitmentEmpIdIgnored", { id: empId });

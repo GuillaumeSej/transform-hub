@@ -1323,7 +1323,7 @@ const de: Record<string, string> = {
   "shared.hrExcelButtons.importButton": "Excel importieren",
   "shared.hrExcelButtons.exportSuccessBody": "{emp} Mitarbeiter · {mov} Bewegungen",
   "shared.hrExcelButtons.templateDownloadedBody":
-    "Füllen Sie die Spalten aus und importieren Sie anschließend die Datei. Bei einer Aktualisierung behält eine leere Zelle den bestehenden Wert; ein Bindestrich „-“ löscht ihn.",
+    "Füllen Sie die Spalten aus und importieren Sie anschließend die Datei. Bei einer Aktualisierung behält eine leere Zelle den bestehenden Wert; ein Bindestrich „-“ löscht eine optionale Spalte. In einer Pflichtspalte (Personalnummer, Name, Abteilung, Ebene, VZÄ; Bewegungs-ID, Mitarbeiter / Stelle, Typ, Abteilung, geplantes Datum, Status) wird der Bindestrich abgelehnt: blockierender Fehler, nichts wird importiert.",
   "shared.hrExcelButtons.importDoneBody":
     "{emp} Mitarbeiter · {created} Bewegung(en) erstellt, {updated} aktualisiert",
   "shared.hrExcelButtons.employeesUnit": "Mitarbeiter",
@@ -1357,7 +1357,7 @@ const de: Record<string, string> = {
   "shared.leverImportButton.impactsRemovedBody":
     "da sie in der Registerkarte Impacts der Datei fehlen: {list}.",
   "shared.leverImportButton.emptyCellRule":
-    "Leere Zelle = aktueller Wert bleibt erhalten; „-“ = Feld wird geleert. „Progression (%)“ und die Beträge eines Hebels mit Impacts werden berechnet: Änderungen daran werden ignoriert.",
+    "Leere Zelle = aktueller Wert bleibt erhalten; „-“ = optionales Feld wird geleert (in einer Pflichtspalte abgelehnt: blockierender Fehler). „Progression (%)“ und die Beträge eines Hebels mit Impacts werden berechnet: Änderungen daran werden ignoriert.",
   "shared.leverImportButton.fixErrorsFirst":
     "Import nicht möglich, solange die Datei Fehler enthält: Korrigieren Sie die Zeilen unten und laden Sie die Datei erneut.",
   "shared.leverImportButton.confirmLargeValues":
@@ -1381,11 +1381,11 @@ const de: Record<string, string> = {
     "Code „{code}“ ist in der Datei doppelt vorhanden (bereits in Zeile {row} verwendet)",
   "shared.leverImport.msg.unknownStatus": "Unbekannter Status „{value}“ (erwartet: {expected})",
   "shared.leverImport.msg.statusNewLever":
-    "Ein neuer Hebel kann nur mit der Reife „{idea}“ (oder aufgegeben) importiert werden: Die Reife „{target}“ erfordert eine Freigabe. Importieren Sie ihn mit „{idea}“ und beantragen Sie die Freigabe auf seiner Detailseite.",
+    "Ein neuer Hebel kann nur mit dem Status „{idea}“ (oder aufgegeben) importiert werden: Der Status „{target}“ erfordert eine Freigabe. Importieren Sie ihn mit dem Status „{idea}“ und beantragen Sie die Freigabe auf seiner Detailseite.",
   "shared.leverImport.msg.statusGated":
-    "Reifewechsel „{current}“ → „{target}“ abgelehnt: Die Reife „{target}“ erfordert eine Freigabe (Antrag auf der Hebel-Detailseite). Setzen Sie die aktuelle Reife in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
+    "Statuswechsel „{current}“ → „{target}“ abgelehnt: Der Status „{target}“ erfordert eine Freigabe (Antrag auf der Hebel-Detailseite). Setzen Sie den aktuellen Status in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
   "shared.leverImport.msg.statusBackward":
-    "Reifewechsel „{current}“ → „{target}“ abgelehnt: Ein Import kann weder Reifestufen überspringen noch zurückgehen. Setzen Sie die aktuelle Reife in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
+    "Statuswechsel „{current}“ → „{target}“ abgelehnt: Ein Import kann im Lebenszyklus weder Stufen überspringen noch zurückgehen. Setzen Sie den aktuellen Status in der Datei wieder ein, um die übrigen Änderungen zu importieren.",
   "shared.leverImport.msg.unknownPnl": "GuV-Konto „{value}“ nicht gefunden (erwartet: {expected})",
   "shared.leverImport.msg.requiredDate":
     "„{field}“ ist erforderlich und muss ein gültiges Datum sein (TT/MM/JJJJ oder JJJJ-MM-TT)",
@@ -1443,6 +1443,8 @@ const de: Record<string, string> = {
     '"{field}" = {value} {unit}: ungewöhnlich hoher Wert (über {threshold}) — prüfen Sie die Einheit vor dem Bestätigen',
   "shared.leverImport.msg.formulaNoValue":
     "Zelle {cell}: Formel ohne berechneten Wert (Arbeitsmappe nicht neu berechnet) — öffnen und speichern Sie die Datei vor dem Import in Excel.",
+  "shared.leverImport.msg.notClearable":
+    "„{field}“ ist eine Pflichtspalte (oder eine Kennung): Der Bindestrich „-“ kann sie nicht löschen — lassen Sie die Zelle leer, um den Wert beizubehalten",
 
   // ─── shared charts (components/shared/charts) ──────────────────────────────
   "shared.actionGantt.noActions": "Keine Aktionen definiert.",
@@ -2173,7 +2175,7 @@ const de: Record<string, string> = {
   "strategicImport.msg.staffingDuplicateRow":
     "Doppelte FTE-Zeile (gleiches Arbeitspaket, Projekt, Team und gleiche Daten wie Zeile {line})",
   "strategicImport.msg.notClearable":
-    "„{column}“ kann nicht gelöscht werden: Der Bindestrich „-“ ist nur in einer optionalen Spalte zulässig (lassen Sie die Zelle leer, um den Wert beizubehalten)",
+    "„{column}“ ist eine Pflichtspalte (oder eine Kennung): Der Bindestrich „-“ kann sie nicht löschen — lassen Sie die Zelle leer, um den Wert beizubehalten",
   "strategicImport.msg.staffingDuplicateExisting":
     "Neue VZÄ-Zeile identisch mit einer bestehenden Zeile (gleiches Arbeitspaket, Projekt, Team und gleiche Daten — Zeilen-ID „{id}“): Ändern Sie die bestehende Zeile, statt eine Kopie anzulegen",
   "strategicImport.accountStatusOrphan":
@@ -2618,7 +2620,7 @@ const de: Record<string, string> = {
   "staffingImport.lineLabel": "Zeile",
   "staffingImport.templateDownloadedTitle": "Vorlage heruntergeladen",
   "staffingImport.templateDownloadedBody":
-    "Spalten: Arbeitspaket (exakter Name), Funktion (exakter Name eines Teams aus dem Tabellenblatt „Équipes“ — Teams werden nur in der FTE-Basis angelegt), VZÄ (> 0; über dem verfügbaren Bestand des Teams nur Warnung), Startdatum und Enddatum (Pflicht), Hebel (optional, exakter Name), Bemerkung (optional), Zeilen-ID (vom Export ausgefüllt, für eine neue Zeile leer lassen). Eine bestehende Zeile wird über ihre Zeilen-ID gefunden (sonst Arbeitspaket + Funktion + Daten + Hebel) und aktualisiert statt dupliziert. Leere Zelle = Wert bleibt erhalten; ein Bindestrich „-“ in der Bemerkung löscht sie. Das Tabellenblatt „Équipes“ (Teams der FTE-Basis und verfügbarer Bestand) wird beim Import ignoriert.",
+    "Spalten: Arbeitspaket (exakter Name), Funktion (exakter Name eines Teams aus dem Tabellenblatt „Équipes“ — Teams werden nur in der FTE-Basis angelegt), VZÄ (> 0; über dem verfügbaren Bestand des Teams nur Warnung), Startdatum und Enddatum (Pflicht), Hebel (optional, exakter Name), Bemerkung (optional), Zeilen-ID (vom Export ausgefüllt, für eine neue Zeile leer lassen). Eine bestehende Zeile wird über ihre Zeilen-ID gefunden (sonst Arbeitspaket + Funktion + Daten + Hebel) und aktualisiert statt dupliziert. Leere Zelle = Wert bleibt erhalten; ein Bindestrich „-“ löscht die Bemerkung oder entfernt den Hebel, wird aber in Arbeitspaket, Funktion, VZÄ, den Daten und der Zeilen-ID abgelehnt (blockierender Fehler). Das Tabellenblatt „Équipes“ (Teams der FTE-Basis und verfügbarer Bestand) wird beim Import ignoriert.",
   "staffingImport.successMessage": "Import abgeschlossen",
   "staffingImport.importDoneBody": "{created} Zeile(n) erstellt · {updated} Zeile(n) aktualisiert",
   "staffingImport.errorTitle": "Import fehlgeschlagen",
@@ -3587,8 +3589,8 @@ const de: Record<string, string> = {
     "{column} = {value}: ungewöhnlich hoher Betrag (mehr als {max}) — bitte prüfen",
   "hrImport.issue.movementFteHigh":
     "{column} = {value}: mehr als {max} VZÄ für eine einzelne Bewegung — bitte prüfen (eine Bewegung = eine Person oder Stelle)",
-  "hrImport.issue.clearNotAllowed":
-    "{column}: Der Bindestrich „-“ kann keinen Pflichtwert löschen — bestehender Wert beibehalten",
+  "hrImport.issue.notClearable":
+    "„{column}“ ist eine Pflichtspalte (oder eine Kennung): Der Bindestrich „-“ kann sie nicht löschen — lassen Sie die Zelle leer, um den Wert beizubehalten",
   "hrImport.rowPrefix": "{sheet} · Zeile {row}:",
   "hrImport.filePrefix": "{sheet}:",
   "hrImport.createdUnit": "angelegt",
@@ -3633,6 +3635,8 @@ const de: Record<string, string> = {
     "Zeilen-ID „{id}“ mehrfach in der Datei (Zeilen {rows}) — leeren Sie die Zelle „ID ligne“ kopierter Zeilen",
   "staffingImport.issue.duplicateExisting":
     "Neue Zeile identisch mit einer bestehenden Zeile (gleiches Arbeitspaket, gleiche Funktion, gleiche Daten und gleicher Hebel — Zeilen-ID „{id}“): Ändern Sie die bestehende Zeile, statt eine Kopie anzulegen",
+  "staffingImport.issue.notClearable":
+    "„{column}“ ist eine Pflichtspalte (oder eine Kennung): Der Bindestrich „-“ kann sie nicht löschen — lassen Sie die Zelle leer, um den Wert beizubehalten",
   "staffingImport.exportButton": "Exportieren",
   "staffingImport.exportDoneBody": "{n} Staffing-Zeile(n) exportiert",
   "adminHierarchy.issue.missingColumns": "Pflichtspalten fehlen: {columns}",
@@ -3653,6 +3657,8 @@ const de: Record<string, string> = {
   "adminHierarchy.issue.invalidBoolean": "{column} „{value}“ nicht erkannt (erwartet Ja/Nein)",
   "adminHierarchy.issue.financialIgnored":
     "Finanzdaten ignoriert: Ebene „{level}“ ist keine GuV-Zeilen-Ebene",
+  "adminHierarchy.issue.notClearable":
+    "„{column}“ ist eine Pflichtspalte (oder eine Kennung): Der Bindestrich „-“ kann sie nicht löschen — lassen Sie die Zelle leer, um den Wert beizubehalten",
   "adminHierarchy.exportOrphansSuffix": " · {n} verwaiste(r) Wert(e) nicht exportiert",
   "adminHierarchy.toastImportReadFailedTitle": "Datei nicht lesbar",
   "adminHierarchy.toastImportDoneCreatedUpdated":

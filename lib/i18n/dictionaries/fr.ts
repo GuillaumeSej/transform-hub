@@ -1360,7 +1360,7 @@ const fr: Record<string, string> = {
   "shared.hrExcelButtons.importButton": "Importer Excel",
   "shared.hrExcelButtons.exportSuccessBody": "{emp} employés · {mov} mouvements",
   "shared.hrExcelButtons.templateDownloadedBody":
-    "Remplissez les colonnes puis importez le fichier. En mise à jour, une cellule vide conserve la valeur existante ; un tiret « - » l'efface.",
+    "Remplissez les colonnes puis importez le fichier. En mise à jour, une cellule vide conserve la valeur existante ; un tiret « - » efface une colonne facultative. Sur une colonne obligatoire (Matricule, Nom, Département, Niveau, ETP ; ID mouvement, Employé / Poste, Type, Département, Date planifiée, Statut), le tiret est refusé : erreur bloquante, rien n'est importé.",
   "shared.hrExcelButtons.importDoneBody":
     "{emp} employé(s) · {created} mouvement(s) créé(s), {updated} mis à jour",
   "shared.hrExcelButtons.employeesUnit": "employé(s)",
@@ -1408,7 +1408,7 @@ const fr: Record<string, string> = {
   "shared.leverImportButton.impactsRemovedBody":
     "car absentes de la feuille Impacts du fichier : {list}.",
   "shared.leverImportButton.emptyCellRule":
-    "Cellule vide = valeur actuelle conservée ; « - » = champ effacé. « Progression (%) » et les montants d'un levier porteur d'impacts sont calculés : leur modification est ignorée.",
+    "Cellule vide = valeur actuelle conservée ; « - » = champ facultatif effacé (refusé dans une colonne obligatoire : erreur bloquante). « Progression (%) » et les montants d'un levier porteur d'impacts sont calculés : leur modification est ignorée.",
   "shared.leverImportButton.fixErrorsFirst":
     "Import impossible tant que le fichier contient des erreurs : corrigez les lignes ci-dessous puis rechargez le fichier.",
   "shared.leverImportButton.confirmLargeValues":
@@ -1432,11 +1432,11 @@ const fr: Record<string, string> = {
     'Code "{code}" en doublon dans le fichier (déjà utilisé ligne {row})',
   "shared.leverImport.msg.unknownStatus": 'Statut "{value}" inconnu (attendu : {expected})',
   "shared.leverImport.msg.statusNewLever":
-    "Un nouveau levier ne peut être importé qu'en maturité « {idea} » (ou abandonné) : la maturité « {target} » nécessite une validation. Importez-le en « {idea} », puis demandez la validation depuis sa fiche.",
+    "Un nouveau levier ne peut être importé qu'au statut « {idea} » (ou abandonné) : le statut « {target} » nécessite une validation. Importez-le au statut « {idea} », puis demandez la validation depuis sa fiche.",
   "shared.leverImport.msg.statusGated":
-    "Changement de maturité « {current} » → « {target} » refusé : la maturité « {target} » nécessite une validation (demande depuis la fiche du levier). Remettez la maturité actuelle dans le fichier pour importer les autres modifications.",
+    "Changement de statut « {current} » → « {target} » refusé : le statut « {target} » nécessite une validation (demande depuis la fiche du levier). Remettez le statut actuel dans le fichier pour importer les autres modifications.",
   "shared.leverImport.msg.statusBackward":
-    "Changement de maturité « {current} » → « {target} » refusé : un import ne peut ni sauter un niveau de maturité ni revenir en arrière. Remettez la maturité actuelle dans le fichier pour importer les autres modifications.",
+    "Changement de statut « {current} » → « {target} » refusé : un import ne peut ni sauter d'étape ni revenir en arrière dans le cycle de vie. Remettez le statut actuel dans le fichier pour importer les autres modifications.",
   "shared.leverImport.msg.unknownPnl": 'Compte P&L "{value}" introuvable (attendu : {expected})',
   "shared.leverImport.msg.requiredDate":
     '"{field}" obligatoire et doit être une date valide (JJ/MM/AAAA ou AAAA-MM-JJ)',
@@ -1491,6 +1491,8 @@ const fr: Record<string, string> = {
     '"{field}" = {value} {unit} : valeur inhabituellement élevée (au-delà de {threshold}) — vérifiez l\'unité avant de confirmer',
   "shared.leverImport.msg.formulaNoValue":
     "Cellule {cell} : formule sans valeur calculée (classeur non recalculé) — ouvrez et enregistrez le fichier dans Excel avant l'import.",
+  "shared.leverImport.msg.notClearable":
+    '"{field}" est une colonne obligatoire (ou un identifiant) : le tiret « - » ne peut pas l\'effacer — laissez la cellule vide pour conserver la valeur',
 
   // ─── adminHierarchy (Admin > Entreprises > Arborescence financière/géo) ────
   "adminHierarchy.semantic.pnl": "Ligne P&L",
@@ -2246,7 +2248,7 @@ const fr: Record<string, string> = {
   "strategicImport.msg.staffingDuplicateRow":
     "Ligne ETP en doublon (même chantier, projet, équipe et dates que la ligne {line})",
   "strategicImport.msg.notClearable":
-    '"{column}" ne peut pas être effacé : le tiret « - » n\'est accepté que dans une colonne facultative (laissez la cellule vide pour conserver la valeur)',
+    '"{column}" est une colonne obligatoire (ou un identifiant) : le tiret « - » ne peut pas l\'effacer — laissez la cellule vide pour conserver la valeur',
   "strategicImport.msg.staffingDuplicateExisting":
     'Nouvelle ligne ETP identique à une ligne existante (même chantier, projet, équipe et dates — ID ligne "{id}") : modifiez la ligne existante plutôt que d\'en créer une copie',
   "strategicImport.accountStatusOrphan":
@@ -2712,7 +2714,7 @@ const fr: Record<string, string> = {
   "staffingImport.lineLabel": "Ligne",
   "staffingImport.templateDownloadedTitle": "Modèle téléchargé",
   "staffingImport.templateDownloadedBody":
-    "Colonnes : Chantier (nom exact), Fonction (nom exact d'une équipe de l'onglet Équipes — une équipe se crée uniquement dans la base ETP), ETP (> 0 ; au-delà de l'effectif disponible de l'équipe, simple avertissement), Date début et Date fin (obligatoires), Levier (optionnel, nom exact), Note (optionnel), ID ligne (rempli par l'export, à laisser vide pour une nouvelle ligne). Une ligne existante est retrouvée par son ID ligne (à défaut chantier + fonction + dates + levier) et mise à jour plutôt que dupliquée. Cellule vide = valeur conservée ; un tiret « - » dans Note l'efface. L'onglet Équipes (équipes de la base ETP et effectif disponible) est ignoré à l'import.",
+    "Colonnes : Chantier (nom exact), Fonction (nom exact d'une équipe de l'onglet Équipes — une équipe se crée uniquement dans la base ETP), ETP (> 0 ; au-delà de l'effectif disponible de l'équipe, simple avertissement), Date début et Date fin (obligatoires), Levier (optionnel, nom exact), Note (optionnel), ID ligne (rempli par l'export, à laisser vide pour une nouvelle ligne). Une ligne existante est retrouvée par son ID ligne (à défaut chantier + fonction + dates + levier) et mise à jour plutôt que dupliquée. Cellule vide = valeur conservée ; un tiret « - » efface la Note ou retire le Levier, mais il est refusé (erreur bloquante) dans Chantier, Fonction, ETP, les dates et ID ligne. L'onglet Équipes (équipes de la base ETP et effectif disponible) est ignoré à l'import.",
   "staffingImport.successMessage": "Import terminé",
   "staffingImport.importDoneBody":
     "{created} ligne(s) créée(s) · {updated} ligne(s) mise(s) à jour",
@@ -3669,8 +3671,8 @@ const fr: Record<string, string> = {
     "{column} = {value} : montant inhabituellement élevé (plus de {max}) — à vérifier",
   "hrImport.issue.movementFteHigh":
     "{column} = {value} : plus de {max} ETP pour un seul mouvement — à vérifier (un mouvement = une personne ou un poste)",
-  "hrImport.issue.clearNotAllowed":
-    '{column} : le tiret "-" ne peut pas effacer une valeur obligatoire — valeur existante conservée',
+  "hrImport.issue.notClearable":
+    '"{column}" est une colonne obligatoire (ou un identifiant) : le tiret « - » ne peut pas l\'effacer — laissez la cellule vide pour conserver la valeur',
   "hrImport.rowPrefix": "{sheet} · ligne {row} :",
   "hrImport.filePrefix": "{sheet} :",
   "hrImport.createdUnit": "créé(s)",
@@ -3714,6 +3716,8 @@ const fr: Record<string, string> = {
     'ID ligne "{id}" présent plusieurs fois dans le fichier (lignes {rows}) — videz la cellule "ID ligne" des lignes copiées',
   "staffingImport.issue.duplicateExisting":
     'Nouvelle ligne identique à une ligne existante (même chantier, fonction, dates et levier — ID ligne "{id}") : modifiez la ligne existante plutôt que d\'en créer une copie',
+  "staffingImport.issue.notClearable":
+    '"{column}" est une colonne obligatoire (ou un identifiant) : le tiret « - » ne peut pas l\'effacer — laissez la cellule vide pour conserver la valeur',
   "staffingImport.exportButton": "Exporter",
   "staffingImport.exportDoneBody": "{n} ligne(s) de staffing exportée(s)",
   "adminHierarchy.issue.missingColumns": "Colonnes obligatoires absentes : {columns}",
@@ -3733,6 +3737,8 @@ const fr: Record<string, string> = {
   "adminHierarchy.issue.invalidBoolean": '{column} "{value}" non reconnu (attendu Oui/Non)',
   "adminHierarchy.issue.financialIgnored":
     'Données financières ignorées : le niveau "{level}" n\'est pas un niveau de lignes P&L',
+  "adminHierarchy.issue.notClearable":
+    '"{column}" est une colonne obligatoire (ou un identifiant) : le tiret « - » ne peut pas l\'effacer — laissez la cellule vide pour conserver la valeur',
   "adminHierarchy.exportOrphansSuffix": " · {n} valeur(s) orpheline(s) non exportée(s)",
   "adminHierarchy.toastImportReadFailedTitle": "Fichier illisible",
   "adminHierarchy.toastImportDoneCreatedUpdated":

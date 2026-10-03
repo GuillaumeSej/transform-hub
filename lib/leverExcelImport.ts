@@ -81,8 +81,13 @@ function slugifyWorkstreamName(name: string): string {
  * Cellule vide (audit lot 4, point 7 — même règle que le plan stratégique et la base ETP) : une
  * cellule VIDE CONSERVE la valeur existante (texte, nombre, date ou liste optionnels, sur les trois
  * feuilles) ; un tiret « - » (`CLEAR_CELL_TOKENS`) EFFACE le champ. Les colonnes obligatoires ne
- * peuvent être ni vides ni effacées. Règle rappelée dans l'onglet « Aide » du modèle et dans
- * l'aperçu.
+ * peuvent être ni vides ni effacées : un tiret dans une colonne obligatoire ou un identifiant
+ * (Code, Nom du levier, Chantier, Statut, Compte P&L, dates, Programme ; Code Levier, Nom de
+ * l'action, Statut, dates, ID action ; Code Levier, Type, Montant, Nature d'un coût) est une
+ * ERREUR BLOQUANTE `notClearable` (décision PO du 03/10), contrôlée AVANT toute résolution — un
+ * « - » n'est jamais lu comme un nom de chantier à créer ni enregistré comme nom. « Libellé »
+ * d'impact (facultatif) : « - » revient au libellé calculé. Règle rappelée dans l'onglet « Aide »
+ * du modèle et dans l'aperçu.
  *
  * Colonnes calculées (audit lot 4, points 1-2) : « Progression (%) » est TOUJOURS calculée (plan
  * d'action, `leverProgressPct`) et ignorée à l'import ; les montants (brut, net, CAPEX, OPEX) d'un
@@ -317,10 +322,17 @@ export function leverImportHelpRows(): string[][] {
       "Cellule vide",
       "Conserve la valeur actuelle du levier, de l'action ou de l'impact (rien n'est effacé).",
     ],
-    ["Tiret « - »", "Efface le champ (texte, date ou nombre optionnel)."],
+    [
+      "Tiret « - »",
+      "Efface le champ (texte, date ou nombre optionnel). « Libellé » d'impact : revient au libellé calculé.",
+    ],
     [
       "Colonnes obligatoires",
       "Code, Nom du levier, Chantier, Statut, Compte P&L impacté, dates (création) ; Code Levier + Nom de l'action (Actions) ; Code Levier + Type + Montant (Impacts).",
+    ],
+    [
+      "Tiret refusé",
+      "Dans une colonne obligatoire ou un identifiant (Code, Code Levier, ID action, Programme, Nature d'un coût…), le tiret « - » ne peut pas effacer la valeur : erreur bloquante, rien n'est importé. Laissez la cellule vide pour conserver la valeur.",
     ],
     [
       "Colonnes calculées",
@@ -360,9 +372,9 @@ export const LEVER_IMPORT_MESSAGES = {
   duplicateCode: 'Code "{code}" en doublon dans le fichier (déjà utilisé ligne {row})',
   unknownStatus: 'Statut "{value}" inconnu (attendu : {expected})',
   statusNewLever:
-    "Un nouveau levier ne peut être importé qu'au stade « {idea} » (ou abandonné) : le stade « {target} » nécessite une validation. Importez-le au stade « {idea} », puis demandez la validation depuis sa fiche.",
+    "Un nouveau levier ne peut être importé qu'au statut « {idea} » (ou abandonné) : le statut « {target} » nécessite une validation. Importez-le au statut « {idea} », puis demandez la validation depuis sa fiche.",
   statusGated:
-    "Changement de statut « {current} » → « {target} » refusé : le stade « {target} » nécessite une validation (demande depuis la fiche du levier). Remettez le statut actuel dans le fichier pour importer les autres modifications.",
+    "Changement de statut « {current} » → « {target} » refusé : le statut « {target} » nécessite une validation (demande depuis la fiche du levier). Remettez le statut actuel dans le fichier pour importer les autres modifications.",
   statusBackward:
     "Changement de statut « {current} » → « {target} » refusé : un import ne peut ni sauter d'étape ni revenir en arrière dans le cycle de vie. Remettez le statut actuel dans le fichier pour importer les autres modifications.",
   unknownPnl: 'Compte P&L "{value}" introuvable (attendu : {expected})',
@@ -395,6 +407,10 @@ export const LEVER_IMPORT_MESSAGES = {
   unknownMode: 'Mode "{value}" inconnu (attendu : Gain annuel, Gain one-off)',
   unknownDirection: 'Sens "{value}" inconnu (attendu : Recrutement, Départ)',
   unknownImpactStatus: 'Statut impact "{value}" inconnu (attendu : Planifié, Réalisé, En cours)',
+  // Tiret « - » dans une colonne obligatoire ou un identifiant (décision PO du 03/10) — même
+  // modèle que les autres imports (`EXCEL_NOT_CLEARABLE_MESSAGE`, variable `{field}`).
+  notClearable:
+    '"{field}" est une colonne obligatoire (ou un identifiant) : le tiret « - » ne peut pas l\'effacer — laissez la cellule vide pour conserver la valeur',
   // Avertissements (n'empêchent pas l'import)
   unknownColumns: "Colonne(s) non reconnue(s), ignorée(s) : {columns}",
   unknownImpactNature:
@@ -931,6 +947,19 @@ export function validateLeverImportRows(
     return p.value;
   };
 
+  /** Colonne OBLIGATOIRE ou identifiant : le tiret « - » ne peut pas l'effacer — erreur bloquante
+   *  `notClearable`, contrôlée AVANT toute résolution de la valeur (décision PO du 03/10). */
+  const dashRefused = (
+    sheet: LeverImportSheet,
+    rowNumber: number,
+    field: string,
+    v: unknown
+  ): boolean => {
+    if (!isClearCell(v)) return false;
+    err(sheet, rowNumber, "notClearable", { field });
+    return true;
+  };
+
   const existingByCode = new Map(data.levers.map((l) => [normalizeLeverCode(l.code), l]));
   const codeByLeverId = new Map(data.levers.map((l) => [l.id, l]));
 
@@ -969,6 +998,7 @@ export function validateLeverImportRows(
 
   (leverSheetUsable ? leverDataRows : []).forEach(({ row, rowNumber }) => {
     const errorsBefore = errors.length;
+    if (dashRefused("Leviers", rowNumber, "Code", row["Code"])) return;
     const code = str(row["Code"]);
     if (!code) {
       err("Leviers", rowNumber, "required", { field: "Code" });
@@ -1036,6 +1066,7 @@ export function validateLeverImportRows(
         };
 
     if (hasL("Nom du levier")) {
+      if (dashRefused("Leviers", rowNumber, "Nom du levier", row["Nom du levier"])) return reject();
       const name = str(row["Nom du levier"]);
       if (!name) {
         err("Leviers", rowNumber, "required", { field: "Nom du levier" });
@@ -1046,6 +1077,8 @@ export function validateLeverImportRows(
 
     if (wsHeader) {
       const wsRaw = str(row["Chantier"]) || str(row["Workstream"]);
+      // « - » refusé AVANT `findWorkstream` : il n'est jamais lu comme un chantier inconnu à créer.
+      if (dashRefused("Leviers", rowNumber, "Chantier", wsRaw)) return reject();
       if (!wsRaw) {
         err("Leviers", rowNumber, "required", { field: "Chantier" });
         return reject();
@@ -1071,6 +1104,7 @@ export function validateLeverImportRows(
     }
 
     if (hasL("Statut")) {
+      if (dashRefused("Leviers", rowNumber, "Statut", row["Statut"])) return reject();
       const statusRaw = str(row["Statut"]);
       const status = statusRaw ? parseLeverStatus(statusRaw, STATUS_BY_LABEL) : undefined;
       if (!status) {
@@ -1094,6 +1128,8 @@ export function validateLeverImportRows(
     }
 
     if (hasL("Compte P&L impacté")) {
+      if (dashRefused("Leviers", rowNumber, "Compte P&L impacté", row["Compte P&L impacté"]))
+        return reject();
       const pnlRaw = str(row["Compte P&L impacté"]);
       const pnl = resolvePnlAccount(data.pnlAccounts, pnlRaw);
       if (!pnl) {
@@ -1111,6 +1147,7 @@ export function validateLeverImportRows(
       ["Date de fin estimée", "end"],
     ] as const) {
       if (!hasL(header)) continue;
+      if (dashRefused("Leviers", rowNumber, header, row[header])) return reject();
       const d = readDate("Leviers", rowNumber, header, row[header]);
       if (d === null) return reject();
       if (d === undefined) {
@@ -1123,6 +1160,8 @@ export function validateLeverImportRows(
     // Programme : cellule renseignée = résolue ; vide/absente = programme actuel du levier existant
     // (M10), sinon programme sélectionné / unique programme pour un nouveau levier.
     const programRaw = hasL("Programme") ? str(row["Programme"]) : "";
+    // Rattachement obligatoire : le tiret ne retire pas le programme.
+    if (dashRefused("Leviers", rowNumber, "Programme", programRaw)) return reject();
     if (programRaw) {
       const program = programs.find(
         (p) => nk(p.id) === nk(programRaw) || nk(p.name) === nk(programRaw)
@@ -1295,6 +1334,7 @@ export function validateLeverImportRows(
       err("Actions", 1, "missingColumns", { columns: missingKeys.join(", ") });
     } else {
       rows.forEach(({ row, rowNumber }) => {
+        if (dashRefused("Actions", rowNumber, "Code Levier", row["Code Levier"])) return;
         const leverCodeRaw = str(row["Code Levier"]);
         if (!leverCodeRaw) {
           err("Actions", rowNumber, "required", { field: "Code Levier" });
@@ -1303,6 +1343,7 @@ export function validateLeverImportRows(
         const key = resolveTargetLever("Actions", rowNumber, leverCodeRaw);
         if (!key) return;
 
+        if (dashRefused("Actions", rowNumber, "Nom de l'action", row["Nom de l'action"])) return;
         const name = str(row["Nom de l'action"]);
         if (!name) {
           err("Actions", rowNumber, "required", { field: "Nom de l'action" });
@@ -1325,6 +1366,8 @@ export function validateLeverImportRows(
         // action existante n'est rapprochée qu'une fois.
         const existingActions = existingByCode.get(key)?.actions ?? [];
         const used = matchedActionIds.get(key) ?? new Map<string, number>();
+        if (hasA("ID action") && dashRefused("Actions", rowNumber, "ID action", row["ID action"]))
+          return;
         const idRaw = hasA("ID action") ? str(row["ID action"]) : "";
         if (idRaw && used.has(idRaw)) {
           err("Actions", rowNumber, "duplicateActionId", {
@@ -1354,6 +1397,7 @@ export function validateLeverImportRows(
 
         let status: ActionStatus | undefined = prev?.status;
         if (hasA("Statut")) {
+          if (dashRefused("Actions", rowNumber, "Statut", row["Statut"])) return;
           const statusRaw = str(row["Statut"]);
           status = ACTION_STATUS_BY_LABEL.get(nk(statusRaw));
           if (!status) {
@@ -1370,6 +1414,7 @@ export function validateLeverImportRows(
           ["Date fin", "end"],
         ] as const) {
           if (!hasA(header)) continue;
+          if (dashRefused("Actions", rowNumber, header, row[header])) return;
           const d = readDate("Actions", rowNumber, header, row[header]);
           if (d === null) return;
           if (d === undefined) {
@@ -1422,6 +1467,8 @@ export function validateLeverImportRows(
     /** Champs lus pour les colonnes présentes (clé présente = colonne présente). */
     fields: Partial<ActionImpact>;
     explicitLabel?: string;
+    /** « - » dans « Libellé » : l'impact reprend son libellé calculé (`derivedLabel`). */
+    labelCleared?: boolean;
     derivedLabel: string;
     comment: string;
   };
@@ -1442,6 +1489,7 @@ export function validateLeverImportRows(
       err("Impacts", 1, "missingColumns", { columns: missingKeys.join(", ") });
     } else {
       rows.forEach(({ row, rowNumber }) => {
+        if (dashRefused("Impacts", rowNumber, "Code Levier", row["Code Levier"])) return;
         const leverCodeRaw = str(row["Code Levier"]);
         if (!leverCodeRaw) {
           err("Impacts", rowNumber, "required", { field: "Code Levier" });
@@ -1450,7 +1498,11 @@ export function validateLeverImportRows(
         const key = resolveTargetLever("Impacts", rowNumber, leverCodeRaw);
         if (!key) return;
 
-        const actionNameRaw = hasI("Nom de l'action") ? str(row["Nom de l'action"]) : "";
+        // Rattachement FACULTATIF (libellé dérivé seulement) : « - » = sans action.
+        const actionNameCell = hasI("Nom de l'action")
+          ? readTextCell(row["Nom de l'action"])
+          : { kind: "blank" as const };
+        const actionNameRaw = actionNameCell.kind === "value" ? actionNameCell.value : "";
         const matchedAction = actionNameRaw
           ? finalActionsOf(key).find((a) => nk(a.name) === nk(actionNameRaw))
           : undefined;
@@ -1460,6 +1512,7 @@ export function validateLeverImportRows(
         }
 
         const fields: Partial<ActionImpact> = {};
+        if (dashRefused("Impacts", rowNumber, "Type", row["Type"])) return;
         const typeRaw = str(row["Type"]);
         const type = IMPACT_TYPE_BY_LABEL.get(nk(typeRaw));
         if (!type) {
@@ -1472,7 +1525,9 @@ export function validateLeverImportRows(
         fields.type = type;
 
         if (hasI("Nature")) {
-          const natureRaw = str(row["Nature"]);
+          // Obligatoire pour un coût (tiret refusé) ; sans objet sinon (tiret = rien à lire).
+          if (type === "cost" && dashRefused("Impacts", rowNumber, "Nature", row["Nature"])) return;
+          const natureRaw = isClearCell(row["Nature"]) ? "" : str(row["Nature"]);
           const nature = natureRaw ? IMPACT_NATURE_BY_LABEL.get(nk(natureRaw)) : undefined;
           // Obligatoire pour type="Coût" (classement CAPEX/OPEX) ; validée si renseignée sinon.
           if ((type === "cost" || natureRaw) && !nature) {
@@ -1489,6 +1544,7 @@ export function validateLeverImportRows(
         }
 
         // Montant : toujours positif (le type donne le sens) ; hors d'échelle = à confirmer.
+        if (dashRefused("Impacts", rowNumber, "Montant (€M)", row["Montant (€M)"])) return;
         const amount = readNumber("Impacts", rowNumber, "Montant (€M)", row["Montant (€M)"], {
           allowNegative: false,
           large: LARGE_AMOUNT_M,
@@ -1613,11 +1669,21 @@ export function validateLeverImportRows(
 
         const natureForLabel = fields.nature ?? "oneoff";
         const derivedLabel = `${matchedAction ? `${matchedAction.name} — ` : ""}${IMPACT_TYPE_LABEL[type]} (${IMPACT_NATURE_LABEL[natureForLabel]})`;
-        const explicitLabel = hasI("Libellé") ? str(row["Libellé"]) || undefined : undefined;
-        const comment = hasI("Commentaire") ? str(row["Commentaire"]) : "";
+        // « Libellé » facultatif : vide = libellé actuel conservé (dérivé pour une création), « - » =
+        // retour au libellé CALCULÉ (jamais un libellé « - »).
+        const labelCell = hasI("Libellé")
+          ? readTextCell(row["Libellé"])
+          : { kind: "blank" as const };
+        const explicitLabel = labelCell.kind === "value" ? labelCell.value : undefined;
+        const labelCleared = labelCell.kind === "clear";
+        // Commentaire : ajouté au fil (jamais effacé par l'import) — un tiret n'ajoute rien.
+        const commentCell = hasI("Commentaire")
+          ? readTextCell(row["Commentaire"])
+          : { kind: "blank" as const };
+        const comment = commentCell.kind === "value" ? commentCell.value : "";
 
         const list = impactsByLeverCode.get(key) ?? [];
-        list.push({ rowNumber, fields, explicitLabel, derivedLabel, comment });
+        list.push({ rowNumber, fields, explicitLabel, labelCleared, derivedLabel, comment });
         impactsByLeverCode.set(key, list);
       });
     }
@@ -1656,9 +1722,12 @@ export function validateLeverImportRows(
       const m = take((e) => e.type === p.fields.type && nk(e.label) === nk(labelFor(p)));
       if (m) matches.set(p, m);
     }
-    if (!impactHeaders.has("Libellé")) {
+    // 3e passage aussi pour une ligne dont le libellé est remis au calculé (« - ») : l'impact
+    // existant porte encore son ancien libellé.
+    if (!impactHeaders.has("Libellé") || parsed.some((p) => p.labelCleared)) {
       for (const p of parsed) {
         if (matches.has(p)) continue;
+        if (impactHeaders.has("Libellé") && !p.labelCleared) continue;
         const m = take(
           (e) =>
             e.type === p.fields.type &&
@@ -1673,7 +1742,8 @@ export function validateLeverImportRows(
       const prev = matches.get(p);
       let imp: ActionImpact;
       if (prev) {
-        imp = { ...prev, ...p.fields, id: prev.id, label: p.explicitLabel ?? prev.label };
+        const label = p.labelCleared ? p.derivedLabel : (p.explicitLabel ?? prev.label);
+        imp = { ...prev, ...p.fields, id: prev.id, label };
         if (!("nature" in p.fields)) imp.nature = prev.nature;
       } else {
         impactSeq += 1;
