@@ -99,10 +99,13 @@ export function fallbackApprovalChain(
   chain: ApprovalStep[],
   author: string,
   pilots: string[],
-  admins: string[]
+  admins: string[],
+  /** Confidentialité (option A) : seuls les pilotes HABILITÉS sur l'objet sont retenus ; sans
+   *  pilote habilité → palier « admin ». Absent = aucune restriction. */
+  isCleared?: (username: string) => boolean
 ): ApprovalStep[] {
   if (chain.length) return chain;
-  const p = uniq(pilots).filter((u) => u !== author);
+  const p = uniq(pilots).filter((u) => u !== author && (!isCleared || isCleared(u)));
   if (p.length) return [{ level: "pilot", usernames: p }];
   return [{ level: "admin", usernames: uniq(admins).filter((u) => u !== author) }];
 }
@@ -118,12 +121,20 @@ export function fallbackApprovalChain(
  * plan) : elle est retirée des paliers supérieurs, sinon elle validerait seule les deux fois ; un
  * palier ainsi vidé est sauté comme un niveau vide.
  * Chaîne vide = personne au-dessus → application directe.
+ *
+ * CONFIDENTIALITÉ (décision PO, option A) — `clearance.isCleared` fourni : un détenteur NON
+ * habilité sur l'objet (niveau de confidentialité au-delà de son habilitation) n'est jamais
+ * retenu ; un niveau dont aucun détenteur n'est habilité est SAUTÉ vers le niveau habilité
+ * suivant. Si la chaîne n'atteint plus `count` paliers À CAUSE d'un tel saut, un palier « admin »
+ * (`clearance.admins`, hors auteur — vide = n'importe quel admin) la complète : le palier sauté
+ * est repris par un administrateur de l'entreprise plutôt que perdu.
  */
 export function approvalChain(
   author: string,
   ctx: HierarchyContext,
   count: 1 | 2,
-  minAuthorLevel?: StrategicLevel
+  minAuthorLevel?: StrategicLevel,
+  clearance?: ChainClearance
 ): ApprovalStep[] {
   const own = authorLevel(author, ctx);
   const floor = minAuthorLevel ?? "contributor";
@@ -131,15 +142,35 @@ export function approvalChain(
   const holders = levelHolders(ctx);
   const chain: ApprovalStep[] = [];
   const used = new Set<string>([author]);
+  const isCleared = clearance?.isCleared;
+  let skippedForClearance = false;
   for (const level of STRATEGIC_LEVELS.slice(start + 1)) {
-    const usernames = holders[level].filter((u) => !used.has(u));
+    const candidates = holders[level].filter((u) => !used.has(u));
+    const usernames = isCleared ? candidates.filter((u) => isCleared(u)) : candidates;
     usernames.forEach((u) => used.add(u));
-    if (usernames.length === 0) continue;
+    if (usernames.length === 0) {
+      if (candidates.length > 0) skippedForClearance = true;
+      continue;
+    }
     chain.push({ level, usernames });
     if (chain.length === count) break;
   }
+  if (skippedForClearance && chain.length < count) {
+    chain.push({
+      level: "admin",
+      usernames: uniq(clearance?.admins ?? []).filter((u) => u !== author),
+    });
+  }
   return chain;
 }
+
+/** Restriction de confidentialité d'une chaîne de validation (voir `approvalChain`). */
+export type ChainClearance = {
+  /** Le valideur est-il habilité sur l'objet de la demande ? Absent = aucune restriction. */
+  isCleared?: (username: string) => boolean;
+  /** Admins de l'entreprise : palier de reprise d'un palier sauté faute d'habilitation. */
+  admins?: string[];
+};
 
 export type DesignationTarget = "axisSponsor" | "chantierSponsor" | "projectOwner" | "contributors";
 

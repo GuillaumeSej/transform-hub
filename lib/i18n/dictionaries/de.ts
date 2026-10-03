@@ -3482,6 +3482,34 @@ const de: Record<string, string> = {
   "strategicApprovals.legacyMilestone.cleared": "Alte Meilenstein-Anfrage gelöscht",
   "strategicApprovals.legacyMilestone.notDecidable":
     "Keine Meilenstein-Anfrage zur Freigabe für dieses Projekt",
+  // Lot 5 : demandes de validation sur un élément hors de l'habilitation du lecteur
+  "strategicApprovals.outOfScope": "Element außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.milestone":
+    "den Meilensteinübergang eines Projekts außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.kpi_value": "einen Indikatorwert außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.projet_create":
+    "das Hinzufügen eines Projekts außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.projet_update":
+    "die Änderung eines Projekts außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.projet_delete":
+    "die Löschung eines Projekts außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.chantier_create":
+    "die Anlage eines Arbeitspakets außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.chantier_update":
+    "die Änderung eines Arbeitspakets außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.chantier_delete":
+    "die Löschung eines Arbeitspakets außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.axe_create":
+    "die Anlage einer Achse außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.axe_update":
+    "die Änderung einer Achse außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.indicator_update":
+    "die Änderung des Ziels eines Indikators außerhalb Ihres Bereichs",
+  "strategicApprovals.phrase.outOfScope.staffing_update":
+    "eine Staffing-Änderung außerhalb Ihres Bereichs",
+  "strategicApprovals.alert.kpiCorrectedOutOfScopeTitle": "KPI-Wert korrigiert · {label}",
+  "strategicApprovals.alert.kpiCorrectedOutOfScopeDesc":
+    "Ein KPI-Wert wurde für ein Element außerhalb Ihres Bereichs korrigiert.",
   // Motif du risque levier (lib/leverRiskText.ts), retour fiche levier, badge dépassement
   "risk.level.critical": "kritisch",
   "risk.level.high": "hoch",

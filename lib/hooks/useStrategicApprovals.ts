@@ -13,7 +13,8 @@
  *                                     courant — l'approbateur de l'étape 2 ne voit la demande
  *                                     qu'après l'étape 1) → badge Topbar = sa.pendingCount
  *   sa.mine      StrategicApproval[]  demandes émises par l'utilisateur (tous statuts)
- *   sa.history   StrategicApproval[]  demandes décidées visibles de l'utilisateur
+ *   sa.history   StrategicApproval[]  demandes décidées visibles de l'utilisateur (copie MASQUÉE —
+ *                                     ni nom ni avant/après — si sa cible dépasse son habilitation)
  *   sa.alerts    Alert[]              alertes dérivées (à valider / en attente / décision)
  *   sa.route(kind, target, payload?) => ApprovalRoute   (PRÉFÉRÉ — voir resolveApprovalRoute)
  *        { mode: "direct" }            → appliquer directement (admin, pilote du programme, libre)
@@ -73,7 +74,14 @@ import {
   kpiCorrectionDecisionInformees,
   routeKpiCorrection,
   type KpiCorrectionIndicator,
+  type KpiCorrectionRoute,
 } from "@/lib/kpiCorrectionRouting";
+import {
+  clearedApproval,
+  clearedUsernamePredicate,
+  isApprovalTargetConfidential,
+  type ApprovalTargetRef,
+} from "@/lib/strategicApprovalClearance";
 import {
   applyApprovedPayload,
   applyRejectedPayload,
@@ -131,6 +139,11 @@ async function runEffects(
   });
 }
 
+/** Cible « valeur d'un indicateur » (habilitation sur le KPI, lot 5). */
+function kpiTargetRef(indicatorId: string): ApprovalTargetRef {
+  return { kind: "kpi_value", targetType: "indicateur", targetId: indicatorId };
+}
+
 export type UseStrategicApprovalsArgs = {
   user: ApprovalUser | null | undefined;
   companyId: string | null | undefined;
@@ -165,19 +178,29 @@ export function useStrategicApprovals({
     });
   }, [companyId]);
 
-  const approvals = useMemo(
-    () => (programId ? all.filter((a) => a.programId === programId) : []),
-    [all, programId]
-  );
   // Base de DÉCISION (routage, habilitation, effets) : programme complet si fourni (lot 3).
   const fullData = useMemo<StrategicApprovalData>(
     () => ({ ...data, ...(data.program ?? {}), programId }),
     [data, programId]
   );
-  // Base d'AFFICHAGE (libellés des alertes) : données visibles du lecteur.
+  // Base des LIBELLÉS (alertes) : données visibles du lecteur. Ce n'est PAS elle qui protège la
+  // confidentialité : un libellé de demande vient aussi de la demande elle-même (`targetName`,
+  // payload avant/après) — le masquage pour un lecteur non habilité sur la cible est fait par
+  // `buildApprovalAlerts` / `bucketApprovals` (lib/strategicApprovalClearance.ts, lot 5).
   const displayData = useMemo<StrategicApprovalData>(
     () => ({ ...data, programId }),
     [data, programId]
+  );
+  // Lot 5 (option A) : chaque demande EN ATTENTE est relue sous la règle de confidentialité — un
+  // palier routé (avant ce lot) à un valideur non habilité sur la cible est sauté vers le palier
+  // habilité suivant, à défaut un admin (`clearedApproval`). C'est cette version qui est affichée
+  // (badges, « bloqué chez »), décidée et persistée à la décision.
+  const approvals = useMemo(
+    () =>
+      programId
+        ? all.filter((a) => a.programId === programId).map((a) => clearedApproval(a, fullData))
+        : [],
+    [all, programId, fullData]
   );
   const dataRef = useRef(fullData);
   dataRef.current = fullData;
@@ -258,7 +281,24 @@ export function useStrategicApprovals({
   );
 
   const kpiCorrectionRoute = useCallback(
-    (indicator: KpiCorrectionIndicator) => routeKpiCorrection(user, indicator, fullData),
+    (indicator: KpiCorrectionIndicator): KpiCorrectionRoute => {
+      // Lot 5 (option A) : même règle de confidentialité que `buildApproval` (aperçu = réalité).
+      const ref = kpiTargetRef(indicator.id);
+      const route = routeKpiCorrection(
+        user,
+        indicator,
+        fullData,
+        clearedUsernamePredicate(ref, fullData)
+      );
+      if (
+        route.mode === "request" &&
+        fullData.confidentiality === null &&
+        isApprovalTargetConfidential(ref, fullData)
+      ) {
+        return { mode: "retry", level: route.level, inform: [], informLevels: [] };
+      }
+      return route;
+    },
     [user, fullData]
   );
 
@@ -331,7 +371,9 @@ export function useStrategicApprovals({
             user,
             approval.requestedBy,
             indicator,
-            dataRef.current
+            dataRef.current,
+            // Lot 5 : un responsable non habilité sur le KPI n'est pas informé.
+            clearedUsernamePredicate(kpiTargetRef(indicator.id), dataRef.current)
           );
         }
       }

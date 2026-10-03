@@ -24,9 +24,15 @@ import { staffingPeriodShares, todayIso } from "@/lib/staffingNeed";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { ChantierStaffing, StrategicAxis } from "@/types";
 import { formatDateShort } from "@/lib/format";
+import { isOutOfScopeChantierId, OUT_OF_SCOPE_CHANTIER_ID } from "@/lib/strategicProgramScope";
 
 type Granularity = "quarterly" | "semiannual" | "annual";
 type ViewMode = "period" | "axis";
+
+/** Clé d'affichage d'un chantier : toutes les parts « hors périmètre » n'en font qu'une (lot 5). */
+function chantierDisplayKey(id: string): string {
+  return isOutOfScopeChantierId(id) ? OUT_OF_SCOPE_CHANTIER_ID : id;
+}
 
 /** Forme UNIFIÉE d'un bucket de période, quel que soit le mode — `byGroup` porte soit les
  *  équipes (mode "period", projection de `StaffingPeriodBucket.byFunction`), soit les axes (mode
@@ -214,6 +220,21 @@ export function StaffingPeriodBreakdown({
 
   const undatedCount = useMemo(() => staffing.filter((e) => !e.startDate).length, [staffing]);
 
+  /** Lot 5 : toutes les parts « hors périmètre » (sentinelle simple ou suffixée par axe visible,
+   *  `maskStaffingForDisplay`) n'en font qu'UNE à l'affichage par chantier (info-bulle, chips) —
+   *  « Autres chantiers (hors de votre périmètre) », total seul. */
+  const outOfScopeLabel = t(
+    "effectifs.staffingRate.otherChantiers",
+    "Autres chantiers (hors de votre périmètre)"
+  );
+  const chantierLabel = useCallback(
+    (id: string) =>
+      isOutOfScopeChantierId(id)
+        ? outOfScopeLabel
+        : (chantierNamesById[id] ?? t("effectifs.chantierUnknown")),
+    [outOfScopeLabel, chantierNamesById, t]
+  );
+
   /** Disponible total tous équipes confondues (base ETP entreprise) — dénominateur du %
    *  d'utilisation, pertinent uniquement en mode "period" (voir plus bas : diviser le sous-total
    *  d'UNE équipe ou d'UN axe filtré par la capacité de TOUTE l'entreprise n'aurait pas de sens
@@ -242,7 +263,9 @@ export function StaffingPeriodBreakdown({
   const axisFilteredStaffing = useMemo(() => {
     let base = staffing;
     if (selectedFunction) base = base.filter((e) => e.function === selectedFunction);
-    if (selectedChantierId) base = base.filter((e) => e.chantierId === selectedChantierId);
+    if (selectedChantierId) {
+      base = base.filter((e) => chantierDisplayKey(e.chantierId) === selectedChantierId);
+    }
     return base;
   }, [staffing, selectedFunction, selectedChantierId]);
 
@@ -320,7 +343,8 @@ export function StaffingPeriodBreakdown({
             byChantier = new Map();
             byGroup.set(groupKey, byChantier);
           }
-          byChantier.set(entry.chantierId, (byChantier.get(entry.chantierId) ?? 0) + shareFte);
+          const key = chantierDisplayKey(entry.chantierId);
+          byChantier.set(key, (byChantier.get(key) ?? 0) + shareFte);
         }
       }
     return map;
@@ -335,16 +359,17 @@ export function StaffingPeriodBreakdown({
     const totals = new Map<string, number>();
     for (const e of staffing) {
       if (e.function !== selectedFunction) continue;
-      totals.set(e.chantierId, (totals.get(e.chantierId) ?? 0) + (e.fte || 0));
+      const key = chantierDisplayKey(e.chantierId);
+      totals.set(key, (totals.get(key) ?? 0) + (e.fte || 0));
     }
     return Array.from(totals.entries())
       .map(([chantierId, fte]) => ({
         chantierId,
-        name: chantierNamesById[chantierId] ?? t("effectifs.chantierUnknown"),
+        name: chantierLabel(chantierId),
         fte,
       }))
       .sort((a, b) => b.fte - a.fte);
-  }, [staffing, selectedFunction, chantierNamesById, t]);
+  }, [staffing, selectedFunction, chantierLabel]);
 
   /** Lignes "une par série visible" (valeur > 0) — factorisé pour être identique entre l'info-bulle
    *  au survol et le panneau de détail épinglé (round 22), qui ne doivent jamais diverger. */
@@ -380,7 +405,7 @@ export function StaffingPeriodBreakdown({
         </p>
         {entries.map(([chantierId, fte]) => (
           <p key={chantierId} className="flex items-center justify-between gap-3 text-tertiary">
-            <span>{chantierNamesById[chantierId] ?? t("effectifs.chantierUnknown")}</span>
+            <span>{chantierLabel(chantierId)}</span>
             <span className="ml-2 font-semibold text-secondary">
               {formatFte(fte)} {t("staffing.fteUnit")}
             </span>
@@ -419,19 +444,38 @@ export function StaffingPeriodBreakdown({
       (p) => p.bounds.label === detailScope.period
     );
     return (period?.shares ?? [])
-      .map(({ entry: e, fte }) => ({
-        id: e.id,
-        groupKeys: mode === "axis" ? (axisIdsByChantier[e.chantierId] ?? []) : [e.function],
-        chantierName: chantierNamesById[e.chantierId] ?? t("effectifs.chantierUnknown"),
-        function: e.function,
-        axisNames: axisNamesForChantier(e.chantierId),
-        fte,
-        periodLabel: e.startDate
-          ? `${formatDateShort(e.startDate)} → ${e.endDate ? formatDateShort(e.endDate) : "…"}`
-          : t("staffingPeriod.detailModal.undated"),
-        lever: e.actionId ? (actionNamesById[e.actionId] ?? "—") : "—",
-        note: e.note ?? "—",
-      }))
+      .map(({ entry: e, fte }): PeriodModalRow => {
+        const groupKeys = mode === "axis" ? (axisIdsByChantier[e.chantierId] ?? []) : [e.function];
+        // Lot 5 : ligne d'un chantier hors périmètre → ni dates, ni projet, ni précision — la
+        // modale ne l'affiche qu'agrégée (`splitOutOfScopeRows`), total ETP seul par groupe.
+        if (isOutOfScopeChantierId(e.chantierId)) {
+          return {
+            id: e.id,
+            groupKeys,
+            chantierName: outOfScopeLabel,
+            function: e.function,
+            axisNames: "—",
+            fte,
+            periodLabel: "—",
+            lever: "—",
+            note: "—",
+            outOfScope: true,
+          };
+        }
+        return {
+          id: e.id,
+          groupKeys,
+          chantierName: chantierNamesById[e.chantierId] ?? t("effectifs.chantierUnknown"),
+          function: e.function,
+          axisNames: axisNamesForChantier(e.chantierId),
+          fte,
+          periodLabel: e.startDate
+            ? `${formatDateShort(e.startDate)} → ${e.endDate ? formatDateShort(e.endDate) : "…"}`
+            : t("staffingPeriod.detailModal.undated"),
+          lever: e.actionId ? (actionNamesById[e.actionId] ?? "—") : "—",
+          note: e.note ?? "—",
+        };
+      })
       .sort((a, b) => b.fte - a.fte);
   }, [
     detailScope,
@@ -444,6 +488,7 @@ export function StaffingPeriodBreakdown({
     chantierNamesById,
     actionNamesById,
     axisNamesForChantier,
+    outOfScopeLabel,
     t,
   ]);
 

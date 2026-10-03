@@ -3412,6 +3412,28 @@ const en: Record<string, string> = {
   "strategicApprovals.legacyMilestone.cleared": "Old milestone request cleared",
   "strategicApprovals.legacyMilestone.notDecidable":
     "No milestone request to approve on this project",
+  // Lot 5 : demandes de validation sur un élément hors de l'habilitation du lecteur
+  "strategicApprovals.outOfScope": "Item outside your scope",
+  "strategicApprovals.phrase.outOfScope.milestone":
+    "moving a project outside your scope to its next milestone",
+  "strategicApprovals.phrase.outOfScope.kpi_value": "an indicator value outside your scope",
+  "strategicApprovals.phrase.outOfScope.projet_create": "adding a project outside your scope",
+  "strategicApprovals.phrase.outOfScope.projet_update": "changing a project outside your scope",
+  "strategicApprovals.phrase.outOfScope.projet_delete": "deleting a project outside your scope",
+  "strategicApprovals.phrase.outOfScope.chantier_create":
+    "creating a work package outside your scope",
+  "strategicApprovals.phrase.outOfScope.chantier_update":
+    "changing a work package outside your scope",
+  "strategicApprovals.phrase.outOfScope.chantier_delete":
+    "deleting a work package outside your scope",
+  "strategicApprovals.phrase.outOfScope.axe_create": "creating an axis outside your scope",
+  "strategicApprovals.phrase.outOfScope.axe_update": "changing an axis outside your scope",
+  "strategicApprovals.phrase.outOfScope.indicator_update":
+    "changing the target of an indicator outside your scope",
+  "strategicApprovals.phrase.outOfScope.staffing_update": "a staffing change outside your scope",
+  "strategicApprovals.alert.kpiCorrectedOutOfScopeTitle": "KPI value corrected · {label}",
+  "strategicApprovals.alert.kpiCorrectedOutOfScopeDesc":
+    "A KPI value was corrected on an item outside your scope.",
   // Motif du risque levier (lib/leverRiskText.ts), retour fiche levier, badge dépassement
   "risk.level.critical": "critical",
   "risk.level.high": "high",

@@ -1,7 +1,12 @@
 import { rollupBudgets } from "@/lib/budgetRollup";
 import { daysBetween, todayISO } from "@/lib/dateUtils";
 import { effectiveDueDate } from "@/lib/deliverableState";
-import { comparePeriods, periodIsAfter, periodStartsOnOrBefore } from "@/lib/indicatorPeriod";
+import {
+  comparePeriods,
+  indicatorPeriodRange,
+  periodIsAfter,
+  periodStartsOnOrBefore,
+} from "@/lib/indicatorPeriod";
 import { MILESTONE_CHECKLISTS, MILESTONE_ORDER } from "@/lib/milestoneChecklist";
 import { staffingPeriodShares, todayIso } from "@/lib/staffingNeed";
 import {
@@ -64,32 +69,48 @@ export function compareMeasurements(
   return (a.reportedAt ?? "").localeCompare(b.reportedAt ?? "");
 }
 
+/**
+ * Mesure sur une période PAS ENCORE COMMENCÉE (premier mois de la période postérieur au mois de
+ * `now`, heure locale — même horloge que `currentPeriod`, lib/kpiHistory.ts) ? Pour une période au
+ * format de la fréquence de l'indicateur, équivaut à `isFuturePeriod` (garde-fou de saisie, rappel
+ * « Mon espace ») ; période non reconnue : `false`. Lot 5 : une telle mesure déjà en base (ex.
+ * « 2026-12 » = 9 690 saisie avant le garde-fou) ne doit plus devenir la « dernière valeur ».
+ */
+export function isMeasurementPeriodFuture(period: string, now: Date = new Date()): boolean {
+  const range = indicatorPeriodRange(period);
+  return !!range && range.start > now.getFullYear() * 12 + now.getMonth();
+}
+
 /** Dernière mesure connue d'un indicateur (période la plus récente, voir `compareMeasurements` ;
  *  à période égale, la plus récemment saisie), ou `undefined` si jamais mesuré. Peut être une
  *  mesure SANS valeur (commentaire seul) — pour un statut/avancement, voir
- *  `latestNumericMeasurement`. */
+ *  `latestNumericMeasurement`. Les mesures d'une période FUTURE (`isMeasurementPeriodFuture`)
+ *  sont ignorées (lot 5) : elles ne deviennent jamais la dernière valeur. */
 export function latestMeasurement(
   indicatorId: string,
-  measurements: IndicatorMeasurement[]
+  measurements: IndicatorMeasurement[],
+  now: Date = new Date()
 ): IndicatorMeasurement | undefined {
   let latest: IndicatorMeasurement | undefined;
   for (const m of measurements) {
-    if (m.indicatorId !== indicatorId) continue;
+    if (m.indicatorId !== indicatorId || isMeasurementPeriodFuture(m.period, now)) continue;
     if (!latest || compareMeasurements(m, latest) > 0) latest = m;
   }
   return latest;
 }
 
-/** Dernière mesure NUMÉRIQUE d'un indicateur (même ordre que `latestMeasurement`) — un
- *  commentaire seul saisi après une valeur ne doit pas masquer cette valeur pour le statut,
- *  l'avancement ou la « dernière valeur » chiffrée. */
+/** Dernière mesure NUMÉRIQUE d'un indicateur (même ordre que `latestMeasurement`, périodes
+ *  futures ignorées de même) — un commentaire seul saisi après une valeur ne doit pas masquer
+ *  cette valeur pour le statut, l'avancement (trajectoire) ou la « dernière valeur » chiffrée. */
 export function latestNumericMeasurement(
   indicatorId: string,
-  measurements: IndicatorMeasurement[]
+  measurements: IndicatorMeasurement[],
+  now: Date = new Date()
 ): IndicatorMeasurement | undefined {
   let latest: IndicatorMeasurement | undefined;
   for (const m of measurements) {
     if (m.indicatorId !== indicatorId || m.value === undefined) continue;
+    if (isMeasurementPeriodFuture(m.period, now)) continue;
     if (!latest || compareMeasurements(m, latest) > 0) latest = m;
   }
   return latest;
@@ -1809,6 +1830,11 @@ export function axisProgressPct(
  * arrondie, des `axisProgressPct` (même pondération que l'axe sur ses chantiers : chaque axe pèse
  * pareil). Seuls les axes portant au moins un chantier comptent — un axe vide n'a rien à faire
  * avancer et tirerait le programme vers 0. `undefined` si aucun axe n'a de chantier.
+ * Lot 5 : les chantiers « Sans axe » (aucun de leurs `axisIds` dans `axes` — axe supprimé, import
+ * incomplet), montrés par la puce et la feuille de route dans un groupe synthétique, forment ici
+ * aussi UN groupe pesant comme un axe (moyenne simple de leurs avancements) au lieu d'être ignorés.
+ * `axes` doit donc être la liste COMPLÈTE des axes du programme (sinon un chantier d'un axe masqué
+ * serait compté « Sans axe »).
  */
 export function programProgressPct(
   axes: Pick<StrategicAxis, "id">[],
@@ -1816,13 +1842,22 @@ export function programProgressPct(
   actions: ChantierAction[],
   progressOf?: ProjetProgressLookup
 ): number | undefined {
+  const axisIds = new Set(axes.map((a) => a.id));
   const withChantiers = axes.filter((axis) => chantiers.some((c) => c.axisIds.includes(axis.id)));
-  if (withChantiers.length === 0) return undefined;
-  const total = withChantiers.reduce(
+  const unassigned = chantiers.filter((c) => !(c.axisIds ?? []).some((id) => axisIds.has(id)));
+  const groups = withChantiers.length + (unassigned.length > 0 ? 1 : 0);
+  if (groups === 0) return undefined;
+  let total = withChantiers.reduce(
     (sum, axis) => sum + axisProgressPct(axis.id, chantiers, actions, progressOf),
     0
   );
-  return Math.round(total / withChantiers.length);
+  if (unassigned.length > 0) {
+    total += Math.round(
+      unassigned.reduce((sum, c) => sum + chantierDeclaredProgress(c.id, actions, progressOf), 0) /
+        unassigned.length
+    );
+  }
+  return Math.round(total / groups);
 }
 
 /**

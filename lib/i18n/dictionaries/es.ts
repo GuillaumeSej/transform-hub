@@ -3474,6 +3474,33 @@ const es: Record<string, string> = {
   "strategicApprovals.legacyMilestone.cleared": "Antigua solicitud de hito borrada",
   "strategicApprovals.legacyMilestone.notDecidable":
     "No hay ninguna solicitud de hito que validar en esta iniciativa",
+  // Lot 5 : demandes de validation sur un élément hors de l'habilitation du lecteur
+  "strategicApprovals.outOfScope": "Elemento fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.milestone":
+    "el paso de hito de una iniciativa fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.kpi_value": "un valor de indicador fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.projet_create":
+    "la incorporación de una iniciativa fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.projet_update":
+    "la modificación de una iniciativa fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.projet_delete":
+    "la eliminación de una iniciativa fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.chantier_create":
+    "la creación de un proyecto fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.chantier_update":
+    "la modificación de un proyecto fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.chantier_delete":
+    "la eliminación de un proyecto fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.axe_create": "la creación de un eje fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.axe_update":
+    "la modificación de un eje fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.indicator_update":
+    "la modificación del objetivo de un indicador fuera de su perímetro",
+  "strategicApprovals.phrase.outOfScope.staffing_update":
+    "una modificación de staffing fuera de su perímetro",
+  "strategicApprovals.alert.kpiCorrectedOutOfScopeTitle": "Valor KPI corregido · {label}",
+  "strategicApprovals.alert.kpiCorrectedOutOfScopeDesc":
+    "Se ha corregido un valor KPI de un elemento fuera de su perímetro.",
   // Motif du risque levier (lib/leverRiskText.ts), retour fiche levier, badge dépassement
   "risk.level.critical": "crítico",
   "risk.level.high": "alto",

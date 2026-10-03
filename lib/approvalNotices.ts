@@ -5,6 +5,8 @@ import type { StrategicApproval } from "@/lib/strategicApprovals";
  * (cloche). Dérivées côté client des demandes décidées récemment — aucune donnée stockée en plus.
  * Fenêtre de `days` jours après la décision (7 par défaut) ; une demande décidée par son propre
  * auteur (pilote/admin qui applique directement) ne notifie personne.
+ * Lot 5 : la cloche ne s'en sert PLUS (doublon de l'alerte `…-decision` de `buildApprovalAlerts`,
+ * lib/strategicApprovals.ts, seule conservée) — gardé pour compatibilité, sans appelant applicatif.
  */
 export type DecisionNotice = {
   id: string;

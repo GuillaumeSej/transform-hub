@@ -29,6 +29,18 @@ import {
   type HierarchyContext,
   type StrategicLevel,
 } from "@/lib/strategicHierarchy";
+import {
+  clearedApproval,
+  clearedUsernamePredicate,
+  isApprovalTargetConfidential,
+  isClearedForApproval,
+  approvalTargetLevels,
+  maskApprovalForReader,
+  OUT_OF_SCOPE_APPROVAL_KEY,
+  OUT_OF_SCOPE_APPROVAL_LABEL,
+  type StrategicConfidentialityConfig,
+} from "@/lib/strategicApprovalClearance";
+import type { StrategicProgramData } from "@/lib/strategicProgramScope";
 import type {
   Alert,
   AuditEntry,
@@ -360,6 +372,13 @@ export type StrategicApproval = {
   chain?: ApprovalChainStep[];
   /** Index du palier courant dans `chain` (0 par défaut). */
   stepIndex?: number;
+  /** Niveaux de confidentialité qui protégeaient la cible AU MOMENT de la demande (cible
+   *  confidentielle uniquement, voir lib/strategicApprovalClearance.ts) — permettent de masquer
+   *  la demande aux non-habilités même après la suppression de la cible. */
+  targetConfidentiality?: string[];
+  /** Copie d'AFFICHAGE masquée pour un lecteur non habilité (`maskApprovalForReader`) — jamais
+   *  persistée, jamais décidable. */
+  masked?: boolean;
 };
 
 /** Ce que la résolution d'approbateur a besoin de connaître du plan (déjà scopé programme). */
@@ -377,7 +396,16 @@ export type StrategicApprovalData = {
    *  décidée pour un non-pilote/non-admin (`"retry"`). Les drapeaux admin servent au palier de
    *  repli « admin ». */
   users?: (Pick<AuthUser, "username" | "name" | "profiles"> &
-    Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin">>)[];
+    Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin" | "confidentialityClearance">>)[];
+  /** Paramètres de confidentialité de l'entreprise (lot 5, option A) — habilitation des valideurs
+   *  et des lecteurs sur la cible d'une demande (lib/strategicApprovalClearance.ts). `undefined` =
+   *  non fournis (seules les habilitations individuelles comptent) ; `null` = en cours de
+   *  chargement (route "retry" pour une cible confidentielle). */
+  confidentiality?: StrategicConfidentialityConfig | null;
+  /** Collections NON filtrées du programme (`useStrategicData().program`) : quand elles sont
+   *  présentes, la cible d'une demande est résolue dessus pour l'habilitation (une base d'affichage
+   *  filtrée ne la contient pas toujours). */
+  program?: Pick<StrategicProgramData, "axes" | "chantiers" | "chantierActions" | "indicators">;
 };
 
 export type ResolvedApprover = {
@@ -802,6 +830,8 @@ type RouteActor = Pick<Actor, "username"> & Partial<Actor>;
 
 const RETRY_REASON =
   "Utilisateurs en cours de chargement : impossible de déterminer les valideurs, réessayez dans un instant";
+const CLEARANCE_RETRY_REASON =
+  "Habilitations en cours de chargement : impossible de déterminer les valideurs, réessayez dans un instant";
 
 /** Les utilisateurs sont-ils chargés (au moins un) ? Sinon, aucune chaîne fiable. */
 export function usersLoaded(data: Pick<StrategicApprovalData, "users">): boolean {
@@ -1039,18 +1069,29 @@ export function resolveApprovalRoute(
   const count = validationCount(kind, payload);
   if (count === 0) return { mode: "direct" };
   if (!usersLoaded(data)) return { mode: "retry", reason: RETRY_REASON };
+  // Confidentialité (lot 5, option A) : une demande sur une cible confidentielle n'est JAMAIS
+  // routée à un valideur non habilité — palier sauté vers le valideur habilité suivant, à défaut
+  // un admin (`approvalChain`). Paramètres d'habilitation pas encore chargés : réessayer.
+  const ref = { kind, targetType: target.type, targetId: target.id, payload };
+  if (data.confidentiality === null && isApprovalTargetConfidential(ref, data)) {
+    return { mode: "retry", reason: CLEARANCE_RETRY_REASON };
+  }
+  const isCleared = clearedUsernamePredicate(ref, data);
+  const admins = adminUsernames(data.users);
   const ctx = hierarchyContextFor(kind, target, data, payload, actor.username);
   const hierarchy = approvalChain(
     actor.username,
     ctx,
     count,
-    authorFloor(kind, target, data, payload, actor.username)
+    authorFloor(kind, target, data, payload, actor.username),
+    { isCleared, admins }
   );
   const chain = fallbackApprovalChain(
     hierarchy,
     actor.username,
     strategicLeadUsernames(programId, data),
-    adminUsernames(data.users)
+    admins,
+    isCleared
   );
   return { mode: "request", chain };
 }
@@ -1123,9 +1164,14 @@ export function currentStep(approval: StrategicApproval): ApprovalChainStep | un
 }
 
 /** Usernames qui doivent agir MAINTENANT (palier courant ; legacy : `approverUsernames`). Vide
- *  pour une demande close. Sert à « bloqué chez … », « en attente de … ». */
-export function pendingApproversOf(approval: StrategicApproval): string[] {
+ *  pour une demande close. Sert à « bloqué chez … », « en attente de … ». `data` fourni : chaîne
+ *  relue sous la règle de confidentialité (`clearedApproval` — jamais un valideur non habilité). */
+export function pendingApproversOf(
+  approval: StrategicApproval,
+  data?: StrategicApprovalData
+): string[] {
   if (approval.status !== "pending") return [];
+  if (data) approval = clearedApproval(approval, data);
   const step = currentStep(approval);
   if (step) return step.usernames;
   return approval.approverUsernames?.length
@@ -1149,12 +1195,20 @@ function priorDeciders(approval: StrategicApproval): string[] {
  * admin ; jamais le demandeur (admin compris) ; jamais une personne — admin COMPRIS — ayant déjà
  * validé un palier précédent (un admin décide au plus UN palier d'une même demande). Pas
  * d'escalade strategic_lead : le pilote ne décide que SON palier.
+ * `data` fourni (lot 5, option A) : chaîne relue sous la règle de confidentialité
+ * (`clearedApproval`) et décideur non habilité sur la cible refusé, même nommé au palier.
  */
 export function canDecideStep(
   user: Actor | null | undefined,
-  approval: StrategicApproval
+  approval: StrategicApproval,
+  data?: StrategicApprovalData
 ): boolean {
   if (!user || approval.status !== "pending" || !approval.chain?.length) return false;
+  if (approval.masked) return false;
+  if (data) {
+    if (!isClearedForApproval(user, approval, data)) return false;
+    approval = clearedApproval(approval, data);
+  }
   if (approval.requestedBy === user.username) return false;
   if (priorDeciders(approval).includes(user.username)) return false;
   if (isAnyAdmin(user)) return true;
@@ -1164,14 +1218,16 @@ export function canDecideStep(
 /** `user` peut-il approuver/refuser cette demande (encore en attente) — palier courant pour une
  *  demande à chaîne (`canDecideStep`) ; demande LEGACY (sans chaîne) : son approbateur (snapshot
  *  `approverUsernames` ou approbateur résolu) ou un admin, JAMAIS le demandeur (admin compris) —
- *  plus d'escalade strategic_lead. */
+ *  plus d'escalade strategic_lead. Confidentialité (lot 5, option A) : jamais un non-habilité
+ *  sur la cible (admin toujours habilité) — voir lib/strategicApprovalClearance.ts. */
 export function canDecide(
   user: Actor | null | undefined,
   approval: StrategicApproval,
   data: StrategicApprovalData
 ): boolean {
-  if (!user || approval.status !== "pending") return false;
-  if (approval.chain?.length) return canDecideStep(user, approval);
+  if (!user || approval.status !== "pending" || approval.masked) return false;
+  if (approval.chain?.length) return canDecideStep(user, approval, data);
+  if (!isClearedForApproval(user, approval, data)) return false;
   if (approval.requestedBy === user.username) return false;
   if (isAnyAdmin(user)) return true;
   const stage =
@@ -1326,6 +1382,18 @@ export function buildApproval(input: {
     if (route.mode !== "request") throw new Error(route.reason);
     chain = route.chain;
   }
+  // Snapshot des niveaux de confidentialité de la cible (lot 5) : la demande reste masquée aux
+  // non-habilités même si sa cible est supprimée ensuite.
+  const levels = approvalTargetLevels(
+    {
+      kind: input.kind,
+      targetType: input.target.type,
+      targetId: input.target.id,
+      payload: input.payload,
+    },
+    input.data
+  );
+  const targetConfidentiality = levels?.length ? levels : undefined;
   if (chain.length) {
     return stripUndefined({
       id: input.id ?? newApprovalId(),
@@ -1346,6 +1414,7 @@ export function buildApproval(input: {
       reason: input.reason?.trim() || undefined,
       chain: chain.map((s) => ({ level: s.level, usernames: [...s.usernames] })),
       stepIndex: 0,
+      targetConfidentiality,
     });
   }
   const stage =
@@ -1373,6 +1442,7 @@ export function buildApproval(input: {
     approverUsernames: approver.usernames,
     status: "pending" as const,
     reason: input.reason?.trim() || undefined,
+    targetConfidentiality,
   });
 }
 
@@ -2049,10 +2119,17 @@ export type ApprovalDescription = {
   after?: string;
 };
 
+/** Description lisible (sujet, avant → après) d'une demande. Lot 5 (option A) : copie masquée
+ *  (`approval.masked`) ou `reader` fourni et NON habilité sur la cible → sujet « Élément hors de
+ *  votre périmètre », sans avant/après (aucun nom, aucun montant). */
 export function describeApproval(
   approval: StrategicApproval,
-  data: StrategicApprovalData
+  data: StrategicApprovalData,
+  reader?: Actor | null
 ): ApprovalDescription {
+  if (approval.masked || (reader !== undefined && !isClearedForApproval(reader, approval, data))) {
+    return { subject: OUT_OF_SCOPE_APPROVAL_LABEL };
+  }
   const subject = approval.targetName ?? approval.targetId;
   switch (approval.kind) {
     case "milestone": {
@@ -2409,6 +2486,54 @@ function nounPhraseI18n(approval: StrategicApproval): NestedText {
   }
 }
 
+/** Groupe nominal d'une demande pour un lecteur NON habilité sur sa cible (lot 5) : le type de
+ *  demande seulement, jamais le nom de la cible ni une valeur. */
+function maskedNounPhraseI18n(approval: StrategicApproval): NestedText {
+  return {
+    key: `strategicApprovals.phrase.outOfScope.${approval.kind}`,
+    fallback: MASKED_PHRASE_FALLBACK[approval.kind],
+    vars: {},
+  };
+}
+
+/** Groupe nominal (français) d'une demande hors habilitation, par type — clés
+ *  `strategicApprovals.phrase.outOfScope.<kind>`. */
+const MASKED_PHRASE_FALLBACK: Record<StrategicApprovalKind, string> = {
+  milestone: "le passage de jalon d'un projet hors de votre périmètre",
+  kpi_value: "une valeur d'indicateur hors de votre périmètre",
+  projet_create: "la création d'un projet hors de votre périmètre",
+  projet_update: "la modification d'un projet hors de votre périmètre",
+  projet_delete: "la suppression d'un projet hors de votre périmètre",
+  chantier_create: "la création d'un chantier hors de votre périmètre",
+  chantier_update: "la modification d'un chantier hors de votre périmètre",
+  chantier_delete: "la suppression d'un chantier hors de votre périmètre",
+  axe_create: "la création d'un axe hors de votre périmètre",
+  axe_update: "la modification d'un axe hors de votre périmètre",
+  indicator_update: "la modification de l'objectif d'un indicateur hors de votre périmètre",
+  staffing_update: "une modification de staffing hors de votre périmètre",
+};
+
+/** Information d'une correction KPI pour un informé NON habilité (lot 5) : ni indicateur ni
+ *  valeurs. */
+function maskedKpiNoticeText(): {
+  title: string;
+  desc: string;
+  i18n: NonNullable<Alert["i18n"]>;
+} {
+  return {
+    title: `Valeur KPI corrigée · ${OUT_OF_SCOPE_APPROVAL_LABEL}`,
+    desc: `Une valeur KPI a été corrigée sur un élément hors de votre périmètre.`,
+    i18n: {
+      titleKey: "strategicApprovals.alert.kpiCorrectedOutOfScopeTitle",
+      descKey: "strategicApprovals.alert.kpiCorrectedOutOfScopeDesc",
+      vars: {},
+      nested: {
+        label: { key: OUT_OF_SCOPE_APPROVAL_KEY, fallback: OUT_OF_SCOPE_APPROVAL_LABEL, vars: {} },
+      },
+    },
+  };
+}
+
 /**
  * Entrée du journal d'audit (admin/history) pour une demande/décision, avec un texte explicite :
  * « X a supprimé le chantier Y — validé par Z ».
@@ -2492,6 +2617,14 @@ export const APPROVAL_ALERT_ROUTE = "/validation";
 /** Fenêtre (jours) pendant laquelle une décision reste signalée au demandeur/approbateur. */
 export const DECISION_ALERT_WINDOW_DAYS = 14;
 
+/** Id de la demande derrière une alerte « Demande validée / refusée » du DEMANDEUR
+ *  (`strategic-approval-<id>-decision`), sinon `undefined` — la cloche y attache le lien vers
+ *  l'objet concerné (seule alerte de décision depuis le lot 5, plus de doublon `decision-<id>`). */
+export function decisionAlertApprovalId(alertId: string): string | undefined {
+  const m = /^strategic-approval-(.+)-decision$/.exec(alertId);
+  return m ? m[1] : undefined;
+}
+
 /**
  * Alertes DÉRIVÉES des demandes (pas de document `alerts` séparé : toujours cohérentes avec l'état
  * réel, aucun risque de désynchronisation) pour l'utilisateur courant :
@@ -2511,11 +2644,28 @@ export function buildApprovalAlerts(
   if (!user) return [];
   const alerts: Alert[] = [];
   const cutoff = now.getTime() - DECISION_ALERT_WINDOW_DAYS * 86_400_000;
-  for (const a of approvals) {
+  for (const raw of approvals) {
+    // Chaîne relue sous la règle de confidentialité (palier d'un non-habilité sauté).
+    const a = clearedApproval(raw, data);
     const requester = displayName(a.requestedBy, data.users, a.requestedByName);
     const decider = displayName(a.decidedBy, data.users, a.decidedByName);
-    const label = describeApproval(a, display).subject;
-    const phrase = nounPhraseI18n(a);
+    // Lot 5 (option A) : lecteur NON habilité sur la cible (informé, demandeur dont l'habilitation
+    // a baissé, demande héritée…) → ni nom de cible ni contenu avant/après, seulement le type.
+    const cleared = !a.masked && isClearedForApproval(user, a, data);
+    const label = cleared ? describeApproval(a, display).subject : OUT_OF_SCOPE_APPROVAL_LABEL;
+    const phrase = cleared ? nounPhraseI18n(a) : maskedNounPhraseI18n(a);
+    /** Texte de repli (français) du groupe nominal — masqué de même. */
+    const phraseText = cleared ? verbPhrase(a, false) : phrase.fallback;
+    // Libellé « hors périmètre » traduit à l'affichage (remplace la variable `label`).
+    const maskedLabel: Record<string, NestedText> = cleared
+      ? {}
+      : {
+          label: {
+            key: OUT_OF_SCOPE_APPROVAL_KEY,
+            fallback: OUT_OF_SCOPE_APPROVAL_LABEL,
+            vars: {},
+          },
+        };
     const common = {
       scope: a.targetId,
       scopeLabel: label,
@@ -2534,7 +2684,7 @@ export function buildApprovalAlerts(
     ) {
       const decidedAt = a.decidedAt ?? a.requestedAt;
       if (new Date(decidedAt).getTime() >= cutoff) {
-        const notice = kpiCorrectionNoticeText(a, display);
+        const notice = cleared ? kpiCorrectionNoticeText(a, display) : maskedKpiNoticeText();
         alerts.push({
           ...common,
           id: `strategic-approval-${a.id}-info`,
@@ -2558,12 +2708,12 @@ export function buildApprovalAlerts(
           ts: localDateOfInstant(a.requestedAt),
           createdAt: a.requestedAt,
           title: `À valider · ${label}`,
-          desc: `${requester} demande ${verbPhrase(a, false)}.`,
+          desc: `${requester} demande ${phraseText}.`,
           i18n: {
             titleKey: "strategicApprovals.alert.todoTitle",
             descKey: "strategicApprovals.alert.todoDesc",
             vars: { label, requester },
-            nested: { phrase },
+            nested: { phrase, ...maskedLabel },
           },
         });
       }
@@ -2585,12 +2735,12 @@ export function buildApprovalAlerts(
           ts: localDateOfInstant(a.requestedAt),
           createdAt: a.requestedAt,
           title: `Demande en attente · ${label}`,
-          desc: `Votre demande de ${verbPhrase(a, false)} attend la validation de ${approver}.`,
+          desc: `Votre demande de ${phraseText} attend la validation de ${approver}.`,
           i18n: {
             titleKey: "strategicApprovals.alert.waitTitle",
             descKey: "strategicApprovals.alert.waitDesc",
             vars: { label, approver },
-            nested: { phrase },
+            nested: { phrase, ...maskedLabel },
           },
         });
       }
@@ -2602,7 +2752,7 @@ export function buildApprovalAlerts(
       // Annulée par la suppression de sa cible : le demandeur est informé (ni « validée » ni
       // « refusée ») ; rien pour l'auteur de la suppression.
       if (a.requestedBy === user.username && a.decidedBy !== user.username) {
-        const comment = a.decisionComment ? ` — ${a.decisionComment}` : "";
+        const comment = cleared && a.decisionComment ? ` — ${a.decisionComment}` : "";
         alerts.push({
           ...common,
           id: `strategic-approval-${a.id}-cancelled`,
@@ -2610,19 +2760,19 @@ export function buildApprovalAlerts(
           ts: localDateOfInstant(decidedAt),
           createdAt: decidedAt,
           title: `Demande annulée · ${label}`,
-          desc: `Votre demande de ${verbPhrase(a, false)} a été annulée${comment}.`,
+          desc: `Votre demande de ${phraseText} a été annulée${comment}.`,
           i18n: {
             titleKey: "strategicApprovals.alert.cancelledTitle",
             descKey: "strategicApprovals.alert.cancelledDesc",
             vars: { label, comment },
-            nested: { phrase },
+            nested: { phrase, ...maskedLabel },
           },
         });
       }
       continue;
     }
     const approved = a.status === "approved";
-    const comment = a.decisionComment ? ` — ${a.decisionComment}` : "";
+    const comment = cleared && a.decisionComment ? ` — ${a.decisionComment}` : "";
     if (a.requestedBy === user.username) {
       alerts.push({
         ...common,
@@ -2631,7 +2781,7 @@ export function buildApprovalAlerts(
         ts: localDateOfInstant(decidedAt),
         createdAt: decidedAt,
         title: `${approved ? "Demande validée" : "Demande refusée"} · ${label}`,
-        desc: `${decider} a ${approved ? "validé" : "refusé"} ${verbPhrase(a, false)}${comment}.`,
+        desc: `${decider} a ${approved ? "validé" : "refusé"} ${phraseText}${comment}.`,
         i18n: {
           titleKey: approved
             ? "strategicApprovals.alert.approvedTitle"
@@ -2640,7 +2790,7 @@ export function buildApprovalAlerts(
             ? "strategicApprovals.alert.approvedDesc"
             : "strategicApprovals.alert.rejectedDesc",
           vars: { label, decider, comment },
-          nested: { phrase },
+          nested: { phrase, ...maskedLabel },
         },
       });
     } else if (a.decidedBy === user.username) {
@@ -2651,7 +2801,7 @@ export function buildApprovalAlerts(
         ts: localDateOfInstant(decidedAt),
         createdAt: decidedAt,
         title: `${approved ? "Validation enregistrée" : "Refus enregistré"} · ${label}`,
-        desc: `Vous avez ${approved ? "validé" : "refusé"} ${verbPhrase(a, false)} demandé(e) par ${requester}.`,
+        desc: `Vous avez ${approved ? "validé" : "refusé"} ${phraseText} demandé(e) par ${requester}.`,
         i18n: {
           titleKey: approved
             ? "strategicApprovals.alert.decidedApprovedTitle"
@@ -2660,7 +2810,7 @@ export function buildApprovalAlerts(
             ? "strategicApprovals.alert.decidedApprovedDesc"
             : "strategicApprovals.alert.decidedRejectedDesc",
           vars: { label, requester },
-          nested: { phrase },
+          nested: { phrase, ...maskedLabel },
         },
       });
     }
@@ -2689,10 +2839,20 @@ export function bucketApprovals(
   if (!user) return { pending: [], mine: [], history: [] };
   const byRecent = (a: StrategicApproval, b: StrategicApproval) =>
     (b.decidedAt ?? b.requestedAt).localeCompare(a.decidedAt ?? a.requestedAt);
+  // Lot 5 (option A) : chaînes relues sous la règle de confidentialité (`clearedApproval`) et
+  // copies MASQUÉES pour ce qui touche une cible hors habilitation du lecteur
+  // (`maskApprovalForReader` : ni nom ni avant/après) — le pilote voit tout l'historique, mais pas
+  // le contenu des demandes confidentielles.
+  const shown = (a: StrategicApproval) =>
+    maskApprovalForReader(clearedApproval(a, data), user, data);
   const pending = approvals
     .filter((a) => canDecide(user, a, data))
-    .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
-  const mine = approvals.filter((a) => !a.direct && a.requestedBy === user.username).sort(byRecent);
+    .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))
+    .map((a) => clearedApproval(a, data));
+  const mine = approvals
+    .filter((a) => !a.direct && a.requestedBy === user.username)
+    .sort(byRecent)
+    .map(shown);
   const seesAll = isAnyAdmin(user) || hasRole(user, "strategic_lead");
   const history = approvals
     .filter(
@@ -2704,6 +2864,7 @@ export function bucketApprovals(
           (a.chain ?? []).some((st) => st.decidedBy === user.username) ||
           (a.informUsernames ?? []).includes(user.username))
     )
-    .sort(byRecent);
+    .sort(byRecent)
+    .map(shown);
   return { pending, mine, history };
 }

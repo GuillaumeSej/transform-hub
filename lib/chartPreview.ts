@@ -46,7 +46,10 @@ export function waterfallStepSummary(
   return {
     kind: isDelta ? "delta" : "total",
     value: step.value,
-    before: isDelta ? Math.round((step.cumulative - step.value) * 10) / 10 : null,
+    // NON arrondi : l'arrondi se fait une seule fois, à l'affichage (`fmt`). Avant, `before` était
+    // arrondi à 0,1 ici puis reformaté — un niveau de 0,04 M€ s'affichait « 0,0 » et la barre
+    // « avant » d'un petit montant tombait à 0.
+    before: isDelta ? step.cumulative - step.value : null,
     after: step.cumulative,
     share,
     shareBase,

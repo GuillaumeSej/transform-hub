@@ -605,39 +605,24 @@ export function DashboardPagePerformance() {
     setTrajRangeEnd(effectiveFyEnd);
   }, [isConsolidatedView, selectedProgram, effectiveFyStart, effectiveFyEnd]);
 
-  /** Convertit un label de période ("Jan 2026", "Q2 2026") en Date pour le filtrage. */
-  const labelToDate = useCallback(
-    (label: string, granularity: engine.TimeGranularity): Date => {
-      const parts = label.split(" ");
-      const year = parseInt(parts[parts.length - 1]) || new Date(effectiveFyStart).getFullYear();
-      if (granularity === "quarter") {
-        const q = parseInt((parts[0] || "").replace("Q", "")) || 1;
-        return new Date(year, (q - 1) * 3, 1);
-      }
-      const monthIdx = engine.MONTH_LABELS.indexOf(parts[0]);
-      return new Date(year, monthIdx >= 0 ? monthIdx : 0, 1);
-    },
-    [effectiveFyStart]
-  );
-
   const trajSCurve = useMemo(() => {
     const full = engine.savingsSeries(filteredData, trajGranularity);
-    // Bornes lues en date LOCALE (`parseLocalDate`), comme les périodes (`labelToDate`) :
-    // `new Date("2026-01-01")` vaut minuit UTC, soit 1 h du matin à Paris, après le 1er janvier
-    // 00 h local de la première période — janvier / T1 disparaissait en UTC+ (audit DASH-02).
-    // Une période est gardée dès qu'elle RECOUPE la plage.
+    // Bornes lues en date LOCALE (`parseLocalDate`) : `new Date("2026-01-01")` vaut minuit UTC,
+    // soit 1 h du matin à Paris, après le 1er janvier 00 h local de la première période — janvier
+    // / T1 disparaissait en UTC+ (audit DASH-02). Une période est gardée dès qu'elle RECOUPE la
+    // plage. Début de période déduit de son RANG dans l'exercice (même `fyStart` que
+    // `savingsSeries`), plus de son libellé : les trimestres sont désormais libellés en trimestres
+    // FISCAUX (« Q3 FY26/27 », lot 5), illisibles comme dates civiles.
     const start = parseLocalDate(trajRangeStart);
     const end = parseLocalDate(trajRangeEnd);
-    return full.filter((p) => {
-      const periodStart = labelToDate(p.month, trajGranularity);
-      const periodEnd = new Date(
-        periodStart.getFullYear(),
-        periodStart.getMonth() + (trajGranularity === "quarter" ? 3 : 1),
-        0
-      );
+    const fy = engine.resolveFiscalYearStart(filteredData.program?.fyStart);
+    const step = trajGranularity === "quarter" ? 3 : 1;
+    return full.filter((_, i) => {
+      const periodStart = new Date(fy.getFullYear(), fy.getMonth() + i * step, 1);
+      const periodEnd = new Date(fy.getFullYear(), fy.getMonth() + (i + 1) * step, 0);
       return periodEnd >= start && periodStart <= end;
     });
-  }, [filteredData, trajGranularity, trajRangeStart, trajRangeEnd, labelToDate]);
+  }, [filteredData, trajGranularity, trajRangeStart, trajRangeEnd]);
 
   // Pop-up de détail de la trajectoire (clic sur la courbe en S).
   const [scurveDetail, setScurveDetail] = useState<{
@@ -2096,12 +2081,8 @@ export function DashboardPagePerformance() {
           value={engine.fmtCurr(summary.engagedCosts)}
           icon={TrendingUp}
           accent="brown"
-          sub={`${t("dashboard.kpi.plan")} ${engine.fmtCurr(summary.plannedCosts)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastCosts)} · ${summary.reforecastCosts > 0 ? Math.round((summary.engagedCosts / summary.reforecastCosts) * 100) : 0}%`}
-          barPct={
-            summary.reforecastCosts > 0
-              ? Math.round((summary.engagedCosts / summary.reforecastCosts) * 100)
-              : 0
-          }
+          sub={`${t("dashboard.kpi.plan")} ${engine.fmtCurr(summary.plannedCosts)} · ${t("dashboard.kpi.reforecast")} ${engine.fmtCurr(summary.reforecastCosts)} · ${summary.engagedCostsPct}%`}
+          barPct={summary.engagedCostsPct}
           barMarkerPct={
             summary.reforecastCosts > 0
               ? Math.round((summary.plannedCosts / summary.reforecastCosts) * 100)

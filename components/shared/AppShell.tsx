@@ -42,10 +42,9 @@ import {
 import { canAccessPerformanceProgram } from "@/lib/roleProfiles";
 import { useStrategicApprovals } from "@/lib/hooks/useStrategicApprovals";
 import { StrategicApprovalsProvider } from "@/lib/hooks/useStrategicApprovalsContext";
-import { APPROVAL_ALERT_ROUTE } from "@/lib/strategicApprovals";
-import { decisionNoticesFor } from "@/lib/approvalNotices";
+import { APPROVAL_ALERT_ROUTE, decisionAlertApprovalId } from "@/lib/strategicApprovals";
 import { approvalTargetHref } from "@/lib/strategicLinks";
-import { KIND_FALLBACK, kindLabelKey } from "@/lib/strategicApprovalView";
+import { bellAlertCount, receivesBudgetOverrunAlert } from "@/lib/strategicBell";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import type { Alert } from "@/types";
 import { formatCurrency } from "@/lib/format";
@@ -237,7 +236,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     //    ci-dessus qui cible le responsable métier de l'indicateur.
     //    Lot 3 : total calculé sur le programme COMPLET (`program`) — même montant que la puce
     //    « Budget alloué » du dashboard, quel que soit le périmètre du lecteur.
-    if (activeProgram) {
+    //    Lot 5 : réservée au pilote du plan, aux admins et au sponsor du programme
+    //    (`receivesBudgetOverrunAlert`) — plus diffusée à tout profil stratégique.
+    if (activeProgram && receivesBudgetOverrunAlert(user, activeProgram)) {
       const overrun = programBudgetOverrun(
         activeProgram,
         strategic.program.chantiers,
@@ -301,51 +302,28 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
     }
 
-    // 5. Décisions sur MES demandes (validée / refusée par quelqu'un d'autre, 7 derniers jours) —
-    //    la personne qui a saisi est prévenue ; lien vers l'objet concerné.
-    for (const notice of decisionNoticesFor(user?.username, strategicApprovals.approvals, today)) {
-      const kindLabel = t(kindLabelKey(notice.kind), KIND_FALLBACK[notice.kind]);
-      alerts.push({
-        id: notice.id,
-        type: notice.status === "approved" ? "green" : "red",
-        ts: localDateOfInstant(notice.decidedAt),
-        createdAt: localDateOfInstant(notice.decidedAt),
-        scope: notice.targetId,
-        scopeLabel: notice.targetName,
-        title: (notice.status === "approved"
-          ? t("approvalFeedback.decisionApproved", "Demande validée · {kind}")
-          : t("approvalFeedback.decisionRejected", "Demande refusée · {kind}")
-        ).replace("{kind}", kindLabel),
-        desc:
-          t("approvalFeedback.decisionDesc", "« {target} » — décision de {name}.")
-            .replace("{target}", notice.targetName)
-            .replace("{name}", notice.decidedByName) +
-          (notice.comment
-            ? " " +
-              t("approvalFeedback.decisionComment", "Commentaire : {comment}").replace(
-                "{comment}",
-                notice.comment
-              )
-            : ""),
-        actorRole: "",
-        resolved: false,
-        source: "auto",
-        companyId,
-      });
-      routes[notice.id] = reachable(
-        approvalTargetHref(notice, {
-          axes: strategic.axes,
-          chantiers: strategic.chantiers,
-          chantierActions: strategic.chantierActions,
-          indicators: strategic.indicators,
-        }) ?? undefined,
-        APPROVAL_ALERT_ROUTE
-      );
-    }
-
+    // 5. Alertes des demandes de validation (à valider, en attente, décision, information) —
+    //    `buildApprovalAlerts`, déjà masquées pour un lecteur non habilité sur la cible (lot 5).
+    //    Lot 5 : la décision sur MES demandes n'est plus signalée DEUX fois (ancien doublon
+    //    `decision-<id>` sur 7 j + `…-decision` sur 14 j) — seule l'alerte de
+    //    `buildApprovalAlerts` reste ; elle mène à l'objet concerné quand il est ouvrable (comme
+    //    l'ancien avis), sinon à la page Validation.
+    const approvalById = new Map(strategicApprovals.approvals.map((a) => [a.id, a]));
     for (const alert of strategicApprovals.alerts) {
       alerts.push(alert);
-      routes[alert.id] = reachable(APPROVAL_ALERT_ROUTE);
+      const decided = decisionAlertApprovalId(alert.id);
+      const approval = decided ? approvalById.get(decided) : undefined;
+      routes[alert.id] = reachable(
+        approval
+          ? (approvalTargetHref(approval, {
+              axes: strategic.axes,
+              chantiers: strategic.chantiers,
+              chantierActions: strategic.chantierActions,
+              indicators: strategic.indicators,
+            }) ?? undefined)
+          : undefined,
+        APPROVAL_ALERT_ROUTE
+      );
     }
 
     return { alerts, routes };
@@ -563,16 +541,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
-          alertCount={
-            shellAlerts.length +
-            approvalQueue.count +
-            realizedApprovalQueue.count +
-            deletionQueue.count
-          }
+          // Lot 5 : en mode stratégique, la cloche ne compte (et ne liste) que les alertes du
+          // plan actif — jamais les files du Plan Performance.
+          alertCount={bellAlertCount({
+            isStrategic,
+            alerts: shellAlerts.length,
+            performanceQueues: [
+              approvalQueue.count,
+              realizedApprovalQueue.count,
+              deletionQueue.count,
+            ],
+          })}
           alerts={shellAlerts}
-          approvalQueue={approvalQueue.queue}
-          realizedApprovalQueue={realizedApprovalQueue.queue}
-          deletionQueue={deletionQueue.queue}
+          approvalQueue={isStrategic ? [] : approvalQueue.queue}
+          realizedApprovalQueue={isStrategic ? [] : realizedApprovalQueue.queue}
+          deletionQueue={isStrategic ? [] : deletionQueue.queue}
           alertHref={alertHref}
           onAlertClick={(alert) => {
             const href = alertHref(alert);

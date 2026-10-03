@@ -3564,6 +3564,34 @@ const fr: Record<string, string> = {
   "strategicApprovals.legacyMilestone.cleared": "Ancienne demande de jalon effacée",
   "strategicApprovals.legacyMilestone.notDecidable":
     "Aucune demande de passage de jalon à valider sur ce projet",
+  // Lot 5 : demandes de validation sur un élément hors de l'habilitation du lecteur
+  "strategicApprovals.outOfScope": "Élément hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.milestone":
+    "le passage de jalon d'un projet hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.kpi_value":
+    "une valeur d'indicateur hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.projet_create":
+    "la création d'un projet hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.projet_update":
+    "la modification d'un projet hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.projet_delete":
+    "la suppression d'un projet hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.chantier_create":
+    "la création d'un chantier hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.chantier_update":
+    "la modification d'un chantier hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.chantier_delete":
+    "la suppression d'un chantier hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.axe_create": "la création d'un axe hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.axe_update":
+    "la modification d'un axe hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.indicator_update":
+    "la modification de l'objectif d'un indicateur hors de votre périmètre",
+  "strategicApprovals.phrase.outOfScope.staffing_update":
+    "une modification de staffing hors de votre périmètre",
+  "strategicApprovals.alert.kpiCorrectedOutOfScopeTitle": "Valeur KPI corrigée · {label}",
+  "strategicApprovals.alert.kpiCorrectedOutOfScopeDesc":
+    "Une valeur KPI a été corrigée sur un élément hors de votre périmètre.",
   // Motif du risque levier (lib/leverRiskText.ts), retour fiche levier, badge dépassement
   "risk.level.critical": "critique",
   "risk.level.high": "élevé",

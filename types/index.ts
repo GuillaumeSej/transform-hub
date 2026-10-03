@@ -1591,6 +1591,10 @@ export type ProgramSummary = {
   engagedCosts: number;
   /** Coûts réactualisés : Σ reforecast.(capex + opexOneOff) ?? plan. */
   reforecastCosts: number;
+  /** % engagé / réactualisé des coûts Invest, calculé sur les montants NON arrondis
+   *  (`engine.realizationPct`, même convention que `progressPct`) — SEULE source du % du KPI
+   *  « CAPEX & coûts ponctuels » (texte et barre). */
+  engagedCostsPct: number;
   /** Suppressions de postes prévues (Σ ETP des mouvements RH type "Départ forcé"). */
   suppressionsPlanned: number;
   /** Suppressions de postes réalisées (statut "Réalisé"). */
