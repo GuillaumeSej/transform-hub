@@ -139,8 +139,8 @@ export function hrKpiDetail(
 /**
  * Couverture de l'ambition ETP de chaque levier par ses mouvements rattachés (carte ETP →
  * « Reste à couvrir »). Même règle que `fteCoverage` : un mouvement de sens contraire au levier
- * augmente le reste à couvrir. Ambition levier = `leverTargetFte([lever])` (0 pour un levier
- * annulé, comme le KPI « ETP visés par les leviers »). `levers` = périmètre déjà filtré par
+ * augmente le reste à couvrir. Ambition levier = `leverTargetFte([lever])` ; les leviers ABANDONNÉS
+ * sont exclus, avec leurs mouvements (comme `leverFteCoverage`). `levers` = périmètre déjà filtré par
  * l'appelant. Ne retient que les leviers avec une ambition ≠ 0 ou au moins un mouvement rattaché
  * d'impact ETP cible ≠ 0 ; tri par reste à couvrir décroissant puis |ambition| décroissante.
  */
@@ -157,6 +157,9 @@ export function leverCoverageRows(
 
   const rows: LeverCoverageRow[] = [];
   for (const lever of levers) {
+    // Levier abandonné : ni ambition ni couverture (même périmètre que `leverFteCoverage`, décision
+    // PO audit lot 6) — la somme des lignes se réconcilie ainsi avec le reste global.
+    if (lever.status === "cancelled") continue;
     const attached = (movementsByLever.get(lever.id) ?? []).filter(
       (m) => targetMovementFteImpact(m) !== 0
     );

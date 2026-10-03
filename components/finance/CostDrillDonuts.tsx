@@ -19,6 +19,7 @@ import {
   costsByHierarchyNode,
   engagedVsUpcomingRows,
   groupCostsByWorkstream,
+  leversWithUndetailedCosts,
   sortedHierarchyLevels,
   recurringOpexReconciliation,
   splitByNature,
@@ -424,6 +425,17 @@ export function CostByHierarchyChart({
     );
   }, [data, hierarchyNodes, levels]);
   const unattached = round2(allCostsTotal - rootTotal);
+  // Leviers macro (coûts saisis au niveau du levier, sans ligne de coût) : comptés dans les coûts
+  // ponctuels, l'engagement des coûts et Invest vs Savings (audit lot 6), mais non ventilables par
+  // compte P&L / centre de coût — signalés plutôt qu'omis en silence.
+  const undetailed = useMemo(() => {
+    const levers = leversWithUndetailedCosts(data);
+    const amount = levers.reduce((s, l) => {
+      const snap = engine.displayedReforecastSnapshot(l);
+      return s + snap.capex + snap.opexOneOff + snap.opexRec;
+    }, 0);
+    return { count: levers.length, amount: round2(amount) };
+  }, [data]);
 
   if (levels.length === 0) {
     return (
@@ -474,6 +486,13 @@ export function CostByHierarchyChart({
         "finance.chart.hierarchyUnattachedNote",
         "Dont {amount} sans rattachement à l'arborescence (absent du graphique)."
       ).replace("{amount}", fmt(unattached))}`,
+    undetailed.count > 0 &&
+      ` ${t(
+        "finance.chart.hierarchyUndetailedNote",
+        "{count} levier(s) sans ligne de coût détaillée ({amount}) : comptés dans les coûts ponctuels et Invest vs Savings, mais non ventilés par compte P&L / centre de coût."
+      )
+        .replace("{count}", String(undetailed.count))
+        .replace("{amount}", fmt(undetailed.amount))}`,
   ]
     .filter(Boolean)
     .join("");

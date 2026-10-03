@@ -464,8 +464,9 @@ describe("alertEngine — generateAlerts", () => {
       });
       const delay = generateAlerts(data).find((a) => a.id === "AUTO-DELAY-L001");
       expect(delay?.type).toBe("red");
-      // Gains récurrents du levier (impacts des actions) = 1 → impact = −0,7
-      expect(delay?.impactEur).toBe(-700000);
+      // Lot 6 : impact = (réactualisé net − réalisé net) × part en retard = (8 − 0) × 0,7 = −5,6
+      // (avant : gains récurrents bruts des impacts × part en retard = 1 × 0,7, réalisé compris).
+      expect(delay?.impactEur).toBe(-5600000);
     });
 
     it("is amber when late actions are the majority by count but light by weight", () => {

@@ -310,6 +310,18 @@ export function LeversPagePerformance() {
     for (const p of programs) map.set(p.id, p.name);
     return map;
   }, [programs]);
+  // Mois (0-11) de début d'exercice par programme : filtre « Trimestre de fin » en trimestres
+  // FISCAUX du programme du levier, comme la courbe en S (audit lot 6).
+  const fyStartMonthByProgram = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of programs) {
+      map.set(p.id, engine.resolveFiscalYearStart(p.fyStart || data.program.fyStart).getMonth());
+    }
+    return map;
+  }, [programs, data.program.fyStart]);
+  const leverFyStartMonth = (l: Lever): number =>
+    (l.programId ? fyStartMonthByProgram.get(l.programId) : undefined) ??
+    engine.resolveFiscalYearStart(data.program.fyStart).getMonth();
   const programLabel = (l: Lever): string =>
     l.programId ? (programNameById.get(l.programId) ?? l.programId) : "";
   const showProgramColumn = useMemo(() => {
@@ -494,7 +506,7 @@ export function LeversPagePerformance() {
       {
         key: "f_endQuarter",
         label: t("levers.filter.endQuarter", "Trimestre de fin"),
-        getValue: (l) => engine.leverEndQuarterLabel(l),
+        getValue: (l) => engine.leverEndQuarterLabel(l, leverFyStartMonth(l)),
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -509,6 +521,7 @@ export function LeversPagePerformance() {
       geographyFilterDefs,
       showProgramColumn,
       programNameById,
+      fyStartMonthByProgram,
     ]
   );
 

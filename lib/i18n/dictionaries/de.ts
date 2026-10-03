@@ -831,7 +831,7 @@ const de: Record<string, string> = {
   "hr.fteCard.levers": "Angestrebt (Hebel)",
   "hr.fteCard.coveragePct": "{pct} % der Hebel-Ambition abgedeckt",
   "hr.fteCard.coverageBasis":
-    "Abdeckung berechnet auf den {n} VZÄ der Bewegungen, die Hebeln des Perimeters zugeordnet sind.",
+    "Abdeckung berechnet auf den {n} VZÄ der Bewegungen, die Hebeln des Perimeters zugeordnet sind, ohne aufgegebene Hebel.",
   "hr.fteCard.headcount": "Personalbestand",
   "hr.fteCard.targetShort": "Ziel",
   "hr.kpi.targetLabel": "Ziel {v}",
@@ -2882,6 +2882,9 @@ const de: Record<string, string> = {
   "finance.calc.formula.roi": "ROI = Nettoergebnis ÷ Investitionskosten",
   "finance.calc.formula.payback":
     "Erste Periode, in der das kumulierte Netto nach negativem Verlauf ≥ 0 wird (gesamter Horizont)",
+  // Audit Los 6: Makro-Hebel (Kosten auf Hebelebene erfasst) nicht nach Kostenstelle aufteilbar.
+  "finance.chart.hierarchyUndetailedNote":
+    "{count} Hebel ohne detaillierte Kostenzeile ({amount}): in den Einmalkosten und Invest vs. Savings enthalten, aber nicht nach GuV-Konto / Kostenstelle aufgeteilt.",
 
   // ─── Lever-Bibliothek: Swimlanes, deklarativer Fortschritt, Baumansicht ────
   "leverForm.workstreamWeightPct": "Gewicht im Fortschritt des Arbeitspakets (%)",

@@ -868,7 +868,7 @@ const fr: Record<string, string> = {
   "hr.fteCard.levers": "Visé (leviers)",
   "hr.fteCard.coveragePct": "{pct} % de l'ambition des leviers couverte",
   "hr.fteCard.coverageBasis":
-    "Couverture calculée sur les {n} ETP des seuls mouvements rattachés aux leviers du périmètre.",
+    "Couverture calculée sur les {n} ETP des seuls mouvements rattachés aux leviers du périmètre, hors leviers abandonnés.",
   "hr.fteCard.headcount": "Effectif",
   "hr.fteCard.targetShort": "cible",
   "hr.kpi.targetLabel": "Cible {v}",
@@ -2978,6 +2978,9 @@ const fr: Record<string, string> = {
   "finance.calc.formula.roi": "ROI = Résultat net ÷ Coût d'investissement",
   "finance.calc.formula.payback":
     "1re période où le cumul net repasse ≥ 0 après avoir été négatif (tout l'horizon)",
+  // Audit lot 6 : leviers macro (coûts saisis au niveau du levier) non ventilables par centre de coût.
+  "finance.chart.hierarchyUndetailedNote":
+    "{count} levier(s) sans ligne de coût détaillée ({amount}) : comptés dans les coûts ponctuels et Invest vs Savings, mais non ventilés par compte P&L / centre de coût.",
 
   // ─── levers library: swimlanes, avancement déclaratif, vue arborescence ────
   "leverForm.workstreamWeightPct": "Poids dans l'avancement du chantier (%)",

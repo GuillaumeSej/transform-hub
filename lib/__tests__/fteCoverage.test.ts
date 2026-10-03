@@ -55,25 +55,25 @@ describe("leverFteCoverage — ETP couverts : même chiffre Dashboard Performanc
     expect(oldHr).toMatchObject({ status: "exceeded", exceeded: 3 });
   });
 
-  it("après : sélecteur partagé — leviers abandonnés inclus, mouvements sans levier exclus", () => {
+  it("après : sélecteur partagé — mouvements sans levier et des leviers abandonnés exclus", () => {
+    // Lot 2 : leviers abandonnés inclus (m4, m5 comptés : −5, « dépassé de 1 ») ; décision PO
+    // lot 6 : cible et couverture sur le même périmètre, les abandonnés sortent des deux côtés.
     expect(movementsOfPerimeterLevers(movements, levers).map((m) => m.id)).toEqual([
       "m1",
       "m2",
       "m3",
-      "m4",
-      "m5",
     ]);
     // Dashboard (filteredData.levers + tous les mouvements) et RH (coverageLevers + mouvements
     // filtrés) appellent la même fonction sur le même périmètre : même résultat.
     const dashboard = leverFteCoverage(levers, movements);
     const hr = leverFteCoverage(levers, movements);
-    expect(dashboard.movementFte).toBe(-5);
+    expect(dashboard.movementFte).toBe(-3);
     expect(hr.movementFte).toBe(dashboard.movementFte);
     expect(dashboard).toMatchObject({
       leverFte: -4,
-      status: "exceeded",
-      exceeded: 1,
-      linkedCount: 5,
+      status: "remaining",
+      remaining: 1,
+      linkedCount: 3,
     });
   });
 
@@ -81,12 +81,12 @@ describe("leverFteCoverage — ETP couverts : même chiffre Dashboard Performanc
     const rows = leverCoverageRows(levers, movements);
     const total = leverFteCoverage(levers, movements);
     const sign = Math.sign(total.leverFte);
-    // Σ (|ambition| − couverts dans le sens du programme) par levier : A 4 − 3 = 1, B (abandonné,
-    // ambition 0) 0 − 2 = −2 → −1 = −dépassement global. Les mouvements sans levier (m6, m7)
-    // n'apparaissent ni dans la fiche ni dans le total.
+    // Σ (|ambition| − couverts dans le sens du programme) par levier : A 4 − 3 = 1 = reste global.
+    // Le levier abandonné B (lot 6) et les mouvements sans levier (m6, m7) n'apparaissent ni dans
+    // la fiche ni dans le total.
     const signedGap = rows.reduce((s, r) => s + Math.abs(r.leverFte) - r.movementFte * sign, 0);
-    expect(rows.map((r) => r.leverId).sort()).toEqual(["A", "B"]);
-    expect(Math.round(signedGap * 10) / 10).toBe(-total.exceeded);
+    expect(rows.map((r) => r.leverId).sort()).toEqual(["A"]);
+    expect(Math.round(signedGap * 10) / 10).toBe(total.remaining);
   });
 
   it("aucun mouvement rattaché : linkedCount 0 (le Dashboard n'affiche rien)", () => {

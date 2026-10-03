@@ -829,7 +829,7 @@ const es: Record<string, string> = {
   "hr.fteCard.levers": "Objetivo (palancas)",
   "hr.fteCard.coveragePct": "{pct} % de la ambición de las palancas cubierta",
   "hr.fteCard.coverageBasis":
-    "Cobertura calculada sobre los {n} ETC de los movimientos vinculados a las palancas del perímetro.",
+    "Cobertura calculada sobre los {n} ETC de los movimientos vinculados a las palancas del perímetro, sin las palancas abandonadas.",
   "hr.fteCard.headcount": "Plantilla",
   "hr.fteCard.targetShort": "objetivo",
   "hr.kpi.targetLabel": "Objetivo {v}",
@@ -2874,6 +2874,9 @@ const es: Record<string, string> = {
   "finance.calc.formula.roi": "ROI = Resultado neto ÷ Coste de inversión",
   "finance.calc.formula.payback":
     "Primer periodo en que el acumulado neto vuelve a ≥ 0 tras ser negativo (todo el horizonte)",
+  // Auditoría lote 6: palancas macro (costes a nivel de palanca) no desglosables por centro de coste.
+  "finance.chart.hierarchyUndetailedNote":
+    "{count} palanca(s) sin línea de coste detallada ({amount}): incluidas en los costes puntuales e Invest vs Savings, pero no desglosadas por cuenta de P&L / centro de coste.",
 
   // ─── biblioteca de proyectos: swimlanes, avance declarativo, vista árbol ───
   "leverForm.workstreamWeightPct": "Peso en el avance del proyecto (%)",

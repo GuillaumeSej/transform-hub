@@ -827,7 +827,7 @@ const en: Record<string, string> = {
   "hr.fteCard.levers": "Targeted (levers)",
   "hr.fteCard.coveragePct": "{pct}% of the levers' ambition covered",
   "hr.fteCard.coverageBasis":
-    "Coverage computed on the {n} FTE of movements linked to the levers in scope.",
+    "Coverage computed on the {n} FTE of movements linked to the levers in scope, excluding cancelled levers.",
   "hr.fteCard.headcount": "Headcount",
   "hr.fteCard.targetShort": "target",
   "hr.kpi.targetLabel": "Target {v}",
@@ -2826,6 +2826,9 @@ const en: Record<string, string> = {
   "finance.calc.formula.roi": "ROI = Net result ÷ Investment cost",
   "finance.calc.formula.payback":
     "First period where the cumulative net turns ≥ 0 after being negative (full horizon)",
+  // Audit lot 6: macro levers (costs entered at lever level) cannot be split by cost center.
+  "finance.chart.hierarchyUndetailedNote":
+    "{count} lever(s) without detailed cost lines ({amount}): included in one-off costs and Invest vs Savings, but not split by P&L account / cost center.",
 
   // ─── levers library: swimlanes, declared progress, tree view ───────────────
   "leverForm.workstreamWeightPct": "Weight in work package progress (%)",
