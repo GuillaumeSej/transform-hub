@@ -12,6 +12,14 @@ import {
   type AccountAuditEntry,
 } from "@/lib/firestore/admin";
 import { useRole } from "@/lib/hooks/useRole";
+import { useAuditClearanceData } from "@/lib/hooks/useAuditClearanceData";
+import { isAnyAdmin } from "@/lib/roleProfiles";
+import {
+  maskAuditForReader,
+  OUT_OF_SCOPE_AUDIT_LABEL,
+  type DisplayAuditEntry,
+} from "@/lib/strategicAuditClearance";
+import { OUT_OF_SCOPE_APPROVAL_KEY } from "@/lib/strategicApprovalClearance";
 import { useTranslation } from "@/lib/i18n/useTranslation";
 import { intlTag } from "@/lib/format";
 
@@ -113,12 +121,25 @@ export default function AdminHistoryPage() {
     return unsub;
   }, [companyId]);
 
-  const scopedAudit = filterAuditByCompany(audit, levers, companyId);
+  // Lot 6 (confidentialité, option A) : pour un lecteur NON admin (pilote du plan…), les entrées
+  // dont la cible dépasse son habilitation sont masquées — date, auteur et type d'action gardés,
+  // ni nom, ni valeurs, ni motif (lib/strategicAuditClearance.ts). Masquage AVANT les filtres et
+  // la recherche : chercher un nom confidentiel ne révèle rien.
+  const readerIsAdmin = isAnyAdmin(user);
+  const clearanceData = useAuditClearanceData(companyId, !!user && !readerIsAdmin);
+  const scopedAudit: DisplayAuditEntry[] = maskAuditForReader(
+    filterAuditByCompany(audit, levers, companyId),
+    user,
+    clearanceData
+  );
+  const outOfScope = t(OUT_OF_SCOPE_APPROVAL_KEY, OUT_OF_SCOPE_AUDIT_LABEL);
+  const entityText = (entry: DisplayAuditEntry) => (entry.masked ? outOfScope : entry.entity);
 
   const filtered = scopedAudit.filter((entry) => {
     if (actionFilter.length > 0 && !actionFilter.includes(entry.action)) return false;
+    // Entrée masquée : elle ne répond plus au filtre par type d'entité (sa cible est masquée).
     if (entityFilter.length > 0) {
-      const e = entry.entity.toLowerCase();
+      const e = entry.masked ? "" : entry.entity.toLowerCase();
       // Multi-sélection : l'entrée passe si elle correspond à AU MOINS un type d'entité coché.
       // Entités Plan Stratégique (round audit trail) — ids générés par `newId()`
       // (lib/hooks/useStrategicData.ts), toujours `{PREFIX}-...` : "ax-" (axe), "ch-" (chantier),
@@ -140,7 +161,7 @@ export default function AdminHistoryPage() {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const haystack =
-        `${entry.user} ${entry.entity} ${entry.field} ${displayAuditValue(entry.old)} ${displayAuditValue(entry.new)}`.toLowerCase();
+        `${entry.user} ${entityText(entry)} ${entry.field} ${displayAuditValue(entry.old)} ${displayAuditValue(entry.new)}`.toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;
@@ -249,9 +270,9 @@ export default function AdminHistoryPage() {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((entry) => (
+            {sorted.map((entry, i) => (
               <tr
-                key={`${entry.ts}|${entry.user}|${entry.action}|${entry.entity}|${entry.field}`}
+                key={`${entry.ts}|${entry.user}|${entry.action}|${entry.entity}|${entry.field}|${i}`}
                 className="border-b border-border hover:bg-bg-elevated/50"
               >
                 <td className="px-4 py-2.5 font-mono text-xs text-text-secondary whitespace-nowrap">
@@ -265,8 +286,10 @@ export default function AdminHistoryPage() {
                     {ACTION_LABELS[entry.action] ?? entry.action}
                   </span>
                 </td>
-                <td className="px-4 py-2.5 font-mono text-xs text-text-secondary">
-                  {entry.entity}
+                <td
+                  className={`px-4 py-2.5 text-xs text-text-secondary ${entry.masked ? "italic" : "font-mono"}`}
+                >
+                  {entityText(entry)}
                 </td>
                 <td className="px-4 py-2.5 text-text-secondary">{entry.field}</td>
                 <td
@@ -296,9 +319,9 @@ export default function AdminHistoryPage() {
 
       {/* Mobile (< sm) : une carte par entrée, tout le contenu empilé verticalement. */}
       <div className="divide-y divide-border rounded-xl border border-border sm:hidden">
-        {sorted.map((entry) => (
+        {sorted.map((entry, i) => (
           <div
-            key={`${entry.ts}|${entry.user}|${entry.action}|${entry.entity}|${entry.field}`}
+            key={`${entry.ts}|${entry.user}|${entry.action}|${entry.entity}|${entry.field}|${i}`}
             className="p-3"
           >
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
@@ -313,7 +336,11 @@ export default function AdminHistoryPage() {
             </div>
             <div className="mb-1.5 text-[13px] font-medium text-text-primary">
               {entry.user} ·{" "}
-              <span className="font-mono text-[11px] text-text-secondary">{entry.entity}</span>
+              <span
+                className={`text-[11px] text-text-secondary ${entry.masked ? "italic" : "font-mono"}`}
+              >
+                {entityText(entry)}
+              </span>
             </div>
             <div className="text-xs text-text-secondary">
               <span className="font-semibold text-text-primary">{entry.field}</span> :{" "}

@@ -78,11 +78,15 @@ import {
   type KpiCorrectionRoute,
 } from "@/lib/kpiCorrectionRouting";
 import {
+  approvalTargetLevels,
   clearedApproval,
   clearedUsernamePredicate,
   isApprovalTargetConfidential,
+  strategicTargetLevels,
+  unionLevels,
   type ApprovalTargetRef,
 } from "@/lib/strategicApprovalClearance";
+import { withTargetConfidentiality } from "@/lib/strategicAuditLogic";
 import {
   applyApprovedPayload,
   applyRejectedPayload,
@@ -219,7 +223,12 @@ export function useStrategicApprovals({
 
   const logAudit = useCallback(
     (approval: StrategicApproval, event: ApprovalEvent) => {
-      const entry = buildApprovalAuditEntry(approval, event, dataRef.current.users);
+      // Lot 6 : niveaux de confidentialité de la cible enregistrés dans l'entrée (programme
+      // complet + snapshot de la demande) — le journal reste masqué aux non-habilités.
+      const [entry] = withTargetConfidentiality(
+        [buildApprovalAuditEntry(approval, event, dataRef.current.users)],
+        unionLevels(approvalTargetLevels(approval, dataRef.current), approval.targetConfidentiality)
+      );
       appendAuditEntries(companyId, [entry]).catch((err) =>
         console.error("[betrack] audit validation stratégique :", err)
       );
@@ -494,17 +503,23 @@ export function useStrategicApprovals({
       if (!action) throw new Error("Projet introuvable");
       const cleared = clearLegacyMilestoneMarker(action, user, approvalsRef.current);
       await saveChantierAction(cleared);
-      appendAuditEntries(companyId, [
-        {
-          ts: auditTimestamp(),
-          user: user?.name ?? user?.username ?? "—",
-          action: "approval_rejected",
-          entity: actionId,
-          field: "validation:milestone",
-          old: "pending",
-          new: `Ancienne demande de passage de jalon effacée (circuit supprimé) sur « ${action.name} »`,
-        },
-      ]).catch((err) => console.error("[betrack] audit validation stratégique :", err));
+      appendAuditEntries(
+        companyId,
+        withTargetConfidentiality(
+          [
+            {
+              ts: auditTimestamp(),
+              user: user?.name ?? user?.username ?? "—",
+              action: "approval_rejected",
+              entity: actionId,
+              field: "validation:milestone",
+              old: "pending",
+              new: `Ancienne demande de passage de jalon effacée (circuit supprimé) sur « ${action.name} »`,
+            },
+          ],
+          strategicTargetLevels("projet", actionId, dataRef.current)
+        )
+      ).catch((err) => console.error("[betrack] audit validation stratégique :", err));
     },
     [user, companyId]
   );

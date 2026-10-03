@@ -249,6 +249,8 @@ describe("routeKpiCorrection — règle PO : 2 validations depuis le niveau RÉE
         action(),
         action({ id: "CA2", chantierId: "CH2", owner: "finn", indicatorId: "IND1" }),
       ],
+      // Lot 6 : les valideurs nommés doivent avoir un compte actif.
+      users: [...users, user("dora", "axis_sponsor"), user("eve", "chantier_owner")],
     });
     const finn = user("finn", "chantier_contributor");
     const r = routeKpiCorrection(finn, indicator(), d);

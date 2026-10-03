@@ -67,7 +67,7 @@ export type KpiCorrectionData = {
   chantiers: Chantier[];
   chantierActions: ChantierAction[];
   users?: (Pick<AuthUser, "username" | "profiles"> &
-    Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin">>)[];
+    Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin" | "disabled">>)[];
 };
 
 export type KpiCorrectionIndicator = Pick<
@@ -198,8 +198,21 @@ export function kpiAuthorFloor(
 /** Usernames des admins connus (`data.users`) — palier de repli ultime. */
 export function adminUsernames(users: KpiCorrectionData["users"]): string[] {
   return uniq(
-    (users ?? []).filter((u) => u.isGlobalAdmin || u.isCompanyAdmin).map((u) => u.username)
+    (users ?? [])
+      .filter((u) => (u.isGlobalAdmin || u.isCompanyAdmin) && !u.disabled)
+      .map((u) => u.username)
   );
+}
+
+/** Prédicat « ce username a un compte utilisateur ACTIF » (présent dans `users`, non désactivé) —
+ *  lot 6 : un valideur nommé sans compte n'est jamais retenu dans une chaîne (niveau traité comme
+ *  vide). `undefined` tant que les utilisateurs ne sont pas chargés (aucune vérification possible). */
+export function activeUsernamePredicate(
+  users: KpiCorrectionData["users"]
+): ((username: string) => boolean) | undefined {
+  if (!(users ?? []).length) return undefined;
+  const active = new Set((users ?? []).filter((u) => !u.disabled).map((u) => u.username));
+  return (username) => active.has(username);
 }
 
 /** Chaîne HIÉRARCHIQUE de validation d'une valeur KPI saisie/corrigée par `author` (voir
@@ -389,10 +402,11 @@ export function routeKpiCorrection(
   // Sans utilisateurs chargés, pilotes (et admins de repli) inconnus : ne pas décider.
   if (!(data.users ?? []).length) return { mode: "retry", level, inform: [], informLevels: [] };
   const admins = adminUsernames(data.users);
+  const isActive = activeUsernamePredicate(data.users);
   const chain = fallbackApprovalChain(
-    kpiApprovalChain(actor.username, indicator, data, resp, { isCleared, admins }),
+    kpiApprovalChain(actor.username, indicator, data, resp, { isCleared, admins, isActive }),
     actor.username,
-    resp.planLeads,
+    isActive ? resp.planLeads.filter(isActive) : resp.planLeads,
     admins,
     isCleared
   );

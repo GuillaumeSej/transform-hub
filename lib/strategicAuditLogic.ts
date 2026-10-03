@@ -31,6 +31,20 @@ export function makeAuditEntry(entry: Omit<AuditEntry, "ts">): AuditEntry {
   return { ...entry, ts: nowTs() };
 }
 
+/**
+ * Lot 6 — ENREGISTRE dans chaque entrée les niveaux de confidentialité de sa cible au moment de
+ * l'écriture (`AuditEntry.targetConfidentiality`, `[]` = non confidentielle), pour que le journal
+ * reste masqué aux non-habilités même une fois la cible supprimée (lib/strategicAuditClearance.ts).
+ * `levels` null/absent (cible introuvable) : entrées inchangées — résolues à la lecture.
+ */
+export function withTargetConfidentiality(
+  entries: AuditEntry[],
+  levels: string[] | null | undefined
+): AuditEntry[] {
+  if (!levels) return entries;
+  return entries.map((e) => ({ ...e, targetConfidentiality: [...levels] }));
+}
+
 export function makeCreatedAuditEntry(
   user: string,
   entity: string,

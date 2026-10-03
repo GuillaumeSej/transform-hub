@@ -92,8 +92,6 @@ function chantierLevels(
 export function approvalTargetLevels(ref: ApprovalTargetRef, data: TargetData): string[] | null {
   const src = data.program ?? data;
   const axes = src.axes;
-  const chantierById = (id: string | undefined) =>
-    id ? src.chantiers.find((c) => c.id === id) : undefined;
   if (ref.kind === "axe_create") {
     const axis = (ref.payload as AxeCreateApprovalPayload | undefined)?.axis;
     if (axis) return uniqLevels([axis.confidentialityLevel]);
@@ -102,30 +100,52 @@ export function approvalTargetLevels(ref: ApprovalTargetRef, data: TargetData): 
     const created = (ref.payload as ChantierCreateApprovalPayload | undefined)?.chantier;
     if (created) return uniqLevels(chantierLevels(created, axes));
   }
+  const levels = strategicTargetLevels(
+    ref.targetType,
+    ref.targetId,
+    src,
+    (ref.payload as StaffingUpdateApprovalPayload | undefined)?.line?.chantierId ??
+      (ref.payload as ProjetCreateApprovalPayload | undefined)?.action?.chantierId
+  );
+  if (levels) return levels;
+  return ref.targetConfidentiality ? uniqLevels(ref.targetConfidentiality) : null;
+}
+
+/**
+ * Niveaux de confidentialité qui protègent un élément du Plan Stratégique (même règle d'héritage
+ * que l'affichage, voir l'en-tête), `[]` = non confidentiel, `null` = élément introuvable dans
+ * `data`. `fallbackChantierId` : chantier d'un projet pas (ou plus) présent dans `data`. Sert aux
+ * demandes (`approvalTargetLevels`) et au journal d'audit (lib/strategicAuditClearance.ts).
+ */
+export function strategicTargetLevels(
+  type: StrategicApproval["targetType"],
+  id: string,
+  data: Pick<TargetData, "axes" | "chantiers" | "chantierActions" | "indicators">,
+  fallbackChantierId?: string
+): string[] | null {
+  const axes = data.axes;
+  const chantierById = (cid: string | undefined) =>
+    cid ? data.chantiers.find((c) => c.id === cid) : undefined;
   let levels: (string | undefined)[] | null = null;
-  switch (ref.targetType) {
+  switch (type) {
     case "axe": {
-      const axis = axes.find((a) => a.id === ref.targetId);
+      const axis = axes.find((a) => a.id === id);
       if (axis) levels = [axis.confidentialityLevel];
       break;
     }
     case "chantier": {
-      const chantier = chantierById(ref.targetId);
+      const chantier = chantierById(id);
       if (chantier) levels = chantierLevels(chantier, axes);
       break;
     }
     case "projet": {
-      const action = src.chantierActions.find((a) => a.id === ref.targetId);
-      const chantierId =
-        action?.chantierId ??
-        (ref.payload as StaffingUpdateApprovalPayload | undefined)?.line?.chantierId ??
-        (ref.payload as ProjetCreateApprovalPayload | undefined)?.action?.chantierId;
-      const chantier = chantierById(chantierId);
+      const action = data.chantierActions.find((a) => a.id === id);
+      const chantier = chantierById(action?.chantierId ?? fallbackChantierId);
       if (chantier) levels = chantierLevels(chantier, axes);
       break;
     }
     case "indicateur": {
-      const indicator = src.indicators.find((i) => i.id === ref.targetId);
+      const indicator = data.indicators.find((i) => i.id === id);
       if (indicator) {
         const chantier = chantierById(indicator.chantierId);
         levels = [
@@ -140,8 +160,18 @@ export function approvalTargetLevels(ref: ApprovalTargetRef, data: TargetData): 
       break;
     }
   }
-  if (levels) return uniqLevels(levels);
-  return ref.targetConfidentiality ? uniqLevels(ref.targetConfidentiality) : null;
+  return levels ? uniqLevels(levels) : null;
+}
+
+/** Union de niveaux (null = inconnu, ignoré ; les deux null → null). */
+export function unionLevels(...lists: (string[] | null | undefined)[]): string[] | null {
+  const known = lists.filter((l): l is string[] => Array.isArray(l));
+  return known.length ? uniqLevels(known.flat()) : null;
+}
+
+/** Les niveaux `levels` sont-ils tous accessibles à cette habilitation ? */
+export function levelsAccessibleTo(levels: string[], clearance: "all" | string[]): boolean {
+  return levelsAccessible(levels, clearance);
 }
 
 /** Habilitation (stratégique) résolue d'un utilisateur — admin : tout. */
@@ -221,20 +251,30 @@ export function isApprovalTargetConfidential(ref: ApprovalTargetRef, data: Targe
 function adminsOf(users: StrategicApprovalData["users"]): string[] {
   const out: string[] = [];
   for (const u of users ?? []) {
-    if ((u.isGlobalAdmin || u.isCompanyAdmin) && !out.includes(u.username)) out.push(u.username);
+    if ((u.isGlobalAdmin || u.isCompanyAdmin) && !u.disabled && !out.includes(u.username)) {
+      out.push(u.username);
+    }
   }
   return out;
+}
+
+/** Usernames ayant un compte ACTIF (présent dans `users`, non désactivé). */
+function activeUsernames(users: StrategicApprovalData["users"]): Set<string> {
+  return new Set((users ?? []).filter((u) => !u.disabled).map((u) => u.username));
 }
 
 /**
  * Demande EN ATTENTE relue sous la règle de confidentialité (option A, cas des demandes déjà
  * routées à un non-habilité avant ce lot) : sur les paliers NON ENCORE décidés, les valideurs non
- * habilités sont retirés ; un palier qui n'en garde aucun est SAUTÉ (le palier habilité suivant
- * reçoit la demande) ; si un palier a été sauté, un palier « admin » final reprend la validation
- * perdue (sauf s'il en existe déjà un). `approver*` suivent le palier courant. Idempotente ;
- * renvoie la MÊME référence quand rien ne change (cible non confidentielle, utilisateurs ou
- * paramètres pas encore chargés, tous les valideurs habilités). Demande LEGACY (sans chaîne) :
- * inchangée — `canDecide` refuse un non-habilité et un admin peut toujours décider.
+ * habilités — et (lot 6) ceux qui n'ont plus de compte actif — sont retirés ; un palier qui n'en
+ * garde aucun est SAUTÉ (le palier suivant reçoit la demande) ; si un palier a été sauté, un palier
+ * « admin » final reprend la validation perdue (sauf s'il en existe déjà un) — ses admins nommés
+ * excluent le demandeur et, s'il en reste d'autres, ceux qui ont déjà validé un palier (sinon
+ * l'admin déjà intervenu reprend : un palier de reprise lui reste ouvert, voir `canDecideStep`).
+ * `approver*` suivent le palier courant. Idempotente ; renvoie la MÊME référence quand rien ne
+ * change (valideurs tous habilités et actifs, utilisateurs ou paramètres pas encore chargés).
+ * Demande LEGACY (sans chaîne) : inchangée — `canDecide` refuse un non-habilité et un admin peut
+ * toujours décider.
  */
 export function clearedApproval(
   approval: StrategicApproval,
@@ -243,7 +283,8 @@ export function clearedApproval(
   if (approval.status !== "pending" || !approval.chain?.length) return approval;
   if (!(data.users?.length ?? 0) || data.confidentiality === null) return approval;
   const isCleared = clearedUsernamePredicate(approval, data);
-  if (!isCleared) return approval;
+  const active = activeUsernames(data.users);
+  const eligible = (u: string) => active.has(u) && (!isCleared || isCleared(u));
   const idx = Math.min(approval.stepIndex ?? 0, approval.chain.length - 1);
   const head = approval.chain.slice(0, idx);
   const tail: ApprovalChainStep[] = [];
@@ -254,7 +295,7 @@ export function clearedApproval(
       tail.push(step);
       continue;
     }
-    const usernames = step.usernames.filter((u) => isCleared(u));
+    const usernames = step.usernames.filter((u) => eligible(u));
     if (usernames.length === step.usernames.length) {
       tail.push(step);
       continue;
@@ -269,12 +310,9 @@ export function clearedApproval(
   if (!changed) return approval;
   if (skipped && !tail.some((s) => s.level === "admin")) {
     const prior = head.map((s) => s.decidedBy);
-    tail.push({
-      level: "admin",
-      usernames: adminsOf(data.users).filter(
-        (u) => u !== approval.requestedBy && !prior.includes(u)
-      ),
-    });
+    const admins = adminsOf(data.users).filter((u) => u !== approval.requestedBy);
+    const fresh = admins.filter((u) => !prior.includes(u));
+    tail.push({ level: "admin", usernames: fresh.length ? fresh : admins });
   }
   const chain = [...head, ...tail];
   const current = chain[idx];

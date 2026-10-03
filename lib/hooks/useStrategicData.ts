@@ -48,7 +48,9 @@ import {
   buildUpdateAuditEntries,
   makeCreatedAuditEntry,
   makeDeletedAuditEntry,
+  withTargetConfidentiality,
 } from "@/lib/strategicAuditLogic";
+import { strategicTargetLevels, unionLevels } from "@/lib/strategicApprovalClearance";
 import type {
   AuditEntry,
   AuthUser,
@@ -90,6 +92,11 @@ function logAudit(companyId: string | null | undefined, entries: AuditEntry[]): 
 
 function nowDate(): string {
   return todayISO();
+}
+
+/** `list` avec `item` ajouté ou remplacé (même id) — état APRÈS mutation, pour l'audit (lot 6). */
+function withItem<T extends { id: string }>(list: T[], item: T): T[] {
+  return [item, ...list.filter((x) => x.id !== item.id)];
 }
 
 /** Retire les clés valant `undefined` (en place) : un appelant EFFACE un champ optionnel en le
@@ -645,6 +652,24 @@ export function useStrategicData(
   const staffingRef = useRef(allStaffing);
   staffingRef.current = allStaffing;
 
+  // Lot 6 : niveaux de confidentialité de la cible ENREGISTRÉS dans chaque entrée d'audit
+  // (`withTargetConfidentiality`) — résolus sur toutes les données de l'entreprise (jamais sur la
+  // vue filtrée du lecteur), `overrides` = état après mutation (élément créé / modifié).
+  const levelsOf = useCallback(
+    (
+      type: Parameters<typeof strategicTargetLevels>[0],
+      id: string,
+      overrides: Partial<Parameters<typeof strategicTargetLevels>[2]> = {}
+    ) =>
+      strategicTargetLevels(type, id, {
+        axes: overrides.axes ?? axesRef.current,
+        chantiers: overrides.chantiers ?? chantiersRef.current,
+        chantierActions: overrides.chantierActions ?? actionsRef.current,
+        indicators: overrides.indicators ?? indicatorsRef.current,
+      }),
+    []
+  );
+
   // ── Mutations ─────────────────────────────────────────────────────────────────────────────
 
   const createAxis = useCallback<StrategicData["createAxis"]>(
@@ -659,10 +684,16 @@ export function useStrategicData(
         lastUpdate: nowDate(),
       };
       await saveStrategicAxis(axis);
-      logAudit(companyId, [makeCreatedAuditEntry(auditUser, axis.id, "axe", axis.name)]);
+      logAudit(
+        companyId,
+        withTargetConfidentiality(
+          [makeCreatedAuditEntry(auditUser, axis.id, "axe", axis.name)],
+          levelsOf("axe", axis.id, { axes: withItem(axesRef.current, axis) })
+        )
+      );
       return axis;
     },
-    [companyId, programId, auditUser]
+    [companyId, programId, auditUser, levelsOf]
   );
 
   const updateAxis = useCallback<StrategicData["updateAxis"]>(
@@ -675,10 +706,21 @@ export function useStrategicData(
         id,
         lastUpdate: nowDate(),
       });
+      // Niveaux AVANT et APRÈS (un changement de confidentialité protège les deux états).
+      const levels = unionLevels(
+        levelsOf("axe", id),
+        levelsOf("axe", id, { axes: withItem(axesRef.current, after) })
+      );
       await saveStrategicAxis(after);
-      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
+      logAudit(
+        companyId,
+        withTargetConfidentiality(
+          buildUpdateAuditEntries(auditUser, id, patch, existing, after),
+          levels
+        )
+      );
     },
-    [companyId, auditUser]
+    [companyId, auditUser, levelsOf]
   );
 
   // Auteur des suppressions en cascade (annulation des demandes en attente qui visent la cible).
@@ -691,16 +733,23 @@ export function useStrategicData(
     async (id) => {
       if (!companyId) throw new Error("removeAxis: companyId manquant");
       const existing = axesRef.current.find((a) => a.id === id);
+      const levels = levelsOf("axe", id); // avant suppression (lot 6)
       // Lot 3 : suppression BLOQUÉE tant que l'axe porte des chantiers/indicateurs
       // (`AxisNotEmptyError`, rien d'écrit) — ses chantiers gardaient sinon un `axisIds`
       // inexistant (comptés dans la puce, absents de la feuille de route). Axe vide : supprimé avec
       // annulation des demandes en attente qui le visent, en un seul batch.
       await deleteWithCascade(companyId, { axisIds: [id] }, cascadeActor);
       if (existing) {
-        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "axe", existing.name)]);
+        logAudit(
+          companyId,
+          withTargetConfidentiality(
+            [makeDeletedAuditEntry(auditUser, id, "axe", existing.name)],
+            levels
+          )
+        );
       }
     },
-    [companyId, auditUser, cascadeActor]
+    [companyId, auditUser, cascadeActor, levelsOf]
   );
 
   const createChantier = useCallback<StrategicData["createChantier"]>(
@@ -716,12 +765,18 @@ export function useStrategicData(
         lastUpdate: nowDate(),
       };
       await saveChantier(chantier);
-      logAudit(companyId, [
-        makeCreatedAuditEntry(auditUser, chantier.id, "chantier", chantier.name),
-      ]);
+      logAudit(
+        companyId,
+        withTargetConfidentiality(
+          [makeCreatedAuditEntry(auditUser, chantier.id, "chantier", chantier.name)],
+          levelsOf("chantier", chantier.id, {
+            chantiers: withItem(chantiersRef.current, chantier),
+          })
+        )
+      );
       return chantier;
     },
-    [companyId, programId, auditUser]
+    [companyId, programId, auditUser, levelsOf]
   );
 
   const updateChantier = useCallback<StrategicData["updateChantier"]>(
@@ -729,25 +784,42 @@ export function useStrategicData(
       const existing = chantiersRef.current.find((c) => c.id === id);
       if (!existing) return;
       const after: Chantier = stripUndefined({ ...existing, ...patch, id, lastUpdate: nowDate() });
+      const levels = unionLevels(
+        levelsOf("chantier", id),
+        levelsOf("chantier", id, { chantiers: withItem(chantiersRef.current, after) })
+      );
       await saveChantier(after);
-      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
+      logAudit(
+        companyId,
+        withTargetConfidentiality(
+          buildUpdateAuditEntries(auditUser, id, patch, existing, after),
+          levels
+        )
+      );
     },
-    [companyId, auditUser]
+    [companyId, auditUser, levelsOf]
   );
 
   const removeChantier = useCallback<StrategicData["removeChantier"]>(
     async (id) => {
       if (!companyId) throw new Error("removeChantier: companyId manquant");
       const existing = chantiersRef.current.find((c) => c.id === id);
+      const levels = levelsOf("chantier", id); // avant suppression (lot 6)
       // Lot 3 : cascade en UN SEUL batch — projets, lignes ETP (chantier ET projets), indicateurs
       // et leurs mesures, dépendances/prérequis qui les citent, demandes en attente annulées. Les
       // lignes ETP de niveau chantier restaient sinon comptées (IT 125 % au lieu de 90 %).
       await deleteWithCascade(companyId, { chantierIds: [id] }, cascadeActor);
       if (existing) {
-        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "chantier", existing.name)]);
+        logAudit(
+          companyId,
+          withTargetConfidentiality(
+            [makeDeletedAuditEntry(auditUser, id, "chantier", existing.name)],
+            levels
+          )
+        );
       }
     },
-    [companyId, auditUser, cascadeActor]
+    [companyId, auditUser, cascadeActor, levelsOf]
   );
 
   const createChantierAction = useCallback<StrategicData["createChantierAction"]>(
@@ -755,10 +827,18 @@ export function useStrategicData(
       if (!companyId) throw new Error("createChantierAction: companyId manquant");
       const action: ChantierAction = { ...input, id: newId("CA"), companyId };
       await saveChantierAction(action);
-      logAudit(companyId, [makeCreatedAuditEntry(auditUser, action.id, "projet", action.name)]);
+      logAudit(
+        companyId,
+        withTargetConfidentiality(
+          [makeCreatedAuditEntry(auditUser, action.id, "projet", action.name)],
+          levelsOf("projet", action.id, {
+            chantierActions: withItem(actionsRef.current, action),
+          })
+        )
+      );
       return action;
     },
-    [companyId, auditUser]
+    [companyId, auditUser, levelsOf]
   );
 
   const updateChantierAction = useCallback<StrategicData["updateChantierAction"]>(
@@ -774,25 +854,42 @@ export function useStrategicData(
       // field value: undefined") — le même piège documenté ailleurs dans ce fichier pour
       // `ChantierStaffing.note`. Ne change RIEN pour les appelants historiques, qui omettent déjà la
       // clé plutôt que d'y mettre `undefined` (voir `ChantierActionForm.tsx`, "Clés OMISES").
+      const levels = unionLevels(
+        levelsOf("projet", id),
+        levelsOf("projet", id, { chantierActions: withItem(actionsRef.current, after) })
+      );
       await saveChantierAction(after);
-      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, after));
+      logAudit(
+        companyId,
+        withTargetConfidentiality(
+          buildUpdateAuditEntries(auditUser, id, patch, existing, after),
+          levels
+        )
+      );
     },
-    [companyId, auditUser]
+    [companyId, auditUser, levelsOf]
   );
 
   const removeChantierAction = useCallback<StrategicData["removeChantierAction"]>(
     async (id) => {
       if (!companyId) throw new Error("removeChantierAction: companyId manquant");
       const existing = actionsRef.current.find((a) => a.id === id);
+      const levels = levelsOf("projet", id); // avant suppression (lot 6)
       // Suppression en CASCADE (un seul batch, lot 3) : lignes de staffing du projet (elles
       // restaient comptées au niveau du chantier, audit DB-14 / KPI-02), prérequis qui le citent,
       // demandes en attente qui le visent (annulées).
       await deleteWithCascade(companyId, { actionIds: [id] }, cascadeActor);
       if (existing) {
-        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "projet", existing.name)]);
+        logAudit(
+          companyId,
+          withTargetConfidentiality(
+            [makeDeletedAuditEntry(auditUser, id, "projet", existing.name)],
+            levels
+          )
+        );
       }
     },
-    [companyId, auditUser, cascadeActor]
+    [companyId, auditUser, cascadeActor, levelsOf]
   );
 
   const createIndicator = useCallback<StrategicData["createIndicator"]>(
@@ -811,12 +908,18 @@ export function useStrategicData(
         lastUpdate: nowDate(),
       };
       await saveIndicator(indicator);
-      logAudit(companyId, [
-        makeCreatedAuditEntry(auditUser, indicator.id, "indicateur", indicator.name),
-      ]);
+      logAudit(
+        companyId,
+        withTargetConfidentiality(
+          [makeCreatedAuditEntry(auditUser, indicator.id, "indicateur", indicator.name)],
+          levelsOf("indicateur", indicator.id, {
+            indicators: withItem(indicatorsRef.current, indicator),
+          })
+        )
+      );
       return indicator;
     },
-    [companyId, programId, auditUser]
+    [companyId, programId, auditUser, levelsOf]
   );
 
   const updateIndicator = useCallback<StrategicData["updateIndicator"]>(
@@ -827,26 +930,43 @@ export function useStrategicData(
       // Modifier l'objectif/le sens/la nature change mécaniquement le verdict sur la dernière
       // mesure — on recalcule ici pour ne pas laisser un statut périmé en base.
       next.status = computeIndicatorStatus(next, measurementsRef.current);
+      const levels = unionLevels(
+        levelsOf("indicateur", id),
+        levelsOf("indicateur", id, { indicators: withItem(indicatorsRef.current, next) })
+      );
       await saveIndicator(next);
       // Diff sur le `patch` d'origine (pas `next`, dont `status` peut avoir été recalculé
       // au-dessus sans que l'appelant l'ait demandé) — même convention que les autres mutations.
-      logAudit(companyId, buildUpdateAuditEntries(auditUser, id, patch, existing, next));
+      logAudit(
+        companyId,
+        withTargetConfidentiality(
+          buildUpdateAuditEntries(auditUser, id, patch, existing, next),
+          levels
+        )
+      );
     },
-    [companyId, auditUser]
+    [companyId, auditUser, levelsOf]
   );
 
   const removeIndicator = useCallback<StrategicData["removeIndicator"]>(
     async (id) => {
       if (!companyId) throw new Error("removeIndicator: companyId manquant");
       const existing = indicatorsRef.current.find((i) => i.id === id);
+      const levels = levelsOf("indicateur", id); // avant suppression (lot 6)
       // Lot 3 : ses mesures partent avec lui (un seul batch), demandes en attente qui le visent
       // (valeur KPI, objectif) annulées.
       await deleteWithCascade(companyId, { indicatorIds: [id] }, cascadeActor);
       if (existing) {
-        logAudit(companyId, [makeDeletedAuditEntry(auditUser, id, "indicateur", existing.name)]);
+        logAudit(
+          companyId,
+          withTargetConfidentiality(
+            [makeDeletedAuditEntry(auditUser, id, "indicateur", existing.name)],
+            levels
+          )
+        );
       }
     },
-    [companyId, auditUser, cascadeActor]
+    [companyId, auditUser, cascadeActor, levelsOf]
   );
 
   const addMeasurement = useCallback<StrategicData["addMeasurement"]>(

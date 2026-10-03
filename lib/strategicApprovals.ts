@@ -14,6 +14,7 @@ import { auditTimestamp } from "@/lib/auditFormat";
 import { assertMeasurementPeriodNotFuture } from "@/lib/kpiHistory";
 import { localDateOfInstant } from "@/lib/dateUtils";
 import {
+  activeUsernamePredicate,
   adminUsernames,
   kpiAuthorFloor,
   kpiCorrectionApprover,
@@ -397,7 +398,9 @@ export type StrategicApprovalData = {
    *  décidée pour un non-pilote/non-admin (`"retry"`). Les drapeaux admin servent au palier de
    *  repli « admin ». */
   users?: (Pick<AuthUser, "username" | "name" | "profiles"> &
-    Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin" | "confidentialityClearance">>)[];
+    Partial<
+      Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin" | "confidentialityClearance" | "disabled">
+    >)[];
   /** Paramètres de confidentialité de l'entreprise (lot 5, option A) — habilitation des valideurs
    *  et des lecteurs sur la cible d'une demande (lib/strategicApprovalClearance.ts). `undefined` =
    *  non fournis (seules les habilitations individuelles comptent) ; `null` = en cours de
@@ -1079,18 +1082,22 @@ export function resolveApprovalRoute(
   }
   const isCleared = clearedUsernamePredicate(ref, data);
   const admins = adminUsernames(data.users);
+  // Lot 6 : un valideur nommé sans compte actif (ex. sponsor saisi sans compte) n'est jamais
+  // retenu — son niveau est traité comme vide (comportement historique d'un niveau vide).
+  const isActive = activeUsernamePredicate(data.users);
   const ctx = hierarchyContextFor(kind, target, data, payload, actor.username);
   const hierarchy = approvalChain(
     actor.username,
     ctx,
     count,
     authorFloor(kind, target, data, payload, actor.username),
-    { isCleared, admins }
+    { isCleared, admins, isActive }
   );
+  const pilots = strategicLeadUsernames(programId, data);
   const chain = fallbackApprovalChain(
     hierarchy,
     actor.username,
-    strategicLeadUsernames(programId, data),
+    isActive ? pilots.filter(isActive) : pilots,
     admins,
     isCleared
   );
@@ -1194,10 +1201,17 @@ function priorDeciders(approval: StrategicApproval): string[] {
 /**
  * Demande à chaîne : `user` peut-il décider le palier COURANT ? L'un des usernames du palier, ou un
  * admin ; jamais le demandeur (admin compris) ; jamais une personne — admin COMPRIS — ayant déjà
- * validé un palier précédent (un admin décide au plus UN palier d'une même demande). Pas
- * d'escalade strategic_lead : le pilote ne décide que SON palier.
+ * validé un palier NOMMÉ précédent (un admin ne valide pas deux paliers nommés différents d'une
+ * même demande). Pas d'escalade strategic_lead : le pilote ne décide que SON palier.
  * `data` fourni (lot 5, option A) : chaîne relue sous la règle de confidentialité
  * (`clearedApproval`) et décideur non habilité sur la cible refusé, même nommé au palier.
+ *
+ * Lot 6 — une demande en attente a TOUJOURS au moins un décideur possible :
+ *  - palier « admin » de REPRISE (lot 5) : décidable par un admin même s'il a déjà validé un palier
+ *    précédent — ce palier n'est pas un palier nommé, il reprend une validation perdue (sinon, dans
+ *    une entreprise à un seul admin, plus personne ne pouvait le décider) ;
+ *  - un admin ne décide pas À LA PLACE d'un palier nommé quand il est lui-même nommé à un palier
+ *    suivant (il bloquerait ce palier, qu'il ne pourrait plus valider) : il décidera le sien.
  */
 export function canDecideStep(
   user: Actor | null | undefined,
@@ -1211,9 +1225,19 @@ export function canDecideStep(
     approval = clearedApproval(approval, data);
   }
   if (approval.requestedBy === user.username) return false;
-  if (priorDeciders(approval).includes(user.username)) return false;
-  if (isAnyAdmin(user)) return true;
-  return currentStep(approval)?.usernames.includes(user.username) ?? false;
+  const step = currentStep(approval);
+  const admin = isAnyAdmin(user);
+  if (priorDeciders(approval).includes(user.username) && !(admin && step?.level === "admin")) {
+    return false;
+  }
+  if (step?.usernames.includes(user.username)) return true;
+  if (!admin) return false;
+  if (step?.level === "admin") return true;
+  const chain = approval.chain ?? [];
+  const idx = Math.min(approval.stepIndex ?? 0, chain.length - 1);
+  return !chain
+    .slice(idx + 1)
+    .some((s) => s.level !== "admin" && s.usernames.includes(user.username));
 }
 
 /** `user` peut-il approuver/refuser cette demande (encore en attente) — palier courant pour une
@@ -1560,12 +1584,17 @@ export type ApprovalDecisionResult = {
  *  - Demande à chaîne : le palier courant est horodaté (`decidedBy`…). Refus ⇒ demande close
  *    "rejected". Validation d'un palier intermédiaire ⇒ `stepIndex + 1`, `approver*` = palier
  *    suivant, statut toujours "pending". Validation du dernier palier ⇒ "approved".
+ *  - Lot 6 : un ADMIN (drapeaux fournis sur `decider`) qui valide un palier alors que les paliers
+ *    restants ne sont que des paliers « admin » de reprise ⇒ demande CLOSE "approved" directement
+ *    (ces paliers sont réputés validés par la même décision) — sinon la demande attendait un
+ *    second admin qui, dans une entreprise à un seul admin, n'existe pas.
  *  - Demande legacy : décision unique (comportement historique).
  * Les champs `decidedBy`/`decidedAt`/`decisionComment` de la demande ne sont posés qu'à la clôture.
  */
 export function decideApproval(
   approval: StrategicApproval,
-  decider: Pick<AuthUser, "username" | "name">,
+  decider: Pick<AuthUser, "username" | "name"> &
+    Partial<Pick<AuthUser, "isGlobalAdmin" | "isCompanyAdmin">>,
   status: "approved" | "rejected",
   comment?: string,
   now: string = new Date().toISOString()
@@ -1597,6 +1626,24 @@ export function decideApproval(
   const isLast = idx === approval.chain.length - 1;
   if (status === "rejected" || isLast) {
     return { approval: { ...closed(), chain, stepIndex: idx }, final: true };
+  }
+  if (isAnyAdmin(decider) && chain.slice(idx + 1).every((s) => s.level === "admin")) {
+    // Paliers « admin » de reprise restants : couverts par la décision de cet admin.
+    const covered = chain.map((s, i) =>
+      i > idx
+        ? stripUndefined({
+            ...s,
+            decidedBy: decider.username,
+            decidedByName: decider.name,
+            decidedAt: now,
+            decision: status,
+          })
+        : s
+    );
+    return {
+      approval: { ...closed(), chain: covered, stepIndex: chain.length - 1 },
+      final: true,
+    };
   }
   const next = chain[idx + 1];
   return {
@@ -2547,7 +2594,14 @@ export function buildApprovalAuditEntry(
 ): AuditEntry {
   const requester = displayName(approval.requestedBy, users, approval.requestedByName);
   const decider = displayName(approval.decidedBy, users, approval.decidedByName);
-  const base = { ts: ts ?? auditTimestamp() };
+  // Lot 6 : niveaux snapshotés de la cible recopiés dans l'entrée (journal masqué aux
+  // non-habilités, voir lib/strategicAuditClearance.ts) ; `useStrategicApprovals` les complète.
+  const base = {
+    ts: ts ?? auditTimestamp(),
+    ...(approval.targetConfidentiality?.length
+      ? { targetConfidentiality: [...approval.targetConfidentiality] }
+      : {}),
+  };
   const entity = approval.targetId;
   const field = `validation:${approval.kind}`;
   const step = stepLabel(approval);

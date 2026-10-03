@@ -128,6 +128,11 @@ export function fallbackApprovalChain(
  * suivant. Si la chaîne n'atteint plus `count` paliers À CAUSE d'un tel saut, un palier « admin »
  * (`clearance.admins`, hors auteur — vide = n'importe quel admin) la complète : le palier sauté
  * est repris par un administrateur de l'entreprise plutôt que perdu.
+ *
+ * COMPTES (lot 6) — `clearance.isActive` fourni : un détenteur nommé sans compte utilisateur actif
+ * (ex. sponsor « alice » saisi en texte libre, compte supprimé ou désactivé) n'est pas retenu ; un
+ * niveau qui n'a plus aucun détenteur actif est traité comme un niveau VIDE (sauté vers le suivant,
+ * comportement historique — pas de palier « admin » ajouté pour autant).
  */
 export function approvalChain(
   author: string,
@@ -143,9 +148,11 @@ export function approvalChain(
   const chain: ApprovalStep[] = [];
   const used = new Set<string>([author]);
   const isCleared = clearance?.isCleared;
+  const isActive = clearance?.isActive;
   let skippedForClearance = false;
   for (const level of STRATEGIC_LEVELS.slice(start + 1)) {
-    const candidates = holders[level].filter((u) => !used.has(u));
+    // Détenteur sans compte actif (lot 6) : niveau traité comme VIDE (sauté, sans palier admin).
+    const candidates = holders[level].filter((u) => !used.has(u) && (!isActive || isActive(u)));
     const usernames = isCleared ? candidates.filter((u) => isCleared(u)) : candidates;
     usernames.forEach((u) => used.add(u));
     if (usernames.length === 0) {
@@ -170,6 +177,8 @@ export type ChainClearance = {
   isCleared?: (username: string) => boolean;
   /** Admins de l'entreprise : palier de reprise d'un palier sauté faute d'habilitation. */
   admins?: string[];
+  /** Le détenteur nommé a-t-il un compte utilisateur actif ? Absent = aucune vérification. */
+  isActive?: (username: string) => boolean;
 };
 
 export type DesignationTarget = "axisSponsor" | "chantierSponsor" | "projectOwner" | "contributors";

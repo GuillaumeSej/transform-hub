@@ -781,6 +781,11 @@ export type AuditEntry = {
   field: string;
   old: string | number;
   new: string | number;
+  /** Plan Stratégique (lot 6) : niveaux de confidentialité qui protégeaient la cible AU MOMENT de
+   *  l'écriture (`[]` = cible non confidentielle) — le journal reste masqué aux non-habilités même
+   *  après la suppression de la cible. ABSENT = entrée d'avant ce lot (niveaux résolus à la
+   *  lecture sur les données actuelles, voir lib/strategicAuditClearance.ts). */
+  targetConfidentiality?: string[];
 };
 
 export type Comment = {

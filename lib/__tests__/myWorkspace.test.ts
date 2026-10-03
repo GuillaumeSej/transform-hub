@@ -523,12 +523,14 @@ describe("buildMyWorkspace", () => {
       { role: "cto", programId: "p1" },
       { role: "axis_sponsor", programId: "p2" },
     ]);
+    // Lot 6 : un valideur nommé doit avoir un compte actif dans `users` (sinon palier repris par un
+    // admin) — liste complète des utilisateurs de l'entreprise, comme `useCompanyUsers`.
     const wsCto = buildMyWorkspace(
-      { user: cto, strategic, programs, users: [cto], today: TODAY },
+      { user: cto, strategic, programs, users: [cto, paul, sofia], today: TODAY },
       t
     );
     expect(wsCto.blocked).toEqual([
-      expect.objectContaining({ id: "blockedValidation:strategic:S9", waitingOn: "sofia" }),
+      expect.objectContaining({ id: "blockedValidation:strategic:S9", waitingOn: "sofia Test" }),
     ]);
   });
 });

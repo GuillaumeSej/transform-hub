@@ -262,9 +262,11 @@ describe("chaînes par kind et niveau d'auteur", () => {
     const noSponsor = data({ chantiers: [chantier({ pilote: undefined })] });
     expect(chainOf("milestone", carl, T.projet, undefined, noSponsor)).toEqual(["alice", "lea"]);
     expect(chainOf("milestone", admin, T.projet)).toEqual([]);
+    // Lot 6 : un valideur nommé doit avoir un compte (sinon son niveau est vide) — dora en a un.
     const multi = data({
       axes: [axis(), axis({ id: "AX2", owner: "dora" })],
       chantiers: [chantier({ axisIds: ["AX1", "AX2"] })],
+      users: [...users, user("dora", "axis_sponsor")],
     });
     expect(chainOf("milestone", carl, T.projet, undefined, multi)).toEqual(["bob", "alice|dora"]);
   });
@@ -396,13 +398,16 @@ describe("demande à paliers : snapshot, avance, refus, droits", () => {
       ...req(),
       chain: [
         { level: "chantierSponsor", usernames: ["gone"] },
-        { level: "axisSponsor", usernames: ["gone2"] },
+        { level: "axisSponsor", usernames: ["alice"] },
       ],
     };
     expect(canDecide(admin, orphan, data())).toBe(true);
     const s1 = decideApproval(orphan, admin, "approved").approval;
     expect(s1.chain?.[0].decidedBy).toBe("root");
-    // Un admin décide AU PLUS UN palier d'une même demande : le suivant revient à un AUTRE admin.
+    // Un admin ne valide pas deux paliers NOMMÉS d'une même demande : le suivant revient à son
+    // valideur (alice) ou à un AUTRE admin (lot 6 : un palier sans compte actif devient, lui, un
+    // palier « admin » de reprise — voir lib/__tests__/strategicLot6.test.ts).
+    expect(canDecide(alice, s1, data())).toBe(true);
     expect(canDecide(admin, s1, data())).toBe(false);
     const admin2 = user("root2", undefined, { isGlobalAdmin: true });
     expect(canDecide(admin2, s1, data())).toBe(true);
