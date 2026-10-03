@@ -10,6 +10,7 @@ import {
   resolveStrategicRoleForProgram,
 } from "@/lib/axisLogic";
 import { samePeriod } from "@/lib/indicatorPeriod";
+import { auditTimestamp } from "@/lib/auditFormat";
 import { assertMeasurementPeriodNotFuture } from "@/lib/kpiHistory";
 import { localDateOfInstant } from "@/lib/dateUtils";
 import {
@@ -2546,7 +2547,7 @@ export function buildApprovalAuditEntry(
 ): AuditEntry {
   const requester = displayName(approval.requestedBy, users, approval.requestedByName);
   const decider = displayName(approval.decidedBy, users, approval.decidedByName);
-  const base = { ts: ts ?? new Date().toISOString().slice(0, 16).replace("T", " ") };
+  const base = { ts: ts ?? auditTimestamp() };
   const entity = approval.targetId;
   const field = `validation:${approval.kind}`;
   const step = stepLabel(approval);

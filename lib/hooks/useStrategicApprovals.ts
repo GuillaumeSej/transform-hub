@@ -62,6 +62,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { auditTimestamp } from "@/lib/auditFormat";
 import {
   subscribeStrategicApprovals,
   saveStrategicApproval,
@@ -495,7 +496,7 @@ export function useStrategicApprovals({
       await saveChantierAction(cleared);
       appendAuditEntries(companyId, [
         {
-          ts: new Date().toISOString().slice(0, 16).replace("T", " "),
+          ts: auditTimestamp(),
           user: user?.name ?? user?.username ?? "—",
           action: "approval_rejected",
           entity: actionId,
