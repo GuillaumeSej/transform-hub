@@ -78,6 +78,8 @@ export function useMyWorkspace(): { workspace: MyWorkspace; loading: boolean } {
             approvals: strategicApprovals.approvals,
             // Lot 3 : santé / avancement calculés sur le programme COMPLET.
             program: strategicData.program,
+            // Lot 5 : habilitation sur la cible des demandes de validation.
+            confidentiality: strategicData.confidentiality,
           }
         : null,
     [
@@ -89,6 +91,7 @@ export function useMyWorkspace(): { workspace: MyWorkspace; loading: boolean } {
       strategicData.measurements,
       strategicData.projetProgress,
       strategicData.program,
+      strategicData.confidentiality,
       strategicApprovals.approvals,
     ]
   );

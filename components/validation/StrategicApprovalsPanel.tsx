@@ -23,6 +23,7 @@ import {
 import { formatDateTimeShort } from "@/lib/format";
 import { canOpenRoute } from "@/lib/routeAccess";
 import { approvalTargetHref } from "@/lib/strategicLinks";
+import { OUT_OF_SCOPE_APPROVAL_KEY } from "@/lib/strategicApprovalClearance";
 import {
   chainStepsView,
   KIND_FALLBACK,
@@ -112,6 +113,8 @@ export function StrategicApprovalsPanel({
    *  (`canOpenRoute`, même règle que la garde d'AppShell ; ce panneau n'est rendu qu'en mode
    *  stratégique). `user` absent = pas de garde connue, on laisse AppShell trancher. */
   const targetLink = (a: StrategicApproval) => {
+    // Lot 5 : demande masquée (cible hors habilitation du lecteur) → aucun lien vers la cible.
+    if (a.masked) return null;
     const href = approvalTargetHref(a, data);
     if (!href) return null;
     if (user !== undefined && !canOpenRoute(user, href, "strategic")) return null;
@@ -245,9 +248,12 @@ export function StrategicApprovalsPanel({
         ) : (
           <div className="space-y-3">
             {list.map((a) => {
+              // Lot 5 (option A) : copie masquée (`a.masked`, cible hors habilitation) → sujet
+              // « Élément hors de votre périmètre », ni diff ni avant/après.
               const d = describeApproval(a, data);
+              const subject = a.masked ? t(OUT_OF_SCOPE_APPROVAL_KEY, d.subject) : d.subject;
               const steps = chainStepsView(a, data.users);
-              const diff = patchDiffRows(a, data.users, idNames);
+              const diff = a.masked ? [] : patchDiffRows(a, data.users, idNames);
               return (
                 <Card key={a.id}>
                   <CardBody>
@@ -256,7 +262,7 @@ export function StrategicApprovalsPanel({
                         <div className="text-[10px] font-semibold uppercase tracking-wide text-tertiary">
                           {kindLabel(a.kind)}
                         </div>
-                        <div className="text-sm font-semibold text-primary">{d.subject}</div>
+                        <div className="text-sm font-semibold text-primary">{subject}</div>
                         {targetLink(a)}
                       </div>
                       <span

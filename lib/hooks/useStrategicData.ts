@@ -33,6 +33,7 @@ import {
 import { resolveConfidentialityClearance } from "@/lib/leversLogic";
 import { filterStrategicByClearance } from "@/lib/strategicConfidentiality";
 import type { StrategicProgramData } from "@/lib/strategicProgramScope";
+import type { StrategicConfidentialityConfig } from "@/lib/strategicApprovalClearance";
 import { isAnyAdmin } from "@/lib/roleProfiles";
 import { todayISO } from "@/lib/dateUtils";
 import { normalizePeriod } from "@/lib/indicatorPeriod";
@@ -172,6 +173,11 @@ export type StrategicData = {
   /** Ids des projets VISIBLES du lecteur (= `chantierActions`) — même usage, pour les prérequis
    *  (`canStartAction`/`programBlockedActions`, option `visibleActionIds`). */
   visibleActionIds: ReadonlySet<string>;
+  /** Paramètres de confidentialité de l'entreprise (`Company.roleClearance` / `confidentialityLevels`)
+   *  — habilitation des valideurs et lecteurs sur la cible d'une demande de validation (lot 5,
+   *  lib/strategicApprovalClearance.ts). `null` = entreprise en cours de chargement ; `undefined` =
+   *  filtrage non activé (`user` omis). */
+  confidentiality?: StrategicConfidentialityConfig | null;
 
   // ── Mutations ──────────────────────────────────────────────────────────────────────────────
   createAxis: (
@@ -385,16 +391,31 @@ export function useStrategicData(
   // paramètre `user` (champ `name`) et `AUDIT_FALLBACK_USER` plus haut.
   const auditUser = user?.name ?? AUDIT_FALLBACK_USER;
   const [company, setCompany] = useState<Company | null>(null);
+  const [companyLoaded, setCompanyLoaded] = useState(false);
   useEffect(() => {
     if (!filterActive || !companyId) {
       setCompany(null);
+      setCompanyLoaded(false);
       return;
     }
+    setCompanyLoaded(false);
     const unsub = subscribeCompanies((companies) => {
       setCompany(companies.find((c) => c.id === companyId) ?? null);
+      setCompanyLoaded(true);
     }, companyId);
     return unsub;
   }, [filterActive, companyId]);
+  // Paramètres de confidentialité exposés pour la validation (lot 5, option A) : habilitation des
+  // VALIDEURS et des lecteurs sur la cible d'une demande. `null` tant que l'entreprise n'est pas
+  // chargée (les demandes sur cible confidentielle attendent : route "retry").
+  const confidentiality = useMemo<StrategicConfidentialityConfig | null | undefined>(() => {
+    if (!filterActive) return undefined;
+    if (!companyLoaded) return null;
+    return {
+      roleClearance: company?.roleClearance,
+      levels: company?.confidentialityLevels,
+    };
+  }, [filterActive, companyLoaded, company?.roleClearance, company?.confidentialityLevels]);
   const isAdmin = isAnyAdmin(user);
   const clearance = useMemo(
     () =>
@@ -978,6 +999,7 @@ export function useStrategicData(
     program,
     visibleChantierIds,
     visibleActionIds,
+    confidentiality,
     createAxis,
     updateAxis,
     removeAxis,

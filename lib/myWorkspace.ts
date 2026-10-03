@@ -78,6 +78,13 @@ import {
   type StrategicApproval,
 } from "@/lib/strategicApprovals";
 import { canFillIndicatorValue, currentPeriod, isFuturePeriod } from "@/lib/kpiHistory";
+import {
+  clearedApproval,
+  isClearedForApproval,
+  OUT_OF_SCOPE_APPROVAL_KEY,
+  OUT_OF_SCOPE_APPROVAL_LABEL,
+  type StrategicConfidentialityConfig,
+} from "@/lib/strategicApprovalClearance";
 import { comparePeriods, indicatorPeriodRange } from "@/lib/indicatorPeriod";
 import {
   getAuthorizedPrograms,
@@ -155,6 +162,9 @@ export type MyWorkspaceStrategicInput = Pick<
     StrategicProgramData,
     "axes" | "chantiers" | "chantierActions" | "indicators" | "measurements"
   >;
+  /** Paramètres de confidentialité de l'entreprise (`useStrategicData().confidentiality`, lot 5) :
+   *  habilitation des valideurs et du lecteur sur la cible d'une demande. */
+  confidentiality?: StrategicConfidentialityConfig | null;
 };
 
 export type MyWorkspaceInput = {
@@ -623,8 +633,19 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
       strategic.projetProgress ?? ((a) => milestoneProgressPct(a));
     const chantierById = new Map(chantiers.map((c) => [c.id, c]));
     const actionById = new Map(chantierActions.map((a) => [a.id, a]));
-    const approvals = (strategic.approvals ?? []).filter((a) => a.status === "pending");
-    const approvalData = { ...strategic, programId, users: input.users ?? [] };
+    // Base de DÉCISION sur le programme COMPLET (comme `useStrategicApprovals`) : sur les seules
+    // données visibles, une demande visant un objet hors périmètre ne se résolvait pas — « À
+    // valider » divergeait de la cloche et du badge Validation. Demandes relues sous la règle de
+    // confidentialité (lot 5, option A : palier d'un non-habilité sauté, `clearedApproval`).
+    const approvalData = {
+      ...strategic,
+      ...(strategic.program ?? {}),
+      programId,
+      users: input.users ?? [],
+    };
+    const approvals = (strategic.approvals ?? [])
+      .filter((a) => a.status === "pending")
+      .map((a) => clearedApproval(a, approvalData));
     const indicatorById = new Map(indicators.map((i) => [i.id, i]));
     /** Page de détail de la cible d'une demande (repli quand `/validation` n'est pas ouvrable). */
     const approvalTargetHref = (a: StrategicApproval): string | undefined => {
@@ -703,14 +724,21 @@ export function buildMyWorkspace(input: MyWorkspaceInput, t: Translate): MyWorks
           : "";
       const waitingDays = daysSince(a.requestedAt, today);
       const action = a.targetType === "projet" ? actionById.get(a.targetId) : undefined;
+      // Lot 5 (option A) : lecteur NON habilité sur la cible (ex. pilote non habilité dans « En
+      // attente chez d'autres ») → ni nom de cible ni lien vers elle, seulement type et date.
+      const cleared = isClearedForApproval(user, a, approvalData);
       const base = {
         source: "strategicApproval" as const,
         plan: "strategic" as const,
         title: step ? `${approvalTitle(a)} · ${step}` : approvalTitle(a),
-        context: action ? projetContext(action) : (a.targetName ?? a.targetId),
+        context: !cleared
+          ? t(OUT_OF_SCOPE_APPROVAL_KEY, OUT_OF_SCOPE_APPROVAL_LABEL)
+          : action
+            ? projetContext(action)
+            : (a.targetName ?? a.targetId),
         waitingDays,
         href: VALIDATION_HREF,
-        fallbackHref: approvalTargetHref(a),
+        fallbackHref: cleared ? approvalTargetHref(a) : undefined,
         programId: a.programId,
         dedupeKey: a.kind === "milestone" ? `projet:${a.targetId}:milestone` : `strategic:${a.id}`,
       };

@@ -5,6 +5,7 @@ import {
   approvalChain,
   fallbackApprovalChain,
   type ApprovalStep,
+  type ChainClearance,
   type ChainLevel,
   type HierarchyContext,
   type StrategicLevel,
@@ -207,13 +208,16 @@ export function kpiApprovalChain(
   author: string,
   indicator: KpiCorrectionIndicator,
   data: KpiCorrectionData,
-  resp: KpiResponsibles = kpiResponsibles(indicator, data)
+  resp: KpiResponsibles = kpiResponsibles(indicator, data),
+  /** Confidentialité (lot 5, option A) : valideurs non habilités sautés, voir `approvalChain`. */
+  clearance?: ChainClearance
 ): ApprovalStep[] {
   return approvalChain(
     author,
     kpiHierarchyContext(indicator, data, author, resp),
     2,
-    kpiAuthorFloor(indicator, data, author)
+    kpiAuthorFloor(indicator, data, author),
+    clearance
   );
 }
 
@@ -240,11 +244,14 @@ export function kpiCorrectionLevel(
 }
 
 /** Personnes à INFORMER après une correction appliquée par un acteur de niveau `level` : tous les
- *  responsables des niveaux strictement supérieurs. `exclude` (acteur, demandeur…) jamais inclus. */
+ *  responsables des niveaux strictement supérieurs. `exclude` (acteur, demandeur…) jamais inclus.
+ *  `isCleared` (lot 5, option A) : un responsable NON habilité sur le KPI n'est pas informé (il ne
+ *  recevrait qu'une alerte vidée de son contenu). */
 export function kpiCorrectionInformees(
   level: KpiCorrectionLevel,
   resp: KpiResponsibles,
-  exclude: (string | undefined)[] = []
+  exclude: (string | undefined)[] = [],
+  isCleared?: (username: string) => boolean
 ): string[] {
   const list =
     level === "plan"
@@ -252,7 +259,7 @@ export function kpiCorrectionInformees(
       : level === "axis"
         ? resp.planLeads
         : [...resp.axisOwners, ...resp.planLeads];
-  return uniq(list).filter((u) => !exclude.includes(u));
+  return uniq(list).filter((u) => !exclude.includes(u) && (!isCleared || isCleared(u)));
 }
 
 export type KpiCorrectionApprover = {
@@ -357,7 +364,10 @@ const STEP_APPROVER_LEVEL: Partial<Record<ChainLevel, KpiApproverLevel>> = {
 export function routeKpiCorrection(
   actor: Actor | null | undefined,
   indicator: KpiCorrectionIndicator,
-  data: KpiCorrectionData
+  data: KpiCorrectionData,
+  /** Confidentialité (lot 5, option A) : valideur habilité sur le KPI ? Fourni, la chaîne et les
+   *  informés ne retiennent que des habilités (palier sauté → habilité suivant, sinon admin). */
+  isCleared?: (username: string) => boolean
 ): KpiCorrectionRoute {
   const resp = kpiResponsibles(indicator, data);
   const level = kpiCorrectionLevel(actor, indicator, data, resp);
@@ -378,11 +388,13 @@ export function routeKpiCorrection(
   }
   // Sans utilisateurs chargés, pilotes (et admins de repli) inconnus : ne pas décider.
   if (!(data.users ?? []).length) return { mode: "retry", level, inform: [], informLevels: [] };
+  const admins = adminUsernames(data.users);
   const chain = fallbackApprovalChain(
-    kpiApprovalChain(actor.username, indicator, data, resp),
+    kpiApprovalChain(actor.username, indicator, data, resp, { isCleared, admins }),
     actor.username,
     resp.planLeads,
-    adminUsernames(data.users)
+    admins,
+    isCleared
   );
   const first = chain[0];
   const approver: KpiCorrectionApprover = {
@@ -403,10 +415,12 @@ export function routeKpiCorrection(
   };
   // Les paliers de la chaîne VALIDENT (ils ne sont donc pas « informés ») : restent les éventuels
   // autres responsables d'axe/plan du KPI (ex. KPI rattaché à plusieurs axes).
-  const informOnApproval = kpiCorrectionInformees("chantier", resp, [
-    actor.username,
-    ...chain.flatMap((st) => st.usernames),
-  ]);
+  const informOnApproval = kpiCorrectionInformees(
+    "chantier",
+    resp,
+    [actor.username, ...chain.flatMap((st) => st.usernames)],
+    isCleared
+  );
   return {
     mode: "request",
     level,
@@ -424,10 +438,14 @@ export function kpiCorrectionDecisionInformees(
   decider: Pick<Actor, "username"> | null | undefined,
   requestedBy: string,
   indicator: KpiCorrectionIndicator,
-  data: KpiCorrectionData
+  data: KpiCorrectionData,
+  /** Lot 5 (option A) : seuls les responsables habilités sur le KPI sont informés. */
+  isCleared?: (username: string) => boolean
 ): string[] {
-  return kpiCorrectionInformees("chantier", kpiResponsibles(indicator, data), [
-    decider?.username,
-    requestedBy,
-  ]);
+  return kpiCorrectionInformees(
+    "chantier",
+    kpiResponsibles(indicator, data),
+    [decider?.username, requestedBy],
+    isCleared
+  );
 }

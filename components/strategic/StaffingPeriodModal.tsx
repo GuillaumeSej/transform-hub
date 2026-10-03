@@ -9,7 +9,28 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 export type PeriodModalRow = StaffingDetailRow & {
   /** Clés de série (équipe ou axe) auxquelles la ligne appartient. */
   groupKeys: string[];
+  /** Ligne d'un chantier HORS du périmètre du lecteur (lot 5) : jamais rendue ligne à ligne —
+   *  agrégée en une part « Autres chantiers (hors de votre périmètre) » par groupe, total ETP
+   *  seul (`splitOutOfScopeRows`). */
+  outOfScope?: boolean;
 };
+
+/**
+ * Lignes d'UN groupe prêtes à l'affichage : les lignes visibles telles quelles, et les lignes hors
+ * périmètre réduites à leur seul TOTAL d'ETP (aucune date, équipe ou ligne individuelle : dans une
+ * petite équipe, une ligne isolée suffirait à identifier une personne). Même règle que la part
+ * « autres chantiers » du taux de staffing (`StaffingRateSection`).
+ */
+export function splitOutOfScopeRows<R extends { fte: number; outOfScope?: boolean }>(
+  rows: R[]
+): { rows: R[]; outOfScopeFte: number | null } {
+  const visible = rows.filter((r) => !r.outOfScope);
+  const hidden = rows.filter((r) => r.outOfScope);
+  return {
+    rows: visible,
+    outOfScopeFte: hidden.length ? hidden.reduce((sum, r) => sum + r.fte, 0) : null,
+  };
+}
 
 export type PeriodModalSeries = { key: string; name: string; color: string };
 
@@ -113,7 +134,9 @@ export function StaffingPeriodModal({
           </p>
 
           {visible.map((s) => {
-            const groupRows = rows.filter((r) => r.groupKeys.includes(s.key));
+            const split = splitOutOfScopeRows(rows.filter((r) => r.groupKeys.includes(s.key)));
+            const groupRows = split.rows;
+            const rowCount = groupRows.length + (split.outOfScopeFte !== null ? 1 : 0);
             return (
               <section key={s.key} className="rounded-md border border-border">
                 <header className="flex items-center justify-between gap-3 bg-neutral-50 px-3 py-2">
@@ -125,7 +148,7 @@ export function StaffingPeriodModal({
                     {s.name}
                   </span>
                   <span className="text-[12px] text-secondary">
-                    {groupRows.length}{" "}
+                    {rowCount}{" "}
                     {t("staffingPeriod.periodModal.rowsFor", "Lignes mobilisées").toLowerCase()} ·{" "}
                     <strong className="text-primary">
                       {formatFte(fteByKey.get(s.key) ?? 0)} {t("staffing.fteUnit", "ETP")}
@@ -163,6 +186,24 @@ export function StaffingPeriodModal({
                           <td className="px-3 py-2 text-tertiary">{r.note}</td>
                         </tr>
                       ))}
+                      {/* Lot 5 : chantiers hors périmètre — UNE part agrégée, total ETP seul. */}
+                      {split.outOfScopeFte !== null && (
+                        <tr key={`${s.key}-out-of-scope`} className="text-primary">
+                          <td className="px-3 py-2 font-medium italic">
+                            {t(
+                              "effectifs.staffingRate.otherChantiers",
+                              "Autres chantiers (hors de votre périmètre)"
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-tertiary">—</td>
+                          <td className="px-3 py-2 text-right font-semibold">
+                            {formatFte(split.outOfScopeFte)}
+                          </td>
+                          <td className="px-3 py-2 text-tertiary">—</td>
+                          <td className="px-3 py-2 text-tertiary">—</td>
+                          <td className="px-3 py-2 text-tertiary">—</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

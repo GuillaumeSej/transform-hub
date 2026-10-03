@@ -34,6 +34,7 @@ import { useTranslation } from "@/lib/i18n/useTranslation";
 import { isAnyAdmin, isReadOnlyUser } from "@/lib/roleProfiles";
 import { useStrategicApprovalsApi } from "@/lib/hooks/useStrategicApprovalsContext";
 import { maskDependencyAlerts } from "@/lib/strategicProgramScope";
+import { pendingChantierCreationsOnAxis } from "@/lib/strategicApprovalClearance";
 import { useApprovalErrorToast } from "@/lib/hooks/useApprovalErrorToast";
 import {
   createChantierFlow,
@@ -375,8 +376,13 @@ export function AxisDetailClient() {
       { chantier } satisfies ChantierCreateApprovalPayload
     );
   };
-  const pendingChantierCreations = pendingApprovals(sa?.approvals, "chantier_create").filter((a) =>
-    (a.payload as ChantierCreateApprovalPayload).chantier?.axisIds?.includes(axis.id)
+  // Lot 5 : une création de chantier CONFIDENTIEL en attente n'est montrée (nom compris) qu'aux
+  // lecteurs habilités sur ce chantier — jamais à un non-habilité, même sur un axe qu'il voit.
+  const pendingChantierCreations = pendingChantierCreationsOnAxis(
+    pendingApprovals(sa?.approvals, "chantier_create"),
+    axis.id,
+    user,
+    data
   );
 
   return (
@@ -442,7 +448,10 @@ export function AxisDetailClient() {
       {/* ── Compteur d'ensemble des indicateurs de l'axe ───────────────────────────────────── */}
       <IndicatorStatusSummary
         indicators={axisIndicatorsForSummary}
-        measurements={data.measurements}
+        // Lot 5 : mesures du programme COMPLET, comme les indicateurs — sur les mesures filtrées,
+        // un indicateur confidentiel comptait « sans donnée » pour un non-habilité (synthèse
+        // différente selon le profil).
+        measurements={data.program.measurements}
         showTotal={false}
         labels={{
           tracked: t("strategicAxes.summaryTracked"),
